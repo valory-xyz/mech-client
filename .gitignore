@@ -1,0 +1,5 @@
+ethereum_private_key.txt
+
+*.DS_Store
+dist/
+__pycache__
