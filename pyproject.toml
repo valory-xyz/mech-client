@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mech-client"
-version = "0.1.0"
+version = "0.1.1"
 description = "Basic client to interact with a mech"
 authors = ["David Minarsch <david.minarsch@googlemail.com>"]
 readme = "README.md"
@@ -11,7 +11,7 @@ python = "^3.10"
 open-aea = {version = "1.33.0", extras = ["cli"]}
 open-aea-ledger-ethereum = "1.33.0"
 open-aea-cli-ipfs = "1.33.0"
-websocket-client = "^1.5.2"
+websocket-client = ">=0.32.0,<1"
 
 [tool.poetry.scripts]
 mechx = "mech_client.cli:cli"
