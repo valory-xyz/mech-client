@@ -10,6 +10,12 @@ Basic client to interact with a mech
 pip install mech-client
 ```
 
+Then, set a websocket endpoint for Gnosis RPC like so:
+
+```bash
+export WEBSOCKET_ENDPOINT=<YOUR ENDPOINT>
+```
+
 ## CLI:
 
 ```bash
