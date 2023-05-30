@@ -26,8 +26,10 @@ python client.py <prompt> <tool>
 """
 
 import json
+import os
 import sys
 import time
+import warnings
 from typing import Optional
 
 import requests
@@ -45,6 +47,19 @@ ETHEREUM_TESTNET_CONFIG = {
     "default_gas_price_strategy": "eip1559",
 }
 PRIVATE_KEY_FILE_PATH = "ethereum_private_key.txt"
+EVENT_SIGNATURE_REQUEST = (
+    "0x4bda649efe6b98b0f9c1d5e859c29e20910f45c66dabfe6fad4a4881f7faf9cc"
+)
+EVENT_SIGNATURE_DELIVER = (
+    "0x3ec84da2cdc1ce60c063642b69ff2e65f3b69787a2b90443457ba274e51e7c72"
+)
+WSS_ENDPOINT = os.getenv(
+    "WEBSOCKET_ENDPOINT",
+    "wss://gno.getblock.io/3042bb06-d18e-4ce0-8ccf-83eedd35532b/mainnet/",
+)
+
+# Ignore a specific warning message
+warnings.filterwarnings("ignore", "The log with transaction hash.*")
 
 
 def check_for_tools(tool: str) -> Optional[int]:
@@ -63,7 +78,47 @@ def check_for_tools(tool: str) -> Optional[int]:
     )
 
 
+def register_event_handlers(ethereum_crypto: EthereumCrypto) -> websocket.WebSocket:
+    """Register event handlers."""
+    wss = websocket.create_connection(WSS_ENDPOINT)
+    subscription_request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_subscribe",
+        "params": [
+            "logs",
+            {
+                "address": CONTRACT_ADDRESS,
+                "topics": [
+                    EVENT_SIGNATURE_REQUEST,
+                    ["0x" + "0" * 24 + ethereum_crypto.address[2:]],
+                ],
+            },
+        ],
+    }
+    content = bytes(json.dumps(subscription_request), "utf-8")
+    wss.send(content)
+    # registration confirmation
+    msg = wss.recv()
+    subscription_deliver = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_subscribe",
+        "params": [
+            "logs",
+            {"address": CONTRACT_ADDRESS, "topics": [EVENT_SIGNATURE_DELIVER]},
+        ],
+    }
+    content = bytes(json.dumps(subscription_deliver), "utf-8")
+    wss.send(content)
+    # registration confirmation
+    msg = wss.recv()
+    return wss
+
+
 def send_request(
+    ethereum_crypto: EthereumCrypto,
+    ethereum_ledger_api: EthereumApi,
     prompt: str,
     tool: str,
     contract_address: str = CONTRACT_ADDRESS,
@@ -75,9 +130,6 @@ def send_request(
         raise ValueError(f"Tool {tool} is not supported by any mech.")
     v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(prompt, tool)
     print(f"Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}")
-
-    ethereum_crypto = EthereumCrypto(private_key_path=PRIVATE_KEY_FILE_PATH)
-    ethereum_ledger_api = EthereumApi(**ETHEREUM_TESTNET_CONFIG)
 
     gnosisscan_api_url = f"https://api.gnosisscan.io/api?module=contract&action=getabi&address={contract_address}"
     response = requests.get(gnosisscan_api_url)
@@ -104,28 +156,18 @@ def send_request(
     signed_transaction = ethereum_crypto.sign_transaction(raw_transaction)
     transaction_digest = ethereum_ledger_api.send_signed_transaction(signed_transaction)
     print(f"Transaction sent: https://gnosisscan.io/tx/{transaction_digest}")
-    return contract_instance, ethereum_ledger_api
+    return contract_instance
 
 
 def watch_for_events(
-    contract_instance: Contract, ethereum_ledger_api: EthereumApi
+    wss: websocket.WebSocket,
+    contract_instance: Contract,
+    ethereum_ledger_api: EthereumApi,
+    ethereum_crypto: EthereumCrypto,
 ) -> None:
     """Watches for events on mech."""
-    wss_endpoint = "wss://rpc.eu-central-2.gateway.fm/ws/v4/gnosis/non-archival/mainnet"
-    wss = websocket.create_connection(wss_endpoint)
-    subscription_msg_template = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "eth_subscribe",
-        "params": ["logs", {"address": CONTRACT_ADDRESS}],
-    }
-    content = bytes(json.dumps(subscription_msg_template), "utf-8")
-    wss.send(content)
-    # registration confirmation
-    msg = wss.recv()
-    # events
-    count = 0
-    while count < 2:
+    is_waiting = True
+    while is_waiting:
         msg = wss.recv()
         data = json.loads(msg)
         tx_hash = data["params"]["result"]["transactionHash"]
@@ -138,20 +180,28 @@ def watch_for_events(
                 no_receipt = False
             except Exception:
                 time.sleep(1)
-        if count == 0:
+        event_signature = tx_receipt["logs"][0]["topics"][0].hex()
+        if event_signature == EVENT_SIGNATURE_REQUEST:
             rich_logs = contract_instance.events.Request().processReceipt(tx_receipt)
             request_id = rich_logs[0]["args"]["requestId"]
             print(f"Request on-chain with id: {request_id}")
-        if count == 1:
+        if event_signature == EVENT_SIGNATURE_DELIVER:
             rich_logs = contract_instance.events.Deliver().processReceipt(tx_receipt)
             data = rich_logs[0]["args"]["data"]
+            request_id_ = rich_logs[0]["args"]["requestId"]
+            if request_id != request_id_:
+                continue
             data_url = "https://gateway.autonolas.tech/ipfs/f01701220" + data.hex()
             print(f"Data arrived: {data_url}")
-        count += 1
+            is_waiting = False
     response = requests.get(data_url + "/" + str(request_id))
-    print(f"Data: {response.json()}")
+    result = response.json()["result"]
+    print(f"Data:\n{result}")
 
 
 def interact(prompt: str, tool: str) -> None:
-    contract_instance, ethereum_ledger_api = send_request(prompt, tool)
-    watch_for_events(contract_instance, ethereum_ledger_api)
+    ethereum_crypto = EthereumCrypto(private_key_path=PRIVATE_KEY_FILE_PATH)
+    ethereum_ledger_api = EthereumApi(**ETHEREUM_TESTNET_CONFIG)
+    wss = register_event_handlers(ethereum_crypto)
+    contract_instance = send_request(ethereum_crypto, ethereum_ledger_api, prompt, tool)
+    watch_for_events(wss, contract_instance, ethereum_ledger_api, ethereum_crypto)
