@@ -153,8 +153,5 @@ def watch_for_events(
 
 
 def interact(prompt: str, tool: str) -> None:
-    import pdb
-
-    pdb.set_trace()
     contract_instance, ethereum_ledger_api = send_request(prompt, tool)
     watch_for_events(contract_instance, ethereum_ledger_api)

@@ -18,9 +18,6 @@ def cli() -> None:
 def interact(prompt: str, tool: str) -> None:
     """Interact with a mech specifying a prompt and tool."""
     interact_(prompt=prompt, tool=tool)
-    import pdb
-
-    pdb.set_trace()
 
 
 @click.command()
