@@ -104,28 +104,51 @@ def send_request(
     signed_transaction = ethereum_crypto.sign_transaction(raw_transaction)
     transaction_digest = ethereum_ledger_api.send_signed_transaction(signed_transaction)
     print(f"Transaction sent: https://gnosisscan.io/tx/{transaction_digest}")
-    return contract_instance, ethereum_ledger_api
+    return contract_instance, ethereum_ledger_api, ethereum_crypto
 
 
 def watch_for_events(
-    contract_instance: Contract, ethereum_ledger_api: EthereumApi
+    contract_instance: Contract, ethereum_ledger_api: EthereumApi, ethereum_crypto: EthereumCrypto
 ) -> None:
     """Watches for events on mech."""
+    EVENT_SIGNATURE_REQUEST = "0x4bda649efe6b98b0f9c1d5e859c29e20910f45c66dabfe6fad4a4881f7faf9cc"
+    EVENT_SIGNATURE_DELIVER = "0x3ec84da2cdc1ce60c063642b69ff2e65f3b69787a2b90443457ba274e51e7c72"
     wss_endpoint = "wss://rpc.eu-central-2.gateway.fm/ws/v4/gnosis/non-archival/mainnet"
     wss = websocket.create_connection(wss_endpoint)
-    subscription_msg_template = {
+    subscription_request = {
         "jsonrpc": "2.0",
         "id": 1,
         "method": "eth_subscribe",
-        "params": ["logs", {"address": CONTRACT_ADDRESS}],
+        "params": [
+            "logs",
+            {
+                "address": CONTRACT_ADDRESS,
+                "topics": [EVENT_SIGNATURE_REQUEST, ["0x" + "0"*24 + ethereum_crypto.address[2:]]]
+            }
+        ],
     }
-    content = bytes(json.dumps(subscription_msg_template), "utf-8")
+    content = bytes(json.dumps(subscription_request), "utf-8")
     wss.send(content)
     # registration confirmation
     msg = wss.recv()
-    # events
-    count = 0
-    while count < 2:
+    subscription_deliver = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_subscribe",
+        "params": [
+            "logs",
+            {
+                "address": CONTRACT_ADDRESS,
+                "topics": [EVENT_SIGNATURE_DELIVER]
+            }
+        ],
+    }
+    content = bytes(json.dumps(subscription_deliver), "utf-8")
+    wss.send(content)
+    # registration confirmation
+    msg = wss.recv()
+    is_waiting = True
+    while is_waiting:
         msg = wss.recv()
         data = json.loads(msg)
         tx_hash = data["params"]["result"]["transactionHash"]
@@ -138,6 +161,8 @@ def watch_for_events(
                 no_receipt = False
             except Exception:
                 time.sleep(1)
+        # TODO below: look for event signature to do if/else assignment;
+        import pdb; pdb.set_trace()
         if count == 0:
             rich_logs = contract_instance.events.Request().processReceipt(tx_receipt)
             request_id = rich_logs[0]["args"]["requestId"]
@@ -147,11 +172,11 @@ def watch_for_events(
             data = rich_logs[0]["args"]["data"]
             data_url = "https://gateway.autonolas.tech/ipfs/f01701220" + data.hex()
             print(f"Data arrived: {data_url}")
-        count += 1
+            is_waiting = False
     response = requests.get(data_url + "/" + str(request_id))
     print(f"Data: {response.json()}")
 
 
 def interact(prompt: str, tool: str) -> None:
-    contract_instance, ethereum_ledger_api = send_request(prompt, tool)
-    watch_for_events(contract_instance, ethereum_ledger_api)
+    contract_instance, ethereum_ledger_api, ethereum_crypto = send_request(prompt, tool)
+    watch_for_events(contract_instance, ethereum_ledger_api, ethereum_crypto)
