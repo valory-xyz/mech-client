@@ -30,7 +30,7 @@ import os
 import sys
 import time
 import warnings
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import requests
 import websocket
@@ -55,7 +55,7 @@ EVENT_SIGNATURE_DELIVER = (
 )
 WSS_ENDPOINT = os.getenv(
     "WEBSOCKET_ENDPOINT",
-    "wss://gno.getblock.io/3042bb06-d18e-4ce0-8ccf-83eedd35532b/mainnet/",
+    "wss://rpc.eu-central-2.gateway.fm/ws/v4/gnosis/non-archival/mainnet",
 )
 
 # Ignore a specific warning message
@@ -164,9 +164,10 @@ def watch_for_events(
     contract_instance: Contract,
     ethereum_ledger_api: EthereumApi,
     ethereum_crypto: EthereumCrypto,
-) -> None:
+) -> Dict[str, Any]:
     """Watches for events on mech."""
     is_waiting = True
+    request_id = None
     while is_waiting:
         msg = wss.recv()
         data = json.loads(msg)
@@ -195,13 +196,18 @@ def watch_for_events(
             print(f"Data arrived: {data_url}")
             is_waiting = False
     response = requests.get(data_url + "/" + str(request_id))
-    result = response.json()["result"]
+    response_json = response.json()
+    result = response_json["result"]
     print(f"Data:\n{result}")
+    return response_json
 
 
-def interact(prompt: str, tool: str) -> None:
+def interact(prompt: str, tool: str) -> Dict[str, Any]:
     ethereum_crypto = EthereumCrypto(private_key_path=PRIVATE_KEY_FILE_PATH)
     ethereum_ledger_api = EthereumApi(**ETHEREUM_TESTNET_CONFIG)
     wss = register_event_handlers(ethereum_crypto)
     contract_instance = send_request(ethereum_crypto, ethereum_ledger_api, prompt, tool)
-    watch_for_events(wss, contract_instance, ethereum_ledger_api, ethereum_crypto)
+    response = watch_for_events(
+        wss, contract_instance, ethereum_ledger_api, ethereum_crypto
+    )
+    return response
