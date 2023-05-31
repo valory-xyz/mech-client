@@ -25,7 +25,6 @@ Usage:
 python push_to_ipfs.py <file_path>
 """
 
-import sys
 from typing import Tuple
 
 import multibase
