@@ -27,7 +27,6 @@ python push_to_ipfs.py <prompt> <tool>
 
 import json
 import shutil
-import sys
 import tempfile
 import uuid
 from typing import Tuple
