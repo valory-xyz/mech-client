@@ -8,9 +8,9 @@ packages = [{include = "mech_client"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-open-aea = {version = "1.33.0", extras = ["cli"]}
-open-aea-ledger-ethereum = "1.33.0"
-open-aea-cli-ipfs = "1.33.0"
+open-aea = {version = "1.34.0", extras = ["cli"]}
+open-aea-ledger-ethereum = "1.34.0"
+open-aea-cli-ipfs = "1.34.0"
 websocket-client = ">=0.32.0,<1"
 
 [tool.poetry.scripts]
