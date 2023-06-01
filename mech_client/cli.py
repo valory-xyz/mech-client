@@ -4,6 +4,7 @@ from mech_client import __version__
 from mech_client.interact import interact as interact_
 from mech_client.prompt_to_ipfs import main as prompt_to_ipfs_main
 from mech_client.push_to_ipfs import main as push_to_ipfs_main
+from mech_client.to_png import main as to_png_main
 
 
 @click.group(name="mechx")  # type: ignore
@@ -35,9 +36,19 @@ def push_to_ipfs(file_path: str) -> None:
     push_to_ipfs_main(file_path=file_path)
 
 
+@click.command()
+@click.argument("ipfs_hash")
+@click.argument("path")
+@click.argument("request_id")
+def to_png(ipfs_hash: str, path: str, request_id: str) -> None:
+    """Convert a stability AI API's diffusion model output into a PNG format."""
+    to_png_main(ipfs_hash, path, request_id)
+
+
 cli.add_command(interact)
 cli.add_command(prompt_to_ipfs)
 cli.add_command(push_to_ipfs)
+cli.add_command(to_png)
 
 
 if __name__ == "__main__":
