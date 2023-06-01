@@ -72,6 +72,10 @@ def check_for_tools(tool: str) -> Optional[int]:
             "openai-text-davinci-003",
             "openai-gpt-3.5-turbo",
             "openai-gpt-4",
+            "stabilityai-stable-diffusion-v1-5",
+            "stabilityai-stable-diffusion-xl-beta-v2-2-2",
+            "stabilityai-stable-diffusion-512-v2-1",
+            "stabilityai-stable-diffusion-768-v2-1",
         ]
         else None
     )
