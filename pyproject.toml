@@ -1,10 +1,11 @@
 [tool.poetry]
 name = "mech-client"
-version = "0.1.6"
+version = "0.1.7"
 description = "Basic client to interact with a mech"
 authors = ["David Minarsch <david.minarsch@googlemail.com>"]
 readme = "README.md"
 packages = [{include = "mech_client"}]
+license = "Apache-2.0"
 
 [tool.poetry.dependencies]
 python = "^3.10"
