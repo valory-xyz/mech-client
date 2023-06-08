@@ -1,3 +1,26 @@
+# -*- coding: utf-8 -*-
+# ------------------------------------------------------------------------------
+#
+#   Copyright 2023 Valory AG
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+# ------------------------------------------------------------------------------
+
+"""Mech client CLI module."""
+
+from typing import Optional
+
 import click
 
 from mech_client import __version__
@@ -15,10 +38,23 @@ def cli() -> None:
 
 @click.command()
 @click.argument("prompt")
-@click.argument("tool")
-def interact(prompt: str, tool: str) -> None:
+@click.argument("agent_id", type=int)
+@click.option(
+    "--tool",
+    type=str,
+)
+@click.option(
+    "--key",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+)
+def interact(
+    prompt: str, agent_id: int, tool: Optional[str], key: Optional[str]
+) -> None:
     """Interact with a mech specifying a prompt and tool."""
-    interact_(prompt=prompt, tool=tool)
+    try:
+        interact_(prompt=prompt, agent_id=agent_id, private_key_path=key, tool=tool)
+    except (ValueError, FileNotFoundError) as e:
+        raise click.ClickException(str(e)) from e
 
 
 @click.command()

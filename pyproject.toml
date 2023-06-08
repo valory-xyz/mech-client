@@ -13,6 +13,7 @@ open-aea = {version = "1.34.0", extras = ["cli"]}
 open-aea-ledger-ethereum = "1.34.0"
 open-aea-cli-ipfs = "1.34.0"
 websocket-client = ">=0.32.0,<1"
+gql = "^3.4.1"
 
 [tool.poetry.scripts]
 mechx = "mech_client.cli:cli"
