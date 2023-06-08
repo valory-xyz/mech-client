@@ -69,8 +69,6 @@ GNOSISSCAN_API_URL = "https://api.gnosisscan.io/api?module=contract&action=getab
 # Ignore a specific warning message
 warnings.filterwarnings("ignore", "The log with transaction hash.*")
 
-EthereumApi().api.eth.contract()
-
 
 def get_contract(contract_address: str, ledger_api: EthereumApi) -> Web3Contract:
     """Returns a contract instance."""
