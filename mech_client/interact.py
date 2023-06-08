@@ -83,7 +83,7 @@ def get_contract(contract_address: str, ledger_api: EthereumApi) -> Web3Contract
 def _tool_selector_prompt(available_tools: List[str]) -> str:
     """Tool selector prompt."""
 
-    tool_col_len = len(max(available_tools))
+    tool_col_len = max(map(len, available_tools))
     id_col_len = max(2, len(str(len(available_tools))))
     table_len = tool_col_len + id_col_len + 5
 
