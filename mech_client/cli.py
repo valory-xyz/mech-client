@@ -42,17 +42,34 @@ def cli() -> None:
 @click.option(
     "--tool",
     type=str,
+    help="Name of the tool to be used",
 )
 @click.option(
     "--key",
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    help="Path to private key to use for request minting",
+)
+@click.option(
+    "--agent",
+    type=str,
+    help="Agent address to retrive the data using ACN",
 )
 def interact(
-    prompt: str, agent_id: int, tool: Optional[str], key: Optional[str]
+    prompt: str,
+    agent_id: int,
+    tool: Optional[str],
+    key: Optional[str],
+    agent: Optional[str],
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
-        interact_(prompt=prompt, agent_id=agent_id, private_key_path=key, tool=tool)
+        interact_(
+            prompt=prompt,
+            agent_id=agent_id,
+            agent_address=agent,
+            private_key_path=key,
+            tool=tool,
+        )
     except (ValueError, FileNotFoundError) as e:
         raise click.ClickException(str(e)) from e
 

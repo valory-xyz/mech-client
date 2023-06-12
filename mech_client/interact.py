@@ -25,6 +25,7 @@ Usage:
 python client.py <prompt> <tool>
 """
 
+import asyncio
 import json
 import os
 import time
@@ -38,9 +39,9 @@ from aea.contracts.base import Contract
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from web3.contract import Contract as Web3Contract
 
+from mech_client.acn import request_mech_for_data
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.subgraph import query_agent_address
-
 
 AGENT_REGISTRY_CONTRACT = "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA"
 MECHX_CHAIN_RPC = os.environ.get(
@@ -206,11 +207,11 @@ def send_request(
     print(f"Transaction sent: https://gnosisscan.io/tx/{transaction_digest}")
 
 
-def watch_for_events(
+def watch_for_request_id(
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
     ledger_api: EthereumApi,
-) -> Dict[str, Any]:
+) -> str:
     """Watches for events on mech."""
     is_waiting = True
     request_id = None
@@ -228,8 +229,30 @@ def watch_for_events(
         event_signature = tx_receipt["logs"][0]["topics"][0].hex()
         if event_signature == EVENT_SIGNATURE_REQUEST:
             rich_logs = mech_contract.events.Request().processReceipt(tx_receipt)
-            request_id = rich_logs[0]["args"]["requestId"]
-            print(f"Request on-chain with id: {request_id}")
+            request_id = str(rich_logs[0]["args"]["requestId"])
+            return request_id
+
+
+def watch_for_data(
+    request_id: str,
+    wss: websocket.WebSocket,
+    mech_contract: Web3Contract,
+    ledger_api: EthereumApi,
+) -> str:
+    """Watches for events on mech."""
+    is_waiting = True
+    while is_waiting:
+        msg = wss.recv()
+        data = json.loads(msg)
+        tx_hash = data["params"]["result"]["transactionHash"]
+        no_receipt = True
+        while no_receipt:
+            try:
+                tx_receipt = ledger_api._api.eth.get_transaction_receipt(tx_hash)
+                no_receipt = False
+            except Exception:
+                time.sleep(1)
+        event_signature = tx_receipt["logs"][0]["topics"][0].hex()
         if event_signature == EVENT_SIGNATURE_DELIVER:
             rich_logs = mech_contract.events.Deliver().processReceipt(tx_receipt)
             data = rich_logs[0]["args"]["data"]
@@ -237,20 +260,18 @@ def watch_for_events(
             if request_id != request_id_:
                 continue
             data_url = "https://gateway.autonolas.tech/ipfs/f01701220" + data.hex()
-            print(f"Data arrived: {data_url}")
             is_waiting = False
 
     response = requests.get(data_url + "/" + str(request_id))
     response_json = response.json()
-    result = response_json["result"]
-    print(f"Data:\n{result}")
-    return response_json
+    return response_json["result"]
 
 
 def interact(
     prompt: str,
     agent_id: int,
     tool: Optional[str] = None,
+    agent_address: Optional[str] = None,
     private_key_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Interact with agent mech contract."""
@@ -281,4 +302,27 @@ def interact(
         prompt=prompt,
         tool=tool,
     )
-    return watch_for_events(wss=wss, mech_contract=mech_contract, ledger_api=ledger_api)
+    request_id = watch_for_request_id(
+        wss=wss, mech_contract=mech_contract, ledger_api=ledger_api
+    )
+    print(f"Created on-chain request with ID {request_id}")
+    if agent_address is not None:
+        print(f"Requesting data from agent {agent_address}")
+        loop = asyncio.new_event_loop()
+        task = loop.create_task(
+            request_mech_for_data(
+                request_id=request_id,
+                agent_address=agent_address,
+                crypto=crypto,
+            )
+        )
+        loop.run_until_complete(task)
+        data = task.result()
+    else:
+        data = watch_for_data(
+            request_id=request_id,
+            wss=wss,
+            mech_contract=mech_contract,
+            ledger_api=ledger_api,
+        )
+    print(f"Got data from agent: {data}")
