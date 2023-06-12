@@ -1,4 +1,10 @@
+packages/valory/
+mech_client/helpers/acn
+mech_client/helpers/mech_acn
+mech_client/helpers/p2p_libp2p_client
+
 ethereum_private_key.txt
+acn_cert.txt
 
 *.DS_Store
 dist/
