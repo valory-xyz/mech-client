@@ -39,7 +39,7 @@ from aea.contracts.base import Contract
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from web3.contract import Contract as Web3Contract
 
-from mech_client.acn import request_mech_for_data
+from mech_client.acn import wait_for_data
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.subgraph import query_agent_address
 
@@ -233,45 +233,10 @@ def watch_for_request_id(
             return request_id
 
 
-def watch_for_data(
-    request_id: str,
-    wss: websocket.WebSocket,
-    mech_contract: Web3Contract,
-    ledger_api: EthereumApi,
-) -> str:
-    """Watches for events on mech."""
-    is_waiting = True
-    while is_waiting:
-        msg = wss.recv()
-        data = json.loads(msg)
-        tx_hash = data["params"]["result"]["transactionHash"]
-        no_receipt = True
-        while no_receipt:
-            try:
-                tx_receipt = ledger_api._api.eth.get_transaction_receipt(tx_hash)
-                no_receipt = False
-            except Exception:
-                time.sleep(1)
-        event_signature = tx_receipt["logs"][0]["topics"][0].hex()
-        if event_signature == EVENT_SIGNATURE_DELIVER:
-            rich_logs = mech_contract.events.Deliver().processReceipt(tx_receipt)
-            data = rich_logs[0]["args"]["data"]
-            request_id_ = rich_logs[0]["args"]["requestId"]
-            if request_id != request_id_:
-                continue
-            data_url = "https://gateway.autonolas.tech/ipfs/f01701220" + data.hex()
-            is_waiting = False
-
-    response = requests.get(data_url + "/" + str(request_id))
-    response_json = response.json()
-    return response_json["result"]
-
-
 def interact(
     prompt: str,
     agent_id: int,
     tool: Optional[str] = None,
-    agent_address: Optional[str] = None,
     private_key_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Interact with agent mech contract."""
@@ -306,23 +271,5 @@ def interact(
         wss=wss, mech_contract=mech_contract, ledger_api=ledger_api
     )
     print(f"Created on-chain request with ID {request_id}")
-    if agent_address is not None:
-        print(f"Requesting data from agent {agent_address}")
-        loop = asyncio.new_event_loop()
-        task = loop.create_task(
-            request_mech_for_data(
-                request_id=request_id,
-                agent_address=agent_address,
-                crypto=crypto,
-            )
-        )
-        loop.run_until_complete(task)
-        data = task.result()
-    else:
-        data = watch_for_data(
-            request_id=request_id,
-            wss=wss,
-            mech_contract=mech_contract,
-            ledger_api=ledger_api,
-        )
+    data = wait_for_data(crypto=crypto)
     print(f"Got data from agent: {data}")

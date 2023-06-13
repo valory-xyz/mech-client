@@ -90,9 +90,6 @@ def load_protocol(
     configuration.directory = MECH_ACN_CALLBACK_PROTOCOL_PACKAGE
     load_aea_package(configuration=configuration)
 
-    from packages.valory.protocols.mech_acn.custom_types import (
-        StatusEnum as RequestStatus,
-    )
     from packages.valory.protocols.mech_acn.dialogues import MechAcnDialogue
     from packages.valory.protocols.mech_acn.dialogues import (
         MechAcnDialogues as BaseMechAcnDialogues,
@@ -124,7 +121,7 @@ def load_protocol(
                 role_from_first_message=role_from_first_message,
             )
 
-    return MechAcnMessage, MechAcnDialogue, MechAcnDialogues, RequestStatus
+    return MechAcnMessage, MechAcnDialogue, MechAcnDialogues
 
 
 def load_acn_protocol() -> None:
@@ -163,39 +160,23 @@ def load_libp2p_client(
     )
 
 
-async def request_mech_for_data(
-    request_id: int,
-    agent_address: str,
-    crypto: Crypto,
-    sleep: float = 3.0,
-) -> Any:
-    """Request and wait for data from agent."""
-    MechAcnMessage, _, MechAcnDialogues, RequestStatus = load_protocol(
-        address=crypto.address
-    )
+async def wait_for_data_from_mech(crypto: Crypto) -> Any:
+    """Wait for data from mech."""
+    MechAcnMessage, _, _ = load_protocol(address=crypto.address)
     connection = load_libp2p_client(crypto=crypto)
-    dialogues = MechAcnDialogues()
     try:
         await connection.connect()
         while True:
-            message, _ = dialogues.create(
-                counterparty=agent_address,
-                performative=MechAcnMessage.Performative.REQUEST,
-                request_id=request_id,
-            )
-            envelope = Envelope(
-                to=message.to,
-                sender=message.sender,
-                message=message,
-            )
-            await connection.send(envelope=envelope)
             response = await connection.receive()
             response_message = MechAcnMessage.decode(response.message)
-            if response_message.status.status == RequestStatus.READY:
-                return response_message.data
-
-            print(f"{response_message.data}")
-            print(f"Will retry in {sleep}...")
-            await asyncio.sleep(sleep)
+            return response_message.content
     finally:
         await connection.disconnect()
+
+
+def wait_for_data(crypto: Crypto) -> Any:
+    """Request and wait for data from agent."""
+    loop = asyncio.new_event_loop()
+    task = loop.create_task(wait_for_data_from_mech(crypto=crypto))
+    loop.run_until_complete(task)
+    return task.result()

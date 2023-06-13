@@ -83,12 +83,6 @@ Data arrived: https://gateway.autonolas.tech/ipfs/f017012205053a4ae3ef0cf4ed7eff
 Data: {'requestId': 15263135923206312300456917202469137903009897852865973093832667165921851537677, 'result': "\n\nA sun-filled sky,\nA soft breeze blowing by,\nWhere the trees sway in the wind,\nA peaceful moment I can't rewind."}
 ```
 
-If you want to reuquest data directly from the agent you can use `--agent` flag to provide address of one of the agents.
-
-```bash
-mechx interact <prompt> <agent_id> --key <key_file> --agent <agent_address>
-```
-
 
 ## Release guide:
 
