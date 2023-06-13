@@ -20,9 +20,8 @@
 """ACN helpers."""
 
 import asyncio
-from enum import Enum
 from pathlib import Path
-from typing import Any, Tuple, Type, cast
+from typing import Any, Type, cast
 
 from aea.components.base import load_aea_package
 from aea.configurations.base import ConnectionConfig
@@ -35,14 +34,11 @@ from aea.crypto.wallet import CryptoStore
 from aea.helpers.base import CertRequest
 from aea.helpers.yaml_utils import yaml_load
 from aea.identity.base import Identity
-from aea.mail.base import Envelope
-from aea.protocols.base import Message, Protocol
-from aea.protocols.dialogue.base import Dialogue, DialogueLabel, Dialogues
-from aea_ledger_ethereum import EthereumCrypto
+from aea.protocols.base import Message
 
 from mech_client.helpers import (
+    ACN_DATA_SHARE_PROTOCOL_PACKAGE,
     ACN_PROTOCOL_PACKAGE,
-    MECH_ACN_CALLBACK_PROTOCOL_PACKAGE,
     P2P_CLIENT_PACKAGE,
 )
 
@@ -79,49 +75,18 @@ def issue_certificate(cert_request: CertRequest, crypto: Crypto) -> None:
     Path(cert_request.save_path).write_bytes(signature.encode("ascii"))
 
 
-def load_protocol(
-    address: str,
-) -> Tuple[Type[Message], Type[Dialogue], Type[Dialogues], Type[Enum]]:
+def load_protocol(address: str) -> Type[Message]:
     """Load message class."""
     configuration = load_component_configuration(
         component_type=ComponentType.PROTOCOL,
-        directory=MECH_ACN_CALLBACK_PROTOCOL_PACKAGE,
+        directory=ACN_DATA_SHARE_PROTOCOL_PACKAGE,
     )
-    configuration.directory = MECH_ACN_CALLBACK_PROTOCOL_PACKAGE
+    configuration.directory = ACN_DATA_SHARE_PROTOCOL_PACKAGE
     load_aea_package(configuration=configuration)
 
-    from packages.valory.protocols.mech_acn.dialogues import MechAcnDialogue
-    from packages.valory.protocols.mech_acn.dialogues import (
-        MechAcnDialogues as BaseMechAcnDialogues,
-    )
-    from packages.valory.protocols.mech_acn.message import MechAcnMessage
+    from packages.valory.protocols.acn_data_share.message import AcnDataShareMessage
 
-    class MechAcnDialogues(BaseMechAcnDialogues):
-        """The dialogues class keeps track of all dialogues."""
-
-        def __init__(self, **kwargs: Any) -> None:
-            """
-            Initialize dialogues.
-            :param kwargs: keyword arguments
-            """
-
-            def role_from_first_message(  # pylint: disable=unused-argument
-                message: Message, receiver_address: str
-            ) -> Dialogue.Role:
-                """Infer the role of the agent from an incoming/outgoing first message
-                :param message: an incoming/outgoing first message
-                :param receiver_address: the address of the receiving agent
-                :return: The role of the agent
-                """
-                return MechAcnDialogue.Role.AGENT
-
-            BaseMechAcnDialogues.__init__(
-                self,
-                self_address=str(address),
-                role_from_first_message=role_from_first_message,
-            )
-
-    return MechAcnMessage, MechAcnDialogue, MechAcnDialogues
+    return AcnDataShareMessage
 
 
 def load_acn_protocol() -> None:
@@ -162,13 +127,13 @@ def load_libp2p_client(
 
 async def wait_for_data_from_mech(crypto: Crypto) -> Any:
     """Wait for data from mech."""
-    MechAcnMessage, _, _ = load_protocol(address=crypto.address)
+    AcnDataShareMessage = load_protocol(address=crypto.address)
     connection = load_libp2p_client(crypto=crypto)
     try:
         await connection.connect()
         while True:
             response = await connection.receive()
-            response_message = MechAcnMessage.decode(response.message)
+            response_message = AcnDataShareMessage.decode(response.message)
             return response_message.content
     finally:
         await connection.disconnect()
