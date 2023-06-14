@@ -135,6 +135,8 @@ async def wait_for_data_from_mech(crypto: Crypto) -> Any:
             response = await connection.receive()
             response_message = AcnDataShareMessage.decode(response.message)
             return response_message.content
+    except AttributeError:
+        pass
     finally:
         await connection.disconnect()
 
