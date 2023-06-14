@@ -28,20 +28,24 @@ python client.py <prompt> <tool>
 import asyncio
 import json
 import os
-import time
 import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 import websocket
-from aea.contracts.base import Contract
+from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from web3.contract import Contract as Web3Contract
 
-from mech_client.acn import wait_for_data
+from mech_client.acn import wait_for_data as watch_for_data_off_chain
+from mech_client.acn import wait_for_data_from_mech
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.subgraph import query_agent_address
+from mech_client.wss import register_event_handlers
+from mech_client.wss import wait_for_data as watch_for_data_on_chain
+from mech_client.wss import watch_for_data, watch_for_request_id
+from enum import Enum
 
 AGENT_REGISTRY_CONTRACT = "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA"
 MECHX_CHAIN_RPC = os.environ.get(
@@ -55,12 +59,7 @@ LEDGER_CONFIG = {
     "default_gas_price_strategy": "eip1559",
 }
 PRIVATE_KEY_FILE_PATH = "ethereum_private_key.txt"
-EVENT_SIGNATURE_REQUEST = (
-    "0x4bda649efe6b98b0f9c1d5e859c29e20910f45c66dabfe6fad4a4881f7faf9cc"
-)
-EVENT_SIGNATURE_DELIVER = (
-    "0x3ec84da2cdc1ce60c063642b69ff2e65f3b69787a2b90443457ba274e51e7c72"
-)
+
 WSS_ENDPOINT = os.getenv(
     "WEBSOCKET_ENDPOINT",
     "wss://rpc.eu-central-2.gateway.fm/ws/v4/gnosis/non-archival/mainnet",
@@ -69,6 +68,14 @@ GNOSISSCAN_API_URL = "https://api.gnosisscan.io/api?module=contract&action=getab
 
 # Ignore a specific warning message
 warnings.filterwarnings("ignore", "The log with transaction hash.*")
+
+
+class ConfirmationType(Enum):
+    """Verification type."""
+
+    ON_CHAIN = "on-chain"
+    OFF_CHAIN = "off-chain"
+    WAIT_FOR_BOTH = "wait-for-both"
 
 
 def get_contract(contract_address: str, ledger_api: EthereumApi) -> Web3Contract:
@@ -139,47 +146,6 @@ def fetch_tools(agent_id: int, ledger_api: EthereumApi) -> List[str]:
     return response["tools"]
 
 
-def register_event_handlers(
-    wss: websocket.WebSocket, contract_address: str, crypto: EthereumCrypto
-) -> None:
-    """Register event handlers."""
-
-    subscription_request = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "eth_subscribe",
-        "params": [
-            "logs",
-            {
-                "address": contract_address,
-                "topics": [
-                    EVENT_SIGNATURE_REQUEST,
-                    ["0x" + "0" * 24 + crypto.address[2:]],
-                ],
-            },
-        ],
-    }
-    content = bytes(json.dumps(subscription_request), "utf-8")
-    wss.send(content)
-
-    # registration confirmation
-    _ = wss.recv()
-    subscription_deliver = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "eth_subscribe",
-        "params": [
-            "logs",
-            {"address": contract_address, "topics": [EVENT_SIGNATURE_DELIVER]},
-        ],
-    }
-    content = bytes(json.dumps(subscription_deliver), "utf-8")
-    wss.send(content)
-
-    # registration confirmation
-    _ = wss.recv()
-
-
 def send_request(
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
@@ -207,30 +173,42 @@ def send_request(
     print(f"Transaction sent: https://gnosisscan.io/tx/{transaction_digest}")
 
 
-def watch_for_request_id(
+def wait_for_data(
+    request_id: str,
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
     ledger_api: EthereumApi,
-) -> str:
-    """Watches for events on mech."""
-    is_waiting = True
-    request_id = None
-    while is_waiting:
-        msg = wss.recv()
-        data = json.loads(msg)
-        tx_hash = data["params"]["result"]["transactionHash"]
-        no_receipt = True
-        while no_receipt:
-            try:
-                tx_receipt = ledger_api._api.eth.get_transaction_receipt(tx_hash)
-                no_receipt = False
-            except Exception:
-                time.sleep(1)
-        event_signature = tx_receipt["logs"][0]["topics"][0].hex()
-        if event_signature == EVENT_SIGNATURE_REQUEST:
-            rich_logs = mech_contract.events.Request().processReceipt(tx_receipt)
-            request_id = str(rich_logs[0]["args"]["requestId"])
-            return request_id
+    crypto: Crypto,
+) -> Any:
+    """Wait for data from on-chain/off-chain"""
+    loop = asyncio.new_event_loop()
+    off_chain_task = loop.create_task(
+        wait_for_data_from_mech(
+            crypto=crypto,
+        )
+    )
+    on_chain_task = loop.create_task(
+        watch_for_data(
+            request_id=request_id,
+            wss=wss,
+            mech_contract=mech_contract,
+            ledger_api=ledger_api,
+            loop=loop,
+        )
+    )
+
+    async def _wait_for_tasks() -> Any:
+        """Wait for tasks to finish."""
+        (finished, *_), unfinished = await asyncio.wait(
+            [off_chain_task, on_chain_task], return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in unfinished:
+            task.cancel()
+        await asyncio.wait(unfinished)
+        return finished.result()
+
+    result = loop.run_until_complete(_wait_for_tasks())
+    return result
 
 
 def interact(
@@ -238,6 +216,7 @@ def interact(
     agent_id: int,
     tool: Optional[str] = None,
     private_key_path: Optional[str] = None,
+    confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
 ) -> Dict[str, Any]:
     """Interact with agent mech contract."""
     contract_address = query_agent_address(agent_id=agent_id)
@@ -258,7 +237,6 @@ def interact(
     mech_contract = get_contract(
         contract_address=contract_address, ledger_api=ledger_api
     )
-
     register_event_handlers(wss=wss, contract_address=contract_address, crypto=crypto)
     send_request(
         crypto=crypto,
@@ -271,5 +249,21 @@ def interact(
         wss=wss, mech_contract=mech_contract, ledger_api=ledger_api
     )
     print(f"Created on-chain request with ID {request_id}")
-    data = wait_for_data(crypto=crypto)
+    if confirmation_type == ConfirmationType.ON_CHAIN:
+        data = watch_for_data_off_chain(crypto=crypto)
+    elif confirmation_type == ConfirmationType.OFF_CHAIN:
+        data = watch_for_data_on_chain(
+            request_id=request_id,
+            wss=wss,
+            mech_contract=mech_contract,
+            ledger_api=ledger_api,
+        )
+    else:
+        data = wait_for_data(
+            request_id=request_id,
+            wss=wss,
+            mech_contract=mech_contract,
+            ledger_api=ledger_api,
+            crypto=crypto,
+        )
     print(f"Got data from agent: {data}")
