@@ -249,9 +249,9 @@ def interact(
         wss=wss, mech_contract=mech_contract, ledger_api=ledger_api
     )
     print(f"Created on-chain request with ID {request_id}")
-    if confirmation_type == ConfirmationType.ON_CHAIN:
+    if confirmation_type == ConfirmationType.OFF_CHAIN:
         data = watch_for_data_off_chain(crypto=crypto)
-    elif confirmation_type == ConfirmationType.OFF_CHAIN:
+    elif confirmation_type == ConfirmationType.ON_CHAIN:
         data = watch_for_data_on_chain(
             request_id=request_id,
             wss=wss,
