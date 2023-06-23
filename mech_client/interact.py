@@ -29,6 +29,7 @@ import asyncio
 import json
 import os
 import warnings
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -45,7 +46,6 @@ from mech_client.subgraph import query_agent_address
 from mech_client.wss import register_event_handlers
 from mech_client.wss import wait_for_data as watch_for_data_on_chain
 from mech_client.wss import watch_for_data, watch_for_request_id
-from enum import Enum
 
 AGENT_REGISTRY_CONTRACT = "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA"
 MECHX_CHAIN_RPC = os.environ.get(
@@ -185,6 +185,7 @@ def wait_for_data(
     off_chain_task = loop.create_task(
         wait_for_data_from_mech(
             crypto=crypto,
+            request_id=request_id,
         )
     )
     on_chain_task = loop.create_task(
@@ -250,7 +251,10 @@ def interact(
     )
     print(f"Created on-chain request with ID {request_id}")
     if confirmation_type == ConfirmationType.OFF_CHAIN:
-        data = watch_for_data_off_chain(crypto=crypto)
+        data = watch_for_data_off_chain(
+            crypto=crypto,
+            request_id=request_id,
+        )
     elif confirmation_type == ConfirmationType.ON_CHAIN:
         data = watch_for_data_on_chain(
             request_id=request_id,
