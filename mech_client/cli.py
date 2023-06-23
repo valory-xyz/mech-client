@@ -24,6 +24,7 @@ from typing import Optional
 import click
 
 from mech_client import __version__
+from mech_client.interact import ConfirmationType
 from mech_client.interact import interact as interact_
 from mech_client.prompt_to_ipfs import main as prompt_to_ipfs_main
 from mech_client.push_to_ipfs import main as push_to_ipfs_main
@@ -42,17 +43,40 @@ def cli() -> None:
 @click.option(
     "--tool",
     type=str,
+    help="Name of the tool to be used",
 )
 @click.option(
     "--key",
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    help="Path to private key to use for request minting",
+)
+@click.option(
+    "--confirm",
+    type=click.Choice(
+        choices=(ConfirmationType.OFF_CHAIN.value, ConfirmationType.ON_CHAIN.value)
+    ),
+    help="Data verification method (on-chain/off-chain)",
 )
 def interact(
-    prompt: str, agent_id: int, tool: Optional[str], key: Optional[str]
+    prompt: str,
+    agent_id: int,
+    tool: Optional[str],
+    key: Optional[str],
+    confirm: Optional[str] = None,
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
-        interact_(prompt=prompt, agent_id=agent_id, private_key_path=key, tool=tool)
+        interact_(
+            prompt=prompt,
+            agent_id=agent_id,
+            private_key_path=key,
+            tool=tool,
+            confirmation_type=(
+                ConfirmationType(confirm)
+                if confirm is not None
+                else ConfirmationType.WAIT_FOR_BOTH
+            ),
+        )
     except (ValueError, FileNotFoundError) as e:
         raise click.ClickException(str(e)) from e
 
