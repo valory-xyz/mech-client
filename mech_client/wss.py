@@ -23,9 +23,8 @@ import asyncio
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, cast
 
-import aiohttp
 import websocket
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi
@@ -36,9 +35,6 @@ EVENT_SIGNATURE_REQUEST = (
 )
 EVENT_SIGNATURE_DELIVER = (
     "0x3ec84da2cdc1ce60c063642b69ff2e65f3b69787a2b90443457ba274e51e7c72"
-)
-IPFS_DATA_REQUEST_URL = (
-    "https://gateway.autonolas.tech/ipfs/f01701220{hash_hex}/{request_id}"
 )
 
 
@@ -112,17 +108,7 @@ def watch_for_request_id(
         return request_id
 
 
-async def fetch_data_from_ipfs(hash_hex: str, request_id: str) -> Dict:
-    """Fetch data from IPFS"""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(
-            url=IPFS_DATA_REQUEST_URL.format(hash_hex=hash_hex, request_id=request_id)
-        ) as response:
-            response_json = await response.json()
-            return response_json["result"]
-
-
-async def watch_for_data(
+async def watch_for_data_url_from_wss(
     request_id: str,
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
@@ -139,7 +125,6 @@ async def watch_for_data(
             tx_receipt = await loop.run_in_executor(
                 executor, wait_for_receipt, tx_hash, ledger_api
             )
-            # tx_receipt = wait_for_receipt(tx_hash, ledger_api)
             event_signature = tx_receipt["logs"][0]["topics"][0].hex()
             if event_signature != EVENT_SIGNATURE_DELIVER:
                 continue
@@ -148,14 +133,10 @@ async def watch_for_data(
             data = cast(bytes, rich_logs[0]["args"]["data"])
             if request_id != str(rich_logs[0]["args"]["requestId"]):
                 continue
-
-            result = await fetch_data_from_ipfs(
-                hash_hex=data.hex(), request_id=str(request_id)
-            )
-            return result
+            return f"https://gateway.autonolas.tech/ipfs/f01701220{data.hex()}"
 
 
-def wait_for_data(
+def watch_for_data_url_from_wss_sync(
     request_id: str,
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
@@ -164,7 +145,7 @@ def wait_for_data(
     """Watches for data on-chain."""
     loop = asyncio.new_event_loop()
     task = loop.create_task(
-        watch_for_data(
+        watch_for_data_url_from_wss(
             request_id=request_id,
             wss=wss,
             mech_contract=mech_contract,

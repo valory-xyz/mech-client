@@ -39,13 +39,18 @@ from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from web3.contract import Contract as Web3Contract
 
-from mech_client.acn import wait_for_data as watch_for_data_off_chain
-from mech_client.acn import wait_for_data_from_mech
+from mech_client.acn import (
+    watch_for_data_url_from_mech,
+    watch_for_data_url_from_mech_sync,
+)
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.subgraph import query_agent_address
-from mech_client.wss import register_event_handlers
-from mech_client.wss import wait_for_data as watch_for_data_on_chain
-from mech_client.wss import watch_for_data, watch_for_request_id
+from mech_client.wss import (
+    register_event_handlers,
+    watch_for_data_url_from_wss,
+    watch_for_data_url_from_wss_sync,
+    watch_for_request_id,
+)
 
 AGENT_REGISTRY_CONTRACT = "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA"
 MECHX_CHAIN_RPC = os.environ.get(
@@ -173,7 +178,7 @@ def send_request(
     print(f"Transaction sent: https://gnosisscan.io/tx/{transaction_digest}")
 
 
-def wait_for_data(
+def wait_for_data_url(
     request_id: str,
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
@@ -182,14 +187,9 @@ def wait_for_data(
 ) -> Any:
     """Wait for data from on-chain/off-chain"""
     loop = asyncio.new_event_loop()
-    off_chain_task = loop.create_task(
-        wait_for_data_from_mech(
-            crypto=crypto,
-            request_id=request_id,
-        )
-    )
+    off_chain_task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
     on_chain_task = loop.create_task(
-        watch_for_data(
+        watch_for_data_url_from_wss(
             request_id=request_id,
             wss=wss,
             mech_contract=mech_contract,
@@ -251,23 +251,22 @@ def interact(
     )
     print(f"Created on-chain request with ID {request_id}")
     if confirmation_type == ConfirmationType.OFF_CHAIN:
-        data = watch_for_data_off_chain(
-            crypto=crypto,
-            request_id=request_id,
-        )
+        data_url = watch_for_data_url_from_mech_sync(crypto=crypto)
     elif confirmation_type == ConfirmationType.ON_CHAIN:
-        data = watch_for_data_on_chain(
+        data_url = watch_for_data_url_from_wss_sync(
             request_id=request_id,
             wss=wss,
             mech_contract=mech_contract,
             ledger_api=ledger_api,
         )
     else:
-        data = wait_for_data(
+        data_url = wait_for_data_url(
             request_id=request_id,
             wss=wss,
             mech_contract=mech_contract,
             ledger_api=ledger_api,
             crypto=crypto,
         )
-    print(f"Got data from agent: {data}")
+    print(f"Data arrived: {data_url}")
+    data = requests.get(f"{data_url}/{request_id}").json()
+    print(f"Data from agent: {data}")

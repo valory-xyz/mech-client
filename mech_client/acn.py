@@ -21,9 +21,8 @@
 
 import asyncio
 from pathlib import Path
-from typing import Any, Type, cast
+from typing import Type, cast
 
-import aiohttp
 from aea.components.base import load_aea_package
 from aea.configurations.base import ConnectionConfig
 from aea.configurations.constants import DEFAULT_CONNECTION_CONFIG_FILE
@@ -128,32 +127,24 @@ def load_libp2p_client(
     )
 
 
-async def wait_for_data_from_mech(crypto: Crypto, request_id: str) -> Any:
+async def watch_for_data_url_from_mech(crypto: Crypto) -> str:
     """Wait for data from mech."""
     AcnDataShareMessage = load_protocol(address=crypto.address)
     connection = load_libp2p_client(crypto=crypto)
     try:
         await connection.connect()
-        while True:
-            response = await connection.receive()
-            response_message = AcnDataShareMessage.decode(response.message)
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url=f"https://gateway.autonolas.tech/ipfs/{response_message.content}/{request_id}"
-                ) as ipfs_response:
-                    response_json = await ipfs_response.json()
-                    return response_json["result"]
+        response = await connection.receive()
+        response_message = AcnDataShareMessage.decode(response.message)
+        return f"https://gateway.autonolas.tech/ipfs/{response_message.content}"
     except AttributeError:
         pass
     finally:
         await connection.disconnect()
 
 
-def wait_for_data(crypto: Crypto, request_id: str) -> Any:
+def watch_for_data_url_from_mech_sync(crypto: Crypto) -> str:
     """Request and wait for data from agent."""
     loop = asyncio.new_event_loop()
-    task = loop.create_task(
-        wait_for_data_from_mech(crypto=crypto, request_id=request_id)
-    )
+    task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
     loop.run_until_complete(task)
     return task.result()
