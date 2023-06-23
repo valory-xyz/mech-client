@@ -19,3 +19,7 @@ copy-packages-local:
 
 	rm -rf packages/valory/protocols/acn_data_share
 	cp -r ~/mech/packages/valory/protocols/acn_data_share packages/valory/protocols/acn_data_share
+
+.PHONY: dist
+dist: eject-packages
+	poetry build
