@@ -1,0 +1,39 @@
+name: Release Flow
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish-pip-packages:
+    name: Release framework
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10"]
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-versions }}
+      - name: Install dependencies
+        run: |
+          sudo apt-get update --fix-missing
+          sudo apt-get autoremove
+          sudo apt-get autoclean
+          python -m pip install --upgrade pip
+          pip install twine poetry==1.4.2
+
+      - name: Build wheels and source tarball
+        run: |
+          echo Building distribution
+          make dist
+
+      - name: Publish open-autonomy Framework to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip_existing: true
+          packages_dir: dist/
+
