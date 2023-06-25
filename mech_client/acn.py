@@ -21,7 +21,7 @@
 
 import asyncio
 from pathlib import Path
-from typing import Type, cast
+from typing import Optional, Type, cast
 
 from aea.components.base import load_aea_package
 from aea.configurations.base import ConnectionConfig
@@ -41,6 +41,7 @@ from mech_client.helpers import (
     ACN_PROTOCOL_PACKAGE,
     P2P_CLIENT_PACKAGE,
 )
+
 
 CONNECTION_CONFIG = {
     "connect_retries": 3,
@@ -66,8 +67,6 @@ CERT_REQUESTS = [
     }
 ]
 
-IPFS_REQUEST_URL = "https://gateway.autonolas.tech/ipfs/{hash_str}/{request_id}"
-
 
 def issue_certificate(cert_request: CertRequest, crypto: Crypto) -> None:
     """Issue ACN certificate."""
@@ -77,7 +76,7 @@ def issue_certificate(cert_request: CertRequest, crypto: Crypto) -> None:
     Path(cert_request.save_path).write_bytes(signature.encode("ascii"))
 
 
-def load_protocol(address: str) -> Type[Message]:
+def load_protocol() -> Type[Message]:
     """Load message class."""
     configuration = load_component_configuration(
         component_type=ComponentType.PROTOCOL,
@@ -86,7 +85,9 @@ def load_protocol(address: str) -> Type[Message]:
     configuration.directory = ACN_DATA_SHARE_PROTOCOL_PACKAGE
     load_aea_package(configuration=configuration)
 
-    from packages.valory.protocols.acn_data_share.message import AcnDataShareMessage
+    from packages.valory.protocols.acn_data_share.message import (  # pylint: disable=import-outside-toplevel
+        AcnDataShareMessage,
+    )
 
     return AcnDataShareMessage
 
@@ -127,9 +128,9 @@ def load_libp2p_client(
     )
 
 
-async def watch_for_data_url_from_mech(crypto: Crypto) -> str:
+async def watch_for_data_url_from_mech(crypto: Crypto) -> Optional[str]:
     """Wait for data from mech."""
-    AcnDataShareMessage = load_protocol(address=crypto.address)
+    AcnDataShareMessage = load_protocol()
     connection = load_libp2p_client(crypto=crypto)
     try:
         await connection.connect()
@@ -137,12 +138,12 @@ async def watch_for_data_url_from_mech(crypto: Crypto) -> str:
         response_message = AcnDataShareMessage.decode(response.message)
         return f"https://gateway.autonolas.tech/ipfs/{response_message.content}"
     except AttributeError:
-        pass
+        return None
     finally:
         await connection.disconnect()
 
 
-def watch_for_data_url_from_mech_sync(crypto: Crypto) -> str:
+def watch_for_data_url_from_mech_sync(crypto: Crypto) -> Optional[str]:
     """Request and wait for data from agent."""
     loop = asyncio.new_event_loop()
     task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))

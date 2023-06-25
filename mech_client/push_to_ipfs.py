@@ -34,6 +34,15 @@ from aea_cli_ipfs.ipfs_utils import IPFSTool
 
 
 def push_to_ipfs(file_path: str) -> Tuple[str, str]:
+    """
+    Push a file to IPFS.
+
+    :param file_path: Path of the file to be pushed to IPFS.
+    :type file_path: str
+
+    :return: A tuple containing v1_file_hash and v1_file_hash_hex.
+    :rtype: Tuple[str, str]
+    """
     response = IPFSTool().client.add(
         file_path, pin=True, recursive=True, wrap_with_directory=False
     )
@@ -45,6 +54,12 @@ def push_to_ipfs(file_path: str) -> Tuple[str, str]:
 
 
 def main(file_path: str) -> None:
+    """
+    Push a file to IPFS and print the v1_file_hash and v1_file_hash_hex.
+
+    :param file_path: Path of the file to be pushed to IPFS.
+    :type file_path: str
+    """
     v1_file_hash, v1_file_hash_hex = push_to_ipfs(file_path)
     print("IPFS file hash v1: {}".format(v1_file_hash))
     print("IPFS file hash v1 hex: {}".format(v1_file_hash_hex))

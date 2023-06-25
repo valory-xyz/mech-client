@@ -31,7 +31,7 @@ import os
 import warnings
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import requests
 import websocket
@@ -51,6 +51,7 @@ from mech_client.wss import (
     watch_for_data_url_from_wss_sync,
     watch_for_request_id,
 )
+
 
 AGENT_REGISTRY_CONTRACT = "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA"
 MECHX_CHAIN_RPC = os.environ.get(
@@ -103,7 +104,7 @@ def _tool_selector_prompt(available_tools: List[str]) -> str:
     separator = "|" + "-" * table_len + "|"
     print("Select prompting tool")
 
-    def format_row(row: Tuple[str, str]) -> str:
+    def format_row(row: Tuple[Any, Any]) -> str:
         _row = list(map(str, row))
         row_str = "| "
         row_str += _row[0]
@@ -151,7 +152,7 @@ def fetch_tools(agent_id: int, ledger_api: EthereumApi) -> List[str]:
     return response["tools"]
 
 
-def send_request(
+def send_request(  # pylint: disable=too-many-arguments
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
     mech_contract: Web3Contract,
@@ -198,7 +199,7 @@ def wait_for_data_url(
         )
     )
 
-    async def _wait_for_tasks() -> Any:
+    async def _wait_for_tasks() -> Any:  # type: ignore
         """Wait for tasks to finish."""
         (finished, *_), unfinished = await asyncio.wait(
             [off_chain_task, on_chain_task], return_when=asyncio.FIRST_COMPLETED
@@ -218,7 +219,7 @@ def interact(
     tool: Optional[str] = None,
     private_key_path: Optional[str] = None,
     confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
-) -> Dict[str, Any]:
+) -> None:
     """Interact with agent mech contract."""
     contract_address = query_agent_address(agent_id=agent_id)
     if contract_address is None:

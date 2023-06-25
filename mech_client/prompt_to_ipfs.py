@@ -35,10 +35,20 @@ from mech_client.push_to_ipfs import push_to_ipfs
 
 
 def push_metadata_to_ipfs(prompt: str, tool: str) -> Tuple[str, str]:
+    """
+    Pushes metadata object to IPFS.
+
+    :param prompt: Prompt string.
+    :type prompt: str
+    :param tool: Tool string.
+    :type tool: str
+    :return: Tuple containing the IPFS hash and truncated IPFS hash.
+    :rtype: Tuple[str, str]
+    """
     metadata = {"prompt": prompt, "tool": tool, "nonce": str(uuid.uuid4())}
     dirpath = tempfile.mkdtemp()
     file_name = dirpath + "metadata.json"
-    with open(file_name, "w") as f:
+    with open(file_name, "w", encoding="utf-8") as f:
         json.dump(metadata, f)
     _, v1_file_hash_hex = push_to_ipfs(file_name)
     shutil.rmtree(dirpath)
@@ -46,6 +56,14 @@ def push_metadata_to_ipfs(prompt: str, tool: str) -> Tuple[str, str]:
 
 
 def main(prompt: str, tool: str) -> None:
+    """
+    Prints the IPFS hash and truncated IPFS hash for the metadata object.
+
+    :param prompt: Prompt string.
+    :type prompt: str
+    :param tool: Tool string.
+    :type tool: str
+    """
     v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(prompt, tool)
     print("Visit url: https://gateway.autonolas.tech/ipfs/{}".format(v1_file_hash_hex))
     print("Hash for Request method: {}".format(v1_file_hash_hex_truncated))

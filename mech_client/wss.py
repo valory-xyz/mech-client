@@ -30,6 +30,7 @@ from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi
 from web3.contract import Contract as Web3Contract
 
+
 EVENT_SIGNATURE_REQUEST = (
     "0x4bda649efe6b98b0f9c1d5e859c29e20910f45c66dabfe6fad4a4881f7faf9cc"
 )
@@ -83,8 +84,10 @@ def wait_for_receipt(tx_hash: str, ledger_api: EthereumApi) -> Dict:
     """Wait for receipt."""
     while True:
         try:
-            return ledger_api._api.eth.get_transaction_receipt(tx_hash)
-        except Exception:
+            return ledger_api._api.eth.get_transaction_receipt(  # pylint: disable=protected-access
+                tx_hash
+            )
+        except Exception:  # pylint: disable=broad-except
             time.sleep(1)
 
 
