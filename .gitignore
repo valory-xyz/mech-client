@@ -8,5 +8,7 @@ acn_cert.txt
 
 *.DS_Store
 dist/
+temp/
+.tox/
 __pycache__
 .env

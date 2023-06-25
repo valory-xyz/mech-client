@@ -21,7 +21,7 @@
 
 import asyncio
 from pathlib import Path
-from typing import Type, cast
+from typing import Optional, Type, cast
 
 from aea.components.base import load_aea_package
 from aea.configurations.base import ConnectionConfig
@@ -41,6 +41,7 @@ from mech_client.helpers import (
     ACN_PROTOCOL_PACKAGE,
     P2P_CLIENT_PACKAGE,
 )
+
 
 CONNECTION_CONFIG = {
     "connect_retries": 3,
@@ -66,19 +67,31 @@ CERT_REQUESTS = [
     }
 ]
 
-IPFS_REQUEST_URL = "https://gateway.autonolas.tech/ipfs/{hash_str}/{request_id}"
-
 
 def issue_certificate(cert_request: CertRequest, crypto: Crypto) -> None:
-    """Issue ACN certificate."""
+    """
+    Issue ACN certificate.
+
+    :param cert_request: certificate request object
+    :type cert_request: CertRequest
+    :param crypto: instance of Crypto
+    :type crypto: Crypto
+    :raises: None
+    """
     public_key = cast(str, cert_request.public_key)
     message = cert_request.get_message(public_key)
     signature = crypto.sign_message(message).encode("ascii").hex()
     Path(cert_request.save_path).write_bytes(signature.encode("ascii"))
 
 
-def load_protocol(address: str) -> Type[Message]:
-    """Load message class."""
+def load_protocol() -> Type[Message]:
+    """
+    Load message class.
+
+    :return: message class
+    :rtype: Type[Message]
+    :raises: None
+    """
     configuration = load_component_configuration(
         component_type=ComponentType.PROTOCOL,
         directory=ACN_DATA_SHARE_PROTOCOL_PACKAGE,
@@ -86,7 +99,9 @@ def load_protocol(address: str) -> Type[Message]:
     configuration.directory = ACN_DATA_SHARE_PROTOCOL_PACKAGE
     load_aea_package(configuration=configuration)
 
-    from packages.valory.protocols.acn_data_share.message import AcnDataShareMessage
+    from packages.valory.protocols.acn_data_share.message import (  # pylint: disable=import-outside-toplevel,import-error,no-name-in-module
+        AcnDataShareMessage,
+    )
 
     return AcnDataShareMessage
 
@@ -103,7 +118,15 @@ def load_acn_protocol() -> None:
 def load_libp2p_client(
     crypto: Crypto,
 ) -> Connection:
-    """Load `p2p_libp2p_client` connection"""
+    """
+    Load `p2p_libp2p_client` connection.
+
+    :param crypto: instance of Crypto
+    :type crypto: Crypto
+    :return: instance of libp2p2 client connection
+    :rtype: Connection
+    :raises: None
+    """
     config_data = yaml_load(
         (P2P_CLIENT_PACKAGE / DEFAULT_CONNECTION_CONFIG_FILE).open(
             "r", encoding="utf-8"
@@ -127,9 +150,17 @@ def load_libp2p_client(
     )
 
 
-async def watch_for_data_url_from_mech(crypto: Crypto) -> str:
-    """Wait for data from mech."""
-    AcnDataShareMessage = load_protocol(address=crypto.address)
+async def watch_for_data_url_from_mech(crypto: Crypto) -> Optional[str]:
+    """
+    Wait for data from mech
+
+    :param crypto: instance of Crypto
+    :type crypto: Crypto
+    :return: Data URL
+    :rtype: str
+    :raises: None
+    """
+    AcnDataShareMessage = load_protocol()
     connection = load_libp2p_client(crypto=crypto)
     try:
         await connection.connect()
@@ -137,13 +168,21 @@ async def watch_for_data_url_from_mech(crypto: Crypto) -> str:
         response_message = AcnDataShareMessage.decode(response.message)
         return f"https://gateway.autonolas.tech/ipfs/{response_message.content}"
     except AttributeError:
-        pass
+        return None
     finally:
         await connection.disconnect()
 
 
-def watch_for_data_url_from_mech_sync(crypto: Crypto) -> str:
-    """Request and wait for data from agent."""
+def watch_for_data_url_from_mech_sync(crypto: Crypto) -> Optional[str]:
+    """
+    Request and wait for data from agent
+
+    :param crypto: instance of Crypto
+    :type crypto: Crypto
+    :return: Data URL
+    :rtype: str
+    :raises: None
+    """
     loop = asyncio.new_event_loop()
     task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
     loop.run_until_complete(task)

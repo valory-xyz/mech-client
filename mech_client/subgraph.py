@@ -25,6 +25,7 @@ from typing import Optional
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
+
 MECH_SUBGRAPH_URL = "https://api.studio.thegraph.com/query/46780/mech/v0.0.1"
 AGENT_QUERY_TEMPLATE = Template(
     """{
@@ -37,14 +38,21 @@ AGENT_QUERY_TEMPLATE = Template(
 
 
 def query_agent_address(agent_id: int) -> Optional[str]:
-    """Query agent address from subgraph."""
+    """
+    Query agent address from subgraph.
+
+    :param agent_id: The ID of the agent.
+    :type agent_id: int
+    :return: The agent address if found, None otherwise.
+    :rtype: Optional[str]
+    """
     client = Client(transport=AIOHTTPTransport(url=MECH_SUBGRAPH_URL))
     response = client.execute(
         document=gql(
             request_string=AGENT_QUERY_TEMPLATE.substitute({"agent_id": agent_id})
         )
     )
-    mechs = response["createMeches"]
+    mechs = response["createMeches"]  # pylint: disable=unsubscriptable-object
     if len(mechs) == 0:
         return None
 
