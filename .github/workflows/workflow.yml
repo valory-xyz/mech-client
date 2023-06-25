@@ -1,0 +1,44 @@
+name: main_workflow
+on:
+  push:
+    branches:
+      - develop
+      - main
+  pull_request:
+jobs:
+  linter_checks:
+    continue-on-error: False
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10.9"]
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-python@master
+      with:
+        python-version: ${{ matrix.python-version }}
+    - uses: actions/setup-go@v3
+      with:
+        go-version: "1.17.7"
+    - name: Install dependencies
+      run:  |
+        sudo apt-get update --fix-missing
+        sudo apt-get autoremove
+        sudo apt-get autoclean
+        pip install tomte[tox]==0.2.12
+        pip install --user --upgrade setuptools
+        sudo npm install -g markdown-spellcheck
+    - name: Security checks
+      run: |
+        tox -p -e bandit -e safety
+    - name: Code style check
+      run: |
+        tox -p -e black-check -e isort-check -e flake8 -e vulture -e darglint
+    - name: Static type check
+      run: tox -e mypy
+    - name: Pylint
+      run: tox -e pylint
+    - name: Check spelling
+      run: tox -e spell-check
