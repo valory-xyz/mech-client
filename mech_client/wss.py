@@ -42,7 +42,16 @@ EVENT_SIGNATURE_DELIVER = (
 def register_event_handlers(
     wss: websocket.WebSocket, contract_address: str, crypto: Crypto
 ) -> None:
-    """Register event handlers."""
+    """
+    Register event handlers.
+
+    :param wss: The WebSocket connection object.
+    :type wss: websocket.WebSocket
+    :param contract_address: The address of the contract.
+    :type contract_address: str
+    :param crypto: The cryptographic object.
+    :type crypto: Crypto
+    """
 
     subscription_request = {
         "jsonrpc": "2.0",
@@ -81,7 +90,16 @@ def register_event_handlers(
 
 
 def wait_for_receipt(tx_hash: str, ledger_api: EthereumApi) -> Dict:
-    """Wait for receipt."""
+    """
+    Wait for receipt.
+
+    :param tx_hash: The transaction hash.
+    :type tx_hash: str
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :return: The receipt of the transaction.
+    :rtype: Dict
+    """
     while True:
         try:
             return ledger_api._api.eth.get_transaction_receipt(  # pylint: disable=protected-access
@@ -96,7 +114,18 @@ def watch_for_request_id(
     mech_contract: Web3Contract,
     ledger_api: EthereumApi,
 ) -> str:
-    """Watches for events on mech."""
+    """
+    Watches for events on mech.
+
+    :param wss: The WebSocket connection object.
+    :type wss: websocket.WebSocket
+    :param mech_contract: The mech contract instance.
+    :type mech_contract: Web3Contract
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :return: The requested ID.
+    :rtype: str
+    """
     while True:
         msg = wss.recv()
         data = json.loads(msg)
@@ -118,8 +147,22 @@ async def watch_for_data_url_from_wss(
     ledger_api: EthereumApi,
     loop: asyncio.AbstractEventLoop,
 ) -> Any:
-    """Watches for data on-chain."""
+    """
+    Watches for data on-chain.
 
+    :param request_id: The ID of the request.
+    :type request_id: str
+    :param wss: The WebSocket connection object.
+    :type wss: websocket.WebSocket
+    :param mech_contract: The mech contract instance.
+    :type mech_contract: Web3Contract
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param loop: The event loop used for asynchronous operations.
+    :type loop: asyncio.AbstractEventLoop
+    :return: The data received from on-chain.
+    :rtype: Any
+    """
     with ThreadPoolExecutor() as executor:
         while True:
             msg = await loop.run_in_executor(executor=executor, func=wss.recv)
@@ -145,7 +188,20 @@ def watch_for_data_url_from_wss_sync(
     mech_contract: Web3Contract,
     ledger_api: EthereumApi,
 ) -> Any:
-    """Watches for data on-chain."""
+    """
+    Watches for data on-chain.
+
+    :param request_id: The ID of the request.
+    :type request_id: str
+    :param wss: The WebSocket connection object.
+    :type wss: websocket.WebSocket
+    :param mech_contract: The mech contract instance.
+    :type mech_contract: Web3Contract
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :return: The data received from on-chain.
+    :rtype: Any
+    """
     loop = asyncio.new_event_loop()
     task = loop.create_task(
         watch_for_data_url_from_wss(

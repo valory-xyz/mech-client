@@ -85,7 +85,16 @@ class ConfirmationType(Enum):
 
 
 def get_contract(contract_address: str, ledger_api: EthereumApi) -> Web3Contract:
-    """Returns a contract instance."""
+    """
+    Returns a contract instance.
+
+    :param contract_address: The address of the contract.
+    :type contract_address: str
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :return: The contract instance.
+    :rtype: Web3Contract
+    """
     abi_request_url = GNOSISSCAN_API_URL.format(contract_address=contract_address)
     response = requests.get(abi_request_url).json()
     abi = json.loads(response["result"])
@@ -95,7 +104,14 @@ def get_contract(contract_address: str, ledger_api: EthereumApi) -> Web3Contract
 
 
 def _tool_selector_prompt(available_tools: List[str]) -> str:
-    """Tool selector prompt."""
+    """
+    Tool selector prompt.
+
+    :param available_tools: A list of available tools.
+    :type available_tools: List[str]
+    :return: The selected tool.
+    :rtype: str
+    """
 
     tool_col_len = max(map(len, available_tools))
     id_col_len = max(2, len(str(len(available_tools))))
@@ -131,7 +147,18 @@ def _tool_selector_prompt(available_tools: List[str]) -> str:
 def verify_or_retrieve_tool(
     agent_id: int, ledger_api: EthereumApi, tool: Optional[str] = None
 ) -> str:
-    """Checks if the tool is valid and for what agent."""
+    """
+    Checks if the tool is valid and for what agent.
+
+    :param agent_id: The ID of the agent.
+    :type agent_id: int
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param tool: The tool to verify or retrieve (optional).
+    :type tool: Optional[str]
+    :return: The result of the verification or retrieval.
+    :rtype: str
+    """
     available_tools = fetch_tools(agent_id=agent_id, ledger_api=ledger_api)
     if tool is not None and tool not in available_tools:
         raise ValueError(
@@ -160,10 +187,24 @@ def send_request(  # pylint: disable=too-many-arguments
     tool: str,
     price: int = 10_000_000_000_000_000,
 ) -> None:
-    """Sends a request to the mech."""
+    """
+    Sends a request to the mech.
+
+    :param crypto: The Ethereum crypto object.
+    :type crypto: EthereumCrypto
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param mech_contract: The mech contract instance.
+    :type mech_contract: Web3Contract
+    :param prompt: The request prompt.
+    :type prompt: str
+    :param tool: The requested tool.
+    :type tool: str
+    :param price: The price for the request (default: 10_000_000_000_000_000).
+    :type price: int
+    """
     v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(prompt, tool)
     print(f"Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}")
-
     method_name = "request"
     methord_args = {"data": v1_file_hash_hex_truncated}
     tx_args = {"sender_address": crypto.address, "value": price}
@@ -186,7 +227,22 @@ def wait_for_data_url(
     ledger_api: EthereumApi,
     crypto: Crypto,
 ) -> Any:
-    """Wait for data from on-chain/off-chain"""
+    """
+    Wait for data from on-chain/off-chain.
+
+    :param request_id: The ID of the request.
+    :type request_id: str
+    :param wss: The WebSocket connection object.
+    :type wss: websocket.WebSocket
+    :param mech_contract: The mech contract instance.
+    :type mech_contract: Web3Contract
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param crypto: The cryptographic object.
+    :type crypto: Crypto
+    :return: The data received from on-chain/off-chain.
+    :rtype: Any
+    """
     loop = asyncio.new_event_loop()
     off_chain_task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
     on_chain_task = loop.create_task(
@@ -220,7 +276,20 @@ def interact(
     private_key_path: Optional[str] = None,
     confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
 ) -> None:
-    """Interact with agent mech contract."""
+    """
+    Interact with agent mech contract.
+
+    :param prompt: The interaction prompt.
+    :type prompt: str
+    :param agent_id: The ID of the agent.
+    :type agent_id: int
+    :param tool: The tool to interact with (optional).
+    :type tool: Optional[str]
+    :param private_key_path: The path to the private key file (optional).
+    :type private_key_path: Optional[str]
+    :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
+    :type confirmation_type: ConfirmationType
+    """
     contract_address = query_agent_address(agent_id=agent_id)
     if contract_address is None:
         raise ValueError(f"Agent with ID {agent_id} does not exist!")
