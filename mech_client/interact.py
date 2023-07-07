@@ -275,7 +275,7 @@ def interact(
     tool: Optional[str] = None,
     private_key_path: Optional[str] = None,
     confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
-) -> None:
+) -> Any:
     """
     Interact with agent mech contract.
 
@@ -289,6 +289,8 @@ def interact(
     :type private_key_path: Optional[str]
     :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
     :type confirmation_type: ConfirmationType
+    :return: The data received from on-chain/off-chain.
+    :rtype: Any
     """
     contract_address = query_agent_address(agent_id=agent_id)
     if contract_address is None:
@@ -340,3 +342,4 @@ def interact(
     print(f"Data arrived: {data_url}")
     data = requests.get(f"{data_url}/{request_id}").json()
     print(f"Data from agent: {data}")
+    return data
