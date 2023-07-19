@@ -42,6 +42,13 @@ aea generate-key ethereum
 ```
 Ensure the private key carries funds on Gnosis Chain.
 
+A keyfile is just a file with your ethereum private key as a hex-string, example:
+```
+0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
+```
+In case you add your own, make sure you don't have any extra characters in the file, like newlines or spaces.
+
+
 Second, run the following command to instruct the mech with `<prompt>` and `<agent_id>`:
 
 ```bash
@@ -95,10 +102,19 @@ Data from agent: {'requestId': 8165315352912459784908156736160684286126237100293
 ```
 
 ## Release guide:
-
 - Bump versions in `pyproject.toml` and `mech_client/__init__.py`
 - `poetry lock`
 - `rm -rf dist`
 - `autonomy packages sync --update-packages`
 - `make eject-packages`
 - then `poetry publish --build --username=<username> --password=<password>`.
+
+# Developer installation
+To setup the development environment, run the following commands:
+
+    ```bash
+    poetry run pip install "cython<3"
+    poetry run pip install wheel==0.40.0
+    poetry run pip install --no-build-isolation pyyaml==5.4.1
+    poetry install && poetry shell
+    ```
