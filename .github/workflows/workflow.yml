@@ -42,3 +42,5 @@ jobs:
       run: tox -e pylint
     - name: Check spelling
       run: tox -e spell-check
+    - name: License compatibility check
+      run: tox -e liccheck
