@@ -135,7 +135,7 @@ def watch_for_request_id(
         if event_signature != EVENT_SIGNATURE_REQUEST:
             continue
 
-        rich_logs = mech_contract.events.Request().processReceipt(tx_receipt)
+        rich_logs = mech_contract.events.Request().process_receipt(tx_receipt)
         request_id = str(rich_logs[0]["args"]["requestId"])
         return request_id
 
@@ -175,7 +175,7 @@ async def watch_for_data_url_from_wss(
             if event_signature != EVENT_SIGNATURE_DELIVER:
                 continue
 
-            rich_logs = mech_contract.events.Deliver().processReceipt(tx_receipt)
+            rich_logs = mech_contract.events.Deliver().process_receipt(tx_receipt)
             data = cast(bytes, rich_logs[0]["args"]["data"])
             if request_id != str(rich_logs[0]["args"]["requestId"]):
                 continue
