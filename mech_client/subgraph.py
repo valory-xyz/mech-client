@@ -26,7 +26,7 @@ from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
 
-MECH_SUBGRAPH_URL = "https://api.studio.thegraph.com/query/46780/mech/v0.0.1"
+MECH_SUBGRAPH_URL = "https://api.studio.thegraph.com/query/57238/mech/version/latest"
 AGENT_QUERY_TEMPLATE = Template(
     """{
     createMeches(where:{agentId:$agent_id}) {
