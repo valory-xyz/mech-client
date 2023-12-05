@@ -57,12 +57,30 @@ def cli() -> None:
     ),
     help="Data verification method (on-chain/off-chain)",
 )
-def interact(
+@click.option(
+    "--retries",
+    type=int,
+    help="Number of retries for sending a transaction",
+)
+@click.option(
+    "--timeout",
+    type=float,
+    help="Timeout to wait for the transaction",
+)
+@click.option(
+    "--sleep",
+    type=float,
+    help="Amount of sleep before retrying the transaction",
+)
+def interact(  # pylint: disable=too-many-arguments
     prompt: str,
     agent_id: int,
     tool: Optional[str],
     key: Optional[str],
     confirm: Optional[str] = None,
+    retries: Optional[int] = None,
+    timeout: Optional[float] = None,
+    sleep: Optional[float] = None,
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
@@ -76,6 +94,9 @@ def interact(
                 if confirm is not None
                 else ConfirmationType.WAIT_FOR_BOTH
             ),
+            retries=retries,
+            timeout=timeout,
+            sleep=sleep,
         )
     except (ValueError, FileNotFoundError) as e:
         raise click.ClickException(str(e)) from e

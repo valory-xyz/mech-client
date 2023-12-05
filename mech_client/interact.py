@@ -28,7 +28,9 @@ python client.py <prompt> <tool>
 import asyncio
 import json
 import os
+import time
 import warnings
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
@@ -63,6 +65,7 @@ LEDGER_CONFIG = {
     "chain_id": 100,
     "poa_chain": False,
     "default_gas_price_strategy": "eip1559",
+    "is_gas_estimation_enabled": True,
 }
 PRIVATE_KEY_FILE_PATH = "ethereum_private_key.txt"
 
@@ -71,6 +74,10 @@ WSS_ENDPOINT = os.getenv(
     "wss://rpc.eu-central-2.gateway.fm/ws/v4/gnosis/non-archival/mainnet",
 )
 GNOSISSCAN_API_URL = "https://api.gnosisscan.io/api?module=contract&action=getabi&address={contract_address}"
+
+MAX_RETRIES = 3
+WAIT_SLEEP = 3.0
+TIMEOUT = 60.0
 
 # Ignore a specific warning message
 warnings.filterwarnings("ignore", "The log with transaction hash.*")
@@ -179,13 +186,16 @@ def fetch_tools(agent_id: int, ledger_api: EthereumApi) -> List[str]:
     return response["tools"]
 
 
-def send_request(  # pylint: disable=too-many-arguments
+def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
     mech_contract: Web3Contract,
     prompt: str,
     tool: str,
     price: int = 10_000_000_000_000_000,
+    retries: Optional[int] = None,
+    timeout: Optional[float] = None,
+    sleep: Optional[float] = None,
 ) -> None:
     """
     Sends a request to the mech.
@@ -202,22 +212,46 @@ def send_request(  # pylint: disable=too-many-arguments
     :type tool: str
     :param price: The price for the request (default: 10_000_000_000_000_000).
     :type price: int
+    :param retries: Number of retries for sending a transaction
+    :type retries: int
+    :param timeout: Timeout to wait for the transaction
+    :type timeout: float
+    :param sleep: Amount of sleep before retrying the transaction
+    :type sleep: float
     """
     v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(prompt, tool)
     print(f"Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}")
     method_name = "request"
     methord_args = {"data": v1_file_hash_hex_truncated}
     tx_args = {"sender_address": crypto.address, "value": price}
-    raw_transaction = ledger_api.build_transaction(
-        contract_instance=mech_contract,
-        method_name=method_name,
-        method_args=methord_args,
-        tx_args=tx_args,
-    )
-    raw_transaction["gas"] = 50_000
-    signed_transaction = crypto.sign_transaction(raw_transaction)
-    transaction_digest = ledger_api.send_signed_transaction(signed_transaction)
-    print(f"Transaction sent: https://gnosisscan.io/tx/{transaction_digest}")
+
+    tries = 0
+    retries = retries or MAX_RETRIES
+    timeout = timeout or TIMEOUT
+    sleep = sleep or WAIT_SLEEP
+    deadline = datetime.now().timestamp() + timeout
+
+    while tries < retries and datetime.now().timestamp() < deadline:
+        try:
+            raw_transaction = ledger_api.build_transaction(
+                contract_instance=mech_contract,
+                method_name=method_name,
+                method_args=methord_args,
+                tx_args=tx_args,
+                raise_on_try=True,
+            )
+            signed_transaction = crypto.sign_transaction(raw_transaction)
+            transaction_digest = ledger_api.send_signed_transaction(
+                signed_transaction,
+                raise_on_try=True,
+            )
+            print(f"Transaction sent: https://gnosisscan.io/tx/{transaction_digest}")
+            return
+        except Exception as e:  # pylint: disable=broad-except
+            print(
+                f"Error occured while sending the transaction: {e}; Retrying in {sleep}"
+            )
+            time.sleep(sleep)
 
 
 def wait_for_data_url(
@@ -269,12 +303,15 @@ def wait_for_data_url(
     return result
 
 
-def interact(
+def interact(  # pylint: disable=too-many-arguments,too-many-locals
     prompt: str,
     agent_id: int,
     tool: Optional[str] = None,
     private_key_path: Optional[str] = None,
     confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
+    retries: Optional[int] = None,
+    timeout: Optional[float] = None,
+    sleep: Optional[float] = None,
 ) -> Any:
     """
     Interact with agent mech contract.
@@ -290,6 +327,12 @@ def interact(
     :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
     :type confirmation_type: ConfirmationType
     :return: The data received from on-chain/off-chain.
+    :param retries: Number of retries for sending a transaction
+    :type retries: int
+    :param timeout: Timeout to wait for the transaction
+    :type timeout: float
+    :param sleep: Amount of sleep before retrying the transaction
+    :type sleep: float
     :rtype: Any
     """
     contract_address = query_agent_address(agent_id=agent_id)
@@ -317,6 +360,9 @@ def interact(
         mech_contract=mech_contract,
         prompt=prompt,
         tool=tool,
+        retries=retries,
+        timeout=timeout,
+        sleep=sleep,
     )
     request_id = watch_for_request_id(
         wss=wss, mech_contract=mech_contract, ledger_api=ledger_api
