@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mech-client"
-version = "0.2.8"
+version = "0.2.9"
 description = "Basic client to interact with a mech"
 authors = ["David Minarsch <david.minarsch@googlemail.com>"]
 readme = "README.md"
@@ -39,7 +39,7 @@ mechx = "mech_client.cli:cli"
 
 [tool.poetry.group.dev.dependencies]
 open-autonomy = "==0.13.8"
-tomte = {extras = ["tox"], version = "==0.2.14"}
+tomte = {extras = ["tox"], version = "==0.2.15"}
 
 [build-system]
 requires = ["poetry-core"]
