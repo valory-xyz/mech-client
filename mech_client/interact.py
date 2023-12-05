@@ -232,6 +232,7 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     deadline = datetime.now().timestamp() + timeout
 
     while tries < retries and datetime.now().timestamp() < deadline:
+        tries += 1
         try:
             raw_transaction = ledger_api.build_transaction(
                 contract_instance=mech_contract,
