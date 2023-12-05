@@ -39,7 +39,7 @@ mechx = "mech_client.cli:cli"
 
 [tool.poetry.group.dev.dependencies]
 open-autonomy = "==0.13.8"
-tomte = {extras = ["tox"], version = "==0.2.14"}
+tomte = {extras = ["tox"], version = "==0.2.15"}
 
 [build-system]
 requires = ["poetry-core"]
