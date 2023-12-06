@@ -33,12 +33,13 @@ import warnings
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 import websocket
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
+from web3 import Web3
 from web3.contract import Contract as Web3Contract
 
 from mech_client.acn import (
@@ -91,20 +92,54 @@ class ConfirmationType(Enum):
     WAIT_FOR_BOTH = "wait-for-both"
 
 
-def get_contract(contract_address: str, ledger_api: EthereumApi) -> Web3Contract:
+def calculate_topic_id(event: Dict) -> str:
+    """Caclulate topic ID"""
+    text = event["name"]
+    text += "("
+    for inp in event["inputs"]:
+        text += inp["type"]
+        text += ","
+    text = text[:-1]
+    text += ")"
+    return Web3.keccak(text=text).hex()
+
+
+def get_event_signatures(abi: List) -> Tuple[str, str]:
+    """Calculate `Request` and `Deliver` event topics"""
+    request, deliver = "", ""
+    for obj in abi:
+        if obj["type"] != "event":
+            continue
+        if obj["name"] == "Deliver":
+            deliver = calculate_topic_id(event=obj)
+        if obj["name"] == "Request":
+            request = calculate_topic_id(event=obj)
+    return request, deliver
+
+
+def get_abi(contract_address: str) -> List:
+    """Get contract abi"""
+    abi_request_url = GNOSISSCAN_API_URL.format(contract_address=contract_address)
+    response = requests.get(abi_request_url).json()
+    return json.loads(response["result"])
+
+
+def get_contract(
+    contract_address: str, abi: List, ledger_api: EthereumApi
+) -> Web3Contract:
     """
     Returns a contract instance.
 
     :param contract_address: The address of the contract.
     :type contract_address: str
+    :param abi: ABI Object
+    :type abi: List
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
     :return: The contract instance.
     :rtype: Web3Contract
     """
-    abi_request_url = GNOSISSCAN_API_URL.format(contract_address=contract_address)
-    response = requests.get(abi_request_url).json()
-    abi = json.loads(response["result"])
+
     return ledger_api.get_contract_instance(
         {"abi": abi, "bytecode": "0x"}, contract_address
     )
@@ -179,7 +214,9 @@ def verify_or_retrieve_tool(
 def fetch_tools(agent_id: int, ledger_api: EthereumApi) -> List[str]:
     """Fetch tools for specified agent ID."""
     mech_registry = get_contract(
-        contract_address=AGENT_REGISTRY_CONTRACT, ledger_api=ledger_api
+        contract_address=AGENT_REGISTRY_CONTRACT,
+        abi=get_abi(AGENT_REGISTRY_CONTRACT),
+        ledger_api=ledger_api,
     )
     token_uri = mech_registry.functions.tokenURI(agent_id).call()
     response = requests.get(token_uri).json()
@@ -255,10 +292,11 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
             time.sleep(sleep)
 
 
-def wait_for_data_url(
+def wait_for_data_url(  # pylint: disable=too-many-arguments
     request_id: str,
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
+    deliver_signature: str,
     ledger_api: EthereumApi,
     crypto: Crypto,
 ) -> Any:
@@ -271,6 +309,8 @@ def wait_for_data_url(
     :type wss: websocket.WebSocket
     :param mech_contract: The mech contract instance.
     :type mech_contract: Web3Contract
+    :param deliver_signature: Topic signature for Deliver event
+    :type deliver_signature: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
     :param crypto: The cryptographic object.
@@ -285,6 +325,7 @@ def wait_for_data_url(
             request_id=request_id,
             wss=wss,
             mech_contract=mech_contract,
+            deliver_signature=deliver_signature,
             ledger_api=ledger_api,
             loop=loop,
         )
@@ -351,10 +392,18 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     ledger_api = EthereumApi(**LEDGER_CONFIG)
 
     tool = verify_or_retrieve_tool(agent_id=agent_id, ledger_api=ledger_api, tool=tool)
+    abi = get_abi(contract_address=contract_address)
     mech_contract = get_contract(
-        contract_address=contract_address, ledger_api=ledger_api
+        contract_address=contract_address, abi=abi, ledger_api=ledger_api
     )
-    register_event_handlers(wss=wss, contract_address=contract_address, crypto=crypto)
+    request_event_signature, deliver_event_signature = get_event_signatures(abi=abi)
+    register_event_handlers(
+        wss=wss,
+        contract_address=contract_address,
+        crypto=crypto,
+        request_signature=request_event_signature,
+        deliver_signature=deliver_event_signature,
+    )
     send_request(
         crypto=crypto,
         ledger_api=ledger_api,
@@ -366,7 +415,10 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         sleep=sleep,
     )
     request_id = watch_for_request_id(
-        wss=wss, mech_contract=mech_contract, ledger_api=ledger_api
+        wss=wss,
+        mech_contract=mech_contract,
+        ledger_api=ledger_api,
+        request_signature=request_event_signature,
     )
     print(f"Created on-chain request with ID {request_id}")
     if confirmation_type == ConfirmationType.OFF_CHAIN:
@@ -375,6 +427,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         data_url = watch_for_data_url_from_wss_sync(
             request_id=request_id,
             wss=wss,
+            deliver_signature=deliver_event_signature,
             mech_contract=mech_contract,
             ledger_api=ledger_api,
         )
@@ -383,6 +436,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
             request_id=request_id,
             wss=wss,
             mech_contract=mech_contract,
+            deliver_signature=deliver_event_signature,
             ledger_api=ledger_api,
             crypto=crypto,
         )
