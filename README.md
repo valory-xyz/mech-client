@@ -101,4 +101,4 @@ Data from agent: {'requestId': 8165315352912459784908156736160684286126237100293
 - `rm -rf dist`
 - `autonomy packages sync --update-packages`
 - `make eject-packages`
-- then `poetry publish --build --username=<username> --password=<password>`.
+- then create release PR and tag release
