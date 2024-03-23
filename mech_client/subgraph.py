@@ -37,7 +37,9 @@ AGENT_QUERY_TEMPLATE = Template(
 )
 
 
-def query_agent_address(agent_id: int, timeout: Optional[int] = None) -> Optional[str]:
+def query_agent_address(
+    agent_id: int, timeout: Optional[float] = None
+) -> Optional[str]:
     """
     Query agent address from subgraph.
 
@@ -48,7 +50,8 @@ def query_agent_address(agent_id: int, timeout: Optional[int] = None) -> Optiona
     :rtype: Optional[str]
     """
     client = Client(
-        transport=AIOHTTPTransport(url=MECH_SUBGRAPH_URL), execute_timeout=timeout or 30
+        transport=AIOHTTPTransport(url=MECH_SUBGRAPH_URL),
+        execute_timeout=timeout or 30.0,
     )
     response = client.execute(
         document=gql(
