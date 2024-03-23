@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mech-client"
-version = "0.2.9"
+version = "0.2.10"
 description = "Basic client to interact with a mech"
 authors = ["David Minarsch <david.minarsch@googlemail.com>"]
 readme = "README.md"
@@ -26,19 +26,19 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-open-aea = {version = "==1.42.0", extras = ["cli"]}
-open-aea-ledger-ethereum = "==1.42.0"
-open-aea-cli-ipfs = "==1.42.0"
+open-aea = {version = "==1.50.0", extras = ["cli"]}
+open-aea-ledger-ethereum = "==1.50.0"
+open-aea-cli-ipfs = "==1.50.0"
 websocket-client = ">=0.32.0,<1"
 gql = ">=3.4.1"
 asn1crypto = ">=1.4.0,<1.5.0"
-open-aea-ledger-cosmos = "==1.42.0"
+open-aea-ledger-cosmos = "==1.50.0"
 
 [tool.poetry.scripts]
 mechx = "mech_client.cli:cli"
 
 [tool.poetry.group.dev.dependencies]
-open-autonomy = "==0.13.8"
+open-autonomy = "==0.14.10"
 tomte = {version = "0.2.15", extras = ["tox"]}
 
 [build-system]
