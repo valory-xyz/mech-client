@@ -26,7 +26,6 @@ python client.py <prompt> <tool>
 """
 
 import asyncio
-import json
 import os
 import time
 import warnings
@@ -66,7 +65,7 @@ LEDGER_CONFIG = {
     "chain_id": 100,
     "poa_chain": False,
     "default_gas_price_strategy": "eip1559",
-    "is_gas_estimation_enabled": True,
+    "is_gas_estimation_enabled": False,
 }
 PRIVATE_KEY_FILE_PATH = "ethereum_private_key.txt"
 
@@ -74,7 +73,15 @@ WSS_ENDPOINT = os.getenv(
     "WEBSOCKET_ENDPOINT",
     "wss://rpc.eu-central-2.gateway.fm/ws/v4/gnosis/non-archival/mainnet",
 )
-GNOSISSCAN_API_URL = "https://api.gnosisscan.io/api?module=contract&action=getabi&address={contract_address}"
+MANUAL_GAS_LIMIT = int(
+    os.getenv(
+        "MANUAL_GAS_LIMIT",
+        "100_000",
+    )
+)
+BLOCKSCOUT_API_URL = (
+    "https://gnosis.blockscout.com/api/v2/smart-contracts/{contract_address}"
+)
 
 MAX_RETRIES = 3
 WAIT_SLEEP = 3.0
@@ -119,9 +126,9 @@ def get_event_signatures(abi: List) -> Tuple[str, str]:
 
 def get_abi(contract_address: str) -> List:
     """Get contract abi"""
-    abi_request_url = GNOSISSCAN_API_URL.format(contract_address=contract_address)
+    abi_request_url = BLOCKSCOUT_API_URL.format(contract_address=contract_address)
     response = requests.get(abi_request_url).json()
-    return json.loads(response["result"])
+    return response["abi"]
 
 
 def get_contract(
@@ -260,7 +267,11 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     print(f"Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}")
     method_name = "request"
     methord_args = {"data": v1_file_hash_hex_truncated}
-    tx_args = {"sender_address": crypto.address, "value": price}
+    tx_args = {
+        "sender_address": crypto.address,
+        "value": price,
+        "gas": MANUAL_GAS_LIMIT,
+    }
 
     tries = 0
     retries = retries or MAX_RETRIES
