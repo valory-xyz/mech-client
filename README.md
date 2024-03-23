@@ -42,6 +42,12 @@ aea generate-key ethereum
 ```
 Ensure the private key carries funds on Gnosis Chain.
 
+A keyfile is just a file with your ethereum private key as a hex-string, example:
+```
+0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
+```
+In case you add your own, make sure you don't have any extra characters in the file, like newlines or spaces.
+
 Second, run the following command to instruct the mech with `<prompt>` and `<agent_id>`:
 
 ```bash
@@ -111,6 +117,13 @@ result = interact(
     private_key_path='PATH_HERE'
 )
 print(result)
+```
+
+# Developer installation
+To setup the development environment, run the following commands:
+
+```bash
+poetry install && poetry shell
 ```
 
 ## Release guide:
