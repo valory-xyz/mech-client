@@ -388,7 +388,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     :type sleep: float
     :rtype: Any
     """
-    contract_address = query_agent_address(agent_id=agent_id)
+    contract_address = query_agent_address(agent_id=agent_id, timeout=timeout)
     if contract_address is None:
         raise ValueError(f"Agent with ID {agent_id} does not exist!")
 

@@ -33,7 +33,7 @@ Commands:
   push-to-ipfs    Upload a file to IPFS.
  ```
 
-## Usage:
+## CLI Usage:
 
 First, create a private key in file `ethereum_private_key.txt` with this command:
 
@@ -92,6 +92,25 @@ Transaction sent: https://gnosisscan.io/tx/0xf1ef63f617717bbb8deb09699af99aa39f1
 Created on-chain request with ID 81653153529124597849081567361606842861262371002932574194580478443414142139857
 Data arrived: https://gateway.autonolas.tech/ipfs/f0170122069b55e077430a00f3cbc3b069347e901396f978ff160eb2b0a947872be1848b7
 Data from agent: {'requestId': 81653153529124597849081567361606842861262371002932574194580478443414142139857, 'result': "\n\nA summer breeze, so sweet,\nA gentle reminder of summer's heat.\nThe sky so blue, no cloud in sight,\nA perfect day, a wondrous sight."}
+```
+
+## Programmatic Usage:
+
+```python
+from mech_client.interact import interact, ConfirmationType
+
+prompt_text = 'Will gnosis pay reach 100k cards in 2024?'
+agent_id = 3
+tool_name = "prediction-online"
+
+result = interact(
+    prompt=prompt_text,
+    agent_id=agent_id,
+    tool=tool_name,
+    confirmation_type=ConfirmationType.ON_CHAIN,
+    private_key_path='PATH_HERE'
+)
+print(result)
 ```
 
 ## Release guide:
