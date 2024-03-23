@@ -26,7 +26,7 @@ from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
 
-MECH_SUBGRAPH_URL = "https://api.studio.thegraph.com/query/46780/mech/v0.0.1"
+MECH_SUBGRAPH_URL = "https://api.studio.thegraph.com/query/57238/mech/version/latest"
 AGENT_QUERY_TEMPLATE = Template(
     """{
     createMeches(where:{agentId:$agent_id}) {
@@ -37,16 +37,22 @@ AGENT_QUERY_TEMPLATE = Template(
 )
 
 
-def query_agent_address(agent_id: int) -> Optional[str]:
+def query_agent_address(
+    agent_id: int, timeout: Optional[float] = None
+) -> Optional[str]:
     """
     Query agent address from subgraph.
 
     :param agent_id: The ID of the agent.
+    :param timeout: Timeout for the request.
     :type agent_id: int
     :return: The agent address if found, None otherwise.
     :rtype: Optional[str]
     """
-    client = Client(transport=AIOHTTPTransport(url=MECH_SUBGRAPH_URL))
+    client = Client(
+        transport=AIOHTTPTransport(url=MECH_SUBGRAPH_URL),
+        execute_timeout=timeout or 30.0,
+    )
     response = client.execute(
         document=gql(
             request_string=AGENT_QUERY_TEMPLATE.substitute({"agent_id": agent_id})

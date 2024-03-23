@@ -33,7 +33,7 @@ Commands:
   push-to-ipfs    Upload a file to IPFS.
  ```
 
-## Usage:
+## CLI Usage:
 
 First, create a private key in file `ethereum_private_key.txt` with this command:
 
@@ -47,7 +47,6 @@ A keyfile is just a file with your ethereum private key as a hex-string, example
 0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
 ```
 In case you add your own, make sure you don't have any extra characters in the file, like newlines or spaces.
-
 
 Second, run the following command to instruct the mech with `<prompt>` and `<agent_id>`:
 
@@ -101,20 +100,37 @@ Data arrived: https://gateway.autonolas.tech/ipfs/f0170122069b55e077430a00f3cbc3
 Data from agent: {'requestId': 81653153529124597849081567361606842861262371002932574194580478443414142139857, 'result': "\n\nA summer breeze, so sweet,\nA gentle reminder of summer's heat.\nThe sky so blue, no cloud in sight,\nA perfect day, a wondrous sight."}
 ```
 
+## Programmatic Usage:
+
+```python
+from mech_client.interact import interact, ConfirmationType
+
+prompt_text = 'Will gnosis pay reach 100k cards in 2024?'
+agent_id = 3
+tool_name = "prediction-online"
+
+result = interact(
+    prompt=prompt_text,
+    agent_id=agent_id,
+    tool=tool_name,
+    confirmation_type=ConfirmationType.ON_CHAIN,
+    private_key_path='PATH_HERE'
+)
+print(result)
+```
+
 ## Release guide:
 - Bump versions in `pyproject.toml` and `mech_client/__init__.py`
 - `poetry lock`
 - `rm -rf dist`
 - `autonomy packages sync --update-packages`
 - `make eject-packages`
-- then `poetry publish --build --username=<username> --password=<password>`.
+- then create release PR and tag release
 
 # Developer installation
 To setup the development environment, run the following commands:
 
-    ```bash
-    poetry run pip install "cython<3"
-    poetry run pip install wheel==0.40.0
-    poetry run pip install --no-build-isolation pyyaml==5.4.1
-    poetry install && poetry shell
-    ```
+```bash
+poetry install && poetry shell
+```
+

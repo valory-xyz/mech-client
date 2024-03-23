@@ -31,16 +31,12 @@ from aea_ledger_ethereum import EthereumApi
 from web3.contract import Contract as Web3Contract
 
 
-EVENT_SIGNATURE_REQUEST = (
-    "0x4bda649efe6b98b0f9c1d5e859c29e20910f45c66dabfe6fad4a4881f7faf9cc"
-)
-EVENT_SIGNATURE_DELIVER = (
-    "0x3ec84da2cdc1ce60c063642b69ff2e65f3b69787a2b90443457ba274e51e7c72"
-)
-
-
 def register_event_handlers(
-    wss: websocket.WebSocket, contract_address: str, crypto: Crypto
+    wss: websocket.WebSocket,
+    contract_address: str,
+    crypto: Crypto,
+    request_signature: str,
+    deliver_signature: str,
 ) -> None:
     """
     Register event handlers.
@@ -51,6 +47,10 @@ def register_event_handlers(
     :type contract_address: str
     :param crypto: The cryptographic object.
     :type crypto: Crypto
+    :param request_signature: Topic signature for Request event
+    :type request_signature: str
+    :param deliver_signature: Topic signature for Deliver event
+    :type deliver_signature: str
     """
 
     subscription_request = {
@@ -62,7 +62,7 @@ def register_event_handlers(
             {
                 "address": contract_address,
                 "topics": [
-                    EVENT_SIGNATURE_REQUEST,
+                    request_signature,
                     ["0x" + "0" * 24 + crypto.address[2:]],
                 ],
             },
@@ -79,7 +79,7 @@ def register_event_handlers(
         "method": "eth_subscribe",
         "params": [
             "logs",
-            {"address": contract_address, "topics": [EVENT_SIGNATURE_DELIVER]},
+            {"address": contract_address, "topics": [deliver_signature]},
         ],
     }
     content = bytes(json.dumps(subscription_deliver), "utf-8")
@@ -109,10 +109,11 @@ def wait_for_receipt(tx_hash: str, ledger_api: EthereumApi) -> Dict:
             time.sleep(1)
 
 
-def watch_for_request_id(
+def watch_for_request_id(  # pylint: disable=too-many-arguments
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
     ledger_api: EthereumApi,
+    request_signature: str,
 ) -> str:
     """
     Watches for events on mech.
@@ -124,6 +125,8 @@ def watch_for_request_id(
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
     :return: The requested ID.
+    :param request_signature: Topic signature for Request event
+    :type request_signature: str
     :rtype: str
     """
     while True:
@@ -132,18 +135,19 @@ def watch_for_request_id(
         tx_hash = data["params"]["result"]["transactionHash"]
         tx_receipt = wait_for_receipt(tx_hash=tx_hash, ledger_api=ledger_api)
         event_signature = tx_receipt["logs"][0]["topics"][0].hex()
-        if event_signature != EVENT_SIGNATURE_REQUEST:
+        if event_signature != request_signature:
             continue
 
-        rich_logs = mech_contract.events.Request().processReceipt(tx_receipt)
+        rich_logs = mech_contract.events.Request().process_receipt(tx_receipt)
         request_id = str(rich_logs[0]["args"]["requestId"])
         return request_id
 
 
-async def watch_for_data_url_from_wss(
+async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
     request_id: str,
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
+    deliver_signature: str,
     ledger_api: EthereumApi,
     loop: asyncio.AbstractEventLoop,
 ) -> Any:
@@ -156,6 +160,8 @@ async def watch_for_data_url_from_wss(
     :type wss: websocket.WebSocket
     :param mech_contract: The mech contract instance.
     :type mech_contract: Web3Contract
+    :param deliver_signature: Topic signature for Deliver event
+    :type deliver_signature: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
     :param loop: The event loop used for asynchronous operations.
@@ -172,10 +178,10 @@ async def watch_for_data_url_from_wss(
                 executor, wait_for_receipt, tx_hash, ledger_api
             )
             event_signature = tx_receipt["logs"][0]["topics"][0].hex()
-            if event_signature != EVENT_SIGNATURE_DELIVER:
+            if event_signature != deliver_signature:
                 continue
 
-            rich_logs = mech_contract.events.Deliver().processReceipt(tx_receipt)
+            rich_logs = mech_contract.events.Deliver().process_receipt(tx_receipt)
             data = cast(bytes, rich_logs[0]["args"]["data"])
             if request_id != str(rich_logs[0]["args"]["requestId"]):
                 continue
@@ -186,6 +192,7 @@ def watch_for_data_url_from_wss_sync(
     request_id: str,
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
+    deliver_signature: str,
     ledger_api: EthereumApi,
 ) -> Any:
     """
@@ -197,6 +204,8 @@ def watch_for_data_url_from_wss_sync(
     :type wss: websocket.WebSocket
     :param mech_contract: The mech contract instance.
     :type mech_contract: Web3Contract
+    :param deliver_signature: Topic signature for Deliver event
+    :type deliver_signature: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
     :return: The data received from on-chain.
@@ -208,6 +217,7 @@ def watch_for_data_url_from_wss_sync(
             request_id=request_id,
             wss=wss,
             mech_contract=mech_contract,
+            deliver_signature=deliver_signature,
             ledger_api=ledger_api,
             loop=loop,
         )
