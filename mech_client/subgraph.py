@@ -47,7 +47,9 @@ def query_agent_address(agent_id: int, timeout: Optional[int] = None) -> Optiona
     :return: The agent address if found, None otherwise.
     :rtype: Optional[str]
     """
-    client = Client(transport=AIOHTTPTransport(url=MECH_SUBGRAPH_URL), execute_timeout=timeout or 30)
+    client = Client(
+        transport=AIOHTTPTransport(url=MECH_SUBGRAPH_URL), execute_timeout=timeout or 30
+    )
     response = client.execute(
         document=gql(
             request_string=AGENT_QUERY_TEMPLATE.substitute({"agent_id": agent_id})
