@@ -4,19 +4,39 @@ Basic client to interact with a mech
 > **Warning**<br />
 > **This is a hacky alpha version of the client - don't rely on it as production software.**
 
+Add the mech-client ot your python project.
+
 ## Installation
 
-```bash
-pip install mech-client
-```
-
-Then, set a websocket endpoint for Gnosis RPC like so:
+In your project set up the python developement like this:
 
 ```bash
-export WEBSOCKET_ENDPOINT=<YOUR ENDPOINT>
+poetry new my_project
 ```
+
+Naviagte into your project
+
+```bash
+cd my-project
+```
+
+And add the `mech-client` to your project.
+
+```bash
+poetry add mech-client
+```
+
+Then, set a websocket endpoint for the Celo RPC like so:
+
+```bash
+export WEBSOCKET_ENDPOINT="https://rpc.ankr.com/celo"
+```
+
+You can find all Celo RPCs in [their documentation](https://docs.celo.org/learn/developer-tools#hosted-nodes).
 
 ## CLI:
+
+Play around with the mech tool in your command line. Below you can find an example for [how to add the `mech-client` to your python project](#programmatic-usage):
 
 ```bash
 Usage: mechx [OPTIONS] COMMAND [ARGS]...
@@ -40,13 +60,25 @@ First, create a private key in file `ethereum_private_key.txt` with this command
 ```bash
 aea generate-key ethereum
 ```
-Ensure the private key carries funds on Gnosis Chain.
+You need to fund the private key carries funds on Celo Alfajores. You can get testtokens in the [Celo Faucet](https://faucet.celo.org/alfajores).
 
 A keyfile is just a file with your ethereum private key as a hex-string, example:
+
 ```
 0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
 ```
-In case you add your own, make sure you don't have any extra characters in the file, like newlines or spaces.
+
+You can create it in your home directory, e.g., 
+
+```bash
+cd ~
+```
+
+```bash
+printf "<your-private-key>" > private_key
+```
+
+In case you add your own, make sure you don't have any extra characters in the file, like newlines or spaces. For developing purposes make sure not to use a wallet with funds (expet for testing) in it.
 
 Second, run the following command to instruct the mech with `<prompt>` and `<agent_id>`:
 
@@ -81,18 +113,28 @@ mechx interact <prompt> <agent_id> --key <key_file>
 
 Example output:
 ```bash
-mechx interact "write a short poem" 3 --key ~/gnosis_key --tool openai-text-davinci-003
-Prompt uploaded: https://gateway.autonolas.tech/ipfs/f01701220ad773628911d12e28f005e3f249e990d684e5dba07542259195602f9afed30bf
-Transaction sent: https://gnosisscan.io/tx/0x0d9209e32e965a820b9e80accfcd71ea3b1174b9758dd251c2e627a60ec426a5
-Created on-chain request with ID 111240237160304797537720810617416341148235899500021985333360197012735240803849
-Data arrived: https://gateway.autonolas.tech/ipfs/bafybeifk2h35ncszlze7t64rpblfo45rezc33xzbya3cjiyumtaioyat3e
-Data from agent: {'requestId': 111240237160304797537720810617416341148235899500021985333360197012735240803849, 'result': "\n\nI am brave and I'm strong\nI don't hide away my song\nI am here and I'm proud\nMy voice will be heard loud!"}
+mechx interact "write a short poem" 3 --key ~/private_key --tool openai-text-davinci-003
 ```
 
-By default the client will wait for data to arrive from on-chain using the websocket subscription and off-chain using the ACN and show you the result which arrives first. You can specify the type of confirmation you want using `--confirm` flag like this
+In your terminal you will see this as an output:
 
 ```bash
-mechx interact "write a short poem" 3 --key ~/gnosis_key --tool openai-text-davinci-003 --confirm on-chain
+Prompt uploaded: https://gateway.autonolas.tech/ipfs/f017012205e37f761221a8ba4005e91c36b94153e9432b8888ff2acae6b101dd5a5de6768
+Transaction sent: https://gnosisscan.io/tx/0xf1ef63f617717bbb8deb09699af99aa39f10155d33796de2fd7eb61c9c1458b6
+Created on-chain request with ID 81653153529124597849081567361606842861262371002932574194580478443414142139857
+Data arrived: https://gateway.autonolas.tech/ipfs/f0170122069b55e077430a00f3cbc3b069347e901396f978ff160eb2b0a947872be1848b7
+Data from agent: {'requestId': 81653153529124597849081567361606842861262371002932574194580478443414142139857, 'result': "\n\nA summer breeze, so sweet,\nA gentle reminder of summer's heat.\nThe sky so blue, no cloud in sight,\nA perfect day, a wondrous sight."}
+```
+
+By default the client will wait for data to arrive from on-chain using the websocket subscription and off-chain using the ACN and show you the result which arrives first. You can specify the type of confirmation you want using `--confirm` flag like this. 
+
+```bash
+mechx interact "write a short poem" 3 --key ~/private_key --tool openai-text-davinci-003 --confirm on-chain
+```
+
+In your terminal you will see this as an output:
+
+```bash
 Prompt uploaded: https://gateway.autonolas.tech/ipfs/f017012205e37f761221a8ba4005e91c36b94153e9432b8888ff2acae6b101dd5a5de6768
 Transaction sent: https://gnosisscan.io/tx/0xf1ef63f617717bbb8deb09699af99aa39f10155d33796de2fd7eb61c9c1458b6
 Created on-chain request with ID 81653153529124597849081567361606842861262371002932574194580478443414142139857
@@ -101,6 +143,29 @@ Data from agent: {'requestId': 8165315352912459784908156736160684286126237100293
 ```
 
 ## Programmatic Usage:
+Let's look at how to use the mech-client in your python project.
+
+First let's create our `project.py` file inside of our python project
+
+```bash
+touch project.py
+```
+
+Now we need to set up the PRIVATE_KEY in our local environment. For that we create a `.env` file. And add our private key there. 
+
+```bash
+touch .env
+```
+
+It should look like this
+
+```bash
+0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
+```
+
+Before you do anything else, make sure your project has a `.gitignore` file where you add the `.env` file. Even tough you should not be using a wallet with real funds, you don't want to end up pushing your private key to GitHub.
+
+Now we can interact with the mech-client:
 
 ```python
 from mech_client.interact import interact, ConfirmationType
@@ -114,16 +179,9 @@ result = interact(
     agent_id=agent_id,
     tool=tool_name,
     confirmation_type=ConfirmationType.ON_CHAIN,
-    private_key_path='PATH_HERE'
+    private_key_path='./.env'
 )
 print(result)
-```
-
-# Developer installation
-To setup the development environment, run the following commands:
-
-```bash
-poetry install && poetry shell
 ```
 
 ## Release guide:
