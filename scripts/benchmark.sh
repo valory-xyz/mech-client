@@ -6,12 +6,16 @@ iterations=10
 
 mechx --version
 
+echo $WEBSOCKET_ENDPOINT
+
 start_time=$(date +%s.%N)
 
 # Execute the command for the specified number of iterations
 for ((i=1; i<=$iterations; i++)); do
     echo "- Iteration $i"
-    mechx interact "will arsenal win the premier league in 2024" 6 --tool prediction-offline --confirm on-chain
+
+    prompt="($i) Will arsenal win the Premier League in 2024"
+    mechx interact "$prompt" 6 --tool prediction-offline --confirm on-chain
 
     if [ $? -ne 0 ]; then
         echo "Error: Command execution failed."
