@@ -178,6 +178,9 @@ async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
                 executor, wait_for_receipt, tx_hash, ledger_api
             )
             event_signature = tx_receipt["logs"][0]["topics"][0].hex()
+
+            print(f"event_signature {event_signature}")
+            print(f"deliver_signature {deliver_signature}")
             if event_signature != deliver_signature:
                 continue
 

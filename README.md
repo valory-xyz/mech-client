@@ -95,7 +95,7 @@ Data arrived: https://gateway.autonolas.tech/ipfs/bafybeifk2h35ncszlze7t64rpblfo
 Data from agent: {'requestId': 111240237160304797537720810617416341148235899500021985333360197012735240803849, 'result': "\n\nI am brave and I'm strong\nI don't hide away my song\nI am here and I'm proud\nMy voice will be heard loud!"}
 ```
 
-By default the client will wait for data to arrive from on-chain using the websocket subscription and off-chain using the ACN and show you the result which arrives first. You can specify the type of confirmation you want using `--confirm` flag like this
+By default the client will wait for data to arrive from on-chain using the websocket subscription, off-chain using the ACN, and off-chain using the subgraph, and show you the result which arrives first. You can specify the type of confirmation you want using `--confirm` flag like this
 
 ```bash
 mechx interact "write a short poem" 3 --key ~/gnosis_key --tool openai-text-davinci-003 --confirm on-chain

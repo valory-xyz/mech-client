@@ -46,7 +46,11 @@ from mech_client.acn import (
     watch_for_data_url_from_mech_sync,
 )
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
-from mech_client.subgraph import query_agent_address
+from mech_client.subgraph import (
+    query_agent_address,
+    watch_for_data_url_from_subgraph,
+    watch_for_data_url_from_subgraph_sync,
+)
 from mech_client.wss import (
     register_event_handlers,
     watch_for_data_url_from_wss,
@@ -96,7 +100,8 @@ class ConfirmationType(Enum):
 
     ON_CHAIN = "on-chain"
     OFF_CHAIN = "off-chain"
-    WAIT_FOR_BOTH = "wait-for-both"
+    SUBGRAPH = "subgraph"
+    WAIT_FOR_ALL = "wait-for-all"
 
 
 def calculate_topic_id(event: Dict) -> str:
@@ -341,11 +346,12 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
             loop=loop,
         )
     )
+    mech_task = loop.create_task(watch_for_data_url_from_subgraph(request_id=request_id))
 
     async def _wait_for_tasks() -> Any:  # type: ignore
         """Wait for tasks to finish."""
         (finished, *_), unfinished = await asyncio.wait(
-            [off_chain_task, on_chain_task], return_when=asyncio.FIRST_COMPLETED
+            [off_chain_task, on_chain_task, mech_task], return_when=asyncio.FIRST_COMPLETED
         )
         for task in unfinished:
             task.cancel()
@@ -361,7 +367,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     agent_id: int,
     tool: Optional[str] = None,
     private_key_path: Optional[str] = None,
-    confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
+    confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_ALL,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
@@ -377,7 +383,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     :type tool: Optional[str]
     :param private_key_path: The path to the private key file (optional).
     :type private_key_path: Optional[str]
-    :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
+    :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_ALL).
     :type confirmation_type: ConfirmationType
     :return: The data received from on-chain/off-chain.
     :param retries: Number of retries for sending a transaction
@@ -441,6 +447,10 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
             deliver_signature=deliver_event_signature,
             mech_contract=mech_contract,
             ledger_api=ledger_api,
+        )
+    elif confirmation_type == ConfirmationType.SUBGRAPH:
+        data_url = watch_for_data_url_from_subgraph_sync(
+            request_id=request_id,
         )
     else:
         data_url = wait_for_data_url(

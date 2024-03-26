@@ -53,9 +53,13 @@ def cli() -> None:
 @click.option(
     "--confirm",
     type=click.Choice(
-        choices=(ConfirmationType.OFF_CHAIN.value, ConfirmationType.ON_CHAIN.value)
+        choices=(
+            ConfirmationType.OFF_CHAIN.value,
+            ConfirmationType.ON_CHAIN.value,
+            ConfirmationType.SUBGRAPH.value,
+        )
     ),
-    help="Data verification method (on-chain/off-chain)",
+    help="Data verification method (on-chain/off-chain/subgraph)",
 )
 @click.option(
     "--retries",
@@ -92,7 +96,7 @@ def interact(  # pylint: disable=too-many-arguments
             confirmation_type=(
                 ConfirmationType(confirm)
                 if confirm is not None
-                else ConfirmationType.WAIT_FOR_BOTH
+                else ConfirmationType.WAIT_FOR_ALL
             ),
             retries=retries,
             timeout=timeout,
