@@ -60,7 +60,14 @@ First, create a private key in file `ethereum_private_key.txt` with this command
 ```bash
 aea generate-key ethereum
 ```
-You need to fund the private key carries funds on Celo Alfajores. You can get testtokens in the [Celo Faucet](https://faucet.celo.org/alfajores).
+
+You need to fund the wallet that you have created. You can get test-tokens in the [Celo Faucet](https://faucet.celo.org/alfajores). 
+
+Get the wallet key with
+
+```bash
+aea -key-value key
+```
 
 A keyfile is just a file with your ethereum private key as a hex-string, example:
 
@@ -84,6 +91,11 @@ Second, run the following command to instruct the mech with `<prompt>` and `<age
 
 ```bash
 mechx interact <prompt> <agent_id>
+```
+If you are using the key file you have to add `---key` and `<key-file-path>`:
+
+```bash
+mechx interact <prompt> <agent_id> --key ~/gnosis_key 
 ```
 
 The command will prompt you with all available tools for the agent and you can select which tool you want to use
@@ -111,7 +123,8 @@ If you already have a funded key file on locally you can provide path the key us
 mechx interact <prompt> <agent_id> --key <key_file>
 ```
 
-Example output:
+Example for a full command using the key file
+
 ```bash
 mechx interact "write a short poem" 3 --key ~/private_key --tool openai-text-davinci-003
 ```
