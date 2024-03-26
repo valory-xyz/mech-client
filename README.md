@@ -6,6 +6,13 @@ Basic client to interact with a mech
 
 Add the mech-client ot your python project.
 
+1. [Installation](#installation)
+2. [CLI](#cli)
+3. [CLI-Usage](#cli-usage)
+4. [Programmatic Usage](#programmatic-usage)
+5. [Developer installation](#developer-installation)
+6. [release guide](#release-guide)
+
 ## Installation
 
 In your project set up the python developement like this:
@@ -195,6 +202,13 @@ result = interact(
     private_key_path='./.env'
 )
 print(result)
+```
+
+## Developer installation
+To setup the development environment for this project, run the following commands:
+
+```bash
+poetry install && poetry shell
 ```
 
 ## Release guide:
