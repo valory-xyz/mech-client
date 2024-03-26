@@ -100,8 +100,7 @@ class ConfirmationType(Enum):
 
     ON_CHAIN = "on-chain"
     OFF_CHAIN = "off-chain"
-    SUBGRAPH = "subgraph"
-    WAIT_FOR_ALL = "wait-for-all"
+    WAIT_FOR_BOTH = "wait-for-both"
 
 
 def calculate_topic_id(event: Dict) -> str:
@@ -315,6 +314,7 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
     deliver_signature: str,
     ledger_api: EthereumApi,
     crypto: Crypto,
+    confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
 ) -> Any:
     """
     Wait for data from on-chain/off-chain.
@@ -331,29 +331,45 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
     :type ledger_api: EthereumApi
     :param crypto: The cryptographic object.
     :type crypto: Crypto
+    :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
+    :type confirmation_type: ConfirmationType
     :return: The data received from on-chain/off-chain.
     :rtype: Any
     """
     loop = asyncio.new_event_loop()
-    off_chain_task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
-    on_chain_task = loop.create_task(
-        watch_for_data_url_from_wss(
-            request_id=request_id,
-            wss=wss,
-            mech_contract=mech_contract,
-            deliver_signature=deliver_signature,
-            ledger_api=ledger_api,
-            loop=loop,
+    tasks = []
+
+    if (
+        confirmation_type == ConfirmationType.OFF_CHAIN
+        or confirmation_type == ConfirmationType.WAIT_FOR_BOTH
+    ):
+        off_chain_task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
+        tasks.append(off_chain_task)
+
+    if (
+        confirmation_type == ConfirmationType.ON_CHAIN
+        or confirmation_type == ConfirmationType.WAIT_FOR_BOTH
+    ):
+        on_chain_task = loop.create_task(
+            watch_for_data_url_from_wss(
+                request_id=request_id,
+                wss=wss,
+                mech_contract=mech_contract,
+                deliver_signature=deliver_signature,
+                ledger_api=ledger_api,
+                loop=loop,
+            )
         )
-    )
-    mech_task = loop.create_task(
-        watch_for_data_url_from_subgraph(request_id=request_id)
-    )
+        mech_task = loop.create_task(
+            watch_for_data_url_from_subgraph(request_id=request_id)
+        )
+        tasks.append(mech_task)
+        tasks.append(on_chain_task)
 
     async def _wait_for_tasks() -> Any:  # type: ignore
         """Wait for tasks to finish."""
         (finished, *_), unfinished = await asyncio.wait(
-            [off_chain_task, on_chain_task, mech_task],
+            tasks,
             return_when=asyncio.FIRST_COMPLETED,
         )
         for task in unfinished:
@@ -370,7 +386,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     agent_id: int,
     tool: Optional[str] = None,
     private_key_path: Optional[str] = None,
-    confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_ALL,
+    confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
@@ -386,7 +402,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     :type tool: Optional[str]
     :param private_key_path: The path to the private key file (optional).
     :type private_key_path: Optional[str]
-    :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_ALL).
+    :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
     :type confirmation_type: ConfirmationType
     :return: The data received from on-chain/off-chain.
     :param retries: Number of retries for sending a transaction
@@ -444,16 +460,14 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     if confirmation_type == ConfirmationType.OFF_CHAIN:
         data_url = watch_for_data_url_from_mech_sync(crypto=crypto)
     elif confirmation_type == ConfirmationType.ON_CHAIN:
-        data_url = watch_for_data_url_from_wss_sync(
+        data_url = wait_for_data_url(
             request_id=request_id,
             wss=wss,
-            deliver_signature=deliver_event_signature,
             mech_contract=mech_contract,
+            deliver_signature=deliver_event_signature,
             ledger_api=ledger_api,
-        )
-    elif confirmation_type == ConfirmationType.SUBGRAPH:
-        data_url = watch_for_data_url_from_subgraph_sync(
-            request_id=request_id,
+            crypto=crypto,
+            confirmation_type=confirmation_type,
         )
     else:
         data_url = wait_for_data_url(
@@ -463,6 +477,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
             deliver_signature=deliver_event_signature,
             ledger_api=ledger_api,
             crypto=crypto,
+            confirmation_type=confirmation_type,
         )
     print(f"Data arrived: {data_url}")
     data = requests.get(f"{data_url}/{request_id}").json()
