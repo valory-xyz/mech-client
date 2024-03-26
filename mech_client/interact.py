@@ -49,12 +49,10 @@ from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.subgraph import (
     query_agent_address,
     watch_for_data_url_from_subgraph,
-    watch_for_data_url_from_subgraph_sync,
 )
 from mech_client.wss import (
     register_event_handlers,
     watch_for_data_url_from_wss,
-    watch_for_data_url_from_wss_sync,
     watch_for_request_id,
 )
 
