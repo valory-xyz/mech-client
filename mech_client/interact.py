@@ -334,16 +334,16 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
     loop = asyncio.new_event_loop()
     tasks = []
 
-    if (
-        confirmation_type == ConfirmationType.OFF_CHAIN
-        or confirmation_type == ConfirmationType.WAIT_FOR_BOTH
+    if confirmation_type in (
+        ConfirmationType.OFF_CHAIN,
+        ConfirmationType.WAIT_FOR_BOTH,
     ):
         off_chain_task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
         tasks.append(off_chain_task)
 
-    if (
-        confirmation_type == ConfirmationType.ON_CHAIN
-        or confirmation_type == ConfirmationType.WAIT_FOR_BOTH
+    if confirmation_type in (
+        ConfirmationType.ON_CHAIN,
+        ConfirmationType.WAIT_FOR_BOTH,
     ):
         on_chain_task = loop.create_task(
             watch_for_data_url_from_wss(

@@ -2,7 +2,7 @@
 
 export MANUAL_GAS_LIMIT=150000
 export WEBSOCKET_ENDPOINT=wss://rpc.eu-central-2.gateway.fm/ws/v4/gnosis/non-archival/mainnet
-iterations=10
+iterations=2
 
 mechx --version
 

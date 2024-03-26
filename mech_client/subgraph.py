@@ -110,7 +110,7 @@ async def query_deliver_hash(
 
 
 async def watch_for_data_url_from_subgraph(
-    request_id: str, timeout: Optional[float] = DEFAULT_TIMEOUT
+    request_id: str, timeout: Optional[float] = None
 ) -> Optional[str]:
     """
     Continuously query for data URL until it's available or timeout is reached.
@@ -122,6 +122,7 @@ async def watch_for_data_url_from_subgraph(
     :return: Data URL if available within timeout, otherwise None.
     :rtype: Optional[str]
     """
+    timeout = timeout or DEFAULT_TIMEOUT
     start_time = asyncio.get_event_loop().time()
     while True:
         response = await query_deliver_hash(request_id=request_id)
