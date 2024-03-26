@@ -346,12 +346,15 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
             loop=loop,
         )
     )
-    mech_task = loop.create_task(watch_for_data_url_from_subgraph(request_id=request_id))
+    mech_task = loop.create_task(
+        watch_for_data_url_from_subgraph(request_id=request_id)
+    )
 
     async def _wait_for_tasks() -> Any:  # type: ignore
         """Wait for tasks to finish."""
         (finished, *_), unfinished = await asyncio.wait(
-            [off_chain_task, on_chain_task, mech_task], return_when=asyncio.FIRST_COMPLETED
+            [off_chain_task, on_chain_task, mech_task],
+            return_when=asyncio.FIRST_COMPLETED,
         )
         for task in unfinished:
             task.cancel()
