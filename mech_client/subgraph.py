@@ -117,6 +117,8 @@ async def watch_for_data_url_from_subgraph(
 
     :param request_id: The ID of the mech request.
     :type request_id: str
+    :param timeout: Maximum time to wait for the data URL in seconds. Defaults to DEFAULT_TIMEOUT.
+    :type timeout: Optional[float]
     :return: Data URL if available within timeout, otherwise None.
     :rtype: Optional[str]
     """
