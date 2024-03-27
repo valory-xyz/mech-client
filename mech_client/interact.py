@@ -41,16 +41,12 @@ from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from web3 import Web3
 from web3.contract import Contract as Web3Contract
 
-from mech_client.acn import (
-    watch_for_data_url_from_mech,
-    watch_for_data_url_from_mech_sync,
-)
+from mech_client.acn import watch_for_data_url_from_mech
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
-from mech_client.subgraph import query_agent_address
+from mech_client.subgraph import query_agent_address, watch_for_data_url_from_subgraph
 from mech_client.wss import (
     register_event_handlers,
     watch_for_data_url_from_wss,
-    watch_for_data_url_from_wss_sync,
     watch_for_request_id,
 )
 
@@ -310,6 +306,7 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
     deliver_signature: str,
     ledger_api: EthereumApi,
     crypto: Crypto,
+    confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
 ) -> Any:
     """
     Wait for data from on-chain/off-chain.
@@ -326,26 +323,46 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
     :type ledger_api: EthereumApi
     :param crypto: The cryptographic object.
     :type crypto: Crypto
+    :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
+    :type confirmation_type: ConfirmationType
     :return: The data received from on-chain/off-chain.
     :rtype: Any
     """
     loop = asyncio.new_event_loop()
-    off_chain_task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
-    on_chain_task = loop.create_task(
-        watch_for_data_url_from_wss(
-            request_id=request_id,
-            wss=wss,
-            mech_contract=mech_contract,
-            deliver_signature=deliver_signature,
-            ledger_api=ledger_api,
-            loop=loop,
+    tasks = []
+
+    if confirmation_type in (
+        ConfirmationType.OFF_CHAIN,
+        ConfirmationType.WAIT_FOR_BOTH,
+    ):
+        off_chain_task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
+        tasks.append(off_chain_task)
+
+    if confirmation_type in (
+        ConfirmationType.ON_CHAIN,
+        ConfirmationType.WAIT_FOR_BOTH,
+    ):
+        on_chain_task = loop.create_task(
+            watch_for_data_url_from_wss(
+                request_id=request_id,
+                wss=wss,
+                mech_contract=mech_contract,
+                deliver_signature=deliver_signature,
+                ledger_api=ledger_api,
+                loop=loop,
+            )
         )
-    )
+        mech_task = loop.create_task(
+            watch_for_data_url_from_subgraph(request_id=request_id)
+        )
+        tasks.append(mech_task)
+        tasks.append(on_chain_task)
 
     async def _wait_for_tasks() -> Any:  # type: ignore
         """Wait for tasks to finish."""
         (finished, *_), unfinished = await asyncio.wait(
-            [off_chain_task, on_chain_task], return_when=asyncio.FIRST_COMPLETED
+            tasks,
+            return_when=asyncio.FIRST_COMPLETED,
         )
         for task in unfinished:
             task.cancel()
@@ -432,25 +449,16 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         request_signature=request_event_signature,
     )
     print(f"Created on-chain request with ID {request_id}")
-    if confirmation_type == ConfirmationType.OFF_CHAIN:
-        data_url = watch_for_data_url_from_mech_sync(crypto=crypto)
-    elif confirmation_type == ConfirmationType.ON_CHAIN:
-        data_url = watch_for_data_url_from_wss_sync(
-            request_id=request_id,
-            wss=wss,
-            deliver_signature=deliver_event_signature,
-            mech_contract=mech_contract,
-            ledger_api=ledger_api,
-        )
-    else:
-        data_url = wait_for_data_url(
-            request_id=request_id,
-            wss=wss,
-            mech_contract=mech_contract,
-            deliver_signature=deliver_event_signature,
-            ledger_api=ledger_api,
-            crypto=crypto,
-        )
+    data_url = wait_for_data_url(
+        request_id=request_id,
+        wss=wss,
+        mech_contract=mech_contract,
+        deliver_signature=deliver_event_signature,
+        ledger_api=ledger_api,
+        crypto=crypto,
+        confirmation_type=confirmation_type,
+    )
+
     print(f"Data arrived: {data_url}")
     data = requests.get(f"{data_url}/{request_id}").json()
     print(f"Data from agent: {data}")

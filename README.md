@@ -16,6 +16,12 @@ Then, set a websocket endpoint for Gnosis RPC like so:
 export WEBSOCKET_ENDPOINT=<YOUR ENDPOINT>
 ```
 
+Note: If you encounter an "Out of gas" error when executing the tool, you will need to increase the gas limit by setting, e.g.,
+
+```bash
+export MANUAL_GAS_LIMIT=200000
+```
+
 ## CLI:
 
 ```bash
