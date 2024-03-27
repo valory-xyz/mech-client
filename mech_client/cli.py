@@ -46,10 +46,10 @@ def cli() -> None:
     help="Name of the tool to be used",
 )
 @click.option(
-    "--extra-attributes",
+    "--extra-attribute",
     type=str,
     multiple=True,
-    help="Extra attributes (key=value pairs) to be included in the request metadata",
+    help="Extra attribute (key=value) to be included in the request metadata",
     metavar="KEY=VALUE",
 )
 @click.option(
@@ -84,7 +84,7 @@ def interact(  # pylint: disable=too-many-arguments
     agent_id: int,
     key: Optional[str],
     tool: Optional[str],
-    extra_attributes: Optional[List[str]] = None,
+    extra_attribute: Optional[List[str]] = None,
     confirm: Optional[str] = None,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
@@ -93,8 +93,8 @@ def interact(  # pylint: disable=too-many-arguments
     """Interact with a mech specifying a prompt and tool."""
     try:
         extra_attributes_dict: Dict[str, Any] = {}
-        if extra_attributes:
-            for pair in extra_attributes:
+        if extra_attribute:
+            for pair in extra_attribute:
                 k, v = pair.split("=")
                 extra_attributes_dict[k] = v
 
