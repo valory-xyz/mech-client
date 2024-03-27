@@ -19,7 +19,7 @@
 
 """Mech client CLI module."""
 
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import click
 
@@ -44,6 +44,13 @@ def cli() -> None:
     "--tool",
     type=str,
     help="Name of the tool to be used",
+)
+@click.option(
+    "--extra-attributes",
+    type=str,
+    multiple=True,
+    help="Extra attributes (key=value pairs) to be included in the request metadata",
+    metavar="KEY=VALUE",
 )
 @click.option(
     "--key",
@@ -75,8 +82,9 @@ def cli() -> None:
 def interact(  # pylint: disable=too-many-arguments
     prompt: str,
     agent_id: int,
-    tool: Optional[str],
     key: Optional[str],
+    tool: Optional[str],
+    extra_attributes: Optional[List[str]] = None,
     confirm: Optional[str] = None,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
@@ -84,11 +92,18 @@ def interact(  # pylint: disable=too-many-arguments
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
+        extra_attributes_dict: Dict[str, Any] = {}
+        if extra_attributes:
+            for pair in extra_attributes:
+                k, v = pair.split("=")
+                extra_attributes_dict[k] = v
+
         interact_(
             prompt=prompt,
             agent_id=agent_id,
             private_key_path=key,
             tool=tool,
+            extra_attributes=extra_attributes_dict,
             confirmation_type=(
                 ConfirmationType(confirm)
                 if confirm is not None

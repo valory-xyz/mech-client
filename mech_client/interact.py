@@ -232,6 +232,7 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     mech_contract: Web3Contract,
     prompt: str,
     tool: str,
+    extra_attributes: Optional[Dict[str, Any]] = None,
     price: int = 10_000_000_000_000_000,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
@@ -250,6 +251,8 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     :type prompt: str
     :param tool: The requested tool.
     :type tool: str
+    :param extra_attributes: Extra attributes to be included in the request metadata.
+    :type extra_attributes: Optional[Dict[str,Any]]
     :param price: The price for the request (default: 10_000_000_000_000_000).
     :type price: int
     :param retries: Number of retries for sending a transaction
@@ -259,7 +262,9 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     :param sleep: Amount of sleep before retrying the transaction
     :type sleep: float
     """
-    v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(prompt, tool)
+    v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
+        prompt, tool, extra_attributes
+    )
     print(f"Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}")
     method_name = "request"
     methord_args = {"data": v1_file_hash_hex_truncated}
@@ -377,6 +382,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     prompt: str,
     agent_id: int,
     tool: Optional[str] = None,
+    extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
     confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
     retries: Optional[int] = None,
@@ -392,6 +398,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     :type agent_id: int
     :param tool: The tool to interact with (optional).
     :type tool: Optional[str]
+    :param extra_attributes: Extra attributes to be included in the request metadata (optional).
+    :type extra_attributes: Optional[Dict[str, Any]]
     :param private_key_path: The path to the private key file (optional).
     :type private_key_path: Optional[str]
     :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
@@ -438,6 +446,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         mech_contract=mech_contract,
         prompt=prompt,
         tool=tool,
+        extra_attributes=extra_attributes,
         retries=retries,
         timeout=timeout,
         sleep=sleep,

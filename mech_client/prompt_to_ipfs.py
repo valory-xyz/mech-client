@@ -29,12 +29,14 @@ import json
 import shutil
 import tempfile
 import uuid
-from typing import Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from mech_client.push_to_ipfs import push_to_ipfs
 
 
-def push_metadata_to_ipfs(prompt: str, tool: str) -> Tuple[str, str]:
+def push_metadata_to_ipfs(
+    prompt: str, tool: str, extra_attributes: Optional[Dict[str, Any]] = None
+) -> Tuple[str, str]:
     """
     Pushes metadata object to IPFS.
 
@@ -42,10 +44,14 @@ def push_metadata_to_ipfs(prompt: str, tool: str) -> Tuple[str, str]:
     :type prompt: str
     :param tool: Tool string.
     :type tool: str
+    :param extra_attributes: Extra attributes to be included in the request metadata.
+    :type extra_attributes: Optional[Dict[str,Any]]
     :return: Tuple containing the IPFS hash and truncated IPFS hash.
     :rtype: Tuple[str, str]
     """
     metadata = {"prompt": prompt, "tool": tool, "nonce": str(uuid.uuid4())}
+    if extra_attributes:
+        metadata.update(extra_attributes)
     dirpath = tempfile.mkdtemp()
     file_name = dirpath + "metadata.json"
     with open(file_name, "w", encoding="utf-8") as f:
