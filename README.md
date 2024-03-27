@@ -62,25 +62,7 @@ Commands:
 
 ## CLI Usage:
 
-First, create a private key in file `ethereum_private_key.txt` with this command:
-
-```bash
-aea generate-key ethereum
-```
-
-You need to fund the wallet that you have created. You can get test-tokens in the [Celo Faucet](https://faucet.celo.org/alfajores). 
-
-Get the wallet key with
-
-```bash
-aea -key-value key
-```
-
-A keyfile is just a file with your ethereum private key as a hex-string, example:
-
-```
-0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
-```
+First, you will need to store the private key to your ethereum wallet (make sure it's just for development purposes and doesn't hold a lot of funds). 
 
 You can create it in your home directory, e.g., 
 
@@ -92,7 +74,7 @@ cd ~
 printf "<your-private-key>" > private_key
 ```
 
-In case you add your own, make sure you don't have any extra characters in the file, like newlines or spaces. For developing purposes make sure not to use a wallet with funds (expet for testing) in it.
+In case you add your own, make sure you don't have any extra characters in the file, like newlines or spaces. For developing purposes make sure not to use a wallet with funds (except for testing) in it.
 
 Second, run the following command to instruct the mech with `<prompt>` and `<agent_id>`:
 
