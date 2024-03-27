@@ -15,7 +15,7 @@ for ((i=1; i<=$iterations; i++)); do
     echo "- Iteration $i"
 
     prompt="($i) Will arsenal win the Premier League in 2024"
-    mechx interact "$prompt" 6 --tool prediction-offline --confirm on-chain
+    mechx interact "$prompt" 6 --tool prediction-offline --confirm on-chain --extra-attribute key1=value1 --extra-attribute key2=value2
 
     if [ $? -ne 0 ]; then
         echo "Error: Command execution failed."
