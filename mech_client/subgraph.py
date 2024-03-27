@@ -136,19 +136,3 @@ async def watch_for_data_url_from_subgraph(
         await asyncio.sleep(5)
 
     return None
-
-
-def watch_for_data_url_from_subgraph_sync(request_id: str) -> Optional[str]:
-    """
-    Request and wait for data from agent
-
-    :param request_id: The ID of the mech request.
-    :type request_id: str
-    :return: Data URL
-    :rtype: str
-    :raises: None
-    """
-    loop = asyncio.new_event_loop()
-    task = loop.create_task(watch_for_data_url_from_subgraph(request_id=request_id))
-    loop.run_until_complete(task)
-    return task.result()

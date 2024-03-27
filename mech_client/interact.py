@@ -41,10 +41,7 @@ from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from web3 import Web3
 from web3.contract import Contract as Web3Contract
 
-from mech_client.acn import (
-    watch_for_data_url_from_mech,
-    watch_for_data_url_from_mech_sync,
-)
+from mech_client.acn import watch_for_data_url_from_mech
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.subgraph import query_agent_address, watch_for_data_url_from_subgraph
 from mech_client.wss import (
@@ -452,28 +449,16 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         request_signature=request_event_signature,
     )
     print(f"Created on-chain request with ID {request_id}")
-    if confirmation_type == ConfirmationType.OFF_CHAIN:
-        data_url = watch_for_data_url_from_mech_sync(crypto=crypto)
-    elif confirmation_type == ConfirmationType.ON_CHAIN:
-        data_url = wait_for_data_url(
-            request_id=request_id,
-            wss=wss,
-            mech_contract=mech_contract,
-            deliver_signature=deliver_event_signature,
-            ledger_api=ledger_api,
-            crypto=crypto,
-            confirmation_type=confirmation_type,
-        )
-    else:
-        data_url = wait_for_data_url(
-            request_id=request_id,
-            wss=wss,
-            mech_contract=mech_contract,
-            deliver_signature=deliver_event_signature,
-            ledger_api=ledger_api,
-            crypto=crypto,
-            confirmation_type=confirmation_type,
-        )
+    data_url = wait_for_data_url(
+        request_id=request_id,
+        wss=wss,
+        mech_contract=mech_contract,
+        deliver_signature=deliver_event_signature,
+        ledger_api=ledger_api,
+        crypto=crypto,
+        confirmation_type=confirmation_type,
+    )
+
     print(f"Data arrived: {data_url}")
     data = requests.get(f"{data_url}/{request_id}").json()
     print(f"Data from agent: {data}")

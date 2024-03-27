@@ -19,7 +19,6 @@
 
 """ACN helpers."""
 
-import asyncio
 from pathlib import Path
 from typing import Optional, Type, cast
 
@@ -171,19 +170,3 @@ async def watch_for_data_url_from_mech(crypto: Crypto) -> Optional[str]:
         return None
     finally:
         await connection.disconnect()
-
-
-def watch_for_data_url_from_mech_sync(crypto: Crypto) -> Optional[str]:
-    """
-    Request and wait for data from agent
-
-    :param crypto: instance of Crypto
-    :type crypto: Crypto
-    :return: Data URL
-    :rtype: str
-    :raises: None
-    """
-    loop = asyncio.new_event_loop()
-    task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
-    loop.run_until_complete(task)
-    return task.result()
