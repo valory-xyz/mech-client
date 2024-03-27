@@ -134,7 +134,7 @@ poetry install && poetry shell
 
 ## Release guide:
 
-- Bump versions in `pyproject.toml` and `mech_client/__init__.py`
+- Bump versions in `pyproject.toml`, `mech_client/__init__.py` and `SECURITY.md`
 - `poetry lock`
 - `rm -rf dist`
 - `autonomy packages sync --update-packages`
