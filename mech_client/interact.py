@@ -523,7 +523,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     mech_config = get_mech_config(chain_config)
     ledger_config = mech_config.ledger_config
     contract_address = query_agent_address(
-        agent_id=agent_id, timeout=timeout, url=mech_config.subgraph_url
+        agent_id=agent_id, timeout=timeout, url=mech_config.subgraph_url, chain_config=chain_config
     )
     if contract_address is None:
         raise ValueError(f"Agent with ID {agent_id} does not exist!")

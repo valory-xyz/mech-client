@@ -27,7 +27,7 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://api.arbiscan.io/api?module=contract&action=getabi&address={contract_address}",
-        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
+        "subgraph_url": ""
     },
     "polygon": {
         "agent_registry_contract": "0x984cf72FDe8B5aA910e9e508aC5e007ae5BDcC9C",
@@ -42,12 +42,12 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://api.polygonscan.com/api?module=contract&action=getabi&address={contract_address}",
-        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
+        "subgraph_url": ""
     },
     "base": {
         "agent_registry_contract": "0x88DE734655184a09B70700aE4F72364d1ad23728",
         "rpc_url": "https://base.llamarpc.com",
-        "wss_endpoint": "wss://base-rpc.publicnode.com",
+        "wss_endpoint": "wss://base.gateway.tenderly.co",
         "ledger_config": {
             "address": "https://base.llamarpc.com",
             "chain_id": 8453,
@@ -56,8 +56,8 @@
             "is_gas_estimation_enabled": false
         },
         "gas_limit": 100000,
-        "contract_abi_url": "https://base.blockscout.com/api/v2/smart-contracts/{contract_address}",
-        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
+        "contract_abi_url": "https://api.basescan.org/api?module=contract&action=getabi&address={contract_address}",
+        "subgraph_url": ""
     },
     "celo": {
         "agent_registry_contract": "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA",
@@ -72,7 +72,7 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://explorer.celo.org/mainnet/api?module=contract&action=getabi&address={contract_address}",
-        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
+        "subgraph_url": ""
     },
     "optimism": {
         "agent_registry_contract": "0x75D529FAe220bC8db714F0202193726b46881B76",
@@ -87,6 +87,6 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://api-optimistic.etherscan.io/api?module=contract&action=getabi&address={contract_address}",
-        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
+        "subgraph_url": ""
     }
 }

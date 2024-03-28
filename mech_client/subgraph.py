@@ -51,7 +51,7 @@ DEFAULT_TIMEOUT = 600.0
 
 
 def query_agent_address(
-    agent_id: int, url: str, timeout: Optional[float] = None
+    agent_id: int, url: str, timeout: Optional[float] = None, chain_config: Optional[str] = None,
 ) -> Optional[str]:
     """
     Query agent address from subgraph.
@@ -62,9 +62,21 @@ def query_agent_address(
     :type url: str
     :param timeout: Timeout for the request.
     :type timeout: Optional[float]
+    :type chain_config: Optional[str]:
     :return: The agent address if found, None otherwise.
     :rtype: Optional[str]
     """
+    # temporary hard coded until subgraph present
+    if chain_config == "base" and agent_id == 2:
+        return "0x111D7DB1B752AB4D2cC0286983D9bd73a49bac6c"
+    if chain_config == "arbitrum" and agent_id == 2:
+        return "0x1FDAD3a5af5E96e5a64Fc0662B1814458F114597"
+    if chain_config == "polygon" and agent_id == 2:
+        return "0xbF92568718982bf65ee4af4F7020205dE2331a8a"
+    if chain_config == "celo" and agent_id == 2:
+        return "0xbF92568718982bf65ee4af4F7020205dE2331a8a"
+    if chain_config == "optimism" and agent_id == 2:
+        return "0xbF92568718982bf65ee4af4F7020205dE2331a8a"
     client = Client(
         transport=AIOHTTPTransport(url=url),
         execute_timeout=timeout or 30.0,
