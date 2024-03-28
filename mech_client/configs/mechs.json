@@ -1,0 +1,32 @@
+{
+    "gnosis": {
+        "agent_registry_contract": "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA",
+        "rpc_url": "https://rpc.eu-central-2.gateway.fm/v4/gnosis/non-archival/mainnet",
+        "wss_endpoint": "wss://rpc.eu-central-2.gateway.fm/ws/v4/gnosis/non-archival/mainnet",
+        "ledger_config": {
+            "address": "https://rpc.eu-central-2.gateway.fm/v4/gnosis/non-archival/mainnet",
+            "chain_id": 100,
+            "poa_chain": false,
+            "default_gas_price_strategy": "eip1559",
+            "is_gas_estimation_enabled": false
+        },
+        "manual_gas_limit": 100000,
+        "block_explorer_url": "https://gnosis.blockscout.com/api/v2/smart-contracts/{contract_address}",
+        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
+    },
+    "polygon": {
+        "agent_registry_contract": "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA",
+        "rpc_url": "https://rpc.eu-central-2.gateway.fm/v4/gnosis/non-archival/mainnet",
+        "wss_endpoint": "wss://rpc.eu-central-2.gateway.fm/ws/v4/gnosis/non-archival/mainnet",
+        "ledger_config": {
+            "address": "https://rpc.eu-central-2.gateway.fm/v4/gnosis/non-archival/mainnet",
+            "chain_id": 100,
+            "poa_chain": false,
+            "default_gas_price_strategy": "eip1559",
+            "is_gas_estimation_enabled": false
+        },
+        "manual_gas_limit": 100000,
+        "block_explorer_url": "https://gnosis.blockscout.com/api/v2/smart-contracts/{contract_address}",
+        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
+    }
+}

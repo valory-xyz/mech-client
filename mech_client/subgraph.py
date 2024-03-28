@@ -27,7 +27,6 @@ from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
 
-MECH_SUBGRAPH_URL = "https://api.studio.thegraph.com/query/57238/mech/version/latest"
 AGENT_QUERY_TEMPLATE = Template(
     """{
     createMeches(where:{agentId:$agent_id}) {
@@ -52,19 +51,22 @@ DEFAULT_TIMEOUT = 600.0
 
 
 def query_agent_address(
-    agent_id: int, timeout: Optional[float] = None
+    agent_id: int, url: str, timeout: Optional[float] = None
 ) -> Optional[str]:
     """
     Query agent address from subgraph.
 
     :param agent_id: The ID of the agent.
-    :param timeout: Timeout for the request.
     :type agent_id: int
+    :param url: Subgraph URL.
+    :type url: str
+    :param timeout: Timeout for the request.
+    :type timeout: Optional[float]
     :return: The agent address if found, None otherwise.
     :rtype: Optional[str]
     """
     client = Client(
-        transport=AIOHTTPTransport(url=MECH_SUBGRAPH_URL),
+        transport=AIOHTTPTransport(url=url),
         execute_timeout=timeout or 30.0,
     )
     response = client.execute(
@@ -81,19 +83,22 @@ def query_agent_address(
 
 
 async def query_deliver_hash(
-    request_id: str, timeout: Optional[float] = None
+    request_id: str, url: str, timeout: Optional[float] = None
 ) -> Optional[str]:
     """
     Query deliver IPFS hash from subgraph.
 
     :param request_id: The ID of the mech request.
-    :param timeout: Timeout for the request.
     :type request_id: str
+    :param url: Subgraph URL.
+    :type url: str
+    :param timeout: Timeout for the request.
+    :type timeout: Optional[float]
     :return: The deliver IPFS hash if found, None otherwise.
     :rtype: Optional[str]
     """
     client = Client(
-        transport=AIOHTTPTransport(url=MECH_SUBGRAPH_URL),
+        transport=AIOHTTPTransport(url=url),
         execute_timeout=timeout or 30.0,
     )
     response = await client.execute_async(
@@ -110,13 +115,15 @@ async def query_deliver_hash(
 
 
 async def watch_for_data_url_from_subgraph(
-    request_id: str, timeout: Optional[float] = None
+    request_id: str, url: str, timeout: Optional[float] = None
 ) -> Optional[str]:
     """
     Continuously query for data URL until it's available or timeout is reached.
 
     :param request_id: The ID of the mech request.
     :type request_id: str
+    :param url: Subgraph URL.
+    :type url: str
     :param timeout: Maximum time to wait for the data URL in seconds. Defaults to DEFAULT_TIMEOUT.
     :type timeout: Optional[float]
     :return: Data URL if available within timeout, otherwise None.
@@ -125,7 +132,7 @@ async def watch_for_data_url_from_subgraph(
     timeout = timeout or DEFAULT_TIMEOUT
     start_time = asyncio.get_event_loop().time()
     while True:
-        response = await query_deliver_hash(request_id=request_id)
+        response = await query_deliver_hash(request_id=request_id, url=url)
         if response is not None:
             return f"https://gateway.autonolas.tech/ipfs/{response}"
 
