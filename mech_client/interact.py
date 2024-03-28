@@ -47,9 +47,9 @@ from mech_client.acn import watch_for_data_url_from_mech
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.subgraph import query_agent_address, watch_for_data_url_from_subgraph
 from mech_client.wss import (
+    get_request_id,
     register_event_handlers,
     watch_for_data_url_from_wss,
-    watch_for_request_id,
 )
 
 
@@ -558,7 +558,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         request_signature=request_event_signature,
         deliver_signature=deliver_event_signature,
     )
-    send_request(
+    tx_hash = send_request(
         crypto=crypto,
         ledger_api=ledger_api,
         mech_contract=mech_contract,
@@ -571,13 +571,14 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         sleep=sleep,
     )
     print("Waiting for transaction receipt...")
-    request_id = watch_for_request_id(
-        wss=wss,
+    request_id = get_request_id(
+        tx_hash=tx_hash,
         mech_contract=mech_contract,
         ledger_api=ledger_api,
         request_signature=request_event_signature,
     )
     print(f"Created on-chain request with ID {request_id}")
+    print(f"Waiting for mech response...")
     data_url = wait_for_data_url(
         request_id=request_id,
         wss=wss,
