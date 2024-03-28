@@ -80,7 +80,7 @@ def cli() -> None:
     help="Amount of sleep before retrying the transaction",
 )
 @click.option(
-    "--chain-id",
+    "--chain-config",
     type=str,
     help="Id of the mech's chain configuration (stored configs/mechs.json)",
 )
@@ -94,7 +94,7 @@ def interact(  # pylint: disable=too-many-arguments
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
-    chain_id: Optional[str] = None,
+    chain_config: Optional[str] = None,
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
@@ -118,7 +118,7 @@ def interact(  # pylint: disable=too-many-arguments
             retries=retries,
             timeout=timeout,
             sleep=sleep,
-            chain_id=chain_id,
+            chain_config=chain_config,
         )
     except (ValueError, FileNotFoundError) as e:
         raise click.ClickException(str(e)) from e

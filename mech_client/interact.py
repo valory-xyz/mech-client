@@ -107,7 +107,7 @@ class MechConfig:
     rpc_url: str
     wss_endpoint: str
     ledger_config: LedgerConfig
-    manual_gas_limit: int
+    gas_limit: int
     block_explorer_url: str
     subgraph_url: str
 
@@ -125,9 +125,9 @@ class MechConfig:
         if wss_endpoint:
             self.wss_endpoint = wss_endpoint
 
-        manual_gas_limit = os.getenv("MECHX_MANUAL_GAS_LIMIT")
-        if manual_gas_limit:
-            self.manual_gas_limit = int(manual_gas_limit)
+        gas_limit = os.getenv("MECHX_GAS_LIMIT")
+        if gas_limit:
+            self.gas_limit = int(gas_limit)
 
         block_explorer_url = os.getenv("MECHX_BLOCK_EXPLORER_URL")
         if block_explorer_url:
@@ -146,15 +146,16 @@ class ConfirmationType(Enum):
     WAIT_FOR_BOTH = "wait-for-both"
 
 
-def get_mech_config(chain_id: Optional[str] = None) -> MechConfig:
+def get_mech_config(chain_config: Optional[str] = None) -> MechConfig:
     """Get `MechConfig` configuration"""
     with open(MECH_CONFIGS, "r", encoding="UTF-8") as file:
         data = json.load(file)
 
-        if chain_id is None:
-            chain_id = next(iter(data))
+        if chain_config is None:
+            chain_config = next(iter(data))
 
-        entry = data[chain_id].copy()
+        print(f"Chain configuration: {chain_config}")
+        entry = data[chain_config].copy()
         ledger_config = LedgerConfig(**entry.pop("ledger_config"))
         mech_config = MechConfig(**entry, ledger_config=ledger_config)
         return mech_config
@@ -477,7 +478,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
-    chain_id: Optional[str] = None,
+    chain_config: Optional[str] = None,
 ) -> Any:
     """
     Interact with agent mech contract.
@@ -501,11 +502,11 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     :type timeout: float
     :param sleep: Amount of sleep before retrying the transaction
     :type sleep: float
-    :param chain_id: Id of the mech's chain configuration (stored configs/mechs.json)
-    :type chain_id: str:
+    :param chain_config: Id of the mech's chain configuration (stored configs/mechs.json)
+    :type chain_config: str:
     :rtype: Any
     """
-    mech_config = get_mech_config(chain_id)
+    mech_config = get_mech_config(chain_config)
     ledger_config = mech_config.ledger_config
     contract_address = query_agent_address(
         agent_id=agent_id, timeout=timeout, url=mech_config.subgraph_url
@@ -549,7 +550,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         crypto=crypto,
         ledger_api=ledger_api,
         mech_contract=mech_contract,
-        gas_limit=mech_config.manual_gas_limit,
+        gas_limit=mech_config.gas_limit,
         prompt=prompt,
         tool=tool,
         extra_attributes=extra_attributes,
