@@ -333,7 +333,7 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
-) -> None:
+) -> Optional[str]:
     """
     Sends a request to the mech.
 
@@ -394,12 +394,13 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
                 raise_on_try=True,
             )
             print(f"Transaction sent: https://gnosisscan.io/tx/{transaction_digest}")
-            return
+            return transaction_digest
         except Exception as e:  # pylint: disable=broad-except
             print(
                 f"Error occured while sending the transaction: {e}; Retrying in {sleep}"
             )
             time.sleep(sleep)
+    return None
 
 
 def wait_for_data_url(  # pylint: disable=too-many-arguments
