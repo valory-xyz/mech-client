@@ -41,7 +41,7 @@
             "is_gas_estimation_enabled": false
         },
         "gas_limit": 100000,
-        "contract_abi_url": "",
+        "contract_abi_url": "https://api.polygonscan.com/api?module=contract&action=getabi&address={contract_address}",
         "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
     },
     "base": {
@@ -86,7 +86,7 @@
             "is_gas_estimation_enabled": false
         },
         "gas_limit": 100000,
-        "contract_abi_url": "",
+        "contract_abi_url": "https://api-optimistic.etherscan.io/api?module=contract&action=getabi&address={contract_address}",
         "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
     }
 }
