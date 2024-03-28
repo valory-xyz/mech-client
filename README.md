@@ -82,7 +82,7 @@ mechx interact <prompt> <agent_id> --key <key_file>
 Example output:
 ```bash
 mechx interact "write a short poem" 3 --key ~/gnosis_key --tool openai-text-davinci-003
-Using gnosis chain configuration.
+Chain configuration: gnosis
 Prompt uploaded: https://gateway.autonolas.tech/ipfs/f01701220ad773628911d12e28f005e3f249e990d684e5dba07542259195602f9afed30bf
 Transaction sent: https://gnosisscan.io/tx/0x0d9209e32e965a820b9e80accfcd71ea3b1174b9758dd251c2e627a60ec426a5
 Created on-chain request with ID 111240237160304797537720810617416341148235899500021985333360197012735240803849
@@ -94,7 +94,7 @@ By default the client will wait for data to arrive from on-chain using the webso
 
 ```bash
 mechx interact "write a short poem" 3 --key ~/gnosis_key --tool openai-text-davinci-003 --confirm on-chain
-Using gnosis chain configuration.
+Chain configuration: gnosis
 Prompt uploaded: https://gateway.autonolas.tech/ipfs/f017012205e37f761221a8ba4005e91c36b94153e9432b8888ff2acae6b101dd5a5de6768
 Transaction sent: https://gnosisscan.io/tx/0xf1ef63f617717bbb8deb09699af99aa39f10155d33796de2fd7eb61c9c1458b6
 Created on-chain request with ID 81653153529124597849081567361606842861262371002932574194580478443414142139857
