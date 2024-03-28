@@ -11,82 +11,82 @@
             "is_gas_estimation_enabled": false
         },
         "gas_limit": 100000,
-        "block_explorer_url": "https://gnosis.blockscout.com/api/v2/smart-contracts/{contract_address}",
+        "contract_abi_url": "https://gnosis.blockscout.com/api/v2/smart-contracts/{contract_address}",
         "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
     },
     "arbitrum": {
-        "agent_registry_contract": "",
-        "rpc_url": "",
-        "wss_endpoint": "t",
+        "agent_registry_contract": "0xa4799B083E0068732456EF45ff9fe5c683658327",
+        "rpc_url": "https://arbitrum.llamarpc.com",
+        "wss_endpoint": "wss://arbitrum-one-rpc.publicnode.com",
         "ledger_config": {
-            "address": "",
-            "chain_id": 100,
+            "address": "https://arbitrum.llamarpc.com",
+            "chain_id": 42161,
             "poa_chain": false,
             "default_gas_price_strategy": "eip1559",
             "is_gas_estimation_enabled": false
         },
         "gas_limit": 100000,
-        "block_explorer_url": "",
-        "subgraph_url": ""
+        "contract_abi_url": "https://api.arbiscan.io/api?module=contract&action=getabi&address={contract_address}",
+        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
     },
     "polygon": {
-        "agent_registry_contract": "",
-        "rpc_url": "",
-        "wss_endpoint": "t",
+        "agent_registry_contract": "0x984cf72FDe8B5aA910e9e508aC5e007ae5BDcC9C",
+        "rpc_url": "https://polygon-bor-rpc.publicnode.com",
+        "wss_endpoint": "wss://polygon-bor-rpc.publicnode.com",
         "ledger_config": {
-            "address": "",
-            "chain_id": 100,
+            "address": "https://polygon-bor-rpc.publicnode.com",
+            "chain_id": 137,
             "poa_chain": false,
             "default_gas_price_strategy": "eip1559",
             "is_gas_estimation_enabled": false
         },
         "gas_limit": 100000,
-        "block_explorer_url": "",
-        "subgraph_url": ""
+        "contract_abi_url": "",
+        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
     },
     "base": {
-        "agent_registry_contract": "",
-        "rpc_url": "",
-        "wss_endpoint": "t",
+        "agent_registry_contract": "0x88DE734655184a09B70700aE4F72364d1ad23728",
+        "rpc_url": "https://base.llamarpc.com",
+        "wss_endpoint": "wss://base-rpc.publicnode.com",
         "ledger_config": {
-            "address": "",
-            "chain_id": 100,
+            "address": "https://base.llamarpc.com",
+            "chain_id": 8453,
             "poa_chain": false,
             "default_gas_price_strategy": "eip1559",
             "is_gas_estimation_enabled": false
         },
         "gas_limit": 100000,
-        "block_explorer_url": "",
-        "subgraph_url": ""
+        "contract_abi_url": "https://base.blockscout.com/api/v2/smart-contracts/{contract_address}",
+        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
     },
     "celo": {
-        "agent_registry_contract": "",
-        "rpc_url": "",
-        "wss_endpoint": "t",
+        "agent_registry_contract": "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA",
+        "rpc_url": "https://forno.celo.org",
+        "wss_endpoint": "wss://forno.celo.org/ws",
         "ledger_config": {
-            "address": "",
-            "chain_id": 100,
+            "address": "https://forno.celo.org",
+            "chain_id": 42220,
             "poa_chain": false,
             "default_gas_price_strategy": "eip1559",
             "is_gas_estimation_enabled": false
         },
         "gas_limit": 100000,
-        "block_explorer_url": "",
-        "subgraph_url": ""
+        "contract_abi_url": "https://explorer.celo.org/mainnet/api?module=contract&action=getabi&address={contract_address}",
+        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
     },
     "optimism": {
-        "agent_registry_contract": "",
-        "rpc_url": "",
-        "wss_endpoint": "t",
+        "agent_registry_contract": "0x75D529FAe220bC8db714F0202193726b46881B76",
+        "rpc_url": "https://mainnet.optimism.io",
+        "wss_endpoint": "wss://optimism-rpc.publicnode.com",
         "ledger_config": {
-            "address": "",
-            "chain_id": 100,
+            "address": "https://mainnet.optimism.io",
+            "chain_id": 10,
             "poa_chain": false,
             "default_gas_price_strategy": "eip1559",
             "is_gas_estimation_enabled": false
         },
         "gas_limit": 100000,
-        "block_explorer_url": "",
-        "subgraph_url": ""
+        "contract_abi_url": "",
+        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
     }
 }

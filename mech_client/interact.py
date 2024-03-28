@@ -108,7 +108,7 @@ class MechConfig:
     wss_endpoint: str
     ledger_config: LedgerConfig
     gas_limit: int
-    block_explorer_url: str
+    contract_abi_url: str
     subgraph_url: str
 
     def __post_init__(self) -> None:
@@ -129,9 +129,9 @@ class MechConfig:
         if gas_limit:
             self.gas_limit = int(gas_limit)
 
-        block_explorer_url = os.getenv("MECHX_BLOCK_EXPLORER_URL")
-        if block_explorer_url:
-            self.block_explorer_url = block_explorer_url
+        contract_abi_url = os.getenv("MECHX_CONTRACT_ABI_URL")
+        if contract_abi_url:
+            self.contract_abi_url = contract_abi_url
 
         subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
         if subgraph_url:
@@ -186,11 +186,22 @@ def get_event_signatures(abi: List) -> Tuple[str, str]:
     return request, deliver
 
 
-def get_abi(contract_address: str, block_explorer_url: str) -> List:
+def get_abi(contract_address: str, contract_abi_url: str) -> List:
     """Get contract abi"""
-    abi_request_url = block_explorer_url.format(contract_address=contract_address)
+    abi_request_url = contract_abi_url.format(contract_address=contract_address)
     response = requests.get(abi_request_url).json()
-    return response["abi"]
+
+    if "result" in response:
+        result = response["result"]
+        try:
+            abi = json.loads(result)
+        except json.JSONDecodeError:
+            print("Error: Failed to parse 'result' field as JSON")
+            exit(1)
+    else:
+        abi = response.get("abi")
+
+    return abi if abi else []
 
 
 def get_contract(
@@ -259,7 +270,7 @@ def verify_or_retrieve_tool(
     agent_id: int,
     ledger_api: EthereumApi,
     agent_registry_contract: str,
-    block_explorer_url: str,
+    contract_abi_url: str,
     tool: Optional[str] = None,
 ) -> str:
     """
@@ -271,8 +282,8 @@ def verify_or_retrieve_tool(
     :type ledger_api: EthereumApi
     :param agent_registry_contract: Agent registry contract address.
     :type agent_registry_contract: str
-    :param block_explorer_url: Block explorer URL.
-    :type block_explorer_url: str
+    :param contract_abi_url: Block explorer URL.
+    :type contract_abi_url: str
     :param tool: The tool to verify or retrieve (optional).
     :type tool: Optional[str]
     :return: The result of the verification or retrieval.
@@ -282,7 +293,7 @@ def verify_or_retrieve_tool(
         agent_id=agent_id,
         ledger_api=ledger_api,
         agent_registry_contract=agent_registry_contract,
-        block_explorer_url=block_explorer_url,
+        contract_abi_url=contract_abi_url,
     )
     if tool is not None and tool not in available_tools:
         raise ValueError(
@@ -297,12 +308,12 @@ def fetch_tools(
     agent_id: int,
     ledger_api: EthereumApi,
     agent_registry_contract: str,
-    block_explorer_url: str,
+    contract_abi_url: str,
 ) -> List[str]:
     """Fetch tools for specified agent ID."""
     mech_registry = get_contract(
         contract_address=agent_registry_contract,
-        abi=get_abi(agent_registry_contract, block_explorer_url),
+        abi=get_abi(agent_registry_contract, contract_abi_url),
         ledger_api=ledger_api,
     )
     token_uri = mech_registry.functions.tokenURI(agent_id).call()
@@ -529,11 +540,11 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         ledger_api=ledger_api,
         tool=tool,
         agent_registry_contract=mech_config.agent_registry_contract,
-        block_explorer_url=mech_config.block_explorer_url,
+        contract_abi_url=mech_config.contract_abi_url,
     )
     abi = get_abi(
         contract_address=contract_address,
-        block_explorer_url=mech_config.block_explorer_url,
+        contract_abi_url=mech_config.contract_abi_url,
     )
     mech_contract = get_contract(
         contract_address=contract_address, abi=abi, ledger_api=ledger_api
