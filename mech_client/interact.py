@@ -569,6 +569,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         timeout=timeout,
         sleep=sleep,
     )
+    print("Waiting for transaction receipt...")
     request_id = watch_for_request_id(
         wss=wss,
         mech_contract=mech_contract,
