@@ -359,6 +359,8 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     :type timeout: float
     :param sleep: Amount of sleep before retrying the transaction
     :type sleep: float
+    :return: The transaction hash.
+    :rtype: Optional[str]
     """
     v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
         prompt, tool, extra_attributes
