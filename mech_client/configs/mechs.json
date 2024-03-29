@@ -71,13 +71,13 @@
             "is_gas_estimation_enabled": false
         },
         "gas_limit": 100000,
-        "contract_abi_url": "https://explorer.celo.org/mainnet/api?module=contract&action=getabi&address={contract_address}",
+        "contract_abi_url": "https://api.celoscan.io/api?module=contract&action=getabi&address={contract_address}",
         "subgraph_url": ""
     },
     "optimism": {
         "agent_registry_contract": "0x75D529FAe220bC8db714F0202193726b46881B76",
         "rpc_url": "https://mainnet.optimism.io",
-        "wss_endpoint": "wss://optimism-rpc.publicnode.com",
+        "wss_endpoint": "wss://optimism.gateway.tenderly.co",
         "ledger_config": {
             "address": "https://mainnet.optimism.io",
             "chain_id": 10,
