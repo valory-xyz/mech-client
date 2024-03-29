@@ -109,8 +109,8 @@ def wait_for_receipt(tx_hash: str, ledger_api: EthereumApi) -> Dict:
             time.sleep(1)
 
 
-def watch_for_request_id(  # pylint: disable=too-many-arguments
-    wss: websocket.WebSocket,
+def get_request_id(  # pylint: disable=too-many-arguments
+    tx_hash: str,
     mech_contract: Web3Contract,
     ledger_api: EthereumApi,
     request_signature: str,
@@ -118,8 +118,8 @@ def watch_for_request_id(  # pylint: disable=too-many-arguments
     """
     Watches for events on mech.
 
-    :param wss: The WebSocket connection object.
-    :type wss: websocket.WebSocket
+    :param tx_hash: Transaction hash.
+    :type tx_hash: str
     :param mech_contract: The mech contract instance.
     :type mech_contract: Web3Contract
     :param ledger_api: The Ethereum API used for interacting with the ledger.
@@ -130,9 +130,6 @@ def watch_for_request_id(  # pylint: disable=too-many-arguments
     :rtype: str
     """
     while True:
-        msg = wss.recv()
-        data = json.loads(msg)
-        tx_hash = data["params"]["result"]["transactionHash"]
         tx_receipt = wait_for_receipt(tx_hash=tx_hash, ledger_api=ledger_api)
         event_signature = tx_receipt["logs"][0]["topics"][0].hex()
         if event_signature != request_signature:
