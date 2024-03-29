@@ -26,9 +26,12 @@ python client.py <prompt> <tool>
 """
 
 import asyncio
+import json
 import os
+import sys
 import time
 import warnings
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -51,33 +54,8 @@ from mech_client.wss import (
 )
 
 
-AGENT_REGISTRY_CONTRACT = "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA"
-MECHX_CHAIN_RPC = os.environ.get(
-    "MECHX_CHAIN_RPC",
-    "https://rpc.eu-central-2.gateway.fm/v4/gnosis/non-archival/mainnet",
-)
-LEDGER_CONFIG = {
-    "address": MECHX_CHAIN_RPC,
-    "chain_id": 100,
-    "poa_chain": False,
-    "default_gas_price_strategy": "eip1559",
-    "is_gas_estimation_enabled": False,
-}
 PRIVATE_KEY_FILE_PATH = "ethereum_private_key.txt"
-
-WSS_ENDPOINT = os.getenv(
-    "WEBSOCKET_ENDPOINT",
-    "wss://rpc.eu-central-2.gateway.fm/ws/v4/gnosis/non-archival/mainnet",
-)
-MANUAL_GAS_LIMIT = int(
-    os.getenv(
-        "MANUAL_GAS_LIMIT",
-        "100_000",
-    )
-)
-BLOCKSCOUT_API_URL = (
-    "https://gnosis.blockscout.com/api/v2/smart-contracts/{contract_address}"
-)
+MECH_CONFIGS = Path(__file__).parent / "configs" / "mechs.json"
 
 MAX_RETRIES = 3
 WAIT_SLEEP = 3.0
@@ -87,12 +65,101 @@ TIMEOUT = 60.0
 warnings.filterwarnings("ignore", "The log with transaction hash.*")
 
 
+@dataclass
+class LedgerConfig:
+    """Ledger configuration"""
+
+    address: str
+    chain_id: int
+    poa_chain: bool
+    default_gas_price_strategy: str
+    is_gas_estimation_enabled: bool
+
+    def __post_init__(self) -> None:
+        """Post initialization to override with environment variables."""
+        address = os.getenv("MECHX_LEDGER_ADDRESS")
+        if address:
+            self.address = address
+
+        chain_id = os.getenv("MECHX_LEDGER_CHAIN_ID")
+        if chain_id:
+            self.chain_id = int(chain_id)
+
+        poa_chain = os.getenv("MECHX_LEDGER_POA_CHAIN")
+        if poa_chain:
+            self.poa_chain = bool(poa_chain)
+
+        default_gas_price_strategy = os.getenv(
+            "MECHX_LEDGER_DEFAULT_GAS_PRICE_STRATEGY"
+        )
+        if default_gas_price_strategy:
+            self.default_gas_price_strategy = default_gas_price_strategy
+
+        is_gas_estimation_enabled = os.getenv("MECHX_LEDGER_IS_GAS_ESTIMATION_ENABLED")
+        if is_gas_estimation_enabled:
+            self.is_gas_estimation_enabled = bool(is_gas_estimation_enabled)
+
+
+@dataclass
+class MechConfig:
+    """Mech configuration"""
+
+    agent_registry_contract: str
+    rpc_url: str
+    wss_endpoint: str
+    ledger_config: LedgerConfig
+    gas_limit: int
+    contract_abi_url: str
+    subgraph_url: str
+
+    def __post_init__(self) -> None:
+        """Post initialization to override with environment variables."""
+        agent_registry_contract = os.getenv("MECHX_AGENT_REGISTRY_CONTRACT")
+        if agent_registry_contract:
+            self.agent_registry_contract = agent_registry_contract
+
+        rpc_url = os.getenv("MECHX_CHAIN_RPC")
+        if rpc_url:
+            self.rpc_url = rpc_url
+
+        wss_endpoint = os.getenv("MECHX_WSS_ENDPOINT")
+        if wss_endpoint:
+            self.wss_endpoint = wss_endpoint
+
+        gas_limit = os.getenv("MECHX_GAS_LIMIT")
+        if gas_limit:
+            self.gas_limit = int(gas_limit)
+
+        contract_abi_url = os.getenv("MECHX_CONTRACT_ABI_URL")
+        if contract_abi_url:
+            self.contract_abi_url = contract_abi_url
+
+        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
+        if subgraph_url:
+            self.subgraph_url = subgraph_url
+
+
 class ConfirmationType(Enum):
     """Verification type."""
 
     ON_CHAIN = "on-chain"
     OFF_CHAIN = "off-chain"
     WAIT_FOR_BOTH = "wait-for-both"
+
+
+def get_mech_config(chain_config: Optional[str] = None) -> MechConfig:
+    """Get `MechConfig` configuration"""
+    with open(MECH_CONFIGS, "r", encoding="UTF-8") as file:
+        data = json.load(file)
+
+        if chain_config is None:
+            chain_config = next(iter(data))
+
+        print(f"Chain configuration: {chain_config}")
+        entry = data[chain_config].copy()
+        ledger_config = LedgerConfig(**entry.pop("ledger_config"))
+        mech_config = MechConfig(**entry, ledger_config=ledger_config)
+        return mech_config
 
 
 def calculate_topic_id(event: Dict) -> str:
@@ -120,11 +187,22 @@ def get_event_signatures(abi: List) -> Tuple[str, str]:
     return request, deliver
 
 
-def get_abi(contract_address: str) -> List:
+def get_abi(contract_address: str, contract_abi_url: str) -> List:
     """Get contract abi"""
-    abi_request_url = BLOCKSCOUT_API_URL.format(contract_address=contract_address)
+    abi_request_url = contract_abi_url.format(contract_address=contract_address)
     response = requests.get(abi_request_url).json()
-    return response["abi"]
+
+    if "result" in response:
+        result = response["result"]
+        try:
+            abi = json.loads(result)
+        except json.JSONDecodeError:
+            print("Error: Failed to parse 'result' field as JSON")
+            sys.exit(1)
+    else:
+        abi = response.get("abi")
+
+    return abi if abi else []
 
 
 def get_contract(
@@ -190,7 +268,11 @@ def _tool_selector_prompt(available_tools: List[str]) -> str:
 
 
 def verify_or_retrieve_tool(
-    agent_id: int, ledger_api: EthereumApi, tool: Optional[str] = None
+    agent_id: int,
+    ledger_api: EthereumApi,
+    agent_registry_contract: str,
+    contract_abi_url: str,
+    tool: Optional[str] = None,
 ) -> str:
     """
     Checks if the tool is valid and for what agent.
@@ -199,12 +281,21 @@ def verify_or_retrieve_tool(
     :type agent_id: int
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param agent_registry_contract: Agent registry contract address.
+    :type agent_registry_contract: str
+    :param contract_abi_url: Block explorer URL.
+    :type contract_abi_url: str
     :param tool: The tool to verify or retrieve (optional).
     :type tool: Optional[str]
     :return: The result of the verification or retrieval.
     :rtype: str
     """
-    available_tools = fetch_tools(agent_id=agent_id, ledger_api=ledger_api)
+    available_tools = fetch_tools(
+        agent_id=agent_id,
+        ledger_api=ledger_api,
+        agent_registry_contract=agent_registry_contract,
+        contract_abi_url=contract_abi_url,
+    )
     if tool is not None and tool not in available_tools:
         raise ValueError(
             f"Provided tool `{tool}` not in the list of available tools; Available tools={available_tools}"
@@ -214,11 +305,16 @@ def verify_or_retrieve_tool(
     return _tool_selector_prompt(available_tools=available_tools)
 
 
-def fetch_tools(agent_id: int, ledger_api: EthereumApi) -> List[str]:
+def fetch_tools(
+    agent_id: int,
+    ledger_api: EthereumApi,
+    agent_registry_contract: str,
+    contract_abi_url: str,
+) -> List[str]:
     """Fetch tools for specified agent ID."""
     mech_registry = get_contract(
-        contract_address=AGENT_REGISTRY_CONTRACT,
-        abi=get_abi(AGENT_REGISTRY_CONTRACT),
+        contract_address=agent_registry_contract,
+        abi=get_abi(agent_registry_contract, contract_abi_url),
         ledger_api=ledger_api,
     )
     token_uri = mech_registry.functions.tokenURI(agent_id).call()
@@ -230,6 +326,7 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
     mech_contract: Web3Contract,
+    gas_limit: int,
     prompt: str,
     tool: str,
     extra_attributes: Optional[Dict[str, Any]] = None,
@@ -237,7 +334,7 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
-) -> None:
+) -> Optional[str]:
     """
     Sends a request to the mech.
 
@@ -247,6 +344,8 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     :type ledger_api: EthereumApi
     :param mech_contract: The mech contract instance.
     :type mech_contract: Web3Contract
+    :param gas_limit: Gas limit.
+    :type gas_limit: int
     :param prompt: The request prompt.
     :type prompt: str
     :param tool: The requested tool.
@@ -261,6 +360,8 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     :type timeout: float
     :param sleep: Amount of sleep before retrying the transaction
     :type sleep: float
+    :return: The transaction hash.
+    :rtype: Optional[str]
     """
     v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
         prompt, tool, extra_attributes
@@ -271,7 +372,7 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     tx_args = {
         "sender_address": crypto.address,
         "value": price,
-        "gas": MANUAL_GAS_LIMIT,
+        "gas": gas_limit,
     }
 
     tries = 0
@@ -296,18 +397,20 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
                 raise_on_try=True,
             )
             print(f"Transaction sent: https://gnosisscan.io/tx/{transaction_digest}")
-            return
+            return transaction_digest
         except Exception as e:  # pylint: disable=broad-except
             print(
                 f"Error occured while sending the transaction: {e}; Retrying in {sleep}"
             )
             time.sleep(sleep)
+    return None
 
 
 def wait_for_data_url(  # pylint: disable=too-many-arguments
     request_id: str,
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
+    subgraph_url: str,
     deliver_signature: str,
     ledger_api: EthereumApi,
     crypto: Crypto,
@@ -322,6 +425,8 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
     :type wss: websocket.WebSocket
     :param mech_contract: The mech contract instance.
     :type mech_contract: Web3Contract
+    :param subgraph_url: Subgraph URL.
+    :type subgraph_url: str
     :param deliver_signature: Topic signature for Deliver event
     :type deliver_signature: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
@@ -358,7 +463,7 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
             )
         )
         mech_task = loop.create_task(
-            watch_for_data_url_from_subgraph(request_id=request_id)
+            watch_for_data_url_from_subgraph(request_id=request_id, url=subgraph_url)
         )
         tasks.append(mech_task)
         tasks.append(on_chain_task)
@@ -388,6 +493,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
+    chain_config: Optional[str] = None,
 ) -> Any:
     """
     Interact with agent mech contract.
@@ -411,9 +517,18 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     :type timeout: float
     :param sleep: Amount of sleep before retrying the transaction
     :type sleep: float
+    :param chain_config: Id of the mech's chain configuration (stored configs/mechs.json)
+    :type chain_config: str:
     :rtype: Any
     """
-    contract_address = query_agent_address(agent_id=agent_id, timeout=timeout)
+    mech_config = get_mech_config(chain_config)
+    ledger_config = mech_config.ledger_config
+    contract_address = query_agent_address(
+        agent_id=agent_id,
+        timeout=timeout,
+        url=mech_config.subgraph_url,
+        chain_config=chain_config,
+    )
     if contract_address is None:
         raise ValueError(f"Agent with ID {agent_id} does not exist!")
 
@@ -423,12 +538,21 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
             f"Private key file `{private_key_path}` does not exist!"
         )
 
-    wss = websocket.create_connection(WSS_ENDPOINT)
+    wss = websocket.create_connection(mech_config.wss_endpoint)
     crypto = EthereumCrypto(private_key_path=private_key_path)
-    ledger_api = EthereumApi(**LEDGER_CONFIG)
+    ledger_api = EthereumApi(**asdict(ledger_config))
 
-    tool = verify_or_retrieve_tool(agent_id=agent_id, ledger_api=ledger_api, tool=tool)
-    abi = get_abi(contract_address=contract_address)
+    tool = verify_or_retrieve_tool(
+        agent_id=agent_id,
+        ledger_api=ledger_api,
+        tool=tool,
+        agent_registry_contract=mech_config.agent_registry_contract,
+        contract_abi_url=mech_config.contract_abi_url,
+    )
+    abi = get_abi(
+        contract_address=contract_address,
+        contract_abi_url=mech_config.contract_abi_url,
+    )
     mech_contract = get_contract(
         contract_address=contract_address, abi=abi, ledger_api=ledger_api
     )
@@ -444,6 +568,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         crypto=crypto,
         ledger_api=ledger_api,
         mech_contract=mech_contract,
+        gas_limit=mech_config.gas_limit,
         prompt=prompt,
         tool=tool,
         extra_attributes=extra_attributes,
@@ -451,6 +576,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         timeout=timeout,
         sleep=sleep,
     )
+    print("Waiting for transaction receipt...")
     request_id = watch_for_request_id(
         wss=wss,
         mech_contract=mech_contract,
@@ -462,6 +588,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         request_id=request_id,
         wss=wss,
         mech_contract=mech_contract,
+        subgraph_url=mech_config.subgraph_url,
         deliver_signature=deliver_event_signature,
         ledger_api=ledger_api,
         crypto=crypto,

@@ -10,16 +10,10 @@ Basic client to interact with a mech
 pip install mech-client
 ```
 
-Then, set a websocket endpoint for Gnosis RPC like so:
-
-```bash
-export WEBSOCKET_ENDPOINT=<YOUR ENDPOINT>
-```
-
 Note: If you encounter an "Out of gas" error when executing the tool, you will need to increase the gas limit by setting, e.g.,
 
 ```bash
-export MANUAL_GAS_LIMIT=200000
+export MECHX_GAS_LIMIT=200000
 ```
 
 ## CLI:
@@ -88,6 +82,7 @@ mechx interact <prompt> <agent_id> --key <key_file>
 Example output:
 ```bash
 mechx interact "write a short poem" 3 --key ~/gnosis_key --tool openai-text-davinci-003
+Chain configuration: gnosis
 Prompt uploaded: https://gateway.autonolas.tech/ipfs/f01701220ad773628911d12e28f005e3f249e990d684e5dba07542259195602f9afed30bf
 Transaction sent: https://gnosisscan.io/tx/0x0d9209e32e965a820b9e80accfcd71ea3b1174b9758dd251c2e627a60ec426a5
 Created on-chain request with ID 111240237160304797537720810617416341148235899500021985333360197012735240803849
@@ -95,15 +90,40 @@ Data arrived: https://gateway.autonolas.tech/ipfs/bafybeifk2h35ncszlze7t64rpblfo
 Data from agent: {'requestId': 111240237160304797537720810617416341148235899500021985333360197012735240803849, 'result': "\n\nI am brave and I'm strong\nI don't hide away my song\nI am here and I'm proud\nMy voice will be heard loud!"}
 ```
 
-By default the client will wait for data to arrive from on-chain using the websocket subscription and off-chain using the ACN and show you the result which arrives first. You can specify the type of confirmation you want using `--confirm` flag like this
+By default the client will wait for data to arrive from on-chain using the websocket subscription and subgraph, and off-chain using the ACN and show you the result which arrives first. You can specify the type of confirmation you want using `--confirm` flag like this
 
 ```bash
 mechx interact "write a short poem" 3 --key ~/gnosis_key --tool openai-text-davinci-003 --confirm on-chain
+Chain configuration: gnosis
 Prompt uploaded: https://gateway.autonolas.tech/ipfs/f017012205e37f761221a8ba4005e91c36b94153e9432b8888ff2acae6b101dd5a5de6768
 Transaction sent: https://gnosisscan.io/tx/0xf1ef63f617717bbb8deb09699af99aa39f10155d33796de2fd7eb61c9c1458b6
 Created on-chain request with ID 81653153529124597849081567361606842861262371002932574194580478443414142139857
 Data arrived: https://gateway.autonolas.tech/ipfs/f0170122069b55e077430a00f3cbc3b069347e901396f978ff160eb2b0a947872be1848b7
 Data from agent: {'requestId': 81653153529124597849081567361606842861262371002932574194580478443414142139857, 'result': "\n\nA summer breeze, so sweet,\nA gentle reminder of summer's heat.\nThe sky so blue, no cloud in sight,\nA perfect day, a wondrous sight."}
+```
+
+### Chain configuration
+
+Configurations for different chains are stored in the file `configs/mechs.json`. By default, `mech interact` will choose the first configuration on the JSON. You can specify which config you want to use using the `--chain-config` flag, for example,
+
+```bash
+mechx interact <prompt> <agent_id> --chain-config gnosis
+```
+
+Additionally, you can override any configuration parameter by exporting any of the following environment variables:
+
+```bash
+MECHX_CHAIN_RPC
+MECHX_WSS_ENDPOINT
+MECHX_GAS_LIMIT
+MECHX_CONTRACT_ABI_URL
+MECHX_SUBGRAPH_URL
+
+MECHX_LEDGER_ADDRESS
+MECHX_LEDGER_CHAIN_ID
+MECHX_LEDGER_POA_CHAIN
+MECHX_LEDGER_DEFAULT_GAS_PRICE_STRATEGY
+MECHX_LEDGER_IS_GAS_ESTIMATION_ENABLED
 ```
 
 ## Programmatic Usage:

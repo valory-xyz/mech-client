@@ -41,6 +41,11 @@ def cli() -> None:
 @click.argument("prompt")
 @click.argument("agent_id", type=int)
 @click.option(
+    "--key",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    help="Path to private key to use for request minting",
+)
+@click.option(
     "--tool",
     type=str,
     help="Name of the tool to be used",
@@ -51,11 +56,6 @@ def cli() -> None:
     multiple=True,
     help="Extra attribute (key=value) to be included in the request metadata",
     metavar="KEY=VALUE",
-)
-@click.option(
-    "--key",
-    type=click.Path(exists=True, file_okay=True, dir_okay=False),
-    help="Path to private key to use for request minting",
 )
 @click.option(
     "--confirm",
@@ -79,6 +79,11 @@ def cli() -> None:
     type=float,
     help="Amount of sleep before retrying the transaction",
 )
+@click.option(
+    "--chain-config",
+    type=str,
+    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+)
 def interact(  # pylint: disable=too-many-arguments
     prompt: str,
     agent_id: int,
@@ -89,6 +94,7 @@ def interact(  # pylint: disable=too-many-arguments
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
+    chain_config: Optional[str] = None,
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
@@ -112,6 +118,7 @@ def interact(  # pylint: disable=too-many-arguments
             retries=retries,
             timeout=timeout,
             sleep=sleep,
+            chain_config=chain_config,
         )
     except (ValueError, FileNotFoundError) as e:
         raise click.ClickException(str(e)) from e
