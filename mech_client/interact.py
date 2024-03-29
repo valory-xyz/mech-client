@@ -28,6 +28,7 @@ python client.py <prompt> <tool>
 import asyncio
 import json
 import os
+import sys
 import time
 import warnings
 from dataclasses import asdict, dataclass
@@ -197,7 +198,7 @@ def get_abi(contract_address: str, contract_abi_url: str) -> List:
             abi = json.loads(result)
         except json.JSONDecodeError:
             print("Error: Failed to parse 'result' field as JSON")
-            exit(1)
+            sys.exit(1)
     else:
         abi = response.get("abi")
 

@@ -50,7 +50,7 @@ DELIVER_QUERY_TEMPLATE = Template(
 DEFAULT_TIMEOUT = 600.0
 
 
-def query_agent_address(
+def query_agent_address(  # pylint: disable=too-many-return-statements
     agent_id: int,
     url: str,
     timeout: Optional[float] = None,
