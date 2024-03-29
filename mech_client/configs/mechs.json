@@ -32,11 +32,11 @@
     "polygon": {
         "agent_registry_contract": "0x984cf72FDe8B5aA910e9e508aC5e007ae5BDcC9C",
         "rpc_url": "https://polygon-bor-rpc.publicnode.com",
-        "wss_endpoint": "wss://polygon-bor-rpc.publicnode.com",
+        "wss_endpoint": "wss://polygon.gateway.tenderly.co",
         "ledger_config": {
             "address": "https://polygon-bor-rpc.publicnode.com",
             "chain_id": 137,
-            "poa_chain": false,
+            "poa_chain": true,
             "default_gas_price_strategy": "eip1559",
             "is_gas_estimation_enabled": false
         },
