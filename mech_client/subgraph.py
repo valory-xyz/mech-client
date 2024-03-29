@@ -51,7 +51,10 @@ DEFAULT_TIMEOUT = 600.0
 
 
 def query_agent_address(
-    agent_id: int, url: str, timeout: Optional[float] = None, chain_config: Optional[str] = None,
+    agent_id: int,
+    url: str,
+    timeout: Optional[float] = None,
+    chain_config: Optional[str] = None,
 ) -> Optional[str]:
     """
     Query agent address from subgraph.
