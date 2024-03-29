@@ -17,7 +17,7 @@
     "arbitrum": {
         "agent_registry_contract": "0xa4799B083E0068732456EF45ff9fe5c683658327",
         "rpc_url": "https://arbitrum.llamarpc.com",
-        "wss_endpoint": "wss://arbitrum-one-rpc.publicnode.com",
+        "wss_endpoint": "wss://arbitrum.gateway.tenderly.co",
         "ledger_config": {
             "address": "https://arbitrum.llamarpc.com",
             "chain_id": 42161,
