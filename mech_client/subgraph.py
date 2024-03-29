@@ -74,9 +74,9 @@ def query_agent_address(
     if chain_config == "polygon" and agent_id == 2:
         return "0xbF92568718982bf65ee4af4F7020205dE2331a8a"
     if chain_config == "celo" and agent_id == 2:
-        return "0xbF92568718982bf65ee4af4F7020205dE2331a8a"
+        return "0x230eD015735c0D01EA0AaD2786Ed6Bd3C6e75912"
     if chain_config == "optimism" and agent_id == 2:
-        return "0xbF92568718982bf65ee4af4F7020205dE2331a8a"
+        return "0xDd40E7D93c37eFD860Bd53Ab90b2b0a8D05cf71a"
     client = Client(
         transport=AIOHTTPTransport(url=url),
         execute_timeout=timeout or 30.0,
