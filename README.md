@@ -77,7 +77,13 @@ Do not include any leading or trailing spaces, tabs or newlines, or any other ch
 The EOA you use must have enough funds to pay for the Mech requests, or alternatively, use a Nevermined subscription.
 
 > **:warning: Warning** <br />
-> **If the generated EOA account is for development purposes, make sure it does not contain large amounts of funds.**
+> * **If the generated EOA account is for development purposes, make sure it does not contain large amounts of funds.**
+>
+> * **If you store the key file in a local Git repository, we recommend that you add it to `.gitignore` in order to avoid publishing it unintentionally:**
+>
+>    ```bash
+>    echo ethereum_private_key.txt >> .gitignore
+>    ```
 
 ### Generate Mech requests
 
@@ -170,13 +176,6 @@ MECHX_LEDGER_IS_GAS_ESTIMATION_ENABLED
 You can also use the Mech Client as a library on your Python project.
 
 1. Set up the private key as specified [above](#set-up-the-private-key). Store the resulting key file (e.g., `ethereum_private_key.txt`) in a convenient and secure location.
-
-    > **:warning: Warning** <br />
-    > **If you store the key file in a local Git repository, we recommend that you add it to `.gitignore` in order to avoid publishing it unintentionally:**
-    >
-    >    ```bash
-    >    echo ethereum_private_key.txt >> .gitignore
-    >    ```
 
 2. Create Python script `my_script.py`:
 
