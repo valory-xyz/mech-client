@@ -237,7 +237,7 @@ The [Mech repository](https://github.com/valory-xyz/mech?tab=readme-ov-file#exam
 
 <summary><b>Are AI Mechs deployed on testnets?</b></summary>
 
-No. AI Mechs are currently deployed on mainnets.
+No. AI Mechs are currently deployed only on mainnets.
 
 </details>
 
