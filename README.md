@@ -129,19 +129,19 @@ Some useful options:
 Example of a request specifying a key file and tool:
 
 ```bash
-mechx interact "write a short poem" 6 --key ~/ethereum_private_key.txt --tool openai-gpt-4 --chain-config gnosis --confirm on-chain
+mechx interact "write a short poem" 6 --key ~/ethereum_private_key.txt --tool openai-gpt-3.5-turbo --chain-config gnosis --confirm on-chain
 ```
 
 You will see an output like this:
 
 ```bash
 Chain configuration: gnosis
-Prompt uploaded: https://gateway.autonolas.tech/ipfs/f01701220e9de165cd31fe8fe1846277016789be54430ff2dbe07d81d629bd971882b81cb
-Transaction sent: https://gnosisscan.io/tx/0x7f674ebe4bb95409a1f32401d2354360ca15b958ef1e56ddd693bc4fd52d6574
+Prompt uploaded: https://gateway.autonolas.tech/ipfs/f01701220af9e4e8b4bd62d76394064f493081917bcc0b9c34a4aff60f82623b717617279
+Transaction sent: https://gnosisscan.io/tx/0x61359f9cc6a1debb07d34ce1038f6aa30d25257c17edeb2b161741805e43e8d0
 Waiting for transaction receipt...
-Created on-chain request with ID 59387271056842355685803467150998163662711999807247350022294926548747130212916
-Data arrived: https://gateway.autonolas.tech/ipfs/f017012206878f9a8564fd57ba155948a580990a52ef99dee3db7d2ac98cf707ceec54ab0
-Data from agent: {'requestId': 59387271056842355685803467150998163662711999807247350022294926548747130212916, 'result': "Beneath a sky so wide and blue,\nWhere dreams take flight and hearts stay true.\nThe sun does rise, the moon takes rest,\nIn this world, we are truly blessed.\n\nFields of green and oceans deep,\nMountains high, secrets they keep.\nNature's song in every breeze,\nWhispers carried through the trees.\n\nLife's a journey, not a race,\nFilled with wonder, love and grace.\nEmbrace each moment, make it last,\nFor the future becomes the past.", 'prompt': 'write a short poem', 'cost_dict': {}, 'metadata': {'model': None, 'tool': 'openai-gpt-4'}}
+Created on-chain request with ID 100407405856633966395081711430940962809568685031934329025999216833965518452765
+Data arrived: https://gateway.autonolas.tech/ipfs/f01701220a462120d5bb03f406fa5ef3573df77184a20ab6343d7bade76bd321654aa7251
+Data from agent: {'requestId': 100407405856633966395081711430940962809568685031934329025999216833965518452765, 'result': "In a world of chaos and strife,\nThere's beauty in the simplest of life.\nA gentle breeze whispers through the trees,\nAnd birds sing melodies with ease.\n\nThe sun sets in a fiery hue,\nPainting the sky in shades of blue.\nStars twinkle in the darkness above,\nGuiding us with their light and love.\n\nSo take a moment to pause and see,\nThe wonders of this world so free.\nEmbrace the joy that each day brings,\nAnd let your heart soar on gentle wings.", 'prompt': 'write a short poem', 'cost_dict': {}, 'metadata': {'model': None, 'tool': 'openai-gpt-3.5-turbo'}}
 ```
 
 > **:pencil2: Note** <br />
