@@ -132,7 +132,7 @@ Example of a request specifying a key file and tool:
 mechx interact "write a short poem" 6 --key ~/ethereum_private_key.txt --tool openai-gpt-4 --chain-config gnosis --confirm on-chain
 ```
 
-In your terminal you will see this as an output:
+You will see an output like this:
 
 ```bash
 Chain configuration: gnosis
