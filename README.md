@@ -129,19 +129,19 @@ Some useful options:
 Example of a request specifying a key file and tool:
 
 ```bash
-mechx interact "write a short poem" 6 --key ~/ethereum_private_key.txt --tool openai-text-davinci-003 --chain-config gnosis --confirm on-chain
+mechx interact "write a short poem" 6 --key ~/ethereum_private_key.txt --tool openai-gpt-4 --chain-config gnosis --confirm on-chain
 ```
 
 In your terminal you will see this as an output:
 
 ```bash
 Chain configuration: gnosis
-Prompt uploaded: https://gateway.autonolas.tech/ipfs/f017012205e37f761221a8ba4005e91c36b94153e9432b8888ff2acae6b101dd5a5de6768
-Transaction sent: https://gnosisscan.io/tx/0xf1ef63f617717bbb8deb09699af99aa39f10155d33796de2fd7eb61c9c1458b6
+Prompt uploaded: https://gateway.autonolas.tech/ipfs/f01701220e9de165cd31fe8fe1846277016789be54430ff2dbe07d81d629bd971882b81cb
+Transaction sent: https://gnosisscan.io/tx/0x7f674ebe4bb95409a1f32401d2354360ca15b958ef1e56ddd693bc4fd52d6574
 Waiting for transaction receipt...
-Created on-chain request with ID 81653153529124597849081567361606842861262371002932574194580478443414142139857
-Data arrived: https://gateway.autonolas.tech/ipfs/f0170122069b55e077430a00f3cbc3b069347e901396f978ff160eb2b0a947872be1848b7
-Data from agent: {'requestId': 81653153529124597849081567361606842861262371002932574194580478443414142139857, 'result': "\n\nA summer breeze, so sweet,\nA gentle reminder of summer's heat.\nThe sky so blue, no cloud in sight,\nA perfect day, a wondrous sight."}
+Created on-chain request with ID 59387271056842355685803467150998163662711999807247350022294926548747130212916
+Data arrived: https://gateway.autonolas.tech/ipfs/f017012206878f9a8564fd57ba155948a580990a52ef99dee3db7d2ac98cf707ceec54ab0
+Data from agent: {'requestId': 59387271056842355685803467150998163662711999807247350022294926548747130212916, 'result': "Beneath a sky so wide and blue,\nWhere dreams take flight and hearts stay true.\nThe sun does rise, the moon takes rest,\nIn this world, we are truly blessed.\n\nFields of green and oceans deep,\nMountains high, secrets they keep.\nNature's song in every breeze,\nWhispers carried through the trees.\n\nLife's a journey, not a race,\nFilled with wonder, love and grace.\nEmbrace each moment, make it last,\nFor the future becomes the past.", 'prompt': 'write a short poem', 'cost_dict': {}, 'metadata': {'model': None, 'tool': 'openai-gpt-4'}}
 ```
 
 > **:pencil2: Note** <br />
