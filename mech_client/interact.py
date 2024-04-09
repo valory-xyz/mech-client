@@ -101,7 +101,7 @@ class LedgerConfig:
 
 
 @dataclass
-class MechConfig:
+class MechConfig:  # pylint: disable=too-many-instance-attributes
     """Mech configuration"""
 
     agent_registry_contract: str
