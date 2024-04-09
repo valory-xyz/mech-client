@@ -470,7 +470,9 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
 
         if subgraph_url:
             mech_task = loop.create_task(
-                watch_for_data_url_from_subgraph(request_id=request_id, url=subgraph_url)
+                watch_for_data_url_from_subgraph(
+                    request_id=request_id, url=subgraph_url
+                )
             )
             tasks.append(mech_task)
 
@@ -584,7 +586,9 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         timeout=timeout,
         sleep=sleep,
     )
-    transaction_url_formatted = mech_config.transaction_url.format(transaction_digest=transaction_digest)
+    transaction_url_formatted = mech_config.transaction_url.format(
+        transaction_digest=transaction_digest
+    )
     print(f"Transaction sent: {transaction_url_formatted}")
     print("Waiting for transaction receipt...")
     request_id = watch_for_request_id(
@@ -605,8 +609,9 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         crypto=crypto,
         confirmation_type=confirmation_type,
     )
-
-    print(f"Data arrived: {data_url}")
-    data = requests.get(f"{data_url}/{request_id}").json()
-    print(f"Data from agent: {data}")
-    return data
+    if data_url:
+        print(f"Data arrived: {data_url}")
+        data = requests.get(f"{data_url}/{request_id}").json()
+        print(f"Data from agent: {data}")
+        return data
+    return None
