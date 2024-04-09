@@ -12,6 +12,7 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://gnosis.blockscout.com/api/v2/smart-contracts/{contract_address}",
+        "transaction_url": "https://gnosisscan.io/tx/{transaction_digest}",
         "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
     },
     "arbitrum": {
@@ -27,6 +28,7 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://api.arbiscan.io/api?module=contract&action=getabi&address={contract_address}",
+        "transaction_url": "",
         "subgraph_url": ""
     },
     "polygon": {
@@ -42,6 +44,7 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://api.polygonscan.com/api?module=contract&action=getabi&address={contract_address}",
+        "transaction_url": "",
         "subgraph_url": ""
     },
     "base": {
@@ -57,6 +60,7 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://api.basescan.org/api?module=contract&action=getabi&address={contract_address}",
+        "transaction_url": "",
         "subgraph_url": ""
     },
     "celo": {
@@ -66,12 +70,13 @@
         "ledger_config": {
             "address": "https://forno.celo.org",
             "chain_id": 42220,
-            "poa_chain": false,
+            "poa_chain": true,
             "default_gas_price_strategy": "eip1559",
             "is_gas_estimation_enabled": false
         },
-        "gas_limit": 100000,
+        "gas_limit": 250000,
         "contract_abi_url": "https://api.celoscan.io/api?module=contract&action=getabi&address={contract_address}",
+        "transaction_url": "https://celoscan.io/tx/{transaction_digest}",
         "subgraph_url": ""
     },
     "optimism": {
@@ -87,6 +92,7 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://api-optimistic.etherscan.io/api?module=contract&action=getabi&address={contract_address}",
+        "transaction_url": "",
         "subgraph_url": ""
     }
 }

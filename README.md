@@ -5,6 +5,10 @@ A basic client to interact with an AI Mech. [AI Mechs](https://github.com/valory
 > **:warning: Warning** <br />
 > **This is a *hacky* alpha version of the client. Don't rely on it as production software.**
 
+## Requirements
+
+- Python >=3.10
+
 ## Installation
 
 Find the latest available release on [PyPi](https://pypi.org/project/mech-client/#description).
@@ -54,7 +58,15 @@ Commands:
 
 To use the Mech Client you need an EOA account and its associated private key stored in a text file `ethereum_private_key.txt`. You can set it up in two ways:
 
-- Use the Open AEA command `generate-key`:
+- Use any software of your choice (e.g., [Metamask](https://metamask.io/)) and copy the private key:
+
+  ```bash
+  echo -n YOUR_PRIVATE_KEY > ethereum_private_key.txt
+  ```
+
+  Do not include any leading or trailing spaces, tabs or newlines, or any other character in the file `ethereum_private_key.txt`.
+
+- Alternatively, use the Open AEA command `generate-key` (you'll need to install [Open AEA](https://pypi.org/project/open-aea/) and its [Ethereum ledger plugin](https://pypi.org/project/open-aea-ledger-ethereum/)):
 
   ```bash
   aea generate-key ethereum
@@ -66,14 +78,6 @@ To use the Mech Client you need an EOA account and its associated private key st
   python -c "from web3 import Web3; print(Web3().eth.account.from_key(open('ethereum_private_key.txt').read()).address)"
   ```
 
-- Alternatively, use any software of your choice (e.g., [Metamask](https://metamask.io/)) and copy the private key:
-
-  ```bash
-  echo -n YOUR_PRIVATE_KEY > ethereum_private_key.txt
-  ```
-
-Do not include any leading or trailing spaces, tabs or newlines, or any other character in the file `ethereum_private_key.txt`.
-
 The EOA you use must have enough funds to pay for the Mech requests, or alternatively, use a Nevermined subscription.
 
 > **:warning: Warning** <br />
@@ -84,6 +88,10 @@ The EOA you use must have enough funds to pay for the Mech requests, or alternat
 >    ```bash
 >    echo ethereum_private_key.txt >> .gitignore
 >    ```
+
+### Select the mech you are going to send requests to
+
+Mechs are deployed to several networks. Find the list of supported networks and corresponging mech addresses [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
 
 ### Generate Mech requests
 
@@ -108,7 +116,7 @@ Some useful options:
   | 0  | openai-text-davinci-002                     |
   | ...| ...                                         |
   |--------------------------------------------------|
-  Tool ID > 
+  Tool ID >
   ```
 
 - `--chain-config <name>`: Use default chain configuration parameters (RPC, WSS, ...). [See below](#chain-configuration) for more details. Available values are
@@ -162,6 +170,7 @@ MECHX_CHAIN_RPC
 MECHX_WSS_ENDPOINT
 MECHX_GAS_LIMIT
 MECHX_CONTRACT_ABI_URL
+MECHX_TRANSACTION_URL
 MECHX_SUBGRAPH_URL
 
 MECHX_LEDGER_ADDRESS

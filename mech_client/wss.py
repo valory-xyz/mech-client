@@ -170,19 +170,26 @@ async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
     :rtype: Any
     """
     with ThreadPoolExecutor() as executor:
-        while True:
-            msg = await loop.run_in_executor(executor=executor, func=wss.recv)
-            data = json.loads(msg)
-            tx_hash = data["params"]["result"]["transactionHash"]
-            tx_receipt = await loop.run_in_executor(
-                executor, wait_for_receipt, tx_hash, ledger_api
-            )
-            event_signature = tx_receipt["logs"][0]["topics"][0].hex()
-            if event_signature != deliver_signature:
-                continue
+        try:
+            while True:
+                msg = await loop.run_in_executor(executor=executor, func=wss.recv)
+                data = json.loads(msg)
+                tx_hash = data["params"]["result"]["transactionHash"]
+                tx_receipt = await loop.run_in_executor(
+                    executor, wait_for_receipt, tx_hash, ledger_api
+                )
+                event_signature = tx_receipt["logs"][0]["topics"][0].hex()
+                if event_signature != deliver_signature:
+                    continue
 
-            rich_logs = mech_contract.events.Deliver().process_receipt(tx_receipt)
-            data = cast(bytes, rich_logs[0]["args"]["data"])
-            if request_id != str(rich_logs[0]["args"]["requestId"]):
-                continue
-            return f"https://gateway.autonolas.tech/ipfs/f01701220{data.hex()}"
+                rich_logs = mech_contract.events.Deliver().process_receipt(tx_receipt)
+                data = cast(bytes, rich_logs[0]["args"]["data"])
+                if request_id != str(rich_logs[0]["args"]["requestId"]):
+                    continue
+                return f"https://gateway.autonolas.tech/ipfs/f01701220{data.hex()}"
+        except websocket.WebSocketConnectionClosedException as e:
+            print(f"WebSocketConnectionClosedException {repr(e)}")
+            print(
+                "Error: The WSS connection was likely closed by the remote party. Please, try using another WSS provider."
+            )
+            return None
