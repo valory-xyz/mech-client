@@ -74,7 +74,7 @@
             "default_gas_price_strategy": "eip1559",
             "is_gas_estimation_enabled": false
         },
-        "gas_limit": 100000,
+        "gas_limit": 250000,
         "contract_abi_url": "https://api.celoscan.io/api?module=contract&action=getabi&address={contract_address}",
         "transaction_url": "https://celoscan.io/tx/{transaction_digest}",
         "subgraph_url": ""
