@@ -110,6 +110,7 @@ class MechConfig:
     ledger_config: LedgerConfig
     gas_limit: int
     contract_abi_url: str
+    transaction_url: str
     subgraph_url: str
 
     def __post_init__(self) -> None:
@@ -133,6 +134,10 @@ class MechConfig:
         contract_abi_url = os.getenv("MECHX_CONTRACT_ABI_URL")
         if contract_abi_url:
             self.contract_abi_url = contract_abi_url
+
+        transaction_url = os.getenv("MECHX_TRANSACTION_URL")
+        if transaction_url:
+            self.transaction_url = transaction_url
 
         subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
         if subgraph_url:
@@ -396,7 +401,6 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
                 signed_transaction,
                 raise_on_try=True,
             )
-            print(f"Transaction sent: https://gnosisscan.io/tx/{transaction_digest}")
             return transaction_digest
         except Exception as e:  # pylint: disable=broad-except
             print(
@@ -564,7 +568,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         request_signature=request_event_signature,
         deliver_signature=deliver_event_signature,
     )
-    send_request(
+    transaction_digest = send_request(
         crypto=crypto,
         ledger_api=ledger_api,
         mech_contract=mech_contract,
@@ -576,6 +580,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         timeout=timeout,
         sleep=sleep,
     )
+    transaction_url_formatted = mech_config.transaction_url.format(transaction_digest=transaction_digest)
+    print(f"Transaction sent: {transaction_url_formatted}")
     print("Waiting for transaction receipt...")
     request_id = watch_for_request_id(
         wss=wss,
@@ -584,6 +590,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         request_signature=request_event_signature,
     )
     print(f"Created on-chain request with ID {request_id}")
+    print("Waiting for Mech response...")
     data_url = wait_for_data_url(
         request_id=request_id,
         wss=wss,
