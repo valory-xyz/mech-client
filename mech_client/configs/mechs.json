@@ -28,7 +28,7 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://api.arbiscan.io/api?module=contract&action=getabi&address={contract_address}",
-        "transaction_url": "",
+        "transaction_url": "https://arbiscan.io/tx/{transaction_digest}",
         "subgraph_url": ""
     },
     "polygon": {
@@ -44,7 +44,7 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://api.polygonscan.com/api?module=contract&action=getabi&address={contract_address}",
-        "transaction_url": "",
+        "transaction_url": "https://polygonscan.com/tx/{transaction_digest}",
         "subgraph_url": ""
     },
     "base": {
@@ -60,7 +60,7 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://api.basescan.org/api?module=contract&action=getabi&address={contract_address}",
-        "transaction_url": "",
+        "transaction_url": "https://basescan.org/tx/{transaction_digest}",
         "subgraph_url": ""
     },
     "celo": {
@@ -92,7 +92,7 @@
         },
         "gas_limit": 100000,
         "contract_abi_url": "https://api-optimistic.etherscan.io/api?module=contract&action=getabi&address={contract_address}",
-        "transaction_url": "",
+        "transaction_url": "https://optimistic.etherscan.io/tx/{transaction_digest}",
         "subgraph_url": ""
     }
 }
