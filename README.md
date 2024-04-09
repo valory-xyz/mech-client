@@ -260,7 +260,7 @@ You can find the agent IDs for each chain on the [Mech Hub](https://aimechs.auto
 
 <details>
 
-<summary><b>How do I access an AI Mech on a different chains?</b></summary>
+<summary><b>How do I access an AI Mech on a different chain?</b></summary>
 
 Use the `--chain-config <name>` parameter together with a valid `<agent_id>`, for example:
 
