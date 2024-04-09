@@ -97,7 +97,6 @@ def interact(  # pylint: disable=too-many-arguments
     chain_config: Optional[str] = None,
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
-    print("....")
     try:
         extra_attributes_dict: Dict[str, Any] = {}
         if extra_attribute:

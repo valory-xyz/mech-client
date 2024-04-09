@@ -466,11 +466,13 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
                 loop=loop,
             )
         )
-        mech_task = loop.create_task(
-            watch_for_data_url_from_subgraph(request_id=request_id, url=subgraph_url)
-        )
-        tasks.append(mech_task)
         tasks.append(on_chain_task)
+
+        if subgraph_url:
+            mech_task = loop.create_task(
+                watch_for_data_url_from_subgraph(request_id=request_id, url=subgraph_url)
+            )
+            tasks.append(mech_task)
 
     async def _wait_for_tasks() -> Any:  # type: ignore
         """Wait for tasks to finish."""
@@ -480,7 +482,8 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
         )
         for task in unfinished:
             task.cancel()
-        await asyncio.wait(unfinished)
+        if unfinished:
+            await asyncio.wait(unfinished)
         return finished.result()
 
     result = loop.run_until_complete(_wait_for_tasks())
@@ -568,6 +571,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         request_signature=request_event_signature,
         deliver_signature=deliver_event_signature,
     )
+    print("Sending request...")
     transaction_digest = send_request(
         crypto=crypto,
         ledger_api=ledger_api,
