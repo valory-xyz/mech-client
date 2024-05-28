@@ -26,19 +26,19 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-open-aea = {version = "^1.50.0", extras = ["cli"]}
-open-aea-ledger-ethereum = "^1.50.0"
-open-aea-cli-ipfs = "^1.50.0"
-websocket-client = ">=0.32.0,<1"
+open-aea = {version = "^1.53.0", extras = ["cli"]}
+open-aea-ledger-ethereum = "^1.53.0"
+open-aea-cli-ipfs = "^1.53.0"
+open-aea-ledger-cosmos = "^1.53.0"
 gql = ">=3.4.1"
 asn1crypto = ">=1.4.0,<1.5.0"
-open-aea-ledger-cosmos = "^1.50.0"
+websocket-client = ">=0.32.0,<1"
 
 [tool.poetry.scripts]
 mechx = "mech_client.cli:cli"
 
 [tool.poetry.group.dev.dependencies]
-open-autonomy = "^0.14.10"
+open-autonomy = "^0.14.13"
 tomte = {version = "0.2.15", extras = ["tox"]}
 
 [build-system]
