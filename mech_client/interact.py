@@ -160,10 +160,18 @@ def get_mech_config(chain_config: Optional[str] = None) -> MechConfig:
         if chain_config is None:
             chain_config = next(iter(data))
 
-        print(f"Chain configuration: {chain_config}")
+        print("Chain configuration:")
         entry = data[chain_config].copy()
         ledger_config = LedgerConfig(**entry.pop("ledger_config"))
         mech_config = MechConfig(**entry, ledger_config=ledger_config)
+
+        print(f"  - Chain ID: {chain_config}")
+        print(f"  - Gas limit: {mech_config.gas_limit}")
+        print(f"  - Contract ABI URL: {mech_config.contract_abi_url}")
+        print(f"  - Transation URL: {mech_config.transaction_url}")
+        print(f"  - Subgraph URL: {mech_config.subgraph_url}")
+        print("")
+
         return mech_config
 
 
@@ -371,7 +379,9 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
         prompt, tool, extra_attributes
     )
-    print(f"Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}")
+    print(
+        f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
+    )
     method_name = "request"
     methord_args = {"data": v1_file_hash_hex_truncated}
     tx_args = {
@@ -573,7 +583,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         request_signature=request_event_signature,
         deliver_signature=deliver_event_signature,
     )
-    print("Sending request...")
+    print("Sending Mech request...")
     transaction_digest = send_request(
         crypto=crypto,
         ledger_api=ledger_api,
@@ -586,19 +596,26 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         timeout=timeout,
         sleep=sleep,
     )
+
+    if not transaction_digest:
+        print("Unable to send request")
+        return None
+
     transaction_url_formatted = mech_config.transaction_url.format(
         transaction_digest=transaction_digest
     )
-    print(f"Transaction sent: {transaction_url_formatted}")
-    print("Waiting for transaction receipt...")
+    print(f"  - Transaction sent: {transaction_url_formatted}")
+    print("  - Waiting for transaction receipt...")
     request_id = watch_for_request_id(
         wss=wss,
         mech_contract=mech_contract,
         ledger_api=ledger_api,
         request_signature=request_event_signature,
     )
-    print(f"Created on-chain request with ID {request_id}")
-    print("Waiting for Mech response...")
+    print(f"  - Created on-chain request with ID {request_id}")
+    print("")
+
+    print("Waiting for Mech deliver...")
     data_url = wait_for_data_url(
         request_id=request_id,
         wss=wss,
@@ -610,8 +627,9 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         confirmation_type=confirmation_type,
     )
     if data_url:
-        print(f"Data arrived: {data_url}")
-        data = requests.get(f"{data_url}/{request_id}").json()
-        print(f"Data from agent: {data}")
+        print(f"  - Data arrived: {data_url}")
+        data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+        print("  - Data from agent:")
+        print(json.dumps(data, indent=2))
         return data
     return None
