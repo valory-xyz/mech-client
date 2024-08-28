@@ -51,7 +51,9 @@ def get_total_supply(chain_config: str = "gnosis") -> int:
     return total_supply
 
 
-def get_agent_tools(agent_id: int, chain_config: str = "gnosis") -> Optional[Union[List[str], Tuple[List[str], Dict[str, Any]]]]:
+def get_agent_tools(
+    agent_id: int, chain_config: str = "gnosis"
+) -> Optional[Union[List[str], Tuple[List[str], Dict[str, Any]]]]:
     """
     Fetch tools for a given agent ID.
 
@@ -190,7 +192,7 @@ def get_tool_io_schema(
         if isinstance(tool_info, dict):
             return {
                 "input": tool_info.get("input", {}),
-                "output": tool_info.get("output", {})
+                "output": tool_info.get("output", {}),
             }
 
     return {"input": {}, "output": {}}

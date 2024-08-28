@@ -301,7 +301,7 @@ def verify_or_retrieve_tool(
         ledger_api=ledger_api,
         agent_registry_contract=agent_registry_contract,
         contract_abi_url=contract_abi_url,
-        include_metadata=False  # Ensure this is False to only get the list of tools
+        include_metadata=False,  # Ensure this is False to only get the list of tools
     )
     # Ensure only the list of tools is used
     available_tools = tools_data if isinstance(tools_data, list) else tools_data[0]
@@ -319,7 +319,7 @@ def fetch_tools(
     ledger_api: EthereumApi,
     agent_registry_contract: str,
     contract_abi_url: str,
-    include_metadata: bool = False
+    include_metadata: bool = False,
 ) -> Union[List[str], Tuple[List[str], Dict[str, Any]]]:
     """Fetch tools for specified agent ID, optionally include metadata."""
     mech_registry = get_contract(
@@ -329,10 +329,10 @@ def fetch_tools(
     )
     token_uri = mech_registry.functions.tokenURI(agent_id).call()
     response = requests.get(token_uri).json()
-    tools = response.get('tools', [])
+    tools = response.get("tools", [])
 
     if include_metadata:
-        tool_metadata = response.get('toolMetadata', {})
+        tool_metadata = response.get("toolMetadata", {})
         return tools, tool_metadata
     return tools
 
