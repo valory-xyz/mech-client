@@ -24,6 +24,7 @@ Usage:
 
 python client.py <prompt> <tool>
 """
+
 import asyncio
 import json
 import os
@@ -163,7 +164,6 @@ def get_mech_config(chain_config: Optional[str] = None) -> MechConfig:
         ledger_config = LedgerConfig(**entry.pop("ledger_config"))
         mech_config = MechConfig(**entry, ledger_config=ledger_config)
 
-
         return mech_config
 
 
@@ -295,14 +295,16 @@ def verify_or_retrieve_tool(
     :return: The result of the verification or retrieval.
     :rtype: str
     """
-         
-        # Serialize the inputs
-    available_tools = fetch_tools(
+    # Fetch tools, possibly including metadata
+    tools_data = fetch_tools(
         agent_id=agent_id,
         ledger_api=ledger_api,
         agent_registry_contract=agent_registry_contract,
         contract_abi_url=contract_abi_url,
+        include_metadata=False  # Ensure this is False to only get the list of tools
     )
+    # Ensure only the list of tools is used
+    available_tools = tools_data if isinstance(tools_data, list) else tools_data[0]
     if tool is not None and tool not in available_tools:
         raise ValueError(
             f"Provided tool `{tool}` not in the list of available tools; Available tools={available_tools}"
@@ -310,7 +312,6 @@ def verify_or_retrieve_tool(
     if tool is not None:
         return tool
     return _tool_selector_prompt(available_tools=available_tools)
-
 
 
 def fetch_tools(
@@ -329,12 +330,11 @@ def fetch_tools(
     token_uri = mech_registry.functions.tokenURI(agent_id).call()
     response = requests.get(token_uri).json()
     tools = response.get('tools', [])
-    
+
     if include_metadata:
         tool_metadata = response.get('toolMetadata', {})
         return tools, tool_metadata
-    else:
-        return tools
+    return tools
 
 
 def send_request(  # pylint: disable=too-many-arguments,too-many-locals

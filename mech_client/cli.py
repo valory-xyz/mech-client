@@ -1,35 +1,22 @@
-# -*- coding: utf-8 -*-
-# ------------------------------------------------------------------------------
-#
-#   Copyright 2023 Valory AG
-#
-#   Licensed under the Apache License, Version 2.0 (the "License");
-#   you may not use this file except in compliance with the License.
-#   You may obtain a copy of the License at
-#
-#       http://www.apache.org/licenses/LICENSE-2.0
-#
-#   Unless required by applicable law or agreed to in writing, software
-#   distributed under the License is distributed on an "AS IS" BASIS,
-#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#   See the License for the specific language governing permissions and
-#   limitations under the License.
-#
-# ------------------------------------------------------------------------------
-
 """Mech client CLI module."""
-
-from typing import Any, Dict, List, Optional
+import json
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
-from tabulate import tabulate
+from tabulate import tabulate  # type: ignore
+
 from mech_client import __version__
 from mech_client.interact import ConfirmationType
 from mech_client.interact import interact as interact_
+from mech_client.mech_tool_management import (
+    get_tool_description,
+    get_tool_io_schema,
+    get_tools_for_agents,
+)
 from mech_client.prompt_to_ipfs import main as prompt_to_ipfs_main
 from mech_client.push_to_ipfs import main as push_to_ipfs_main
 from mech_client.to_png import main as to_png_main
-from mech_client.mech_tool_management import get_tools_for_agents, get_tool_description, get_tool_io_schema
+
 
 @click.group(name="mechx")  # type: ignore
 @click.version_option(__version__, prog_name="mechx")
@@ -147,62 +134,90 @@ def to_png(ipfs_hash: str, path: str, request_id: str) -> None:
     """Convert a stability AI API's diffusion model output into a PNG format."""
     to_png_main(ipfs_hash, path, request_id)
 
-@click.command(name='tools-for-agents')
-@click.option('--agent-id', type=int, help='Agent ID to fetch tools for. If not provided, fetches for all agents.')
-@click.option('--chain-config', default='gnosis', help='Chain configuration to use.')
-def tools_for_agents(agent_id, chain_config):
+
+@click.command(name="tools-for-agents")
+@click.option(
+    "--agent-id",
+    type=int,
+    help="Agent ID to fetch tools for. If not provided, fetches for all agents.",
+)
+@click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
+def tools_for_agents(agent_id: Optional[int], chain_config: str) -> None:
+    """Fetch and display tools for agents."""
     try:
         result = get_tools_for_agents(agent_id, chain_config)
 
-        if agent_id:
+        if agent_id is not None:
             headers = ["Tool Name", "Unique Identifier"]
-            data = [(tool['tool_name'], tool['unique_identifier']) for tool in result['tools']]
+            data: List[Tuple[str, ...]] = [
+                (str(tool["tool_name"]), str(tool["unique_identifier"]))
+                for tool in result["tools"]
+            ]
         else:
             headers = ["Agent ID", "Tool Name", "Unique Identifier"]
-            data = []
-            for agent_id, tools in result['agent_tools_map'].items():
-                for tool_name in tools:
-                    unique_identifier = f"{agent_id}-{tool_name}"  # Construct unique identifier
-                    data.append((agent_id, tool_name, unique_identifier))
+            data = [
+                (str(agent_id), str(tool_name), f"{agent_id}-{tool_name}")
+                for agent_id, tools in result["agent_tools_map"].items()
+                for tool_name in tools
+            ]
 
-        click.echo(tabulate(data, headers=headers, tablefmt='grid'))
-    except Exception as e:
-        click.echo(f"Failed to retrieve tools: {str(e)}")
+        click.echo(tabulate(data, headers=headers, tablefmt="grid"))
+    except (KeyError, TypeError) as e:
+        click.echo(f"Error processing tool data: {str(e)}")
+    except json.JSONDecodeError as e:
+        click.echo(f"Error decoding JSON response: {str(e)}")
+    except IOError as e:
+        click.echo(f"Network or I/O error: {str(e)}")
 
-@click.command(name='tool-description')
-@click.argument('tool_id')
-@click.option('--chain-config', default='gnosis', help='Chain configuration to use.')
-def tool_description(tool_id: str, chain_config: str):
+
+@click.command(name="tool-description")
+@click.argument("tool_id")
+@click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
+def tool_description(tool_id: str, chain_config: str) -> None:
     """Fetch and display the description of a specific tool."""
     try:
         description = get_tool_description(tool_id, chain_config)
         click.echo(f"Description for tool {tool_id}: {description}")
-    except Exception as e:
-        click.echo(f"Error retrieving description for tool {tool_id}: {str(e)}")
+    except KeyError as e:
+        click.echo(f"Tool not found or missing description: {str(e)}")
+    except json.JSONDecodeError as e:
+        click.echo(f"Error decoding JSON response: {str(e)}")
+    except IOError as e:
+        click.echo(f"Network or I/O error: {str(e)}")
 
-@click.command(name='tool-io-schema')
-@click.argument('tool_id')
-@click.option('--chain-config', default='gnosis', help='Chain configuration to use.')
-def tool_io_schema(tool_id: str, chain_config: str):
+
+@click.command(name="tool-io-schema")
+@click.argument("tool_id")
+@click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
+def tool_io_schema(tool_id: str, chain_config: str) -> None:
     """Fetch and display the input/output schema for a specific tool."""
     try:
         io_schema = get_tool_io_schema(tool_id, chain_config)
         # Prepare data for tabulation
-        input_schema = [(key, io_schema['input'][key]) for key in io_schema['input']]
-        
+        input_schema = [(key, io_schema["input"][key]) for key in io_schema["input"]]
+
         # Handling nested output schema
         output_schema = []
-        if 'properties' in io_schema['output']['schema']:
-            for key, value in io_schema['output']['schema']['properties'].items():
-                output_schema.append((key, value['type'], value.get('description', '')))
+        if "properties" in io_schema["output"]["schema"]:
+            for key, value in io_schema["output"]["schema"]["properties"].items():
+                output_schema.append((key, value["type"], value.get("description", "")))
 
         # Display schemas in tabulated format
         click.echo("Input Schema:")
-        click.echo(tabulate(input_schema, headers=['Field', 'Value'], tablefmt='grid'))
+        click.echo(tabulate(input_schema, headers=["Field", "Value"], tablefmt="grid"))
         click.echo("Output Schema:")
-        click.echo(tabulate(output_schema, headers=['Field', 'Type', 'Description'], tablefmt='grid'))
-    except Exception as e:
-        click.echo(f"Error retrieving I/O schema for tool {tool_id}: {str(e)}")
+        click.echo(
+            tabulate(
+                output_schema, headers=["Field", "Type", "Description"], tablefmt="grid"
+            )
+        )
+    except KeyError as e:
+        click.echo(f"Error accessing schema data: {str(e)}")
+    except json.JSONDecodeError as e:
+        click.echo(f"Error decoding JSON response: {str(e)}")
+    except IOError as e:
+        click.echo(f"Network or I/O error: {str(e)}")
+
 
 cli.add_command(interact)
 cli.add_command(prompt_to_ipfs)
