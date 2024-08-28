@@ -48,10 +48,14 @@ Options:
   --help     Show this message and exit.
 
 Commands:
-  interact        Interact with a mech specifying a prompt and tool.
-  prompt-to-ipfs  Upload a prompt and tool to IPFS as metadata.
-  push-to-ipfs    Upload a file to IPFS.
-  to-png          Convert a stability AI API's diffusion model output...
+  interact         Interact with a mech specifying a prompt and tool.
+  prompt-to-ipfs   Upload a prompt and tool to IPFS as metadata.
+  push-to-ipfs     Upload a file to IPFS.
+  to-png           Convert a stability AI API's diffusion model output.
+  tools-for-agents List tools available for all agents or a specific agent.
+  tool-description Get the description of a specific tool.
+  tool_io_schema   Get the input/output schema of a specific tool.
+
  ```
 
 ### Set up the EOA and private key
@@ -152,6 +156,102 @@ Data arrived: https://gateway.autonolas.tech/ipfs/f01701220a462120d5bb03f406fa5e
 Data from agent: {'requestId': 100407405856633966395081711430940962809568685031934329025999216833965518452765, 'result': "In a world of chaos and strife,\nThere's beauty in the simplest of life.\nA gentle breeze whispers through the trees,\nAnd birds sing melodies with ease.\n\nThe sun sets in a fiery hue,\nPainting the sky in shades of blue.\nStars twinkle in the darkness above,\nGuiding us with their light and love.\n\nSo take a moment to pause and see,\nThe wonders of this world so free.\nEmbrace the joy that each day brings,\nAnd let your heart soar on gentle wings.", 'prompt': 'write a short poem', 'cost_dict': {}, 'metadata': {'model': None, 'tool': 'openai-gpt-3.5-turbo'}}
 ```
 
+
+### List tools available for agents
+
+To list the tools available for a specific agent or for all agents, use the `tools-for-agents` command. You can specify an agent ID to get tools for a specific agent, or omit it to list tools for all agents.
+
+```bash
+mechx tools-for-agents
+```
+```bash
+You will see an output like this:
++------------+---------------------------------------------+-----------------------------------------------+
+|   Agent ID | Tool Name                                   | UniqueIdentifier                             |
++============+=============================================+===============================================+
+|          3 | claude-prediction-offline                   | 3-claude-prediction-offline                   |
++------------+---------------------------------------------+-----------------------------------------------+
+|          3 | claude-prediction-online                    | 3-claude-prediction-online                    |
++------------+---------------------------------------------+-----------------------------------------------+
+|          3 | deepmind-optimization                       | 3-deepmind-optimization                       |
++------------+---------------------------------------------+-----------------------------------------------+
+|          3 | deepmind-optimization-strong                | 3-deepmind-optimization-strong                |
++------------+---------------------------------------------+-----------------------------------------------+
+```
+
+```bash
+mechx tools-for-agents --agent-id "agent_id"
+```
+Eaxmple usage 
+```bash
+mechx tools-for-agents --agent-id 6
+```
+```bash
+You will see an output like this:
++---------------------------------------------+-----------------------------------------------+
+| Tool Name                                   | Unique Identifier                             |
++=============================================+===============================================+
+| claude-prediction-offline                   | 6-claude-prediction-offline                   |
++---------------------------------------------+-----------------------------------------------+
+| claude-prediction-online                    | 6-claude-prediction-online                    |
++---------------------------------------------+-----------------------------------------------+
+| deepmind-optimization                       | 6-deepmind-optimization                       |
++---------------------------------------------+-----------------------------------------------+
+```
+
+### Get Tool Description
+
+To get the description of a specific tool, use the `tool-description` command. You need to specify the unique identifier of the tool.
+
+```bash
+mechx tool-description --unique-identifier <unique_identifier> --chain-config <chain_config>
+```
+Example usage:
+
+```bash
+mechx tool-description --unique-identifier "6-claude-prediction-offline" --chain-config gnosis
+```
+You will see an output like this:
+```bash
+Description for tool 6-claude-prediction-offline: Makes a prediction using Claude
+```
+
+
+### Get Tool Input/Output Schema
+
+To get the input/output schema of a specific tool, use the `tool_io_schema` command. You need to specify the unique identifier of the tool.
+
+```bash
+mechx tool_io_schema --unique-identifier <unique_identifier> --chain-config <chain_config>
+```
+
+Example usage:
+
+```bash
+mechx tool_io_schema --unique-identifier "6-prediction-offline" --chain-config gnosis
+```
+You will see an output like this:
+```bash
+Input Schema:
++-------------+----------------------------------+
+| Field       | Value                            |
++=============+==================================+
+| type        | text                             |
++-------------+----------------------------------+
+| description | The text to make a prediction on |
++-------------+----------------------------------+
+Output Schema:
++-----------+---------+-----------------------------------------------+
+| Field     | Type    | Description                                   |
++===========+=========+===============================================+
+| requestId | integer | Unique identifier for the request             |
++-----------+---------+-----------------------------------------------+
+| result    | string  | Result information in JSON format as a string |
++-----------+---------+-----------------------------------------------+
+| prompt    | string  | Prompt used for probability estimation.       |
++-----------+---------+-----------------------------------------------+
+```
+
 > **:pencil2: Note** <br />
 > **If you encounter an "Out of gas" error when executing the Mech Client, you will need to increase the gas limit, e.g.,**
 >
@@ -213,6 +313,45 @@ You can also use the Mech Client as a library on your Python project.
     )
     print(result)
     ```
+
+You can also use the Mech Client to programmatically fetch tools for agents in your Python project, as well as retrieve descriptions and input/output schemas for specific tools given their unique identifier.
+
+1. Set up the private key as specified [above](#set-up-the-private-key). Store the resulting key file (e.g., `ethereum_private_key.txt`) in a convenient and secure location.
+
+2. Create a Python script `fetch_tools_script.py`:
+
+    ```bash
+    touch fetch_tools_script.py
+    ```
+
+3. Edit `fetch_tools_script.py` as follows:
+
+    ```python
+    from mech_client.mech_tool_management import get_tools_for_agents, get_tool_description, get_tool_io_schema
+
+    # Fetching tools for a specific agent or all agents
+    agent_id = 6  # Specify the agent ID or set to None to fetch tools for all agents
+    chain_config = "gnosis"  # Specify the chain configuration
+    tools = get_tools_for_agents(agent_id=agent_id, chain_config=chain_config)
+    print(f"Tools for agent {agent_id}:", tools)
+
+    # Assuming you know the tool name, construct the unique identifier
+    tool_name = "claude-prediction-offline"  # Example tool name
+    unique_identifier = f"{agent_id}-{tool_name}"  # Construct the unique identifier
+
+    # Fetching description and I/O schema for a specific tool using the unique identifier
+    description = get_tool_description(unique_identifier, chain_config)
+    print(f"Description for {unique_identifier}:", description)
+
+    io_schema = get_tool_io_schema(unique_identifier, chain_config)
+    print(f"Input/Output Schema for {unique_identifier}:", io_schema)
+    ```
+
+This script will:
+- Fetch and print the tools available for a specified agent or for all agents if `agent_id` is set to `None`.
+- Construct the unique identifier for a tool using the format `agentId-toolName`.
+- Retrieve and display the description of a specific tool using its unique identifier.
+- Retrieve and display the input and output schema of a specific tool using its unique identifier.
 
 ## Developer installation
 
