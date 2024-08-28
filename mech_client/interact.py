@@ -24,7 +24,7 @@ Usage:
 
 python client.py <prompt> <tool>
 """
-
+import pickle
 import asyncio
 import json
 import os
@@ -35,7 +35,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import requests
 import websocket
@@ -160,17 +160,10 @@ def get_mech_config(chain_config: Optional[str] = None) -> MechConfig:
         if chain_config is None:
             chain_config = next(iter(data))
 
-        print("Chain configuration:")
         entry = data[chain_config].copy()
         ledger_config = LedgerConfig(**entry.pop("ledger_config"))
         mech_config = MechConfig(**entry, ledger_config=ledger_config)
 
-        print(f"  - Chain ID: {chain_config}")
-        print(f"  - Gas limit: {mech_config.gas_limit}")
-        print(f"  - Contract ABI URL: {mech_config.contract_abi_url}")
-        print(f"  - Transation URL: {mech_config.transaction_url}")
-        print(f"  - Subgraph URL: {mech_config.subgraph_url}")
-        print("")
 
         return mech_config
 
@@ -303,6 +296,8 @@ def verify_or_retrieve_tool(
     :return: The result of the verification or retrieval.
     :rtype: str
     """
+         
+        # Serialize the inputs
     available_tools = fetch_tools(
         agent_id=agent_id,
         ledger_api=ledger_api,
@@ -318,13 +313,15 @@ def verify_or_retrieve_tool(
     return _tool_selector_prompt(available_tools=available_tools)
 
 
+
 def fetch_tools(
     agent_id: int,
     ledger_api: EthereumApi,
     agent_registry_contract: str,
     contract_abi_url: str,
-) -> List[str]:
-    """Fetch tools for specified agent ID."""
+    include_metadata: bool = False
+) -> Union[List[str], Tuple[List[str], Dict[str, Any]]]:
+    """Fetch tools for specified agent ID, optionally include metadata."""
     mech_registry = get_contract(
         contract_address=agent_registry_contract,
         abi=get_abi(agent_registry_contract, contract_abi_url),
@@ -332,7 +329,13 @@ def fetch_tools(
     )
     token_uri = mech_registry.functions.tokenURI(agent_id).call()
     response = requests.get(token_uri).json()
-    return response["tools"]
+    tools = response.get('tools', [])
+    
+    if include_metadata:
+        tool_metadata = response.get('toolMetadata', {})
+        return tools, tool_metadata
+    else:
+        return tools
 
 
 def send_request(  # pylint: disable=too-many-arguments,too-many-locals
