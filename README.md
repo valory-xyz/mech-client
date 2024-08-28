@@ -222,13 +222,13 @@ Description for tool 6-claude-prediction-offline: Makes a prediction using Claud
 To get the input/output schema of a specific tool, use the `tool_io_schema` command. You need to specify the unique identifier of the tool.
 
 ```bash
-mechx tool_io_schema --unique-identifier <unique_identifier> --chain-config <chain_config>
+mechx tool-io-schema --unique-identifier <unique_identifier> --chain-config <chain_config>
 ```
 
 Example usage:
 
 ```bash
-mechx tool_io_schema --unique-identifier "6-prediction-offline" --chain-config gnosis
+mechx tool-io-schema --unique-identifier "6-prediction-offline" --chain-config gnosis
 ```
 You will see an output like this:
 ```bash
