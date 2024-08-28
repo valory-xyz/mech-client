@@ -24,7 +24,6 @@ Usage:
 
 python client.py <prompt> <tool>
 """
-import pickle
 import asyncio
 import json
 import os
