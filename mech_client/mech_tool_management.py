@@ -6,49 +6,32 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import requests
 from aea_ledger_ethereum import EthereumApi
-from web3 import Web3
 
-from mech_client.interact import fetch_tools, get_mech_config
+from mech_client.interact import fetch_tools, get_abi, get_contract, get_mech_config
 
 
 def get_total_supply(chain_config: str = "gnosis") -> int:
     """
-    Get the total supply from the contract.
+    Fetches the total supply of tokens from a contract using the chain configuration.
 
-    :param chain_config: The chain configuration to use (default is "gnosis").
-    :return: The total supply as an integer.
+    :param chain_config: The chain configuration to use.
+    :type chain_config: str
+    :return: The total supply of tokens.
+    :rtype: int
     """
+    # Get the mech configuration
     mech_config = get_mech_config(chain_config)
     ledger_config = mech_config.ledger_config
 
-    # Setup Web3
-    w3 = Web3(Web3.HTTPProvider(ledger_config.address))
+    # Setup Ethereum API
+    ledger_api = EthereumApi(**asdict(ledger_config))
 
-    # Fetch ABI from the contract_abi_url
-    response = requests.get(
-        mech_config.contract_abi_url.format(
-            contract_address=mech_config.agent_registry_contract
-        )
-    )
-    response_json = response.json()
-
-    # Try to extract the ABI from different possible response structures
-    if "result" in response_json and isinstance(response_json["result"], str):
-        contract_abi = json.loads(response_json["result"])
-    elif "abi" in response_json:
-        contract_abi = response_json["abi"]
-    else:
-        raise ValueError(f"Unexpected API response structure: {response_json}")
-
-    # Create a contract instance
-    contract = w3.eth.contract(
-        address=mech_config.agent_registry_contract, abi=contract_abi
-    )
+    # Fetch ABI and create contract instance
+    abi = get_abi(mech_config.agent_registry_contract, mech_config.contract_abi_url)
+    contract = get_contract(mech_config.agent_registry_contract, abi, ledger_api)
 
     # Call the totalSupply function
-    total_supply = contract.functions.totalSupply().call()
-
-    return total_supply
+    return contract.functions.totalSupply().call()
 
 
 def get_agent_tools(
