@@ -35,13 +35,14 @@ def get_total_supply(chain_config: str = "gnosis") -> int:
 
 
 def get_agent_tools(
-    agent_id: int, chain_config: str = "gnosis"
+    agent_id: int, chain_config: str = "gnosis", include_metadata: bool = False
 ) -> Optional[Union[List[str], Tuple[List[str], Dict[str, Any]]]]:
     """
     Fetch tools for a given agent ID.
 
     :param agent_id: The ID of the agent.
     :param chain_config: The chain configuration to use (default is "gnosis").
+    :param include_metadata: To include tools metadata or not (default is False)
     :return: A list of tools if successful, or a tuple of (list of tools, metadata) if metadata is included, or None if an error occurs.
     """
     try:
@@ -58,6 +59,7 @@ def get_agent_tools(
             ledger_api=ledger_api,
             agent_registry_contract=mech_config.agent_registry_contract,
             contract_abi_url=mech_config.contract_abi_url,
+            include_metadata=include_metadata,
         )
     except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as e:
         print(f"An error occurred while fetching tools for agent {agent_id}: {e}")
@@ -78,10 +80,19 @@ def get_tools_for_agents(
         total_supply = get_total_supply(chain_config)
 
         if agent_id is not None:
-            tools = get_agent_tools(agent_id, chain_config)
-            if isinstance(tools, list):
+            (tools, tool_metadata) = get_agent_tools(agent_id, chain_config, True)
+
+            if isinstance(tools, list) and isinstance(tool_metadata, dict):
                 tools_with_ids = [
-                    {"tool_name": tool, "unique_identifier": f"{agent_id}-{tool}"}
+                    {
+                        "tool_name": tool,
+                        "unique_identifier": f"{agent_id}-{tool}",
+                        "is_marketplace_supported": (
+                            tool_metadata.get(tool, {}).get(
+                                "isMechMarketplaceSupported", None
+                            )
+                        ),
+                    }
                     for tool in tools
                 ]
             else:
@@ -92,12 +103,20 @@ def get_tools_for_agents(
         agent_tools_map = {}
 
         for current_agent_id in range(1, total_supply + 1):
-            tools = get_agent_tools(current_agent_id, chain_config)
-            if isinstance(tools, list):
+            (tools, tool_metadata) = get_agent_tools(
+                current_agent_id, chain_config, True
+            )
+            if isinstance(tools, list) and isinstance(tool_metadata, dict):
+
                 tools_with_ids = [
                     {
                         "tool_name": tool,
                         "unique_identifier": f"{current_agent_id}-{tool}",
+                        "is_marketplace_supported": (
+                            tool_metadata.get(tool, {}).get(
+                                "isMechMarketplaceSupported", None
+                            )
+                        ),
                     }
                     for tool in tools
                 ]

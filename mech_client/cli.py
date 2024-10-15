@@ -167,17 +167,39 @@ def tools_for_agents(agent_id: Optional[int], chain_config: str) -> None:
         result = get_tools_for_agents(agent_id, chain_config)
 
         if agent_id is not None:
-            headers = ["Tool Name", "Unique Identifier"]
+            headers = ["Tool Name", "Unique Identifier", "Mech Marketplace Support"]
             data: List[Tuple[str, ...]] = [
-                (str(tool["tool_name"]), str(tool["unique_identifier"]))
+                (
+                    str(tool["tool_name"]),
+                    str(tool["unique_identifier"]),
+                    "✓" if bool(tool["is_marketplace_supported"]) else "✗",
+                )
                 for tool in result["tools"]
             ]
         else:
-            headers = ["Agent ID", "Tool Name", "Unique Identifier"]
+            headers = [
+                "Agent ID",
+                "Tool Name",
+                "Unique Identifier",
+                "Mech Marketplace Support",
+            ]
+
             data = [
-                (str(agent_id), str(tool_name), f"{agent_id}-{tool_name}")
-                for agent_id, tools in result["agent_tools_map"].items()
-                for tool_name in tools
+                (
+                    str(agent_id),
+                    tool["tool_name"],
+                    tool["unique_identifier"],
+                    (
+                        "✓"
+                        if bool(
+                            tool["is_marketplace_supported"],
+                        )
+                        else "✗"
+                    ),
+                )
+                for agent_id, _ in result["agent_tools_map"].items()
+                for tool in result["all_tools_with_identifiers"]
+                if tool["unique_identifier"].startswith(f"{agent_id}-")
             ]
 
         click.echo(tabulate(data, headers=headers, tablefmt="grid"))
