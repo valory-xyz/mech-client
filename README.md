@@ -232,6 +232,12 @@ mechx tool-io-schema "6-prediction-offline" --chain-config gnosis
 ```
 You will see an output like this:
 ```bash
+Tool Details:
++---------------------------+-----------------------------------------------+
+| Tool Name                 | Tool Description                              |
++===========================+===============================================+
+| OpenAI Prediction Offline | Makes a prediction using OpenAI GPT-3.5 Turbo |
++---------------------------+-----------------------------------------------+
 Input Schema:
 +-------------+----------------------------------+
 | Field       | Value                            |

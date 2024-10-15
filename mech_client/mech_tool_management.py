@@ -170,11 +170,11 @@ def get_tool_io_schema(
     unique_identifier: str, chain_config: str = "gnosis"
 ) -> Dict[str, Any]:
     """
-    Fetch the input and output schema of a specific tool based on a unique identifier.
+    Fetch the input and output schema along with tool name and description of a specific tool based on a unique identifier.
 
     :param unique_identifier: The unique identifier for the tool.
     :param chain_config: The chain configuration to use.
-    :return: Dictionary containing input and output schemas.
+    :return: Dictionary containing name, description, input and output schemas.
     """
     parts = unique_identifier.split("-")
     agent_id = int(parts[0])
@@ -196,6 +196,8 @@ def get_tool_io_schema(
         tool_info = tool_metadata.get(tool_name, {})
         if isinstance(tool_info, dict):
             return {
+                "name": tool_info.get("name", {}),
+                "description": tool_info.get("description", {}),
                 "input": tool_info.get("input", {}),
                 "output": tool_info.get("output", {}),
             }
