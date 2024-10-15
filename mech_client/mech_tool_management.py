@@ -80,48 +80,51 @@ def get_tools_for_agents(
         total_supply = get_total_supply(chain_config)
 
         if agent_id is not None:
-            (tools, tool_metadata) = get_agent_tools(agent_id, chain_config, True)
+            result = get_agent_tools(agent_id, chain_config, True)
 
-            if isinstance(tools, list) and isinstance(tool_metadata, dict):
-                tools_with_ids = [
-                    {
-                        "tool_name": tool,
-                        "unique_identifier": f"{agent_id}-{tool}",
-                        "is_marketplace_supported": (
-                            tool_metadata.get(tool, {}).get(
-                                "isMechMarketplaceSupported", None
-                            )
-                        ),
-                    }
-                    for tool in tools
-                ]
-            else:
-                tools_with_ids = []
-            return {"agent_id": agent_id, "tools": tools_with_ids}
+            if result is not None:
+                (tools, tool_metadata) = result
+
+                if isinstance(tools, list) and isinstance(tool_metadata, dict):
+                    tools_with_ids = [
+                        {
+                            "tool_name": tool,
+                            "unique_identifier": f"{agent_id}-{tool}",
+                            "is_marketplace_supported": (
+                                tool_metadata.get(tool, {}).get(
+                                    "isMechMarketplaceSupported", None
+                                )
+                            ),
+                        }
+                        for tool in tools
+                    ]
+                else:
+                    tools_with_ids = []
+                return {"agent_id": agent_id, "tools": tools_with_ids}
 
         all_tools_with_ids = []
         agent_tools_map = {}
 
         for current_agent_id in range(1, total_supply + 1):
-            (tools, tool_metadata) = get_agent_tools(
-                current_agent_id, chain_config, True
-            )
-            if isinstance(tools, list) and isinstance(tool_metadata, dict):
+            result = get_agent_tools(current_agent_id, chain_config, True)
+            if result is not None:
+                (tools, tool_metadata) = result
 
-                tools_with_ids = [
-                    {
-                        "tool_name": tool,
-                        "unique_identifier": f"{current_agent_id}-{tool}",
-                        "is_marketplace_supported": (
-                            tool_metadata.get(tool, {}).get(
-                                "isMechMarketplaceSupported", None
-                            )
-                        ),
-                    }
-                    for tool in tools
-                ]
-                agent_tools_map[current_agent_id] = tools
-                all_tools_with_ids.extend(tools_with_ids)
+                if isinstance(tools, list) and isinstance(tool_metadata, dict):
+                    tools_with_ids = [
+                        {
+                            "tool_name": tool,
+                            "unique_identifier": f"{current_agent_id}-{tool}",
+                            "is_marketplace_supported": (
+                                tool_metadata.get(tool, {}).get(
+                                    "isMechMarketplaceSupported", None
+                                )
+                            ),
+                        }
+                        for tool in tools
+                    ]
+                    agent_tools_map[current_agent_id] = tools
+                    all_tools_with_ids.extend(tools_with_ids)
 
         return {
             "all_tools_with_identifiers": all_tools_with_ids,
