@@ -231,18 +231,35 @@ def tool_description(tool_id: str, chain_config: str) -> None:
 @click.argument("tool_id")
 @click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
 def tool_io_schema(tool_id: str, chain_config: str) -> None:
-    """Fetch and display the input/output schema for a specific tool."""
+    """Fetch and display the tool's name and description along with the input/output schema for a specific tool."""
     try:
-        io_schema = get_tool_io_schema(tool_id, chain_config)
+        result = get_tool_io_schema(tool_id, chain_config)
+
+        name = result["name"]
+        description = result["description"]
         # Prepare data for tabulation
-        input_schema = [(key, io_schema["input"][key]) for key in io_schema["input"]]
+        input_schema = [(key, result["input"][key]) for key in result["input"]]
 
         # Handling nested output schema
         output_schema = []
-        if "properties" in io_schema["output"]["schema"]:
-            for key, value in io_schema["output"]["schema"]["properties"].items():
+        if "properties" in result["output"]["schema"]:
+            for key, value in result["output"]["schema"]["properties"].items():
                 output_schema.append((key, value["type"], value.get("description", "")))
 
+        # Display tool details in tabulated format
+        click.echo("Tool Details:")
+        click.echo(
+            tabulate(
+                [
+                    [
+                        name,
+                        description,
+                    ]
+                ],
+                headers=["Tool Name", "Tool Description"],
+                tablefmt="grid",
+            )
+        )
         # Display schemas in tabulated format
         click.echo("Input Schema:")
         click.echo(tabulate(input_schema, headers=["Field", "Value"], tablefmt="grid"))
