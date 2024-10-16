@@ -6,10 +6,10 @@ This document outlines security procedures and general policies for the `mech-cl
 
 The following table shows which versions of `mech-client` are currently being supported with security updates.
 
-| Version   | Supported          |
-| --------- | ------------------ |
-| `0.2.16`   | :white_check_mark: |
-| `< 0.2.16` | :x:                |
+| Version    | Supported          |
+|------------| ------------------ |
+| `0.2.17`   | :white_check_mark: |
+| `< 0.2.17` | :x:                |
 
 ## Reporting a Vulnerability
 
