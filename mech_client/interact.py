@@ -455,6 +455,7 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
     :rtype: Any
     """
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     tasks = []
 
     if confirmation_type in (
