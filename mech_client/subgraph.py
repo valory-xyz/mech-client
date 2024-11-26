@@ -70,7 +70,11 @@ def query_agent_address(  # pylint: disable=too-many-return-statements
     :rtype: Optional[str]
     """
     # temporary hard coded until subgraph present
+    if chain_config == "base" and agent_id == 1:
+        return "0x37C484cc34408d0F827DB4d7B6e54b8837Bf8BDA"
     if chain_config == "base" and agent_id == 2:
+        return "0x111D7DB1B752AB4D2cC0286983D9bd73a49bac6c"
+    if chain_config == "base" and agent_id == 3:
         return "0x111D7DB1B752AB4D2cC0286983D9bd73a49bac6c"
     if chain_config == "arbitrum" and agent_id == 2:
         return "0x1FDAD3a5af5E96e5a64Fc0662B1814458F114597"

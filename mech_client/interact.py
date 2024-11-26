@@ -112,6 +112,7 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     contract_abi_url: str
     transaction_url: str
     subgraph_url: str
+    price: int
 
     def __post_init__(self) -> None:
         """Post initialization to override with environment variables."""
@@ -142,6 +143,13 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
         if subgraph_url:
             self.subgraph_url = subgraph_url
+
+        api_key = os.getenv("MECHX_API_KEY")
+        if api_key:
+            updated_contract_abi_url = self.contract_abi_url.replace(
+                "{api_key}", api_key
+            )
+            self.contract_abi_url = updated_contract_abi_url
 
 
 class ConfirmationType(Enum):
@@ -587,11 +595,13 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         deliver_signature=deliver_event_signature,
     )
     print("Sending Mech request...")
+    price = mech_config.price or 10_000_000_000_000_000
     transaction_digest = send_request(
         crypto=crypto,
         ledger_api=ledger_api,
         mech_contract=mech_contract,
         gas_limit=mech_config.gas_limit,
+        price=price,
         prompt=prompt,
         tool=tool,
         extra_attributes=extra_attributes,
