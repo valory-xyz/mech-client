@@ -27,6 +27,9 @@ from tabulate import tabulate  # type: ignore
 from mech_client import __version__
 from mech_client.interact import ConfirmationType
 from mech_client.interact import interact as interact_
+from mech_client.marketplace_interact import (
+    marketplace_interact as marketplace_interact_,
+)
 from mech_client.mech_tool_management import (
     get_tool_description,
     get_tool_io_schema,
@@ -45,7 +48,7 @@ def cli() -> None:
 
 @click.command()
 @click.argument("prompt")
-@click.argument("agent_id", type=int)
+@click.option("--agent_id", type=int, help="Id of the agent to be used")
 @click.option(
     "--key",
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
@@ -110,22 +113,40 @@ def interact(  # pylint: disable=too-many-arguments
                 k, v = pair.split("=")
                 extra_attributes_dict[k] = v
 
-        interact_(
-            prompt=prompt,
-            agent_id=agent_id,
-            private_key_path=key,
-            tool=tool,
-            extra_attributes=extra_attributes_dict,
-            confirmation_type=(
-                ConfirmationType(confirm)
-                if confirm is not None
-                else ConfirmationType.WAIT_FOR_BOTH
-            ),
-            retries=retries,
-            timeout=timeout,
-            sleep=sleep,
-            chain_config=chain_config,
-        )
+        if agent_id is None:
+            marketplace_interact_(
+                prompt=prompt,
+                private_key_path=key,
+                tool=tool,
+                extra_attributes=extra_attributes_dict,
+                confirmation_type=(
+                    ConfirmationType(confirm)
+                    if confirm is not None
+                    else ConfirmationType.WAIT_FOR_BOTH
+                ),
+                retries=retries,
+                timeout=timeout,
+                sleep=sleep,
+                chain_config=chain_config,
+            )
+
+        else:
+            interact_(
+                prompt=prompt,
+                agent_id=agent_id,
+                private_key_path=key,
+                tool=tool,
+                extra_attributes=extra_attributes_dict,
+                confirmation_type=(
+                    ConfirmationType(confirm)
+                    if confirm is not None
+                    else ConfirmationType.WAIT_FOR_BOTH
+                ),
+                retries=retries,
+                timeout=timeout,
+                sleep=sleep,
+                chain_config=chain_config,
+            )
     except (ValueError, FileNotFoundError) as e:
         raise click.ClickException(str(e)) from e
 
