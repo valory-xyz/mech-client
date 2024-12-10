@@ -105,6 +105,7 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     """Mech configuration"""
 
     agent_registry_contract: str
+    mech_marketplace_contract: str
     rpc_url: str
     wss_endpoint: str
     ledger_config: LedgerConfig
@@ -119,6 +120,10 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         agent_registry_contract = os.getenv("MECHX_AGENT_REGISTRY_CONTRACT")
         if agent_registry_contract:
             self.agent_registry_contract = agent_registry_contract
+
+        mech_marketplace_contract = os.getenv("MECHX_MECH_MARKETPLACE_CONTRACT")
+        if mech_marketplace_contract:
+            self.mech_marketplace_contract = mech_marketplace_contract
 
         rpc_url = os.getenv("MECHX_CHAIN_RPC")
         if rpc_url:
