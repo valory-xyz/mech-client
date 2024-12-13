@@ -17,6 +17,24 @@
         "transaction_url": "https://gnosisscan.io/tx/{transaction_digest}",
         "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
     },
+    "chiado": {
+        "agent_registry_contract": "0x9dEc6B62c197268242A768dc3b153AE7a2701396",
+        "mech_marketplace_contract": "0xB5b12496c0bd5E4687fc192fd619b2626985c50b",
+        "rpc_url": "https://rpc.chiadochain.net",
+        "wss_endpoint": "wss://gnosis-chiado-rpc.publicnode.com",
+        "ledger_config": {
+            "address": "https://rpc.chiadochain.net",
+            "chain_id": 100,
+            "poa_chain": false,
+            "default_gas_price_strategy": "eip1559",
+            "is_gas_estimation_enabled": false
+        },
+        "gas_limit": 400000,
+        "price": 1,
+        "contract_abi_url": "https://gnosis-chiado.blockscout.com/api/?module=contract&action=getabi&address={contract_address}",
+        "transaction_url": "https://gnosis-chiado.blockscout.com/tx/{transaction_digest}",
+        "subgraph_url": ""
+    },
     "arbitrum": {
         "agent_registry_contract": "0xa4799B083E0068732456EF45ff9fe5c683658327",
         "rpc_url": "https://arbitrum.llamarpc.com",

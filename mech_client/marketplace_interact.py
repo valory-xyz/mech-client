@@ -3,6 +3,9 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, List, Tuple
+import asyncio
+from aea.crypto.base import Crypto
+
 
 import websocket
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
@@ -12,6 +15,8 @@ from web3.constants import ADDRESS_ZERO
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import (
     register_event_handlers,
+    watch_for_marketplace_request_id,
+    watch_for_marketplace_data_url_from_wss,
 )
 from mech_client.interact import (
     PRIVATE_KEY_FILE_PATH,
@@ -90,9 +95,9 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     method_name = "request"
     methord_args = {
         "data": v1_file_hash_hex_truncated,
-        "priorityMech": ADDRESS_ZERO,
+        "priorityMech": "0xffF8e9f12655caeF09c0921b29b7b813c917bD4F",
         "priorityMechStakingInstance": ADDRESS_ZERO,
-        "priorityMechServiceId": 0,
+        "priorityMechServiceId": 3,
         "requesterStakingInstance": ADDRESS_ZERO,
         "requesterServiceId": 0,
         "responseTimeout": 300,
@@ -131,6 +136,91 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
             )
             time.sleep(sleep)
     return None
+
+
+def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments
+    request_id: str,
+    wss: websocket.WebSocket,
+    marketplace_contract: Web3Contract,
+    subgraph_url: str,
+    deliver_signature: str,
+    ledger_api: EthereumApi,
+    crypto: Crypto,
+    confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
+) -> Any:
+    """
+    Wait for data from on-chain/off-chain.
+
+    :param request_id: The ID of the request.
+    :type request_id: str
+    :param wss: The WebSocket connection object.
+    :type wss: websocket.WebSocket
+    :param marketplace_contract: The mech marketplace contract instance.
+    :type marketplace_contract: Web3Contract
+    :param subgraph_url: Subgraph URL.
+    :type subgraph_url: str
+    :param deliver_signature: Topic signature for MarketplaceDeliver event
+    :type deliver_signature: str
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param crypto: The cryptographic object.
+    :type crypto: Crypto
+    :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
+    :type confirmation_type: ConfirmationType
+    :return: The data received from on-chain/off-chain.
+    :rtype: Any
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    tasks = []
+
+    if confirmation_type in (
+        ConfirmationType.OFF_CHAIN,
+        ConfirmationType.WAIT_FOR_BOTH,
+    ):
+        # off_chain_task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
+        # tasks.append(off_chain_task)
+        print("Off chain to be implemented")
+
+    if confirmation_type in (
+        ConfirmationType.ON_CHAIN,
+        ConfirmationType.WAIT_FOR_BOTH,
+    ):
+        on_chain_task = loop.create_task(
+            watch_for_marketplace_data_url_from_wss(
+                request_id=request_id,
+                wss=wss,
+                marketplace_contract=marketplace_contract,
+                deliver_signature=deliver_signature,
+                ledger_api=ledger_api,
+                loop=loop,
+            )
+        )
+        tasks.append(on_chain_task)
+
+        if subgraph_url:
+            # mech_task = loop.create_task(
+            #     watch_for_data_url_from_subgraph(
+            #         request_id=request_id, url=subgraph_url
+            #     )
+            # )
+            # tasks.append(mech_task)
+            print("Subgraph to be implemented")
+
+    async def _wait_for_tasks() -> Any:  # type: ignore
+        """Wait for tasks to finish."""
+        (finished, *_), unfinished = await asyncio.wait(
+            tasks,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in unfinished:
+            task.cancel()
+        if unfinished:
+            await asyncio.wait(unfinished)
+        return finished.result()
+
+    result = loop.run_until_complete(_wait_for_tasks())
+    return result
 
 
 def marketplace_interact(
@@ -196,6 +286,8 @@ def marketplace_interact(
     marketplace_request_event_signature, marketplace_deliver_event_signature = (
         get_event_signatures(abi=abi)
     )
+    print(f"{marketplace_request_event_signature=}")
+    print(f"{marketplace_deliver_event_signature=}")
 
     register_event_handlers(
         wss=wss,
@@ -232,4 +324,30 @@ def marketplace_interact(
     print(f"  - Transaction sent: {transaction_url_formatted}")
     print("  - Waiting for transaction receipt...")
 
-    return
+    request_id = watch_for_marketplace_request_id(
+        wss=wss,
+        marketplace_contract=mech_marketplace_contract,
+        ledger_api=ledger_api,
+        request_signature=marketplace_request_event_signature,
+    )
+    print(f"  - Created on-chain request with ID {request_id}")
+    print("")
+
+    print("Waiting for Mech Marketplace deliver...")
+    data_url = wait_for_marketplace_data_url(
+        request_id=request_id,
+        wss=wss,
+        marketplace_contract=mech_marketplace_contract,
+        subgraph_url=mech_config.subgraph_url,
+        deliver_signature=marketplace_deliver_event_signature,
+        ledger_api=ledger_api,
+        crypto=crypto,
+        confirmation_type=confirmation_type,
+    )
+    if data_url:
+        print(f"  - Data arrived: {data_url}")
+        # data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+        # print("  - Data from agent:")
+        # print(json.dumps(data, indent=2))
+        # return data
+    return None
