@@ -168,13 +168,14 @@ def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments
         data = json.loads(msg)
         tx_hash = data["params"]["result"]["transactionHash"]
         tx_receipt = wait_for_receipt(tx_hash=tx_hash, ledger_api=ledger_api)
-        event_signature = tx_receipt["logs"][2]["topics"][0].hex()
-        if event_signature != request_signature:
-            continue
 
         rich_logs = marketplace_contract.events.MarketplaceRequest().process_receipt(
             tx_receipt
         )
+        if len(rich_logs) == 0:
+            print("Empty logs")
+            return None
+
         request_id = str(rich_logs[0]["args"]["requestId"])
         return request_id
 
@@ -266,15 +267,16 @@ async def watch_for_marketplace_data_url_from_wss(  # pylint: disable=too-many-a
                 tx_receipt = await loop.run_in_executor(
                     executor, wait_for_receipt, tx_hash, ledger_api
                 )
-                event_signature = tx_receipt["logs"][0]["topics"][0].hex()
-                if event_signature != deliver_signature:
-                    continue
 
                 rich_logs = (
                     marketplace_contract.events.MarketplaceDeliver().process_receipt(
                         tx_receipt
                     )
                 )
+                if len(rich_logs) == 0:
+                    print("Empty logs")
+                    return None
+
                 data = cast(bytes, rich_logs[0]["args"]["data"])
                 if request_id != str(rich_logs[0]["args"]["requestId"]):
                     continue

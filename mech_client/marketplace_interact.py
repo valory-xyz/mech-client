@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional, List, Tuple
 import asyncio
 from aea.crypto.base import Crypto
+import requests
+import json
 
 
 import websocket
@@ -95,7 +97,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     method_name = "request"
     methord_args = {
         "data": v1_file_hash_hex_truncated,
-        "priorityMech": "0xffF8e9f12655caeF09c0921b29b7b813c917bD4F",
+        "priorityMech": "0xb4662e0Fa0A5fBA4fE34E14d1FaB3FB809cfeAF3",
         "priorityMechStakingInstance": ADDRESS_ZERO,
         "priorityMechServiceId": 3,
         "requesterStakingInstance": ADDRESS_ZERO,
@@ -286,8 +288,6 @@ def marketplace_interact(
     marketplace_request_event_signature, marketplace_deliver_event_signature = (
         get_event_signatures(abi=abi)
     )
-    print(f"{marketplace_request_event_signature=}")
-    print(f"{marketplace_deliver_event_signature=}")
 
     register_event_handlers(
         wss=wss,
@@ -346,8 +346,8 @@ def marketplace_interact(
     )
     if data_url:
         print(f"  - Data arrived: {data_url}")
-        # data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
-        # print("  - Data from agent:")
-        # print(json.dumps(data, indent=2))
-        # return data
+        data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+        print("  - Data from agent:")
+        print(json.dumps(data, indent=2))
+        return data
     return None
