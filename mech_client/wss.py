@@ -143,7 +143,7 @@ def watch_for_request_id(  # pylint: disable=too-many-arguments
         return request_id
 
 
-def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments
+def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments, unused-argument
     wss: websocket.WebSocket,
     marketplace_contract: Web3Contract,
     ledger_api: EthereumApi,
@@ -173,8 +173,7 @@ def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments
             tx_receipt
         )
         if len(rich_logs) == 0:
-            print("Empty logs")
-            return None
+            return "Empty Logs"
 
         request_id = str(rich_logs[0]["args"]["requestId"])
         return request_id
@@ -232,7 +231,7 @@ async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
             return None
 
 
-async def watch_for_marketplace_data_url_from_wss(  # pylint: disable=too-many-arguments
+async def watch_for_marketplace_data_url_from_wss(  # pylint: disable=too-many-arguments, unused-argument
     request_id: str,
     wss: websocket.WebSocket,
     marketplace_contract: Web3Contract,

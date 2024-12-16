@@ -1,36 +1,56 @@
+# -*- coding: utf-8 -*-
+# ------------------------------------------------------------------------------
+#
+#   Copyright 2023 Valory AG
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+# ------------------------------------------------------------------------------
+
+"""This script allows sending a Request to an on-chain mech marketplace and waiting for the Deliver."""
+
+
+import asyncio
+import json
 import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, List, Tuple
-import asyncio
-from aea.crypto.base import Crypto
+from typing import Any, Dict, List, Optional, Tuple
+
 import requests
-import json
-
-
 import websocket
+from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
-from web3.contract import Contract as Web3Contract
 from web3.constants import ADDRESS_ZERO
+from web3.contract import Contract as Web3Contract
 
+from mech_client.interact import (
+    ConfirmationType,
+    MAX_RETRIES,
+    PRIVATE_KEY_FILE_PATH,
+    TIMEOUT,
+    WAIT_SLEEP,
+    calculate_topic_id,
+    get_abi,
+    get_contract,
+    get_mech_config,
+)
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import (
     register_event_handlers,
-    watch_for_marketplace_request_id,
     watch_for_marketplace_data_url_from_wss,
-)
-from mech_client.interact import (
-    PRIVATE_KEY_FILE_PATH,
-    MECH_CONFIGS,
-    MAX_RETRIES,
-    WAIT_SLEEP,
-    TIMEOUT,
-    ConfirmationType,
-    calculate_topic_id,
-    get_mech_config,
-    get_abi,
-    get_contract,
+    watch_for_marketplace_request_id,
 )
 
 
@@ -140,7 +160,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     return None
 
 
-def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments
+def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused-argument
     request_id: str,
     wss: websocket.WebSocket,
     marketplace_contract: Web3Contract,
@@ -180,8 +200,6 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments
         ConfirmationType.OFF_CHAIN,
         ConfirmationType.WAIT_FOR_BOTH,
     ):
-        # off_chain_task = loop.create_task(watch_for_data_url_from_mech(crypto=crypto))
-        # tasks.append(off_chain_task)
         print("Off chain to be implemented")
 
     if confirmation_type in (
@@ -201,12 +219,6 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments
         tasks.append(on_chain_task)
 
         if subgraph_url:
-            # mech_task = loop.create_task(
-            #     watch_for_data_url_from_subgraph(
-            #         request_id=request_id, url=subgraph_url
-            #     )
-            # )
-            # tasks.append(mech_task)
             print("Subgraph to be implemented")
 
     async def _wait_for_tasks() -> Any:  # type: ignore
@@ -225,7 +237,7 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments
     return result
 
 
-def marketplace_interact(
+def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     prompt: str,
     tool: Optional[str] = None,
     extra_attributes: Optional[Dict[str, Any]] = None,
@@ -265,7 +277,7 @@ def marketplace_interact(
     ledger_config = mech_config.ledger_config
     contract_address = mech_config.mech_marketplace_contract
     if contract_address is None:
-        raise ValueError(f"Mech Marketplace does not exist!")
+        raise ValueError("Mech Marketplace does not exist!")
 
     private_key_path = private_key_path or PRIVATE_KEY_FILE_PATH
     if not Path(private_key_path).exists():
@@ -285,9 +297,10 @@ def marketplace_interact(
         contract_address=contract_address, abi=abi, ledger_api=ledger_api
     )
 
-    marketplace_request_event_signature, marketplace_deliver_event_signature = (
-        get_event_signatures(abi=abi)
-    )
+    (
+        marketplace_request_event_signature,
+        marketplace_deliver_event_signature,
+    ) = get_event_signatures(abi=abi)
 
     register_event_handlers(
         wss=wss,
@@ -307,7 +320,8 @@ def marketplace_interact(
         gas_limit=mech_config.gas_limit,
         price=price,
         prompt=prompt,
-        tool=tool,
+        # @todo better fetch and verify tool
+        tool=tool,  # type: ignore
         extra_attributes=extra_attributes,
         retries=retries,
         timeout=timeout,
