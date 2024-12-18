@@ -117,9 +117,9 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     method_name = "request"
     methord_args = {
         "data": v1_file_hash_hex_truncated,
-        "priorityMech": "0xb4662e0Fa0A5fBA4fE34E14d1FaB3FB809cfeAF3",
+        "priorityMech": "0x2C347caF85475793A19B18925faA3BEbEa27cd5c",
         "priorityMechStakingInstance": ADDRESS_ZERO,
-        "priorityMechServiceId": 3,
+        "priorityMechServiceId": 1,
         "requesterStakingInstance": ADDRESS_ZERO,
         "requesterServiceId": 0,
         "responseTimeout": 300,
@@ -289,10 +289,9 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     crypto = EthereumCrypto(private_key_path=private_key_path)
     ledger_api = EthereumApi(**asdict(ledger_config))
 
-    abi = get_abi(
-        contract_address=contract_address,
-        contract_abi_url=mech_config.contract_abi_url,
-    )
+    with open(Path(__file__).parent / "abis" / "MechMarketplace.json") as f:
+        abi = json.load(f)
+
     mech_marketplace_contract = get_contract(
         contract_address=contract_address, abi=abi, ledger_api=ledger_api
     )
