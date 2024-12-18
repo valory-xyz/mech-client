@@ -42,7 +42,6 @@ from mech_client.interact import (
     TIMEOUT,
     WAIT_SLEEP,
     calculate_topic_id,
-    get_abi,
     get_contract,
     get_mech_config,
 )
@@ -289,7 +288,9 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     crypto = EthereumCrypto(private_key_path=private_key_path)
     ledger_api = EthereumApi(**asdict(ledger_config))
 
-    with open(Path(__file__).parent / "abis" / "MechMarketplace.json") as f:
+    with open(
+        Path(__file__).parent / "abis" / "MechMarketplace.json", encoding="utf-8"
+    ) as f:
         abi = json.load(f)
 
     mech_marketplace_contract = get_contract(
