@@ -143,6 +143,42 @@ def watch_for_request_id(  # pylint: disable=too-many-arguments
         return request_id
 
 
+def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments, unused-argument
+    wss: websocket.WebSocket,
+    marketplace_contract: Web3Contract,
+    ledger_api: EthereumApi,
+    request_signature: str,
+) -> str:
+    """
+    Watches for events on mech.
+
+    :param wss: The WebSocket connection object.
+    :type wss: websocket.WebSocket
+    :param marketplace_contract: The marketplace contract instance.
+    :type marketplace_contract: Web3Contract
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :return: The requested ID.
+    :param request_signature: Topic signature for MarketplaceRequest event
+    :type request_signature: str
+    :rtype: str
+    """
+    while True:
+        msg = wss.recv()
+        data = json.loads(msg)
+        tx_hash = data["params"]["result"]["transactionHash"]
+        tx_receipt = wait_for_receipt(tx_hash=tx_hash, ledger_api=ledger_api)
+
+        rich_logs = marketplace_contract.events.MarketplaceRequest().process_receipt(
+            tx_receipt
+        )
+        if len(rich_logs) == 0:
+            return "Empty Logs"
+
+        request_id = str(rich_logs[0]["args"]["requestId"])
+        return request_id
+
+
 async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
     request_id: str,
     wss: websocket.WebSocket,
@@ -183,6 +219,63 @@ async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
                     continue
 
                 rich_logs = mech_contract.events.Deliver().process_receipt(tx_receipt)
+                data = cast(bytes, rich_logs[0]["args"]["data"])
+                if request_id != str(rich_logs[0]["args"]["requestId"]):
+                    continue
+                return f"https://gateway.autonolas.tech/ipfs/f01701220{data.hex()}"
+        except websocket.WebSocketConnectionClosedException as e:
+            print(f"WebSocketConnectionClosedException {repr(e)}")
+            print(
+                "Error: The WSS connection was likely closed by the remote party. Please, try using another WSS provider."
+            )
+            return None
+
+
+async def watch_for_marketplace_data_url_from_wss(  # pylint: disable=too-many-arguments, unused-argument
+    request_id: str,
+    wss: websocket.WebSocket,
+    marketplace_contract: Web3Contract,
+    deliver_signature: str,
+    ledger_api: EthereumApi,
+    loop: asyncio.AbstractEventLoop,
+) -> Any:
+    """
+    Watches for data on-chain.
+
+    :param request_id: The ID of the request.
+    :type request_id: str
+    :param wss: The WebSocket connection object.
+    :type wss: websocket.WebSocket
+    :param marketplace_contract: The mech contract instance.
+    :type marketplace_contract: Web3Contract
+    :param deliver_signature: Topic signature for Deliver event
+    :type deliver_signature: str
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param loop: The event loop used for asynchronous operations.
+    :type loop: asyncio.AbstractEventLoop
+    :return: The data received from on-chain.
+    :rtype: Any
+    """
+    with ThreadPoolExecutor() as executor:
+        try:
+            while True:
+                msg = await loop.run_in_executor(executor=executor, func=wss.recv)
+                data = json.loads(msg)
+                tx_hash = data["params"]["result"]["transactionHash"]
+                tx_receipt = await loop.run_in_executor(
+                    executor, wait_for_receipt, tx_hash, ledger_api
+                )
+
+                rich_logs = (
+                    marketplace_contract.events.MarketplaceDeliver().process_receipt(
+                        tx_receipt
+                    )
+                )
+                if len(rich_logs) == 0:
+                    print("Empty logs")
+                    return None
+
                 data = cast(bytes, rich_logs[0]["args"]["data"])
                 if request_id != str(rich_logs[0]["args"]["requestId"]):
                     continue

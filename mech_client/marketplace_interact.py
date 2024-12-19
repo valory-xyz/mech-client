@@ -1,30 +1,69 @@
+# -*- coding: utf-8 -*-
+# ------------------------------------------------------------------------------
+#
+#   Copyright 2023 Valory AG
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+# ------------------------------------------------------------------------------
+
+"""This script allows sending a Request to an on-chain mech marketplace and waiting for the Deliver."""
+
+
+import asyncio
+import json
 import time
-from dataclasses import asdict
+from dataclasses import asdict, make_dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
+import requests
 import websocket
+from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from web3.contract import Contract as Web3Contract
-from web3.constants import ADDRESS_ZERO
 
+from mech_client.interact import (
+    ConfirmationType,
+    MAX_RETRIES,
+    MechMarketplaceConfig,
+    PRIVATE_KEY_FILE_PATH,
+    TIMEOUT,
+    WAIT_SLEEP,
+    calculate_topic_id,
+    get_contract,
+    get_mech_config,
+)
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import (
     register_event_handlers,
+    watch_for_marketplace_data_url_from_wss,
+    watch_for_marketplace_request_id,
 )
-from mech_client.interact import (
-    PRIVATE_KEY_FILE_PATH,
-    MECH_CONFIGS,
-    MAX_RETRIES,
-    WAIT_SLEEP,
-    TIMEOUT,
-    ConfirmationType,
-    calculate_topic_id,
-    get_mech_config,
-    get_abi,
-    get_contract,
-)
+
+
+CHAIN_TO_DEFAULT_MECH_MARKETPLACE_CONFIG = {
+    100: {
+        "mech_marketplace_contract": "0xfE48DbCb92EbE155054aBf6a8273f6be82D56232",
+        "priority_mech_address": "0x2C347caF85475793A19B18925faA3BEbEa27cd5c",
+        "priority_mech_staking_instance_address": "0x0000000000000000000000000000000000000000",
+        "priority_mech_service_id": 1,
+        "requester_staking_instance_address": "0x0000000000000000000000000000000000000000",
+        "requester_service_id": 0,
+        "response_timeout": 300,
+    }
+}
 
 
 def get_event_signatures(abi: List) -> Tuple[str, str]:
@@ -47,6 +86,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     gas_limit: int,
     prompt: str,
     tool: str,
+    method_args_data: MechMarketplaceConfig,
     extra_attributes: Optional[Dict[str, Any]] = None,
     price: int = 10_000_000_000_000_000,
     retries: Optional[int] = None,
@@ -68,6 +108,8 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :type prompt: str
     :param tool: The requested tool.
     :type tool: str
+    :param method_args_data: Method data to use to call the marketplace contract request
+    :type method_args_data: MechMarketplaceConfig
     :param extra_attributes: Extra attributes to be included in the request metadata.
     :type extra_attributes: Optional[Dict[str,Any]]
     :param price: The price for the request (default: 10_000_000_000_000_000).
@@ -88,14 +130,14 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
         f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
     )
     method_name = "request"
-    methord_args = {
+    method_args = {
         "data": v1_file_hash_hex_truncated,
-        "priorityMech": ADDRESS_ZERO,
-        "priorityMechStakingInstance": ADDRESS_ZERO,
-        "priorityMechServiceId": 0,
-        "requesterStakingInstance": ADDRESS_ZERO,
-        "requesterServiceId": 0,
-        "responseTimeout": 300,
+        "priorityMech": method_args_data.priority_mech_address,
+        "priorityMechStakingInstance": method_args_data.priority_mech_staking_instance_address,
+        "priorityMechServiceId": method_args_data.priority_mech_service_id,
+        "requesterStakingInstance": method_args_data.requester_staking_instance_address,
+        "requesterServiceId": method_args_data.requester_service_id,
+        "responseTimeout": method_args_data.response_timeout,
     }
     tx_args = {
         "sender_address": crypto.address,
@@ -115,7 +157,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
             raw_transaction = ledger_api.build_transaction(
                 contract_instance=marketplace_contract,
                 method_name=method_name,
-                method_args=methord_args,
+                method_args=method_args,
                 tx_args=tx_args,
                 raise_on_try=True,
             )
@@ -133,7 +175,84 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     return None
 
 
-def marketplace_interact(
+def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused-argument
+    request_id: str,
+    wss: websocket.WebSocket,
+    marketplace_contract: Web3Contract,
+    subgraph_url: str,
+    deliver_signature: str,
+    ledger_api: EthereumApi,
+    crypto: Crypto,
+    confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
+) -> Any:
+    """
+    Wait for data from on-chain/off-chain.
+
+    :param request_id: The ID of the request.
+    :type request_id: str
+    :param wss: The WebSocket connection object.
+    :type wss: websocket.WebSocket
+    :param marketplace_contract: The mech marketplace contract instance.
+    :type marketplace_contract: Web3Contract
+    :param subgraph_url: Subgraph URL.
+    :type subgraph_url: str
+    :param deliver_signature: Topic signature for MarketplaceDeliver event
+    :type deliver_signature: str
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param crypto: The cryptographic object.
+    :type crypto: Crypto
+    :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
+    :type confirmation_type: ConfirmationType
+    :return: The data received from on-chain/off-chain.
+    :rtype: Any
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    tasks = []
+
+    if confirmation_type in (
+        ConfirmationType.OFF_CHAIN,
+        ConfirmationType.WAIT_FOR_BOTH,
+    ):
+        print("Off chain to be implemented")
+
+    if confirmation_type in (
+        ConfirmationType.ON_CHAIN,
+        ConfirmationType.WAIT_FOR_BOTH,
+    ):
+        on_chain_task = loop.create_task(
+            watch_for_marketplace_data_url_from_wss(
+                request_id=request_id,
+                wss=wss,
+                marketplace_contract=marketplace_contract,
+                deliver_signature=deliver_signature,
+                ledger_api=ledger_api,
+                loop=loop,
+            )
+        )
+        tasks.append(on_chain_task)
+
+        if subgraph_url:
+            print("Subgraph to be implemented")
+
+    async def _wait_for_tasks() -> Any:  # type: ignore
+        """Wait for tasks to finish."""
+        (finished, *_), unfinished = await asyncio.wait(
+            tasks,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in unfinished:
+            task.cancel()
+        if unfinished:
+            await asyncio.wait(unfinished)
+        return finished.result()
+
+    result = loop.run_until_complete(_wait_for_tasks())
+    return result
+
+
+def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     prompt: str,
     tool: Optional[str] = None,
     extra_attributes: Optional[Dict[str, Any]] = None,
@@ -171,9 +290,16 @@ def marketplace_interact(
 
     mech_config = get_mech_config(chain_config)
     ledger_config = mech_config.ledger_config
-    contract_address = mech_config.mech_marketplace_contract
-    if contract_address is None:
-        raise ValueError(f"Mech Marketplace does not exist!")
+    mech_marketplace_config = mech_config.mech_marketplace_config
+    chain_id = ledger_config.chain_id
+
+    if mech_marketplace_config is None:
+        config_values = CHAIN_TO_DEFAULT_MECH_MARKETPLACE_CONFIG[chain_id]
+        mech_marketplace_config = make_dataclass(
+            "MechMarketplaceConfig", ((k, type(v)) for k, v in config_values.items())
+        )(**config_values)
+
+    contract_address = cast(str, mech_marketplace_config.mech_marketplace_contract)
 
     private_key_path = private_key_path or PRIVATE_KEY_FILE_PATH
     if not Path(private_key_path).exists():
@@ -185,17 +311,19 @@ def marketplace_interact(
     crypto = EthereumCrypto(private_key_path=private_key_path)
     ledger_api = EthereumApi(**asdict(ledger_config))
 
-    abi = get_abi(
-        contract_address=contract_address,
-        contract_abi_url=mech_config.contract_abi_url,
-    )
+    with open(
+        Path(__file__).parent / "abis" / "MechMarketplace.json", encoding="utf-8"
+    ) as f:
+        abi = json.load(f)
+
     mech_marketplace_contract = get_contract(
         contract_address=contract_address, abi=abi, ledger_api=ledger_api
     )
 
-    marketplace_request_event_signature, marketplace_deliver_event_signature = (
-        get_event_signatures(abi=abi)
-    )
+    (
+        marketplace_request_event_signature,
+        marketplace_deliver_event_signature,
+    ) = get_event_signatures(abi=abi)
 
     register_event_handlers(
         wss=wss,
@@ -215,7 +343,9 @@ def marketplace_interact(
         gas_limit=mech_config.gas_limit,
         price=price,
         prompt=prompt,
-        tool=tool,
+        # @todo better fetch and verify tool
+        tool=tool,  # type: ignore
+        method_args_data=mech_marketplace_config,
         extra_attributes=extra_attributes,
         retries=retries,
         timeout=timeout,
@@ -232,4 +362,30 @@ def marketplace_interact(
     print(f"  - Transaction sent: {transaction_url_formatted}")
     print("  - Waiting for transaction receipt...")
 
-    return
+    request_id = watch_for_marketplace_request_id(
+        wss=wss,
+        marketplace_contract=mech_marketplace_contract,
+        ledger_api=ledger_api,
+        request_signature=marketplace_request_event_signature,
+    )
+    print(f"  - Created on-chain request with ID {request_id}")
+    print("")
+
+    print("Waiting for Mech Marketplace deliver...")
+    data_url = wait_for_marketplace_data_url(
+        request_id=request_id,
+        wss=wss,
+        marketplace_contract=mech_marketplace_contract,
+        subgraph_url=mech_config.subgraph_url,
+        deliver_signature=marketplace_deliver_event_signature,
+        ledger_api=ledger_api,
+        crypto=crypto,
+        confirmation_type=confirmation_type,
+    )
+    if data_url:
+        print(f"  - Data arrived: {data_url}")
+        data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+        print("  - Data from agent:")
+        print(json.dumps(data, indent=2))
+        return data
+    return None
