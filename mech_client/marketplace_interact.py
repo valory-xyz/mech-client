@@ -23,21 +23,21 @@
 import asyncio
 import json
 import time
-from dataclasses import asdict
+from dataclasses import asdict, make_dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import requests
 import websocket
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
-from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
 
 from mech_client.interact import (
     ConfirmationType,
     MAX_RETRIES,
+    MechMarketplaceConfig,
     PRIVATE_KEY_FILE_PATH,
     TIMEOUT,
     WAIT_SLEEP,
@@ -51,6 +51,19 @@ from mech_client.wss import (
     watch_for_marketplace_data_url_from_wss,
     watch_for_marketplace_request_id,
 )
+
+
+CHAIN_TO_DEFAULT_MECH_MARKETPLACE_CONFIG = {
+    100: {
+        "mech_marketplace_contract": "0xfE48DbCb92EbE155054aBf6a8273f6be82D56232",
+        "priority_mech_address": "0x2C347caF85475793A19B18925faA3BEbEa27cd5c",
+        "priority_mech_staking_instance_address": "0x0000000000000000000000000000000000000000",
+        "priority_mech_service_id": 1,
+        "requester_staking_instance_address": "0x0000000000000000000000000000000000000000",
+        "requester_service_id": 0,
+        "response_timeout": 300,
+    }
+}
 
 
 def get_event_signatures(abi: List) -> Tuple[str, str]:
@@ -73,6 +86,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     gas_limit: int,
     prompt: str,
     tool: str,
+    method_args_data: MechMarketplaceConfig,
     extra_attributes: Optional[Dict[str, Any]] = None,
     price: int = 10_000_000_000_000_000,
     retries: Optional[int] = None,
@@ -94,6 +108,8 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :type prompt: str
     :param tool: The requested tool.
     :type tool: str
+    :param method_args_data: Method data to use to call the marketplace contract request
+    :type method_args_data: MechMarketplaceConfig
     :param extra_attributes: Extra attributes to be included in the request metadata.
     :type extra_attributes: Optional[Dict[str,Any]]
     :param price: The price for the request (default: 10_000_000_000_000_000).
@@ -114,14 +130,14 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
         f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
     )
     method_name = "request"
-    methord_args = {
+    method_args = {
         "data": v1_file_hash_hex_truncated,
-        "priorityMech": "0x2C347caF85475793A19B18925faA3BEbEa27cd5c",
-        "priorityMechStakingInstance": ADDRESS_ZERO,
-        "priorityMechServiceId": 1,
-        "requesterStakingInstance": ADDRESS_ZERO,
-        "requesterServiceId": 0,
-        "responseTimeout": 300,
+        "priorityMech": method_args_data.priority_mech_address,
+        "priorityMechStakingInstance": method_args_data.priority_mech_staking_instance_address,
+        "priorityMechServiceId": method_args_data.priority_mech_service_id,
+        "requesterStakingInstance": method_args_data.requester_staking_instance_address,
+        "requesterServiceId": method_args_data.requester_service_id,
+        "responseTimeout": method_args_data.response_timeout,
     }
     tx_args = {
         "sender_address": crypto.address,
@@ -141,7 +157,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
             raw_transaction = ledger_api.build_transaction(
                 contract_instance=marketplace_contract,
                 method_name=method_name,
-                method_args=methord_args,
+                method_args=method_args,
                 tx_args=tx_args,
                 raise_on_try=True,
             )
@@ -274,9 +290,16 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     mech_config = get_mech_config(chain_config)
     ledger_config = mech_config.ledger_config
-    contract_address = mech_config.mech_marketplace_contract
-    if contract_address is None:
-        raise ValueError("Mech Marketplace does not exist!")
+    mech_marketplace_config = mech_config.mech_marketplace_config
+    chain_id = ledger_config.chain_id
+
+    if mech_marketplace_config is None:
+        config_values = CHAIN_TO_DEFAULT_MECH_MARKETPLACE_CONFIG[chain_id]
+        mech_marketplace_config = make_dataclass(
+            "MechMarketplaceConfig", ((k, type(v)) for k, v in config_values.items())
+        )(**config_values)
+
+    contract_address = cast(str, mech_marketplace_config.mech_marketplace_contract)
 
     private_key_path = private_key_path or PRIVATE_KEY_FILE_PATH
     if not Path(private_key_path).exists():
@@ -322,6 +345,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         prompt=prompt,
         # @todo better fetch and verify tool
         tool=tool,  # type: ignore
+        method_args_data=mech_marketplace_config,
         extra_attributes=extra_attributes,
         retries=retries,
         timeout=timeout,

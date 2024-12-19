@@ -31,7 +31,7 @@ import os
 import sys
 import time
 import warnings
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -101,11 +101,33 @@ class LedgerConfig:
 
 
 @dataclass
+class MechMarketplaceConfig:
+    """Mech Marketplace Config"""
+
+    mech_marketplace_contract: Optional[str] = field(default=None)
+    priority_mech_address: Optional[str] = field(default=None)
+    priority_mech_staking_instance_address: Optional[str] = field(default=None)
+    priority_mech_service_id: Optional[int] = field(default=None)
+    requester_staking_instance_address: Optional[str] = field(default=None)
+    requester_service_id: Optional[int] = field(default=None)
+    response_timeout: Optional[int] = field(default=None)
+
+    def __post_init__(self) -> None:
+        """Post initialization"""
+        fields = asdict(self)
+
+        missing_fields = [field for field, value in fields.items() if value is None]
+        if any(value is not None for value in fields.values()) and missing_fields:
+            raise ValueError(
+                f"Missing values for the following fields: {', '.join(missing_fields)}"
+            )
+
+
+@dataclass
 class MechConfig:  # pylint: disable=too-many-instance-attributes
     """Mech configuration"""
 
     agent_registry_contract: str
-    mech_marketplace_contract: str
     rpc_url: str
     wss_endpoint: str
     ledger_config: LedgerConfig
@@ -114,16 +136,13 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     transaction_url: str
     subgraph_url: str
     price: int
+    mech_marketplace_config: Optional[MechMarketplaceConfig] = None
 
     def __post_init__(self) -> None:
         """Post initialization to override with environment variables."""
         agent_registry_contract = os.getenv("MECHX_AGENT_REGISTRY_CONTRACT")
         if agent_registry_contract:
             self.agent_registry_contract = agent_registry_contract
-
-        mech_marketplace_contract = os.getenv("MECHX_MECH_MARKETPLACE_CONTRACT")
-        if mech_marketplace_contract:
-            self.mech_marketplace_contract = mech_marketplace_contract
 
         rpc_url = os.getenv("MECHX_CHAIN_RPC")
         if rpc_url:
@@ -156,6 +175,9 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
             )
             self.contract_abi_url = updated_contract_abi_url
 
+        if self.mech_marketplace_config:
+            self.mech_marketplace_config.__post_init__()
+
 
 class ConfirmationType(Enum):
     """Verification type."""
@@ -175,8 +197,19 @@ def get_mech_config(chain_config: Optional[str] = None) -> MechConfig:
 
         entry = data[chain_config].copy()
         ledger_config = LedgerConfig(**entry.pop("ledger_config"))
-        mech_config = MechConfig(**entry, ledger_config=ledger_config)
 
+        mech_marketplace_config_data = entry.pop("mech_marketplace_config", None)
+        mech_marketplace_config = (
+            MechMarketplaceConfig(**mech_marketplace_config_data)
+            if mech_marketplace_config_data
+            else None
+        )
+
+        mech_config = MechConfig(
+            **entry,
+            ledger_config=ledger_config,
+            mech_marketplace_config=mech_marketplace_config,
+        )
         return mech_config
 
 
