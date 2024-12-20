@@ -44,6 +44,7 @@ from mech_client.interact import (
     calculate_topic_id,
     get_contract,
     get_mech_config,
+    verify_or_retrieve_tool,
 )
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import (
@@ -311,6 +312,16 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     crypto = EthereumCrypto(private_key_path=private_key_path)
     ledger_api = EthereumApi(**asdict(ledger_config))
 
+    # Expected parameters: agent id and agent registry contract address
+    # Note: passing service id and service registry contract address as internal function calls are same
+    tool = verify_or_retrieve_tool(
+        agent_id=cast(int, mech_marketplace_config.priority_mech_service_id),
+        ledger_api=ledger_api,
+        tool=tool,
+        agent_registry_contract=mech_config.service_registry_contract,
+        contract_abi_url=mech_config.contract_abi_url,
+    )
+
     with open(
         Path(__file__).parent / "abis" / "MechMarketplace.json", encoding="utf-8"
     ) as f:
@@ -343,8 +354,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         gas_limit=mech_config.gas_limit,
         price=price,
         prompt=prompt,
-        # @todo better fetch and verify tool
-        tool=tool,  # type: ignore
+        tool=tool,
         method_args_data=mech_marketplace_config,
         extra_attributes=extra_attributes,
         retries=retries,
