@@ -57,12 +57,10 @@ from mech_client.wss import (
 CHAIN_TO_DEFAULT_MECH_MARKETPLACE_CONFIG = {
     100: {
         "mech_marketplace_contract": "0xfE48DbCb92EbE155054aBf6a8273f6be82D56232",
-        "priority_mech_address": "0x2C347caF85475793A19B18925faA3BEbEa27cd5c",
-        "priority_mech_staking_instance_address": "0x0000000000000000000000000000000000000000",
         "priority_mech_service_id": 1,
-        "requester_staking_instance_address": "0x0000000000000000000000000000000000000000",
         "requester_service_id": 0,
         "response_timeout": 300,
+        "payment_data": "0x",
     }
 }
 
@@ -133,12 +131,10 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     method_name = "request"
     method_args = {
         "data": v1_file_hash_hex_truncated,
-        "priorityMech": method_args_data.priority_mech_address,
-        "priorityMechStakingInstance": method_args_data.priority_mech_staking_instance_address,
         "priorityMechServiceId": method_args_data.priority_mech_service_id,
-        "requesterStakingInstance": method_args_data.requester_staking_instance_address,
         "requesterServiceId": method_args_data.requester_service_id,
         "responseTimeout": method_args_data.response_timeout,
+        "paymentData": "0x",
     }
     tx_args = {
         "sender_address": crypto.address,

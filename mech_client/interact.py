@@ -105,12 +105,10 @@ class MechMarketplaceConfig:
     """Mech Marketplace Config"""
 
     mech_marketplace_contract: Optional[str] = field(default=None)
-    priority_mech_address: Optional[str] = field(default=None)
-    priority_mech_staking_instance_address: Optional[str] = field(default=None)
     priority_mech_service_id: Optional[int] = field(default=None)
-    requester_staking_instance_address: Optional[str] = field(default=None)
     requester_service_id: Optional[int] = field(default=None)
     response_timeout: Optional[int] = field(default=None)
+    payment_data: Optional[str] = field(default=None)
 
     def __post_init__(self) -> None:
         """Post initialization"""
