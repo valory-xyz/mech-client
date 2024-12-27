@@ -57,8 +57,13 @@ from mech_client.wss import (
 )
 
 
-PAYMENT_TYPE_NATIVE = "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"
-PAYMENT_TYPE_TOKEN = "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"
+# false positives for [B105:hardcoded_password_string] Possible hardcoded password
+PAYMENT_TYPE_NATIVE = (
+    "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"  # nosec
+)
+PAYMENT_TYPE_TOKEN = (
+    "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
+)
 
 CHAIN_TO_OLAS = {
     1: "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
@@ -98,6 +103,18 @@ def fetch_mech_info(
     mech_marketplace_contract: Web3Contract,
     priority_mech_service_id: int,
 ) -> Tuple[str, str]:
+    """
+    Fetchs the info of the requested mech.
+
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param mech_marketplace_contract: The mech marketplace contract instance.
+    :type mech_marketplace_contract: Web3Contract
+    :param priority_mech_service_id: Service id of the request mech
+    :type priority_mech_service_id: int
+    :return: The mech info containing payment_type and mech_payment_balance_tracker.
+    :rtype: Tuple[str,str]
+    """
     priority_mech_address = mech_marketplace_contract.functions.mapServiceIdMech(
         priority_mech_service_id
     ).call()
@@ -135,7 +152,23 @@ def approve_price_tokens(
     olas: str,
     mech_payment_balance_tracker: str,
     price: int,
-):
+) -> str:
+    """
+    Sends the approve tx for olas token of the sender to the requested mech's balance payment tracker contract.
+
+    :param crypto: The Ethereum crypto object.
+    :type crypto: EthereumCrypto
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param olas: The olas token contract address.
+    :type olas: str
+    :param mech_payment_balance_tracker: Requested mech's balance tracker contract address
+    :type mech_payment_balance_tracker: str
+    :param price: Amount of olas to approve
+    :type price: int
+    :return: The transaction digest.
+    :rtype: str
+    """
     sender = crypto.address
 
     with open(Path(__file__).parent / "abis" / "IToken.json", encoding="utf-8") as f:
@@ -149,7 +182,7 @@ def approve_price_tokens(
             f"  - Sender Token balance low. Needed: {price}, Actual: {user_token_balance}"
         )
         print(f"  - Sender Address: {sender}")
-        return None
+        sys.exit(1)
 
     tx_args = {"sender_address": sender, "value": 0, "gas": 60000}
     raw_transaction = ledger_api.build_transaction(
@@ -338,7 +371,7 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     return result
 
 
-def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
+def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements
     prompt: str,
     tool: Optional[str] = None,
     extra_attributes: Optional[Dict[str, Any]] = None,
@@ -430,10 +463,13 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     )
 
     print("Fetching Mech Info...")
+    priority_mech_service_id = cast(
+        int, mech_marketplace_config.priority_mech_service_id
+    )
     (payment_type, mech_payment_balance_tracker) = fetch_mech_info(
         ledger_api,
         mech_marketplace_contract,
-        mech_marketplace_config.priority_mech_service_id,
+        priority_mech_service_id,
     )
 
     price = mech_config.price or 10_000_000_000_000_000
