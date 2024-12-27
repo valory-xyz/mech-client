@@ -22,6 +22,7 @@
 
 import asyncio
 import json
+import sys
 import time
 from dataclasses import asdict, make_dataclass
 from datetime import datetime
@@ -32,6 +33,7 @@ import requests
 import websocket
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
+from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
 
 from mech_client.interact import (
@@ -49,10 +51,23 @@ from mech_client.interact import (
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import (
     register_event_handlers,
+    wait_for_receipt,
     watch_for_marketplace_data_url_from_wss,
     watch_for_marketplace_request_id,
 )
 
+
+PAYMENT_TYPE_NATIVE = "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"
+PAYMENT_TYPE_TOKEN = "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"
+
+CHAIN_TO_OLAS = {
+    1: "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+    10: "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",
+    100: "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+    137: "0xFEF5d947472e72Efbb2E388c730B7428406F2F95",
+    8453: "0x54330d28ca3357F294334BDC454a032e7f353416",
+    42220: "0xaCFfAe8e57Ec6E394Eb1b41939A8CF7892DbDc51",
+}
 
 CHAIN_TO_DEFAULT_MECH_MARKETPLACE_CONFIG = {
     100: {
@@ -76,6 +91,80 @@ def get_event_signatures(abi: List) -> Tuple[str, str]:
         if obj["name"] == "MarketplaceRequest":
             marketplace_request = calculate_topic_id(event=obj)
     return marketplace_request, marketplace_deliver
+
+
+def fetch_mech_info(
+    ledger_api: EthereumApi,
+    mech_marketplace_contract: Web3Contract,
+    priority_mech_service_id: int,
+) -> Tuple[str, str]:
+    priority_mech_address = mech_marketplace_contract.functions.mapServiceIdMech(
+        priority_mech_service_id
+    ).call()
+    if priority_mech_address == ADDRESS_ZERO:
+        print(
+            f"  - Priority Mech with service id {priority_mech_service_id} doesnot exists"
+        )
+        sys.exit(1)
+
+    with open(Path(__file__).parent / "abis" / "IMech.json", encoding="utf-8") as f:
+        abi = json.load(f)
+
+    mech_contract = get_contract(
+        contract_address=priority_mech_address, abi=abi, ledger_api=ledger_api
+    )
+    payment_type_bytes = mech_contract.functions.paymentType().call()
+    payment_type = payment_type_bytes.hex()
+
+    mech_payment_balance_tracker = (
+        mech_marketplace_contract.functions.mapPaymentTypeBalanceTrackers(
+            payment_type_bytes
+        ).call()
+    )
+
+    if payment_type not in [PAYMENT_TYPE_NATIVE, PAYMENT_TYPE_TOKEN]:
+        print("  - Invalid mech type detected.")
+        sys.exit(1)
+
+    return payment_type, mech_payment_balance_tracker
+
+
+def approve_price_tokens(
+    crypto: EthereumCrypto,
+    ledger_api: EthereumApi,
+    olas: str,
+    mech_payment_balance_tracker: str,
+    price: int,
+):
+    sender = crypto.address
+
+    with open(Path(__file__).parent / "abis" / "IToken.json", encoding="utf-8") as f:
+        abi = json.load(f)
+
+    token_contract = get_contract(contract_address=olas, abi=abi, ledger_api=ledger_api)
+
+    user_token_balance = token_contract.functions.balanceOf(sender).call()
+    if user_token_balance < price:
+        print(
+            f"  - Sender Token balance low. Needed: {price}, Actual: {user_token_balance}"
+        )
+        print(f"  - Sender Address: {sender}")
+        return None
+
+    tx_args = {"sender_address": sender, "value": 0, "gas": 60000}
+    raw_transaction = ledger_api.build_transaction(
+        contract_instance=token_contract,
+        method_name="approve",
+        method_args={"_to": mech_payment_balance_tracker, "_value": price},
+        tx_args=tx_args,
+        raise_on_try=True,
+    )
+    signed_transaction = crypto.sign_transaction(raw_transaction)
+    transaction_digest = ledger_api.send_signed_transaction(
+        signed_transaction,
+        raise_on_try=True,
+    )
+    return transaction_digest
 
 
 def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
@@ -340,9 +429,34 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         deliver_signature=marketplace_deliver_event_signature,
     )
 
-    print("Sending Mech Marketplace request...")
-    price = mech_config.price or 10_000_000_000_000_000
+    print("Fetching Mech Info...")
+    (payment_type, mech_payment_balance_tracker) = fetch_mech_info(
+        ledger_api,
+        mech_marketplace_contract,
+        mech_marketplace_config.priority_mech_service_id,
+    )
 
+    price = mech_config.price or 10_000_000_000_000_000
+    if payment_type == PAYMENT_TYPE_TOKEN:
+        print("Token Mech detected, approving OLAS for price payment...")
+        olas = CHAIN_TO_OLAS[chain_id]
+        approve_tx = approve_price_tokens(
+            crypto, ledger_api, olas, mech_payment_balance_tracker, price
+        )
+        if not approve_tx:
+            print("Unable to approve allowance")
+            return None
+
+        transaction_url_formatted = mech_config.transaction_url.format(
+            transaction_digest=approve_tx
+        )
+        print(f"  - Transaction sent: {transaction_url_formatted}")
+        print("  - Waiting for transaction receipt...")
+        wait_for_receipt(approve_tx, ledger_api)
+        # set price 0 to not send any msg.value in request transaction for token type mech
+        price = 0
+
+    print("Sending Mech Marketplace request...")
     transaction_digest = send_marketplace_request(
         crypto=crypto,
         ledger_api=ledger_api,
