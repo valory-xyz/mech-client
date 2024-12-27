@@ -11,7 +11,7 @@
             "default_gas_price_strategy": "eip1559",
             "is_gas_estimation_enabled": false
         },
-        "gas_limit": 100000,
+        "gas_limit": 500000,
         "price": 10000000000000000,
         "contract_abi_url": "https://gnosis.blockscout.com/api/v2/smart-contracts/{contract_address}",
         "transaction_url": "https://gnosisscan.io/tx/{transaction_digest}",
