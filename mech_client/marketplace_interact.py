@@ -373,6 +373,7 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
 
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements
     prompt: str,
+    use_prepaid: bool = False,
     tool: Optional[str] = None,
     extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
@@ -462,34 +463,39 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         deliver_signature=marketplace_deliver_event_signature,
     )
 
-    print("Fetching Mech Info...")
-    priority_mech_service_id = cast(
-        int, mech_marketplace_config.priority_mech_service_id
-    )
-    (payment_type, mech_payment_balance_tracker) = fetch_mech_info(
-        ledger_api,
-        mech_marketplace_contract,
-        priority_mech_service_id,
-    )
-
-    price = mech_config.price or 10_000_000_000_000_000
-    if payment_type == PAYMENT_TYPE_TOKEN:
-        print("Token Mech detected, approving OLAS for price payment...")
-        olas = CHAIN_TO_OLAS[chain_id]
-        approve_tx = approve_price_tokens(
-            crypto, ledger_api, olas, mech_payment_balance_tracker, price
+    if not use_prepaid:
+        print("Fetching Mech Info...")
+        priority_mech_service_id = cast(
+            int, mech_marketplace_config.priority_mech_service_id
         )
-        if not approve_tx:
-            print("Unable to approve allowance")
-            return None
-
-        transaction_url_formatted = mech_config.transaction_url.format(
-            transaction_digest=approve_tx
+        (payment_type, mech_payment_balance_tracker) = fetch_mech_info(
+            ledger_api,
+            mech_marketplace_contract,
+            priority_mech_service_id,
         )
-        print(f"  - Transaction sent: {transaction_url_formatted}")
-        print("  - Waiting for transaction receipt...")
-        wait_for_receipt(approve_tx, ledger_api)
-        # set price 0 to not send any msg.value in request transaction for token type mech
+
+        price = mech_config.price or 10_000_000_000_000_000
+        if payment_type == PAYMENT_TYPE_TOKEN:
+            print("Token Mech detected, approving OLAS for price payment...")
+            olas = CHAIN_TO_OLAS[chain_id]
+            approve_tx = approve_price_tokens(
+                crypto, ledger_api, olas, mech_payment_balance_tracker, price
+            )
+            if not approve_tx:
+                print("Unable to approve allowance")
+                return None
+
+            transaction_url_formatted = mech_config.transaction_url.format(
+                transaction_digest=approve_tx
+            )
+            print(f"  - Transaction sent: {transaction_url_formatted}")
+            print("  - Waiting for transaction receipt...")
+            wait_for_receipt(approve_tx, ledger_api)
+            # set price 0 to not send any msg.value in request transaction for token type mech
+            price = 0
+
+    else:
+        print("Prepaid request to be used, skipping payment")
         price = 0
 
     print("Sending Mech Marketplace request...")
