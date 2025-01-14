@@ -294,6 +294,107 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     return None
 
 
+def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
+    crypto: EthereumCrypto,
+    ledger_api: EthereumApi,
+    marketplace_contract: Web3Contract,
+    gas_limit: int,
+    prompt: str,
+    tool: str,
+    method_args_data: MechMarketplaceConfig,
+    extra_attributes: Optional[Dict[str, Any]] = None,
+    price: int = 10_000_000_000_000_000,
+    retries: Optional[int] = None,
+    timeout: Optional[float] = None,
+    sleep: Optional[float] = None,
+) -> Optional[str]:
+    """
+    Sends an offchain request to the mech.
+
+    :param crypto: The Ethereum crypto object.
+    :type crypto: EthereumCrypto
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param marketplace_contract: The mech marketplace contract instance.
+    :type marketplace_contract: Web3Contract
+    :param gas_limit: Gas limit.
+    :type gas_limit: int
+    :param prompt: The request prompt.
+    :type prompt: str
+    :param tool: The requested tool.
+    :type tool: str
+    :param method_args_data: Method data to use to call the marketplace contract request
+    :type method_args_data: MechMarketplaceConfig
+    :param extra_attributes: Extra attributes to be included in the request metadata.
+    :type extra_attributes: Optional[Dict[str,Any]]
+    :param price: The price for the request (default: 10_000_000_000_000_000).
+    :type price: int
+    :param retries: Number of retries for sending a transaction
+    :type retries: int
+    :param timeout: Timeout to wait for the transaction
+    :type timeout: float
+    :param sleep: Amount of sleep before retrying the transaction
+    :type sleep: float
+    :return: The transaction hash.
+    :rtype: Optional[str]
+    """
+    v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
+        prompt, tool, extra_attributes
+    )
+    print(
+        f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
+    )
+    method_name = "request"
+    method_args = {
+        "data": v1_file_hash_hex_truncated,
+        "priorityMechServiceId": method_args_data.priority_mech_service_id,
+        "requesterServiceId": method_args_data.requester_service_id,
+        "responseTimeout": method_args_data.response_timeout,
+        "paymentData": "0x",
+    }
+    tx_args = {
+        "sender_address": crypto.address,
+        "value": price,
+        "gas": gas_limit,
+    }
+
+    tries = 0
+    retries = retries or MAX_RETRIES
+    timeout = timeout or TIMEOUT
+    sleep = sleep or WAIT_SLEEP
+    deadline = datetime.now().timestamp() + timeout
+
+    while tries < retries and datetime.now().timestamp() < deadline:
+        tries += 1
+        try:
+            raw_transaction = ledger_api.build_transaction(
+                contract_instance=marketplace_contract,
+                method_name=method_name,
+                method_args=method_args,
+                tx_args=tx_args,
+                raise_on_try=True,
+            )
+            signed_transaction = crypto.sign_transaction(raw_transaction)
+            payload = {
+                "sender": crypto.address,
+                "signed_tx": signed_transaction,
+                "ipfs_hash": v1_file_hash_hex_truncated,
+                "contract_address": marketplace_contract.address,
+            }
+            # @todo changed hardcoded url
+            response = requests.post(
+                "http://localhost:8000/send_signed_tx", data=payload
+            ).json()
+            return response
+
+        except Exception as e:  # pylint: disable=broad-except
+            print(
+                f"Error occured while sending the offchain request: {e}; Retrying in {sleep}"
+            )
+            time.sleep(sleep)
+    return None
+
+
 def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused-argument
     request_id: str,
     wss: websocket.WebSocket,
@@ -371,9 +472,23 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     return result
 
 
+def wait_for_offchain_marketplace_data_url(request_id):
+    while True:
+        try:
+            # @todo change hardcoded url
+            response = requests.post(
+                "http://localhost:8000/fetch_offchain_info",
+                data={"request_id": request_id},
+            ).json()
+            return response
+        except Exception:  # pylint: disable=broad-except
+            time.sleep(1)
+
+
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements
     prompt: str,
     use_prepaid: bool = False,
+    use_offchain: bool = False,
     tool: Optional[str] = None,
     extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
@@ -498,52 +613,79 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         print("Prepaid request to be used, skipping payment")
         price = 0
 
-    print("Sending Mech Marketplace request...")
-    transaction_digest = send_marketplace_request(
-        crypto=crypto,
-        ledger_api=ledger_api,
-        marketplace_contract=mech_marketplace_contract,
-        gas_limit=mech_config.gas_limit,
-        price=price,
-        prompt=prompt,
-        tool=tool,
-        method_args_data=mech_marketplace_config,
-        extra_attributes=extra_attributes,
-        retries=retries,
-        timeout=timeout,
-        sleep=sleep,
-    )
+    if not use_offchain:
+        print("Sending Mech Marketplace request...")
+        transaction_digest = send_marketplace_request(
+            crypto=crypto,
+            ledger_api=ledger_api,
+            marketplace_contract=mech_marketplace_contract,
+            gas_limit=mech_config.gas_limit,
+            price=price,
+            prompt=prompt,
+            tool=tool,
+            method_args_data=mech_marketplace_config,
+            extra_attributes=extra_attributes,
+            retries=retries,
+            timeout=timeout,
+            sleep=sleep,
+        )
 
-    if not transaction_digest:
-        print("Unable to send request")
-        return None
+        if not transaction_digest:
+            print("Unable to send request")
+            return None
 
-    transaction_url_formatted = mech_config.transaction_url.format(
-        transaction_digest=transaction_digest
-    )
-    print(f"  - Transaction sent: {transaction_url_formatted}")
-    print("  - Waiting for transaction receipt...")
+        transaction_url_formatted = mech_config.transaction_url.format(
+            transaction_digest=transaction_digest
+        )
+        print(f"  - Transaction sent: {transaction_url_formatted}")
+        print("  - Waiting for transaction receipt...")
 
-    request_id = watch_for_marketplace_request_id(
-        wss=wss,
-        marketplace_contract=mech_marketplace_contract,
-        ledger_api=ledger_api,
-        request_signature=marketplace_request_event_signature,
-    )
-    print(f"  - Created on-chain request with ID {request_id}")
-    print("")
+        request_id = watch_for_marketplace_request_id(
+            wss=wss,
+            marketplace_contract=mech_marketplace_contract,
+            ledger_api=ledger_api,
+            request_signature=marketplace_request_event_signature,
+        )
+        print(f"  - Created on-chain request with ID {request_id}")
+        print("")
 
-    print("Waiting for Mech Marketplace deliver...")
-    data_url = wait_for_marketplace_data_url(
-        request_id=request_id,
-        wss=wss,
-        marketplace_contract=mech_marketplace_contract,
-        subgraph_url=mech_config.subgraph_url,
-        deliver_signature=marketplace_deliver_event_signature,
-        ledger_api=ledger_api,
-        crypto=crypto,
-        confirmation_type=confirmation_type,
-    )
+        print("Waiting for Mech Marketplace deliver...")
+        data_url = wait_for_marketplace_data_url(
+            request_id=request_id,
+            wss=wss,
+            marketplace_contract=mech_marketplace_contract,
+            subgraph_url=mech_config.subgraph_url,
+            deliver_signature=marketplace_deliver_event_signature,
+            ledger_api=ledger_api,
+            crypto=crypto,
+            confirmation_type=confirmation_type,
+        )
+
+    else:
+        print("Sending Offchain Mech Marketplace request...")
+        response = send_offchain_marketplace_request(
+            crypto=crypto,
+            ledger_api=ledger_api,
+            marketplace_contract=mech_marketplace_contract,
+            gas_limit=mech_config.gas_limit,
+            price=price,
+            prompt=prompt,
+            tool=tool,
+            method_args_data=mech_marketplace_config,
+            extra_attributes=extra_attributes,
+            retries=retries,
+            timeout=timeout,
+            sleep=sleep,
+        )
+
+        request_id = response.request_id
+
+        print("Waiting for Offchain Mech Marketplace deliver...")
+        data = wait_for_offchain_marketplace_data_url(
+            request_id=request_id,
+        )
+        data_url = data.task_result
+
     if data_url:
         print(f"  - Data arrived: {data_url}")
         data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
