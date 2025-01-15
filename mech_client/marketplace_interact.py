@@ -472,7 +472,7 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     return result
 
 
-def wait_for_offchain_marketplace_data_url(request_id):
+def wait_for_offchain_marketplace_data(request_id):
     while True:
         try:
             # @todo change hardcoded url
@@ -480,7 +480,10 @@ def wait_for_offchain_marketplace_data_url(request_id):
                 "http://localhost:8000/fetch_offchain_info",
                 data={"request_id": request_id},
             ).json()
-            return response
+            if response:
+                return response
+            else:
+                time.sleep(1)
         except Exception:  # pylint: disable=broad-except
             time.sleep(1)
 
@@ -661,6 +664,14 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             confirmation_type=confirmation_type,
         )
 
+        if data_url:
+            print(f"  - Data arrived: {data_url}")
+            data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+            print("  - Data from agent:")
+            print(json.dumps(data, indent=2))
+            return data
+        return None
+
     else:
         print("Sending Offchain Mech Marketplace request...")
         response = send_offchain_marketplace_request(
@@ -680,16 +691,14 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
         request_id = response.request_id
 
+        # @note as we are directly querying data from done task list, we get the data instead of the ipfs hash
         print("Waiting for Offchain Mech Marketplace deliver...")
-        data = wait_for_offchain_marketplace_data_url(
+        data = wait_for_offchain_marketplace_data(
             request_id=request_id,
         )
-        data_url = data.task_result
 
-    if data_url:
-        print(f"  - Data arrived: {data_url}")
-        data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
-        print("  - Data from agent:")
-        print(json.dumps(data, indent=2))
-        return data
-    return None
+        if data:
+            print("  - Data from agent:")
+            print(json.dumps(data, indent=2))
+            return data
+        return None
