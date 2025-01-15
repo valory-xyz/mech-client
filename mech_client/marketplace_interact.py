@@ -377,7 +377,7 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
             signed_transaction = crypto.sign_transaction(raw_transaction)
             payload = {
                 "sender": crypto.address,
-                "signed_tx": signed_transaction,
+                "signed_tx": signed_transaction["raw_transaction"],
                 "ipfs_hash": v1_file_hash_hex_truncated,
                 "contract_address": marketplace_contract.address,
             }
@@ -476,12 +476,13 @@ def wait_for_offchain_marketplace_data(request_id):
     while True:
         try:
             # @todo change hardcoded url
-            response = requests.post(
+            response = requests.get(
                 "http://localhost:8000/fetch_offchain_info",
                 data={"request_id": request_id},
             ).json()
             if response:
                 return response
+                break
             else:
                 time.sleep(1)
         except Exception:  # pylint: disable=broad-except
@@ -689,7 +690,9 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             sleep=sleep,
         )
 
-        request_id = response.request_id
+        request_id = response["request_id"]
+        print(f"  - Created off-chain request with ID {request_id}")
+        print("")
 
         # @note as we are directly querying data from done task list, we get the data instead of the ipfs hash
         print("Waiting for Offchain Mech Marketplace deliver...")
