@@ -80,7 +80,7 @@
         },
         "gas_limit": 250000,
         "price": 10000000000000000,
-        "contract_abi_url": "https://api.celoscan.io/api?module=contract&action=getabi&address={contract_address}",
+        "contract_abi_url": "https://api.celoscan.io/api?module=contract&action=getabi&address={contract_address}&apikey={api_key}",
         "transaction_url": "https://celoscan.io/tx/{transaction_digest}",
         "subgraph_url": ""
     },
