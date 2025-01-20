@@ -367,6 +367,11 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     while tries < retries and datetime.now().timestamp() < deadline:
         tries += 1
         try:
+            nonce = marketplace_contract.functions.mapNonces(crypto.address).call()
+            request_id = marketplace_contract.functions.getRequestId(
+                crypto.address, method_args["data"], nonce
+            ).call()
+
             raw_transaction = ledger_api.build_transaction(
                 contract_instance=marketplace_contract,
                 method_name=method_name,
@@ -375,15 +380,31 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
                 raise_on_try=True,
             )
             signed_transaction = crypto.sign_transaction(raw_transaction)
+
+            # prepare the signature
+            v_hex = format(signed_transaction["v"], "x")
+            if len(v_hex) == 1:
+                v_hex = "0" + v_hex
+            concated_sig = (
+                str(signed_transaction["r"])[2:]
+                + str(signed_transaction["s"])[2:]
+                + v_hex
+            )
+            signature = "0x" + concated_sig
+
             payload = {
                 "sender": crypto.address,
-                "signed_tx": signed_transaction["raw_transaction"],
+                "requester_service_id": method_args["requesterServiceId"],
+                "signature": signature,
                 "ipfs_hash": v1_file_hash_hex_truncated,
+                "priority_mechService_id": method_args["priorityMechServiceId"],
+                "payment_data": method_args["paymentData"],
+                "request_id": request_id,
                 "contract_address": marketplace_contract.address,
             }
             # @todo changed hardcoded url
             response = requests.post(
-                "http://localhost:8000/send_signed_tx", data=payload
+                "http://localhost:8000/send_signed_requests", data=payload
             ).json()
             return response
 
@@ -690,12 +711,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             sleep=sleep,
         )
         request_id = response["request_id"]
-        tx_hash = response["tx_hash"]
-        transaction_url_formatted = mech_config.transaction_url.format(
-            transaction_digest=tx_hash
-        )
         print(f"  - Created off-chain request with ID {request_id}")
-        print(f"  - Transaction sent: {transaction_url_formatted}")
         print("")
 
         # @note as we are directly querying data from done task list, we get the full data instead of the ipfs hash
