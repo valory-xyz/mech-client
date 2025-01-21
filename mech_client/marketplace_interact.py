@@ -346,9 +346,8 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     )
     method_name = "request"
     method_args = {
-        "data": v1_file_hash_hex_truncated,
+        "requestData": v1_file_hash_hex_truncated,
         "priorityMechServiceId": method_args_data.priority_mech_service_id,
-        "requesterServiceId": method_args_data.requester_service_id,
         "responseTimeout": method_args_data.response_timeout,
         "paymentData": "0x",
     }
@@ -368,9 +367,12 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
         tries += 1
         try:
             nonce = marketplace_contract.functions.mapNonces(crypto.address).call()
+            # @todo change max delivery rate, using 1 wei for testing
+            delivery_rate = 1
             request_id = marketplace_contract.functions.getRequestId(
-                crypto.address, method_args["data"], nonce
+                crypto.address, method_args["requestData"], delivery_rate, nonce
             ).call()
+            request_id_int = int.from_bytes(request_id, byteorder="big")
 
             raw_transaction = ledger_api.build_transaction(
                 contract_instance=marketplace_contract,
@@ -394,12 +396,12 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
 
             payload = {
                 "sender": crypto.address,
-                "requester_service_id": method_args["requesterServiceId"],
                 "signature": signature,
                 "ipfs_hash": v1_file_hash_hex_truncated,
                 "priority_mechService_id": method_args["priorityMechServiceId"],
                 "payment_data": method_args["paymentData"],
-                "request_id": request_id,
+                "request_id": request_id_int,
+                "delivery_rate": delivery_rate,
                 "contract_address": marketplace_contract.address,
             }
             # @todo changed hardcoded url
