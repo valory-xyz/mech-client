@@ -77,7 +77,7 @@ CHAIN_TO_OLAS = {
 
 CHAIN_TO_DEFAULT_MECH_MARKETPLACE_CONFIG = {
     100: {
-        "mech_marketplace_contract": "0xfE48DbCb92EbE155054aBf6a8273f6be82D56232",
+        "mech_marketplace_contract": "0xfef449c4A02B880F1e45793d4ceA4ae16694a470",
         "priority_mech_service_id": 1,
         "requester_service_id": 0,
         "response_timeout": 300,
@@ -374,32 +374,7 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
                 crypto.address, method_args["requestData"], delivery_rate, nonce
             ).call()
             request_id_int = int.from_bytes(request_id, byteorder="big")
-
-            raw_transaction = ledger_api.build_transaction(
-                contract_instance=marketplace_contract,
-                method_name=method_name,
-                method_args=method_args,
-                tx_args=tx_args,
-                raise_on_try=True,
-            )
-            signed_transaction = crypto.sign_transaction(raw_transaction)
-
-            r = signed_transaction["r"]
-            s = signed_transaction["s"]
-            v = signed_transaction["v"]
-            r_bytes = int_to_big_endian(r).rjust(32, b"\x00")
-            s_bytes = int_to_big_endian(s).rjust(32, b"\x00")
-
-            # v is typically a single byte if it's 27 or 28 (or 0/1 in some contexts)
-            v_bytes = int_to_big_endian(v).rjust(1, b"\x00")
-
-            # Concatenate r, s, v
-            signature_bytes = r_bytes + s_bytes + v_bytes
-
-            # Return as a 0x-prefixed hex string
-            signature = "0x" + signature_bytes.hex()
-
-            print(f"{signature=}")
+            signature = crypto.sign_message(request_id, is_deprecated_mode=True)
 
             payload = {
                 "sender": crypto.address,
@@ -581,13 +556,13 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     # Expected parameters: agent id and agent registry contract address
     # Note: passing service id and service registry contract address as internal function calls are same
-    tool = verify_or_retrieve_tool(
-        agent_id=cast(int, mech_marketplace_config.priority_mech_service_id),
-        ledger_api=ledger_api,
-        tool=tool,
-        agent_registry_contract=mech_config.service_registry_contract,
-        contract_abi_url=mech_config.contract_abi_url,
-    )
+    # tool = verify_or_retrieve_tool(
+    #     agent_id=cast(int, mech_marketplace_config.priority_mech_service_id),
+    #     ledger_api=ledger_api,
+    #     tool=tool,
+    #     agent_registry_contract=mech_config.service_registry_contract,
+    #     contract_abi_url=mech_config.contract_abi_url,
+    # )
 
     with open(
         Path(__file__).parent / "abis" / "MechMarketplace.json", encoding="utf-8"
