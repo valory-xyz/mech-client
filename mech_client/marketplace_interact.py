@@ -28,6 +28,7 @@ from dataclasses import asdict, make_dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
+from eth_utils import int_to_big_endian
 
 import requests
 import websocket
@@ -383,26 +384,31 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
             )
             signed_transaction = crypto.sign_transaction(raw_transaction)
 
-            # prepare the signature
-            v_hex = format(signed_transaction["v"], "x")
-            if len(v_hex) == 1:
-                v_hex = "0" + v_hex
-            concated_sig = (
-                str(signed_transaction["r"])[2:]
-                + str(signed_transaction["s"])[2:]
-                + v_hex
-            )
-            signature = "0x" + concated_sig
+            r = signed_transaction["r"]
+            s = signed_transaction["s"]
+            v = signed_transaction["v"]
+            r_bytes = int_to_big_endian(r).rjust(32, b"\x00")
+            s_bytes = int_to_big_endian(s).rjust(32, b"\x00")
+
+            # v is typically a single byte if it's 27 or 28 (or 0/1 in some contexts)
+            v_bytes = int_to_big_endian(v).rjust(1, b"\x00")
+
+            # Concatenate r, s, v
+            signature_bytes = r_bytes + s_bytes + v_bytes
+
+            # Return as a 0x-prefixed hex string
+            signature = "0x" + signature_bytes.hex()
+
+            print(f"{signature=}")
 
             payload = {
                 "sender": crypto.address,
                 "signature": signature,
                 "ipfs_hash": v1_file_hash_hex_truncated,
-                "priority_mechService_id": method_args["priorityMechServiceId"],
+                "priority_mech_service_id": method_args["priorityMechServiceId"],
                 "payment_data": method_args["paymentData"],
                 "request_id": request_id_int,
                 "delivery_rate": delivery_rate,
-                "contract_address": marketplace_contract.address,
             }
             # @todo changed hardcoded url
             response = requests.post(
@@ -715,6 +721,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         request_id = response["request_id"]
         print(f"  - Created off-chain request with ID {request_id}")
         print("")
+        return
 
         # @note as we are directly querying data from done task list, we get the full data instead of the ipfs hash
         print("Waiting for Offchain Mech Marketplace deliver...")
