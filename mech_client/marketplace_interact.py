@@ -50,6 +50,7 @@ from mech_client.interact import (
     verify_or_retrieve_tool,
 )
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
+from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.wss import (
     register_event_handlers,
     wait_for_receipt,
@@ -64,6 +65,9 @@ PAYMENT_TYPE_NATIVE = (
 )
 PAYMENT_TYPE_TOKEN = (
     "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
+)
+PAYMENT_TYPE_NVM = (
+    "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
 )
 
 CHAIN_TO_OLAS = {
@@ -140,7 +144,7 @@ def fetch_mech_info(
         ).call()
     )
 
-    if payment_type not in [PAYMENT_TYPE_NATIVE, PAYMENT_TYPE_TOKEN]:
+    if payment_type not in [PAYMENT_TYPE_NATIVE, PAYMENT_TYPE_TOKEN, PAYMENT_TYPE_NVM]:
         print("  - Invalid mech type detected.")
         sys.exit(1)
 
@@ -339,23 +343,17 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     :return: The transaction hash.
     :rtype: Optional[str]
     """
-    v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
+    v1_file_hash_hex_truncated, v1_file_hash_hex, ipfs_data = fetch_ipfs_hash(
         prompt, tool, extra_attributes
     )
     print(
-        f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
+        f"  - Prompt will shortly be uploaded to: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
     )
-    method_name = "request"
     method_args = {
         "requestData": v1_file_hash_hex_truncated,
         "priorityMechServiceId": method_args_data.priority_mech_service_id,
         "responseTimeout": method_args_data.response_timeout,
         "paymentData": "0x",
-    }
-    tx_args = {
-        "sender_address": crypto.address,
-        "value": price,
-        "gas": gas_limit,
     }
 
     tries = 0
@@ -384,10 +382,14 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
                 "payment_data": method_args["paymentData"],
                 "request_id": request_id_int,
                 "delivery_rate": delivery_rate,
+                "nonce": nonce,
+                "ipfs_data": ipfs_data,
             }
             # @todo changed hardcoded url
             response = requests.post(
-                "http://localhost:8000/send_signed_requests", data=payload
+                "http://localhost:8000/send_signed_requests",
+                data=payload,
+                headers={"Content-Type": "application/json"},
             ).json()
             return response
 
