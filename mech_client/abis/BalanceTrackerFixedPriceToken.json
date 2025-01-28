@@ -8,12 +8,12 @@
             },
             {
                 "internalType": "address",
-                "name": "_buyBackBurner",
+                "name": "_drainer",
                 "type": "address"
             },
             {
                 "internalType": "address",
-                "name": "_olas",
+                "name": "_token",
                 "type": "address"
             }
         ],
@@ -66,32 +66,6 @@
     {
         "inputs": [],
         "name": "ReentrancyGuard",
-        "type": "error"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "token",
-                "type": "address"
-            },
-            {
-                "internalType": "address",
-                "name": "from",
-                "type": "address"
-            },
-            {
-                "internalType": "address",
-                "name": "to",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
-            }
-        ],
-        "name": "TransferFailed",
         "type": "error"
     },
     {
@@ -169,10 +143,35 @@
                 "type": "address"
             },
             {
-                "indexed": true,
+                "indexed": false,
                 "internalType": "uint256",
-                "name": "requestId",
+                "name": "deliveryRate",
                 "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "balance",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "rateDiff",
+                "type": "uint256"
+            }
+        ],
+        "name": "MechBalanceAdjusted",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "requester",
+                "type": "address"
             },
             {
                 "indexed": false,
@@ -183,11 +182,11 @@
             {
                 "indexed": false,
                 "internalType": "uint256",
-                "name": "rateDiff",
+                "name": "balance",
                 "type": "uint256"
             }
         ],
-        "name": "MechPaymentCalculated",
+        "name": "RequesterBalanceAdjusted",
         "type": "event"
     },
     {
@@ -230,15 +229,43 @@
     },
     {
         "inputs": [],
-        "name": "buyBackBurner",
+        "name": "MIN_MECH_BALANCE",
         "outputs": [
             {
-                "internalType": "address",
+                "internalType": "uint256",
                 "name": "",
-                "type": "address"
+                "type": "uint256"
             }
         ],
         "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "mech",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "requester",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "mechDeliveryRates",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "bytes",
+                "name": "paymentData",
+                "type": "bytes"
+            }
+        ],
+        "name": "adjustMechRequesterBalances",
+        "outputs": [],
+        "stateMutability": "nonpayable",
         "type": "function"
     },
     {
@@ -250,16 +277,21 @@
             },
             {
                 "internalType": "uint256",
-                "name": "maxDeliveryRate",
+                "name": "numRequests",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "deliveryRate",
                 "type": "uint256"
             },
             {
                 "internalType": "bytes",
-                "name": "",
+                "name": "paymentData",
                 "type": "bytes"
             }
         ],
-        "name": "checkAndRecordDeliveryRate",
+        "name": "checkAndRecordDeliveryRates",
         "outputs": [],
         "stateMutability": "payable",
         "type": "function"
@@ -291,10 +323,41 @@
         "type": "function"
     },
     {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+            }
+        ],
+        "name": "depositFor",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
         "inputs": [],
         "name": "drain",
         "outputs": [],
         "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "drainer",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
         "type": "function"
     },
     {
@@ -305,22 +368,27 @@
                 "type": "address"
             },
             {
-                "internalType": "address",
-                "name": "requester",
-                "type": "address"
+                "internalType": "address[]",
+                "name": "requesters",
+                "type": "address[]"
             },
             {
-                "internalType": "uint256",
-                "name": "requestId",
-                "type": "uint256"
+                "internalType": "bool[]",
+                "name": "deliveredRequests",
+                "type": "bool[]"
             },
             {
-                "internalType": "uint256",
-                "name": "maxDeliveryRate",
-                "type": "uint256"
+                "internalType": "uint256[]",
+                "name": "mechDeliveryRates",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "requesterDeliveryRates",
+                "type": "uint256[]"
             }
         ],
-        "name": "finalizeDeliveryRate",
+        "name": "finalizeDeliveryRates",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
@@ -378,29 +446,16 @@
     },
     {
         "inputs": [],
-        "name": "olas",
-        "outputs": [
-            {
-                "internalType": "address",
-                "name": "",
-                "type": "address"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
         "name": "processPayment",
         "outputs": [
             {
                 "internalType": "uint256",
-                "name": "",
+                "name": "mechPayment",
                 "type": "uint256"
             },
             {
                 "internalType": "uint256",
-                "name": "",
+                "name": "marketplaceFee",
                 "type": "uint256"
             }
         ],
@@ -419,12 +474,12 @@
         "outputs": [
             {
                 "internalType": "uint256",
-                "name": "",
+                "name": "mechPayment",
                 "type": "uint256"
             },
             {
                 "internalType": "uint256",
-                "name": "",
+                "name": "marketplaceFee",
                 "type": "uint256"
             }
         ],
@@ -433,9 +488,15 @@
     },
     {
         "inputs": [],
-        "name": "withdraw",
-        "outputs": [],
-        "stateMutability": "nonpayable",
+        "name": "token",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
         "type": "function"
     }
 ]
