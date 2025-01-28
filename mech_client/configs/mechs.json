@@ -102,55 +102,5 @@
         "contract_abi_url": "https://api-optimistic.etherscan.io/api?module=contract&action=getabi&address={contract_address}",
         "transaction_url": "https://optimistic.etherscan.io/tx/{transaction_digest}",
         "subgraph_url": ""
-    },
-    "chiado-native": {
-        "agent_registry_contract": "0x9dEc6B62c197268242A768dc3b153AE7a2701396",
-        "service_registry_contract": "0xd42BE26a1a227c4d4D7AdC69D8E11d05D035fF11",
-        "rpc_url": "https://virtual.gnosis.rpc.tenderly.co/790f0087-75b1-4daf-aaff-fc588f7ee125",
-        "wss_endpoint": "wss://gnosis-chiado-rpc.publicnode.com",
-        "ledger_config": {
-            "address": "https://virtual.gnosis.rpc.tenderly.co/790f0087-75b1-4daf-aaff-fc588f7ee125",
-            "chain_id": 10200,
-            "poa_chain": false,
-            "default_gas_price_strategy": "eip1559",
-            "is_gas_estimation_enabled": false
-        },
-        "mech_marketplace_config": {
-            "mech_marketplace_contract": "0xfef449c4A02B880F1e45793d4ceA4ae16694a470",
-            "priority_mech_service_id": 1,
-            "requester_service_id": 0,
-            "response_timeout": 300,
-            "payment_data": "0x"
-        },
-        "gas_limit": 500000,
-        "price": 1,
-        "contract_abi_url": "https://gnosis-chiado.blockscout.com/api/?module=contract&action=getabi&address={contract_address}",
-        "transaction_url": "https://gnosis-chiado.blockscout.com/tx/{transaction_digest}",
-        "subgraph_url": ""
-    },
-    "chiado-token": {
-        "agent_registry_contract": "0x9dEc6B62c197268242A768dc3b153AE7a2701396",
-        "service_registry_contract": "0x31D3202d8744B16A120117A053459DDFAE93c855",
-        "rpc_url": "https://rpc.chiadochain.net",
-        "wss_endpoint": "wss://gnosis-chiado-rpc.publicnode.com",
-        "ledger_config": {
-            "address": "https://rpc.chiadochain.net",
-            "chain_id": 10200,
-            "poa_chain": false,
-            "default_gas_price_strategy": "eip1559",
-            "is_gas_estimation_enabled": false
-        },
-        "mech_marketplace_config": {
-            "mech_marketplace_contract": "0x9fBC801359F14850457c96e2d8Da74F92EFa18B4",
-            "priority_mech_service_id": 2,
-            "requester_service_id": 0,
-            "response_timeout": 300,
-            "payment_data": "0x"
-        },
-        "gas_limit": 500000,
-        "price": 1,
-        "contract_abi_url": "https://gnosis-chiado.blockscout.com/api/?module=contract&action=getabi&address={contract_address}",
-        "transaction_url": "https://gnosis-chiado.blockscout.com/tx/{transaction_digest}",
-        "subgraph_url": ""
     }
 }
