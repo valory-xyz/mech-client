@@ -558,13 +558,13 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     # Expected parameters: agent id and agent registry contract address
     # Note: passing service id and service registry contract address as internal function calls are same
-    # tool = verify_or_retrieve_tool(
-    #     agent_id=cast(int, mech_marketplace_config.priority_mech_service_id),
-    #     ledger_api=ledger_api,
-    #     tool=tool,
-    #     agent_registry_contract=mech_config.service_registry_contract,
-    #     contract_abi_url=mech_config.contract_abi_url,
-    # )
+    tool = verify_or_retrieve_tool(
+        agent_id=cast(int, mech_marketplace_config.priority_mech_service_id),
+        ledger_api=ledger_api,
+        tool=tool,
+        agent_registry_contract=mech_config.service_registry_contract,
+        contract_abi_url=mech_config.contract_abi_url,
+    )
 
     with open(
         Path(__file__).parent / "abis" / "MechMarketplace.json", encoding="utf-8"
