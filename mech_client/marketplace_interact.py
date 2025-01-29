@@ -28,7 +28,6 @@ from dataclasses import asdict, make_dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
-from eth_utils import int_to_big_endian
 
 import requests
 import websocket
@@ -37,6 +36,7 @@ from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
 
+from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.interact import (
     ConfirmationType,
     MAX_RETRIES,
@@ -50,7 +50,6 @@ from mech_client.interact import (
     verify_or_retrieve_tool,
 )
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
-from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.wss import (
     register_event_handlers,
     wait_for_receipt,
@@ -301,9 +300,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
 
 def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
     crypto: EthereumCrypto,
-    ledger_api: EthereumApi,
     marketplace_contract: Web3Contract,
-    gas_limit: int,
     prompt: str,
     tool: str,
     method_args_data: MechMarketplaceConfig,
@@ -312,18 +309,14 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
-) -> Optional[str]:
+) -> Optional[Dict]:
     """
     Sends an offchain request to the mech.
 
     :param crypto: The Ethereum crypto object.
     :type crypto: EthereumCrypto
-    :param ledger_api: The Ethereum API used for interacting with the ledger.
-    :type ledger_api: EthereumApi
     :param marketplace_contract: The mech marketplace contract instance.
     :type marketplace_contract: Web3Contract
-    :param gas_limit: Gas limit.
-    :type gas_limit: int
     :param prompt: The request prompt.
     :type prompt: str
     :param tool: The requested tool.
@@ -340,8 +333,8 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     :type timeout: float
     :param sleep: Amount of sleep before retrying the transaction
     :type sleep: float
-    :return: The transaction hash.
-    :rtype: Optional[str]
+    :return: The dict containing request info.
+    :rtype: Optional[Dict]
     """
     v1_file_hash_hex_truncated, v1_file_hash_hex, ipfs_data = fetch_ipfs_hash(
         prompt, tool, extra_attributes
@@ -366,8 +359,7 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
         tries += 1
         try:
             nonce = marketplace_contract.functions.mapNonces(crypto.address).call()
-            # @todo change max delivery rate, using 1 wei for testing
-            delivery_rate = 1
+            delivery_rate = price
             request_id = marketplace_contract.functions.getRequestId(
                 crypto.address, method_args["requestData"], delivery_rate, nonce
             ).call()
@@ -478,7 +470,15 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     return result
 
 
-def wait_for_offchain_marketplace_data(request_id):
+def wait_for_offchain_marketplace_data(request_id: str) -> Any:
+    """
+    Watches for data off-chain on mech.
+
+    :param request_id: The ID of the request.
+    :type request_id: str
+    :return: The data returned by the mech.
+    :rtype: Any
+    """
     while True:
         try:
             # @todo change hardcoded url
@@ -488,14 +488,11 @@ def wait_for_offchain_marketplace_data(request_id):
             ).json()
             if response:
                 return response
-                break
-            else:
-                time.sleep(1)
         except Exception:  # pylint: disable=broad-except
             time.sleep(1)
 
 
-def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements
+def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
     prompt: str,
     use_prepaid: bool = False,
     use_offchain: bool = False,
@@ -513,6 +510,10 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     :param prompt: The interaction prompt.
     :type prompt: str
+    :param use_prepaid: Whether to use prepaid model or not.
+    :type use_prepaid: bool
+    :param use_offchain: Whether to use offchain model or not.
+    :type use_offchain: bool
     :param tool: The tool to interact with (optional).
     :type tool: Optional[str]
     :param extra_attributes: Extra attributes to be included in the request metadata (optional).
@@ -679,39 +680,39 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             return data
         return None
 
-    else:
-        print("Sending Offchain Mech Marketplace request...")
-        response = send_offchain_marketplace_request(
-            crypto=crypto,
-            ledger_api=ledger_api,
-            marketplace_contract=mech_marketplace_contract,
-            gas_limit=mech_config.gas_limit,
-            price=price,
-            prompt=prompt,
-            tool=tool,
-            method_args_data=mech_marketplace_config,
-            extra_attributes=extra_attributes,
-            retries=retries,
-            timeout=timeout,
-            sleep=sleep,
-        )
-        request_id = response["request_id"]
-        print(f"  - Created off-chain request with ID {request_id}")
-        print("")
-        return
+    print("Sending Offchain Mech Marketplace request...")
+    response = send_offchain_marketplace_request(
+        crypto=crypto,
+        marketplace_contract=mech_marketplace_contract,
+        price=price,
+        prompt=prompt,
+        tool=tool,
+        method_args_data=mech_marketplace_config,
+        extra_attributes=extra_attributes,
+        retries=retries,
+        timeout=timeout,
+        sleep=sleep,
+    )
 
-        # @note as we are directly querying data from done task list, we get the full data instead of the ipfs hash
-        print("Waiting for Offchain Mech Marketplace deliver...")
-        data = wait_for_offchain_marketplace_data(
-            request_id=request_id,
-        )
-
-        if data:
-            task_result = data["task_result"]
-            data_url = f"https://gateway.autonolas.tech/ipfs/f01701220{task_result}"
-            print(f"  - Data arrived: {data_url}")
-            data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
-            print("  - Data from agent:")
-            print(json.dumps(data, indent=2))
-            return data
+    if not response:
         return None
+
+    request_id = response["request_id"]
+    print(f"  - Created off-chain request with ID {request_id}")
+    print("")
+
+    # @note as we are directly querying data from done task list, we get the full data instead of the ipfs hash
+    print("Waiting for Offchain Mech Marketplace deliver...")
+    data = wait_for_offchain_marketplace_data(
+        request_id=request_id,
+    )
+
+    if data:
+        task_result = data["task_result"]
+        data_url = f"https://gateway.autonolas.tech/ipfs/f01701220{task_result}"
+        print(f"  - Data arrived: {data_url}")
+        data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+        print("  - Data from agent:")
+        print(json.dumps(data, indent=2))
+        return data
+    return None

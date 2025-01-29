@@ -25,31 +25,31 @@ Usage:
 python fetch_ipfs_hash.py <data>
 """
 
-from typing import Tuple
-
-import multibase
-import multicodec
 import json
-import uuid
 import shutil
 import tempfile
+import uuid
+from typing import Any, Dict, Optional, Tuple
+
 from aea.helpers.ipfs.base import IPFSHashOnly
 from multibase import multibase
 from multicodec import multicodec
-from typing import Any, Dict, Optional, Tuple
 
 
 def fetch_ipfs_hash(
     prompt: str, tool: str, extra_attributes: Optional[Dict[str, Any]] = None
-) -> Tuple[str, str, str]:
+) -> Tuple[Any, Any, bytes]:
     """
     Fetches IPFS hash of the data.
 
-    :param file_path: Path of the file to be pushed to IPFS.
-    :type file_path: str
-
-    :return: A tuple containing v1_file_hash and v1_file_hash_hex.
-    :rtype: Tuple[str, str]
+    :param prompt: Prompt string.
+    :type prompt: str
+    :param tool: Tool string.
+    :type tool: str
+    :param extra_attributes: Extra attributes to be included in the request metadata.
+    :type extra_attributes: Optional[Dict[str,Any]]
+    :return: Tuple containing the IPFS hash, truncated IPFS hash and the metadata for which the hash was calculated.
+    :rtype: Tuple[str, str, bytes]
     """
     metadata = {"prompt": prompt, "tool": tool, "nonce": str(uuid.uuid4())}
     if extra_attributes:
@@ -84,5 +84,5 @@ def main(prompt: str, tool: str) -> None:
     :type tool: str
     """
 
-    v1_file_hash, v1_file_hash_hex, _ = fetch_ipfs_hash(prompt, tool)
+    v1_file_hash, _, _ = fetch_ipfs_hash(prompt, tool)
     print("IPFS file hash v1: {}".format(v1_file_hash))

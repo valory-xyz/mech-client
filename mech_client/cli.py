@@ -103,7 +103,7 @@ def cli() -> None:
     type=str,
     help="Id of the mech's chain configuration (stored configs/mechs.json)",
 )
-def interact(  # pylint: disable=too-many-arguments
+def interact(  # pylint: disable=too-many-arguments,too-many-locals
     prompt: str,
     agent_id: int,
     use_prepaid: bool,
