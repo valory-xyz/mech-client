@@ -28,6 +28,7 @@ from dataclasses import asdict, make_dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
+from eth_utils import int_to_big_endian
 
 import requests
 import websocket
@@ -49,6 +50,7 @@ from mech_client.interact import (
     verify_or_retrieve_tool,
 )
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
+from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.wss import (
     register_event_handlers,
     wait_for_receipt,
@@ -64,6 +66,9 @@ PAYMENT_TYPE_NATIVE = (
 PAYMENT_TYPE_TOKEN = (
     "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
 )
+PAYMENT_TYPE_NVM = (
+    "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
+)
 
 CHAIN_TO_OLAS = {
     1: "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
@@ -76,7 +81,7 @@ CHAIN_TO_OLAS = {
 
 CHAIN_TO_DEFAULT_MECH_MARKETPLACE_CONFIG = {
     100: {
-        "mech_marketplace_contract": "0xfE48DbCb92EbE155054aBf6a8273f6be82D56232",
+        "mech_marketplace_contract": "0xfef449c4A02B880F1e45793d4ceA4ae16694a470",
         "priority_mech_service_id": 1,
         "requester_service_id": 0,
         "response_timeout": 300,
@@ -139,7 +144,7 @@ def fetch_mech_info(
         ).call()
     )
 
-    if payment_type not in [PAYMENT_TYPE_NATIVE, PAYMENT_TYPE_TOKEN]:
+    if payment_type not in [PAYMENT_TYPE_NATIVE, PAYMENT_TYPE_TOKEN, PAYMENT_TYPE_NVM]:
         print("  - Invalid mech type detected.")
         sys.exit(1)
 
@@ -294,6 +299,108 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     return None
 
 
+def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
+    crypto: EthereumCrypto,
+    ledger_api: EthereumApi,
+    marketplace_contract: Web3Contract,
+    gas_limit: int,
+    prompt: str,
+    tool: str,
+    method_args_data: MechMarketplaceConfig,
+    extra_attributes: Optional[Dict[str, Any]] = None,
+    price: int = 10_000_000_000_000_000,
+    retries: Optional[int] = None,
+    timeout: Optional[float] = None,
+    sleep: Optional[float] = None,
+) -> Optional[str]:
+    """
+    Sends an offchain request to the mech.
+
+    :param crypto: The Ethereum crypto object.
+    :type crypto: EthereumCrypto
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param marketplace_contract: The mech marketplace contract instance.
+    :type marketplace_contract: Web3Contract
+    :param gas_limit: Gas limit.
+    :type gas_limit: int
+    :param prompt: The request prompt.
+    :type prompt: str
+    :param tool: The requested tool.
+    :type tool: str
+    :param method_args_data: Method data to use to call the marketplace contract request
+    :type method_args_data: MechMarketplaceConfig
+    :param extra_attributes: Extra attributes to be included in the request metadata.
+    :type extra_attributes: Optional[Dict[str,Any]]
+    :param price: The price for the request (default: 10_000_000_000_000_000).
+    :type price: int
+    :param retries: Number of retries for sending a transaction
+    :type retries: int
+    :param timeout: Timeout to wait for the transaction
+    :type timeout: float
+    :param sleep: Amount of sleep before retrying the transaction
+    :type sleep: float
+    :return: The transaction hash.
+    :rtype: Optional[str]
+    """
+    v1_file_hash_hex_truncated, v1_file_hash_hex, ipfs_data = fetch_ipfs_hash(
+        prompt, tool, extra_attributes
+    )
+    print(
+        f"  - Prompt will shortly be uploaded to: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
+    )
+    method_args = {
+        "requestData": v1_file_hash_hex_truncated,
+        "priorityMechServiceId": method_args_data.priority_mech_service_id,
+        "responseTimeout": method_args_data.response_timeout,
+        "paymentData": "0x",
+    }
+
+    tries = 0
+    retries = retries or MAX_RETRIES
+    timeout = timeout or TIMEOUT
+    sleep = sleep or WAIT_SLEEP
+    deadline = datetime.now().timestamp() + timeout
+
+    while tries < retries and datetime.now().timestamp() < deadline:
+        tries += 1
+        try:
+            nonce = marketplace_contract.functions.mapNonces(crypto.address).call()
+            # @todo change max delivery rate, using 1 wei for testing
+            delivery_rate = 1
+            request_id = marketplace_contract.functions.getRequestId(
+                crypto.address, method_args["requestData"], delivery_rate, nonce
+            ).call()
+            request_id_int = int.from_bytes(request_id, byteorder="big")
+            signature = crypto.sign_message(request_id, is_deprecated_mode=True)
+
+            payload = {
+                "sender": crypto.address,
+                "signature": signature,
+                "ipfs_hash": v1_file_hash_hex_truncated,
+                "priority_mech_service_id": method_args["priorityMechServiceId"],
+                "payment_data": method_args["paymentData"],
+                "request_id": request_id_int,
+                "delivery_rate": delivery_rate,
+                "nonce": nonce,
+                "ipfs_data": ipfs_data,
+            }
+            # @todo changed hardcoded url
+            response = requests.post(
+                "http://localhost:8000/send_signed_requests",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            ).json()
+            return response
+
+        except Exception as e:  # pylint: disable=broad-except
+            print(
+                f"Error occured while sending the offchain request: {e}; Retrying in {sleep}"
+            )
+            time.sleep(sleep)
+    return None
+
+
 def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused-argument
     request_id: str,
     wss: websocket.WebSocket,
@@ -371,8 +478,27 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     return result
 
 
+def wait_for_offchain_marketplace_data(request_id):
+    while True:
+        try:
+            # @todo change hardcoded url
+            response = requests.get(
+                "http://localhost:8000/fetch_offchain_info",
+                data={"request_id": request_id},
+            ).json()
+            if response:
+                return response
+                break
+            else:
+                time.sleep(1)
+        except Exception:  # pylint: disable=broad-except
+            time.sleep(1)
+
+
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements
     prompt: str,
+    use_prepaid: bool = False,
+    use_offchain: bool = False,
     tool: Optional[str] = None,
     extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
@@ -462,86 +588,130 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         deliver_signature=marketplace_deliver_event_signature,
     )
 
-    print("Fetching Mech Info...")
-    priority_mech_service_id = cast(
-        int, mech_marketplace_config.priority_mech_service_id
-    )
-    (payment_type, mech_payment_balance_tracker) = fetch_mech_info(
-        ledger_api,
-        mech_marketplace_contract,
-        priority_mech_service_id,
-    )
-
-    price = mech_config.price or 10_000_000_000_000_000
-    if payment_type == PAYMENT_TYPE_TOKEN:
-        print("Token Mech detected, approving OLAS for price payment...")
-        olas = CHAIN_TO_OLAS[chain_id]
-        approve_tx = approve_price_tokens(
-            crypto, ledger_api, olas, mech_payment_balance_tracker, price
+    if not use_prepaid:
+        print("Fetching Mech Info...")
+        priority_mech_service_id = cast(
+            int, mech_marketplace_config.priority_mech_service_id
         )
-        if not approve_tx:
-            print("Unable to approve allowance")
+        (payment_type, mech_payment_balance_tracker) = fetch_mech_info(
+            ledger_api,
+            mech_marketplace_contract,
+            priority_mech_service_id,
+        )
+
+        price = mech_config.price or 10_000_000_000_000_000
+        if payment_type == PAYMENT_TYPE_TOKEN:
+            print("Token Mech detected, approving OLAS for price payment...")
+            olas = CHAIN_TO_OLAS[chain_id]
+            approve_tx = approve_price_tokens(
+                crypto, ledger_api, olas, mech_payment_balance_tracker, price
+            )
+            if not approve_tx:
+                print("Unable to approve allowance")
+                return None
+
+            transaction_url_formatted = mech_config.transaction_url.format(
+                transaction_digest=approve_tx
+            )
+            print(f"  - Transaction sent: {transaction_url_formatted}")
+            print("  - Waiting for transaction receipt...")
+            wait_for_receipt(approve_tx, ledger_api)
+            # set price 0 to not send any msg.value in request transaction for token type mech
+            price = 0
+
+    else:
+        print("Prepaid request to be used, skipping payment")
+        price = 0
+
+    if not use_offchain:
+        print("Sending Mech Marketplace request...")
+        transaction_digest = send_marketplace_request(
+            crypto=crypto,
+            ledger_api=ledger_api,
+            marketplace_contract=mech_marketplace_contract,
+            gas_limit=mech_config.gas_limit,
+            price=price,
+            prompt=prompt,
+            tool=tool,
+            method_args_data=mech_marketplace_config,
+            extra_attributes=extra_attributes,
+            retries=retries,
+            timeout=timeout,
+            sleep=sleep,
+        )
+
+        if not transaction_digest:
+            print("Unable to send request")
             return None
 
         transaction_url_formatted = mech_config.transaction_url.format(
-            transaction_digest=approve_tx
+            transaction_digest=transaction_digest
         )
         print(f"  - Transaction sent: {transaction_url_formatted}")
         print("  - Waiting for transaction receipt...")
-        wait_for_receipt(approve_tx, ledger_api)
-        # set price 0 to not send any msg.value in request transaction for token type mech
-        price = 0
 
-    print("Sending Mech Marketplace request...")
-    transaction_digest = send_marketplace_request(
-        crypto=crypto,
-        ledger_api=ledger_api,
-        marketplace_contract=mech_marketplace_contract,
-        gas_limit=mech_config.gas_limit,
-        price=price,
-        prompt=prompt,
-        tool=tool,
-        method_args_data=mech_marketplace_config,
-        extra_attributes=extra_attributes,
-        retries=retries,
-        timeout=timeout,
-        sleep=sleep,
-    )
+        request_id = watch_for_marketplace_request_id(
+            wss=wss,
+            marketplace_contract=mech_marketplace_contract,
+            ledger_api=ledger_api,
+            request_signature=marketplace_request_event_signature,
+        )
+        print(f"  - Created on-chain request with ID {request_id}")
+        print("")
 
-    if not transaction_digest:
-        print("Unable to send request")
+        print("Waiting for Mech Marketplace deliver...")
+        data_url = wait_for_marketplace_data_url(
+            request_id=request_id,
+            wss=wss,
+            marketplace_contract=mech_marketplace_contract,
+            subgraph_url=mech_config.subgraph_url,
+            deliver_signature=marketplace_deliver_event_signature,
+            ledger_api=ledger_api,
+            crypto=crypto,
+            confirmation_type=confirmation_type,
+        )
+
+        if data_url:
+            print(f"  - Data arrived: {data_url}")
+            data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+            print("  - Data from agent:")
+            print(json.dumps(data, indent=2))
+            return data
         return None
 
-    transaction_url_formatted = mech_config.transaction_url.format(
-        transaction_digest=transaction_digest
-    )
-    print(f"  - Transaction sent: {transaction_url_formatted}")
-    print("  - Waiting for transaction receipt...")
+    else:
+        print("Sending Offchain Mech Marketplace request...")
+        response = send_offchain_marketplace_request(
+            crypto=crypto,
+            ledger_api=ledger_api,
+            marketplace_contract=mech_marketplace_contract,
+            gas_limit=mech_config.gas_limit,
+            price=price,
+            prompt=prompt,
+            tool=tool,
+            method_args_data=mech_marketplace_config,
+            extra_attributes=extra_attributes,
+            retries=retries,
+            timeout=timeout,
+            sleep=sleep,
+        )
+        request_id = response["request_id"]
+        print(f"  - Created off-chain request with ID {request_id}")
+        print("")
+        return
 
-    request_id = watch_for_marketplace_request_id(
-        wss=wss,
-        marketplace_contract=mech_marketplace_contract,
-        ledger_api=ledger_api,
-        request_signature=marketplace_request_event_signature,
-    )
-    print(f"  - Created on-chain request with ID {request_id}")
-    print("")
+        # @note as we are directly querying data from done task list, we get the full data instead of the ipfs hash
+        print("Waiting for Offchain Mech Marketplace deliver...")
+        data = wait_for_offchain_marketplace_data(
+            request_id=request_id,
+        )
 
-    print("Waiting for Mech Marketplace deliver...")
-    data_url = wait_for_marketplace_data_url(
-        request_id=request_id,
-        wss=wss,
-        marketplace_contract=mech_marketplace_contract,
-        subgraph_url=mech_config.subgraph_url,
-        deliver_signature=marketplace_deliver_event_signature,
-        ledger_api=ledger_api,
-        crypto=crypto,
-        confirmation_type=confirmation_type,
-    )
-    if data_url:
-        print(f"  - Data arrived: {data_url}")
-        data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
-        print("  - Data from agent:")
-        print(json.dumps(data, indent=2))
-        return data
-    return None
+        if data:
+            task_result = data["task_result"]
+            data_url = f"https://gateway.autonolas.tech/ipfs/f01701220{task_result}"
+            print(f"  - Data arrived: {data_url}")
+            data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+            print("  - Data from agent:")
+            print(json.dumps(data, indent=2))
+            return data
+        return None

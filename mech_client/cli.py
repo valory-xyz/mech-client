@@ -50,6 +50,16 @@ def cli() -> None:
 @click.argument("prompt")
 @click.option("--agent_id", type=int, help="Id of the agent to be used")
 @click.option(
+    "--use-prepaid",
+    type=bool,
+    help="Uses the prepaid model for marketplace requests",
+)
+@click.option(
+    "--use-offchain",
+    type=bool,
+    help="Uses the offchain model for marketplace requests",
+)
+@click.option(
     "--key",
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="Path to private key to use for request minting",
@@ -96,6 +106,8 @@ def cli() -> None:
 def interact(  # pylint: disable=too-many-arguments
     prompt: str,
     agent_id: int,
+    use_prepaid: bool,
+    use_offchain: bool,
     key: Optional[str],
     tool: Optional[str],
     extra_attribute: Optional[List[str]] = None,
@@ -113,9 +125,14 @@ def interact(  # pylint: disable=too-many-arguments
                 k, v = pair.split("=")
                 extra_attributes_dict[k] = v
 
+        use_prepaid = use_prepaid or False
+        use_offchain = use_offchain or False
+
         if agent_id is None:
             marketplace_interact_(
                 prompt=prompt,
+                use_prepaid=use_prepaid,
+                use_offchain=use_offchain,
                 private_key_path=key,
                 tool=tool,
                 extra_attributes=extra_attributes_dict,
@@ -131,6 +148,16 @@ def interact(  # pylint: disable=too-many-arguments
             )
 
         else:
+            if use_prepaid:
+                raise Exception(
+                    "Prepaid model can only be used for marketplace requests"
+                )
+
+            if use_offchain:
+                raise Exception(
+                    "Offchain model can only be used for marketplace requests"
+                )
+
             interact_(
                 prompt=prompt,
                 agent_id=agent_id,
@@ -147,7 +174,7 @@ def interact(  # pylint: disable=too-many-arguments
                 sleep=sleep,
                 chain_config=chain_config,
             )
-    except (ValueError, FileNotFoundError) as e:
+    except (ValueError, FileNotFoundError, Exception) as e:
         raise click.ClickException(str(e)) from e
 
 
