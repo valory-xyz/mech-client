@@ -82,7 +82,6 @@ CHAIN_TO_DEFAULT_MECH_MARKETPLACE_CONFIG = {
     100: {
         "mech_marketplace_contract": "0xfef449c4A02B880F1e45793d4ceA4ae16694a470",
         "priority_mech_service_id": 1,
-        "requester_service_id": 0,
         "response_timeout": 300,
         "payment_data": "0x",
     }
@@ -256,9 +255,8 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     )
     method_name = "request"
     method_args = {
-        "data": v1_file_hash_hex_truncated,
+        "requestData": v1_file_hash_hex_truncated,
         "priorityMechServiceId": method_args_data.priority_mech_service_id,
-        "requesterServiceId": method_args_data.requester_service_id,
         "responseTimeout": method_args_data.response_timeout,
         "paymentData": "0x",
     }
