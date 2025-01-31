@@ -256,9 +256,8 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     )
     method_name = "request"
     method_args = {
-        "data": v1_file_hash_hex_truncated,
+        "requestData": v1_file_hash_hex_truncated,
         "priorityMechServiceId": method_args_data.priority_mech_service_id,
-        "requesterServiceId": method_args_data.requester_service_id,
         "responseTimeout": method_args_data.response_timeout,
         "paymentData": "0x",
     }
