@@ -80,8 +80,8 @@ CHAIN_TO_OLAS = {
 
 CHAIN_TO_DEFAULT_MECH_MARKETPLACE_CONFIG = {
     100: {
-        "mech_marketplace_contract": "0xfef449c4A02B880F1e45793d4ceA4ae16694a470",
-        "priority_mech_service_id": 1,
+        "mech_marketplace_contract": "0x85dca9b0e27ddecdb7c657616e34967d2711db55",
+        "priority_mech_service_id": 1722,
         "response_timeout": 300,
         "payment_data": "0x",
     }
@@ -201,6 +201,44 @@ def approve_price_tokens(
         raise_on_try=True,
     )
     return transaction_digest
+
+
+def fetch_requester_nvm_subscription_balance(
+    requester: str,
+    ledger_api: EthereumApi,
+    mech_payment_balance_tracker: str,
+) -> str:
+
+    with open(
+        Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionNative.json",
+        encoding="utf-8",
+    ) as f:
+        abi = json.load(f)
+
+    nvm_balance_tracker_contract = get_contract(
+        contract_address=mech_payment_balance_tracker, abi=abi, ledger_api=ledger_api
+    )
+    subscription_nft_address = (
+        nvm_balance_tracker_contract.functions.subscriptionNFT().call()
+    )
+    subscription_id = (
+        nvm_balance_tracker_contract.functions.subscriptionTokenId().call()
+    )
+
+    with open(
+        Path(__file__).parent / "abis" / "IERC1155.json",
+        encoding="utf-8",
+    ) as f:
+        abi = json.load(f)
+
+    subscription_nft_contract = get_contract(
+        contract_address=subscription_nft_address, abi=abi, ledger_api=ledger_api
+    )
+    requester_balance = subscription_nft_contract.functions.balanceOf(
+        requester, subscription_id
+    ).call()
+
+    return requester_balance
 
 
 def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
@@ -616,6 +654,23 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             print("  - Waiting for transaction receipt...")
             wait_for_receipt(approve_tx, ledger_api)
             # set price 0 to not send any msg.value in request transaction for token type mech
+            price = 0
+
+        if payment_type == PAYMENT_TYPE_NVM:
+            print("Nevermined Mech detected, subscription credits to be used")
+            requester = crypto.address
+            requester_balance = fetch_requester_nvm_subscription_balance(
+                requester, ledger_api, mech_payment_balance_tracker
+            )
+            print(f"{requester_balance=}")
+            print(f"{price=}")
+            if requester_balance < price:
+                print(
+                    f"  - Sender Subscription balance low. Needed: {price}, Actual: {requester_balance}"
+                )
+                print(f"  - Sender Address: {requester}")
+                sys.exit(1)
+
             price = 0
 
     else:
