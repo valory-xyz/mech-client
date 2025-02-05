@@ -207,8 +207,19 @@ def fetch_requester_nvm_subscription_balance(
     requester: str,
     ledger_api: EthereumApi,
     mech_payment_balance_tracker: str,
-) -> str:
+) -> int:
+    """
+    Fetches the requester nvm subscription balance.
 
+    :param requester: The requester's address.
+    :type requester: str
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param mech_payment_balance_tracker: Requested mech's balance tracker contract address
+    :type mech_payment_balance_tracker: str
+    :return: The requester balance.
+    :rtype: int
+    """
     with open(
         Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionNative.json",
         encoding="utf-8",
@@ -662,8 +673,6 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             requester_balance = fetch_requester_nvm_subscription_balance(
                 requester, ledger_api, mech_payment_balance_tracker
             )
-            print(f"{requester_balance=}")
-            print(f"{price=}")
             if requester_balance < price:
                 print(
                     f"  - Sender Subscription balance low. Needed: {price}, Actual: {requester_balance}"
@@ -671,6 +680,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
                 print(f"  - Sender Address: {requester}")
                 sys.exit(1)
 
+            # set price 0 to not send any msg.value in request transaction for nvm type mech
             price = 0
 
     else:
