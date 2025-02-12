@@ -101,24 +101,6 @@ class LedgerConfig:
 
 
 @dataclass
-class MechMarketplaceConfig:
-    """Mech Marketplace Config"""
-
-    mech_marketplace_contract: Optional[str] = field(default=None)
-    priority_mech_address: Optional[str] = field(default=None)
-
-    def __post_init__(self) -> None:
-        """Post initialization"""
-        fields = asdict(self)
-
-        missing_fields = [field for field, value in fields.items() if value is None]
-        if any(value is not None for value in fields.values()) and missing_fields:
-            raise ValueError(
-                f"Missing values for the following fields: {', '.join(missing_fields)}"
-            )
-
-
-@dataclass
 class MechMarketplaceRequestConfig:
     """Mech Marketplace Request Config"""
 

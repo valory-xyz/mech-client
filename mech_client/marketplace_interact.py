@@ -33,7 +33,7 @@ import requests
 import websocket
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
-from eth_utils.address import to_checksum_address
+from eth_utils import to_checksum_address
 from web3.contract import Contract as Web3Contract
 
 from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
@@ -105,7 +105,7 @@ def fetch_mech_info(
     ledger_api: EthereumApi,
     mech_marketplace_contract: Web3Contract,
     priority_mech_address: str,
-) -> Tuple[str, int, str, str]:
+) -> Tuple[str, int, int, str]:
     """
     Fetchs the info of the requested mech.
 
@@ -116,7 +116,7 @@ def fetch_mech_info(
     :param priority_mech_address: Requested mech address
     :type priority_mech_address: str
     :return: The mech info containing payment_type, service_id, max_delivery_rate and mech_payment_balance_tracker.
-    :rtype: Tuple[str, int, str, str]
+    :rtype: Tuple[str, int, int, str]
     """
 
     with open(Path(__file__).parent / "abis" / "IMech.json", encoding="utf-8") as f:
@@ -302,7 +302,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     method_args = {
         "requestData": v1_file_hash_hex_truncated,
         "maxDeliveryRate": method_args_data.delivery_rate,
-        "paymentType": "0x" + method_args_data.payment_type,
+        "paymentType": "0x" + cast(str, method_args_data.payment_type),
         "priorityMech": to_checksum_address(method_args_data.priority_mech_address),
         "responseTimeout": method_args_data.response_timeout,
         "paymentData": method_args_data.payment_data,
@@ -390,7 +390,7 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     method_args = {
         "requestData": v1_file_hash_hex_truncated,
         "maxDeliveryRate": method_args_data.delivery_rate,
-        "paymentType": "0x" + method_args_data.payment_type,
+        "paymentType": "0x" + cast(str, method_args_data.payment_type),
         "priorityMech": to_checksum_address(method_args_data.priority_mech_address),
         "responseTimeout": method_args_data.response_timeout,
         "paymentData": method_args_data.payment_data,
@@ -629,12 +629,15 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     priority_mech_address = cast(
         str, mech_marketplace_request_config.priority_mech_address
     )
-    (payment_type, service_id, max_delivery_rate, mech_payment_balance_tracker) = (
-        fetch_mech_info(
-            ledger_api,
-            mech_marketplace_contract,
-            priority_mech_address,
-        )
+    (
+        payment_type,
+        service_id,
+        max_delivery_rate,
+        mech_payment_balance_tracker,
+    ) = fetch_mech_info(
+        ledger_api,
+        mech_marketplace_contract,
+        priority_mech_address,
     )
     mech_marketplace_request_config.delivery_rate = max_delivery_rate
     mech_marketplace_request_config.payment_type = payment_type
