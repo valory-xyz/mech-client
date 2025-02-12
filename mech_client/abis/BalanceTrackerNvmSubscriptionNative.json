@@ -586,19 +586,6 @@
         "inputs": [
             {
                 "internalType": "address",
-                "name": "requester",
-                "type": "address"
-            }
-        ],
-        "name": "redeemRequesterCredits",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
                 "name": "_subscriptionNFT",
                 "type": "address"
             },
