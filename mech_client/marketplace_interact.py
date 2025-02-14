@@ -73,15 +73,16 @@ CHAIN_TO_WRAPPED_TOKEN = {
     1: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     10: "0x4200000000000000000000000000000000000006",
     100: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
-    137: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+    137: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
     8453: "0x4200000000000000000000000000000000000006",
-    42220: "0x66803FB87aBd4aaC3cbB3fAd7C3aa01f6F3FB207",
+    42220: "0x471EcE3750Da237f93B8E339c536989b8978a438",
 }
+
 
 CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
     100: {
-        "mech_marketplace_contract": "0x74867dC703Cc99D0C537Cd8385308B31D15D81f3",
-        "priority_mech_address": "0x9322F08ffCCc5Ecb2Fb5417B02b43369FE3dc45d",
+        "mech_marketplace_contract": "0xad380C51cd5297FbAE43494dD5D407A2a3260b58",
+        "priority_mech_address": "0x80e5a22fe1fbf8159c13b58811669e028a0b16ff",
         "response_timeout": 300,
         "payment_data": "0x",
     }
@@ -350,7 +351,6 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     tool: str,
     method_args_data: MechMarketplaceRequestConfig,
     extra_attributes: Optional[Dict[str, Any]] = None,
-    price: int = 10_000_000_000_000_000,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
@@ -406,9 +406,14 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
         tries += 1
         try:
             nonce = marketplace_contract.functions.mapNonces(crypto.address).call()
-            delivery_rate = price
+            delivery_rate = method_args["maxDeliveryRate"]
             request_id = marketplace_contract.functions.getRequestId(
-                crypto.address, method_args["requestData"], delivery_rate, nonce
+                method_args["priorityMech"],
+                crypto.address,
+                method_args["requestData"],
+                method_args["maxDeliveryRate"],
+                method_args["paymentType"],
+                nonce,
             ).call()
             request_id_int = int.from_bytes(request_id, byteorder="big")
             signature = crypto.sign_message(request_id, is_deprecated_mode=True)
@@ -417,8 +422,6 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
                 "sender": crypto.address,
                 "signature": signature,
                 "ipfs_hash": v1_file_hash_hex_truncated,
-                "priority_mech_service_id": method_args["priorityMechServiceId"],
-                "payment_data": method_args["paymentData"],
                 "request_id": request_id_int,
                 "delivery_rate": delivery_rate,
                 "nonce": nonce,
@@ -537,6 +540,61 @@ def wait_for_offchain_marketplace_data(request_id: str) -> Any:
                 return response
         except Exception:  # pylint: disable=broad-except
             time.sleep(1)
+
+
+def check_prepaid_balances(
+    crypto,
+    ledger_api,
+    mech_payment_balance_tracker,
+    payment_type,
+    max_delivery_rate,
+):
+    requester = crypto.address
+    if payment_type == PAYMENT_TYPE_NATIVE:
+        with open(
+            Path(__file__).parent / "abis" / "BalanceTrackerFixedPriceNative.json",
+            encoding="utf-8",
+        ) as f:
+            abi = json.load(f)
+
+        balance_tracker_contract = get_contract(
+            contract_address=mech_payment_balance_tracker,
+            abi=abi,
+            ledger_api=ledger_api,
+        )
+        requester_balance = balance_tracker_contract.functions.mapRequesterBalances(
+            requester
+        ).call()
+        if requester_balance < max_delivery_rate:
+            print(
+                f"  - Sender Native deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
+            )
+            print(f"  - Sender Address: {requester}")
+            print("  - Please use scripts/deposit_native.py to add balance")
+            sys.exit(1)
+
+    if payment_type == PAYMENT_TYPE_TOKEN:
+        with open(
+            Path(__file__).parent / "abis" / "BalanceTrackerFixedPriceToken.json",
+            encoding="utf-8",
+        ) as f:
+            abi = json.load(f)
+
+        balance_tracker_contract = get_contract(
+            contract_address=mech_payment_balance_tracker,
+            abi=abi,
+            ledger_api=ledger_api,
+        )
+        requester_balance = balance_tracker_contract.functions.mapRequesterBalances(
+            requester
+        ).call()
+        if requester_balance < max_delivery_rate:
+            print(
+                f"  - Sender Token deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
+            )
+            print(f"  - Sender Address: {requester}")
+            print("  - Please use scripts/deposit_token.py to add balance")
+            sys.exit(1)
 
 
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
@@ -686,24 +744,32 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             # set price 0 to not send any msg.value in request transaction for token type mech
             price = 0
 
-        if payment_type == PAYMENT_TYPE_NVM:
-            print("Nevermined Mech detected, subscription credits to be used")
-            requester = crypto.address
-            requester_balance = fetch_requester_nvm_subscription_balance(
-                requester, ledger_api, mech_payment_balance_tracker
-            )
-            if requester_balance < price:
-                print(
-                    f"  - Sender Subscription balance low. Needed: {price}, Actual: {requester_balance}"
-                )
-                print(f"  - Sender Address: {requester}")
-                sys.exit(1)
-
-            # set price 0 to not send any msg.value in request transaction for nvm type mech
-            price = 0
-
     else:
         print("Prepaid request to be used, skipping payment")
+        price = 0
+
+        check_prepaid_balances(
+            crypto,
+            ledger_api,
+            mech_payment_balance_tracker,
+            payment_type,
+            max_delivery_rate,
+        )
+
+    if payment_type == PAYMENT_TYPE_NVM:
+        print("Nevermined Mech detected, subscription credits to be used")
+        requester = crypto.address
+        requester_balance = fetch_requester_nvm_subscription_balance(
+            requester, ledger_api, mech_payment_balance_tracker
+        )
+        if requester_balance < price:
+            print(
+                f"  - Sender Subscription balance low. Needed: {price}, Actual: {requester_balance}"
+            )
+            print(f"  - Sender Address: {requester}")
+            sys.exit(1)
+
+        # set price 0 to not send any msg.value in request transaction for nvm type mech
         price = 0
 
     if not use_offchain:
@@ -766,7 +832,6 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     response = send_offchain_marketplace_request(
         crypto=crypto,
         marketplace_contract=mech_marketplace_contract,
-        price=price,
         prompt=prompt,
         tool=tool,
         method_args_data=mech_marketplace_request_config,

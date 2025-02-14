@@ -125,8 +125,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 k, v = pair.split("=")
                 extra_attributes_dict[k] = v
 
-        use_prepaid = use_prepaid or False
         use_offchain = use_offchain or False
+        use_prepaid = use_prepaid or use_offchain
 
         if agent_id is None:
             marketplace_interact_(
