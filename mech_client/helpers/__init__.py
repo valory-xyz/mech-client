@@ -22,6 +22,16 @@
 from pathlib import Path
 
 
-ACN_PROTOCOL_PACKAGE = Path(__file__).parent / "acn"
-P2P_CLIENT_PACKAGE = Path(__file__).parent / "p2p_libp2p_client"
-ACN_DATA_SHARE_PROTOCOL_PACKAGE = Path(__file__).parent / "acn_data_share"
+ACN_PROTOCOL_PACKAGE = (
+    Path(__file__).parents[2] / "packages" / "valory" / "protocols" / "acn"
+)
+P2P_CLIENT_PACKAGE = (
+    Path(__file__).parents[2]
+    / "packages"
+    / "valory"
+    / "connections"
+    / "p2p_libp2p_client"
+)
+ACN_DATA_SHARE_PROTOCOL_PACKAGE = (
+    Path(__file__).parents[2] / "packages" / "valory" / "protocols" / "acn_data_share"
+)
