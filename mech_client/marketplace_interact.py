@@ -370,8 +370,6 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     :type method_args_data: MechMarketplaceRequestConfig
     :param extra_attributes: Extra attributes to be included in the request metadata.
     :type extra_attributes: Optional[Dict[str,Any]]
-    :param price: The price for the request (default: 10_000_000_000_000_000).
-    :type price: int
     :param retries: Number of retries for sending a transaction
     :type retries: int
     :param timeout: Timeout to wait for the transaction
@@ -543,12 +541,26 @@ def wait_for_offchain_marketplace_data(request_id: str) -> Any:
 
 
 def check_prepaid_balances(
-    crypto,
-    ledger_api,
-    mech_payment_balance_tracker,
-    payment_type,
-    max_delivery_rate,
-):
+    crypto: Crypto,
+    ledger_api: EthereumApi,
+    mech_payment_balance_tracker: str,
+    payment_type: str,
+    max_delivery_rate: int,
+) -> None:
+    """
+    Checks the requester's prepaid balances for native and token mech.
+
+    :param crypto: The cryptographic object.
+    :type crypto: Crypto
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param mech_payment_balance_tracker: The mech's balance tracker contract address.
+    :type mech_payment_balance_tracker: str
+    :param payment_type: The payment type of the mech.
+    :type payment_type: str
+    :param max_delivery_rate: The max_delivery_rate of the mech
+    :type max_delivery_rate: int
+    """
     requester = crypto.address
     if payment_type == PAYMENT_TYPE_NATIVE:
         with open(
