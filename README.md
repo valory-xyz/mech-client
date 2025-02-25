@@ -166,7 +166,9 @@ With the Mech Marketplace, the basic usage of the Mech Client is as follows.
 mechx interact <prompt> --chain-config <chain_config>
 ```
 
-The Mech agent which corresponds to the `priority_mech_address` in `<chain_config>` will process `<prompt>` with the default options.
+The Mech agent which corresponds to the `priority_mech_address` in `<chain_config>` will process `<prompt>` with the default options. Additionally to other options which are the same as for legacy Mechs, this usage has the following option:
+
+`--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Set to False in order to use the on-chain method.
 
 ### List tools available for agents
 
@@ -278,6 +280,8 @@ Output Schema:
 
 ### Chain configuration
 
+#### For legacy Mechs
+
 Default configurations for different chains are stored in the file [configs/mechs.json](./mech_client/configs/mechs.json). If `--chain-config` parameter is not specified, the Mech Client will choose the first configuration on the JSON.
 
 Additionally, you can override any configuration parameter by exporting any of the following environment variables:
@@ -369,6 +373,8 @@ This script will:
 - Construct the unique identifier for a tool using the format `agentId-toolName`.
 - Retrieve and display the description of a specific tool using its unique identifier.
 - Retrieve and display the input and output schema of a specific tool using its unique identifier.
+
+#### For Mechs receiving requests via the Mech Marketplace
 
 ## Developer installation
 
