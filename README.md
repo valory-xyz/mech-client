@@ -95,14 +95,16 @@ The EOA you use must have enough funds to pay for the Mech requests, or alternat
 
 ### Select the mech you are going to send requests to
 
-Mechs are deployed to several networks. Find the list of supported networks and corresponging mech addresses [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
+Mechs are deployed to several networks. Find the list of supported networks and corresponding mech addresses [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
 
 ### Generate Mech requests
+
+#### Legacy Mechs
 
 The basic usage of the Mech Client is as follows:
 
 ```bash
-mechx interact <prompt> <agent_id>
+mechx interact <prompt> --agent_id <agent_id>
 ```
 
 where agent with `<agent_id>` will process `<prompt>` with the default options. Each chain has its own set of Mech agents. You can find the agent IDs for each chain on the [Mech Hub](https://aimechs.autonolas.network/registry) or on the [Mech repository](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
@@ -141,7 +143,7 @@ Some useful options:
 Example of a request specifying a key file and tool:
 
 ```bash
-mechx interact "write a short poem" 6 --key ~/ethereum_private_key.txt --tool openai-gpt-3.5-turbo --chain-config gnosis --confirm on-chain
+mechx interact "write a short poem" --agent_id 6 --key ~/ethereum_private_key.txt --tool openai-gpt-3.5-turbo --chain-config gnosis --confirm on-chain
 ```
 
 You will see an output like this:
@@ -156,6 +158,15 @@ Data arrived: https://gateway.autonolas.tech/ipfs/f01701220a462120d5bb03f406fa5e
 Data from agent: {'requestId': 100407405856633966395081711430940962809568685031934329025999216833965518452765, 'result': "In a world of chaos and strife,\nThere's beauty in the simplest of life.\nA gentle breeze whispers through the trees,\nAnd birds sing melodies with ease.\n\nThe sun sets in a fiery hue,\nPainting the sky in shades of blue.\nStars twinkle in the darkness above,\nGuiding us with their light and love.\n\nSo take a moment to pause and see,\nThe wonders of this world so free.\nEmbrace the joy that each day brings,\nAnd let your heart soar on gentle wings.", 'prompt': 'write a short poem', 'cost_dict': {}, 'metadata': {'model': None, 'tool': 'openai-gpt-3.5-turbo'}}
 ```
 
+#### With the Mech Marketplace
+
+With the Mech Marketplace, the basic usage of the Mech Client is as follows.
+
+```bash
+mechx interact <prompt> --chain-config <chain_config>
+```
+
+The Mech agent which corresponds to the `priority_mech_address` in `<chain_config>` will process `<prompt>` with the default options.
 
 ### List tools available for agents
 
