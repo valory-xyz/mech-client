@@ -95,7 +95,8 @@ The EOA you use must have enough funds to pay for the Mech requests, or alternat
 
 ### Select the mech you are going to send requests to
 
-Mechs are deployed to several networks. Find the list of supported networks and corresponding mech addresses [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
+Mechs can receive requests via the [Mech Marketplace](https://github.com/valory-xyz/ai-registry-mech/) or directly. We call the last ones are called _Legacy Mechs_. 
+Mechs are deployed on several networks. Find the list of supported networks and corresponding mech addresses [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs). Additionally, on Gnosis you can find more available Mechs [there](https://mech.olas.network/) (click on the tab "Legacy Mech" in order to see Legacy Mech and "Mech Marketplace" for the ones which receive requests via the Mech Marketplace).
 
 ### Generate Mech requests
 
