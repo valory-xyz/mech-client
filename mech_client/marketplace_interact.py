@@ -34,8 +34,8 @@ import websocket
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from eth_utils import to_checksum_address
-from web3.contract import Contract as Web3Contract
 from web3.constants import ADDRESS_ZERO
+from web3.contract import Contract as Web3Contract
 
 from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.interact import (
