@@ -21,6 +21,7 @@
     "arbitrum": {
         "agent_registry_contract": "0xa4799B083E0068732456EF45ff9fe5c683658327",
         "service_registry_contract": "0xE3607b00E75f6405248323A9417ff6b39B244b50",
+        "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
         "rpc_url": "https://arbitrum.llamarpc.com",
         "wss_endpoint": "wss://arbitrum.gateway.tenderly.co",
         "ledger_config": {
@@ -39,6 +40,7 @@
     "polygon": {
         "agent_registry_contract": "0x984cf72FDe8B5aA910e9e508aC5e007ae5BDcC9C",
         "service_registry_contract": "0xE3607b00E75f6405248323A9417ff6b39B244b50",
+        "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
         "rpc_url": "https://polygon-bor-rpc.publicnode.com",
         "wss_endpoint": "wss://polygon.gateway.tenderly.co",
         "ledger_config": {
@@ -57,6 +59,7 @@
     "base": {
         "agent_registry_contract": "0x88DE734655184a09B70700aE4F72364d1ad23728",
         "service_registry_contract": "0x3C1fF68f5aa342D296d4DEe4Bb1cACCA912D95fE",
+        "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
         "rpc_url": "https://base.llamarpc.com",
         "wss_endpoint": "wss://base.gateway.tenderly.co",
         "ledger_config": {
@@ -75,6 +78,7 @@
     "celo": {
         "agent_registry_contract": "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA",
         "service_registry_contract": "0xE3607b00E75f6405248323A9417ff6b39B244b50",
+        "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
         "rpc_url": "https://forno.celo.org",
         "wss_endpoint": "wss://forno.celo.org/ws",
         "ledger_config": {
@@ -93,6 +97,7 @@
     "optimism": {
         "agent_registry_contract": "0x75D529FAe220bC8db714F0202193726b46881B76",
         "service_registry_contract": "0x3d77596beb0f130a4415df3D2D8232B3d3D31e44",
+        "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
         "rpc_url": "https://mainnet.optimism.io",
         "wss_endpoint": "wss://optimism.gateway.tenderly.co",
         "ledger_config": {

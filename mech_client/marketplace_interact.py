@@ -35,6 +35,7 @@ from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from eth_utils import to_checksum_address
 from web3.contract import Contract as Web3Contract
+from web3.constants import ADDRESS_ZERO
 
 from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.interact import (
@@ -656,6 +657,10 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     priority_mech_address = mech_config.priority_mech_address
     mech_marketplace_contract = mech_config.mech_marketplace_contract
     chain_id = ledger_config.chain_id
+
+    if mech_marketplace_contract == ADDRESS_ZERO:
+        print(f"Mech Marketplace not yet supported on {chain_config}")
+        return None
 
     config_values = CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG[chain_id].copy()
     if priority_mech_address is not None:

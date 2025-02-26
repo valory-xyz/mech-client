@@ -139,10 +139,6 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         if service_registry_contract:
             self.service_registry_contract = service_registry_contract
 
-        mech_marketplace_contract = os.getenv("MECHX_MECH_MARKETPLACE_CONTRACT")
-        if mech_marketplace_contract:
-            self.mech_marketplace_contract = mech_marketplace_contract
-
         rpc_url = os.getenv("MECHX_CHAIN_RPC")
         if rpc_url:
             self.rpc_url = rpc_url
