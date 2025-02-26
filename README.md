@@ -376,6 +376,9 @@ This script will:
 
 #### For Mechs receiving requests via the Mech Marketplace
 
+In this case, the script is the same, except for the function result. When this function has no argument agent_id, 
+the request is sent to the Mech Marketplace. The target Mech to which the request is relayed should be in the chain_config file (key `priority_mech_address`).
+
 ## Developer installation
 
 To setup the development environment for this project, clone the repository and run the following commands:
