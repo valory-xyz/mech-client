@@ -50,6 +50,11 @@ def cli() -> None:
 @click.argument("prompt")
 @click.option("--agent_id", type=int, help="Id of the agent to be used")
 @click.option(
+    "--priority-mech",
+    type=str,
+    help="Priority Mech to be used for Marketplace Requests",
+)
+@click.option(
     "--use-prepaid",
     type=bool,
     help="Uses the prepaid model for marketplace requests",
@@ -106,6 +111,7 @@ def cli() -> None:
 def interact(  # pylint: disable=too-many-arguments,too-many-locals
     prompt: str,
     agent_id: int,
+    priority_mech: str,
     use_prepaid: bool,
     use_offchain: bool,
     key: Optional[str],
@@ -131,6 +137,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         if agent_id is None:
             marketplace_interact_(
                 prompt=prompt,
+                priority_mech=priority_mech,
                 use_prepaid=use_prepaid,
                 use_offchain=use_offchain,
                 private_key_path=key,

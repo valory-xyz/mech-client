@@ -618,6 +618,7 @@ def check_prepaid_balances(
 
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
     prompt: str,
+    priority_mech: str,
     use_prepaid: bool = False,
     use_offchain: bool = False,
     tool: Optional[str] = None,
@@ -660,7 +661,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     mech_config = get_mech_config(chain_config)
     ledger_config = mech_config.ledger_config
-    priority_mech_address = mech_config.priority_mech_address
+    priority_mech_address = priority_mech
     mech_marketplace_contract = mech_config.mech_marketplace_contract
     chain_id = ledger_config.chain_id
 
