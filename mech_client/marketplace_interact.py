@@ -635,6 +635,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     :param prompt: The interaction prompt.
     :type prompt: str
+    :param priority_mech: Priority mech address to use (Optional)
+    :type priority_mech: str
     :param use_prepaid: Whether to use prepaid model or not.
     :type use_prepaid: bool
     :param use_offchain: Whether to use offchain model or not.

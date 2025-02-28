@@ -158,8 +158,6 @@ def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments, unu
     :param tx_hash: Tx hash to wait for
     :type tx_hash: str
     :return: The requested ID.
-    :param request_signature: Topic signature for MarketplaceRequest event
-    :type request_signature: str
     :rtype: str
     """
     while True:
