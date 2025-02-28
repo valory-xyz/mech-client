@@ -24,7 +24,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install twine poetry==1.4.2
           poetry install
-          poetry run pip install --user --upgrade setuptools
+          poetry run pip install --upgrade setuptools
           poetry run autonomy packages sync --update-packages
 
       - name: Build wheels and source tarball
@@ -39,4 +39,3 @@ jobs:
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip_existing: true
           packages_dir: dist/
-
