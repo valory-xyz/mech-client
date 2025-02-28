@@ -2,11 +2,7 @@ import json
 from pathlib import Path
 from aea_ledger_ethereum import EthereumApi
 from web3.contract import Contract as Web3Contract
-from mech_client.marketplace_interact import get_contract, CHAIN_TO_OLAS
-
-
-# @note remove after testing
-CHAIN_TO_OLAS[10200] = "0xC36686E4eAa899734C8C1C7C7f48a8858039DD6D"
+from mech_client.marketplace_interact import get_contract, CHAIN_TO_WRAPPED_TOKEN
 
 
 # based on mech configs
@@ -17,13 +13,10 @@ VALID_CHAINS = [
     "base",
     "celo",
     "optimism",
-    "chiado-native",
 ]
 
-# @todo update after mainnet deployments
 CHAIN_TO_NATIVE_BALANCE_TRACKER = {
-    100: "",
-    10200: "0xD97Db5D3eB1bfF1F88F5c6e2a5259Fb9D2A9875c",
+    100: "0x21cE6799A22A3Da84B7c44a814a9c79ab1d2A50D",
     42161: "",
     137: "",
     8453: "",
@@ -31,10 +24,8 @@ CHAIN_TO_NATIVE_BALANCE_TRACKER = {
     10: "",
 }
 
-# @todo update after mainnet deployments
 CHAIN_TO_TOKEN_BALANCE_TRACKER = {
-    100: "",
-    10200: "0x412eb3f42648533ae3024d41Db57A0fE4329953A",
+    100: "0x53Bd432516707a5212A70216284a99A563aAC1D1",
     42161: "",
     137: "",
     8453: "",
@@ -128,7 +119,9 @@ def get_token_contract(ledger_api: EthereumApi, chain_id: int) -> Web3Contract:
         abi = json.load(f)
 
     token_contract = get_contract(
-        contract_address=CHAIN_TO_OLAS[chain_id], abi=abi, ledger_api=ledger_api
+        contract_address=CHAIN_TO_WRAPPED_TOKEN[chain_id],
+        abi=abi,
+        ledger_api=ledger_api,
     )
 
     return token_contract

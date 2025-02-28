@@ -16,17 +16,6 @@
         "type": "constructor"
     },
     {
-        "inputs": [
-            {
-                "internalType": "bytes32",
-                "name": "requestId",
-                "type": "bytes32"
-            }
-        ],
-        "name": "AlreadyDelivered",
-        "type": "error"
-    },
-    {
         "inputs": [],
         "name": "AlreadyInitialized",
         "type": "error"
@@ -144,51 +133,8 @@
         "type": "error"
     },
     {
-        "inputs": [
-            {
-                "internalType": "uint256",
-                "name": "expected",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "current",
-                "type": "uint256"
-            }
-        ],
-        "name": "PriorityMechResponseTimeout",
-        "type": "error"
-    },
-    {
         "inputs": [],
         "name": "ReentrancyGuard",
-        "type": "error"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "bytes32",
-                "name": "requestId",
-                "type": "bytes32"
-            }
-        ],
-        "name": "RequestIdNotFound",
-        "type": "error"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "stakingInstance",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "serviceId",
-                "type": "uint256"
-            }
-        ],
-        "name": "ServiceNotStaked",
         "type": "error"
     },
     {
@@ -268,53 +214,6 @@
     {
         "inputs": [
             {
-                "internalType": "uint256",
-                "name": "numValues1",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "numValues2",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "numValues3",
-                "type": "uint256"
-            }
-        ],
-        "name": "WrongArrayLength3",
-        "type": "error"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint256",
-                "name": "numValues1",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "numValues2",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "numValues3",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "numValues4",
-                "type": "uint256"
-            }
-        ],
-        "name": "WrongArrayLength4",
-        "type": "error"
-    },
-    {
-        "inputs": [
-            {
                 "internalType": "bytes32",
                 "name": "paymentType",
                 "type": "bytes32"
@@ -363,6 +262,12 @@
                 "internalType": "uint256",
                 "name": "serviceId",
                 "type": "uint256"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "mechFactory",
+                "type": "address"
             }
         ],
         "name": "CreateMech",
@@ -388,6 +293,12 @@
                 "internalType": "bytes32",
                 "name": "requestId",
                 "type": "bytes32"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "deliveryRate",
+                "type": "uint256"
             },
             {
                 "indexed": false,
@@ -467,7 +378,7 @@
             {
                 "indexed": false,
                 "internalType": "uint256",
-                "name": "numRequests",
+                "name": "numDeliveries",
                 "type": "uint256"
             },
             {
@@ -547,25 +458,6 @@
             }
         ],
         "name": "OwnerUpdated",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "requester",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "internalType": "bytes32",
-                "name": "hash",
-                "type": "bytes32"
-            }
-        ],
-        "name": "RequesterHashApproved",
         "type": "event"
     },
     {
@@ -779,11 +671,6 @@
                 "internalType": "uint256[]",
                 "name": "deliveryRates",
                 "type": "uint256[]"
-            },
-            {
-                "internalType": "bytes[]",
-                "name": "deliveryDatas",
-                "type": "bytes[]"
             }
         ],
         "name": "deliverMarketplace",
@@ -805,19 +692,26 @@
                 "type": "address"
             },
             {
-                "internalType": "bytes[]",
-                "name": "requestDatas",
-                "type": "bytes[]"
-            },
-            {
-                "internalType": "bytes[]",
-                "name": "signatures",
-                "type": "bytes[]"
-            },
-            {
-                "internalType": "bytes[]",
-                "name": "deliveryDatas",
-                "type": "bytes[]"
+                "components": [
+                    {
+                        "internalType": "bytes",
+                        "name": "requestData",
+                        "type": "bytes"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "signature",
+                        "type": "bytes"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "deliveryData",
+                        "type": "bytes"
+                    }
+                ],
+                "internalType": "struct DeliverWithSignature[]",
+                "name": "deliverWithSignatures",
+                "type": "tuple[]"
             },
             {
                 "internalType": "uint256[]",
@@ -878,7 +772,12 @@
         "inputs": [
             {
                 "internalType": "address",
-                "name": "account",
+                "name": "mech",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "requester",
                 "type": "address"
             },
             {
@@ -890,6 +789,11 @@
                 "internalType": "uint256",
                 "name": "deliveryRate",
                 "type": "uint256"
+            },
+            {
+                "internalType": "bytes32",
+                "name": "paymentType",
+                "type": "bytes32"
             },
             {
                 "internalType": "uint256",
@@ -1160,25 +1064,6 @@
         "type": "function"
     },
     {
-        "inputs": [
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            }
-        ],
-        "name": "mapServiceIdMech",
-        "outputs": [
-            {
-                "internalType": "address",
-                "name": "",
-                "type": "address"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
         "inputs": [],
         "name": "maxResponseTimeout",
         "outputs": [
@@ -1265,8 +1150,18 @@
             },
             {
                 "internalType": "uint256",
-                "name": "priorityMechServiceId",
+                "name": "maxDeliveryRate",
                 "type": "uint256"
+            },
+            {
+                "internalType": "bytes32",
+                "name": "paymentType",
+                "type": "bytes32"
+            },
+            {
+                "internalType": "address",
+                "name": "priorityMech",
+                "type": "address"
             },
             {
                 "internalType": "uint256",
@@ -1299,8 +1194,18 @@
             },
             {
                 "internalType": "uint256",
-                "name": "priorityMechServiceId",
+                "name": "maxDeliveryRate",
                 "type": "uint256"
+            },
+            {
+                "internalType": "bytes32",
+                "name": "paymentType",
+                "type": "bytes32"
+            },
+            {
+                "internalType": "address",
+                "name": "priorityMech",
+                "type": "address"
             },
             {
                 "internalType": "uint256",

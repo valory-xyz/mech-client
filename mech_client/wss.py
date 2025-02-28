@@ -144,29 +144,23 @@ def watch_for_request_id(  # pylint: disable=too-many-arguments
 
 
 def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments, unused-argument
-    wss: websocket.WebSocket,
     marketplace_contract: Web3Contract,
     ledger_api: EthereumApi,
-    request_signature: str,
+    tx_hash: str,
 ) -> str:
     """
     Watches for events on mech.
 
-    :param wss: The WebSocket connection object.
-    :type wss: websocket.WebSocket
     :param marketplace_contract: The marketplace contract instance.
     :type marketplace_contract: Web3Contract
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param tx_hash: Tx hash to wait for
+    :type tx_hash: str
     :return: The requested ID.
-    :param request_signature: Topic signature for MarketplaceRequest event
-    :type request_signature: str
     :rtype: str
     """
     while True:
-        msg = wss.recv()
-        data = json.loads(msg)
-        tx_hash = data["params"]["result"]["transactionHash"]
         tx_receipt = wait_for_receipt(tx_hash=tx_hash, ledger_api=ledger_api)
 
         rich_logs = marketplace_contract.events.MarketplaceRequest().process_receipt(
@@ -175,8 +169,8 @@ def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments, unu
         if len(rich_logs) == 0:
             return "Empty Logs"
 
-        request_id = str(rich_logs[0]["args"]["requestId"])
-        return request_id
+        request_id = rich_logs[0]["args"]["requestIds"][0]
+        return request_id.hex()
 
 
 async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
@@ -234,7 +228,7 @@ async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
 async def watch_for_marketplace_data_url_from_wss(  # pylint: disable=too-many-arguments, unused-argument
     request_id: str,
     wss: websocket.WebSocket,
-    marketplace_contract: Web3Contract,
+    mech_contract: Web3Contract,
     deliver_signature: str,
     ledger_api: EthereumApi,
     loop: asyncio.AbstractEventLoop,
@@ -246,8 +240,8 @@ async def watch_for_marketplace_data_url_from_wss(  # pylint: disable=too-many-a
     :type request_id: str
     :param wss: The WebSocket connection object.
     :type wss: websocket.WebSocket
-    :param marketplace_contract: The mech contract instance.
-    :type marketplace_contract: Web3Contract
+    :param mech_contract: The mech contract instance.
+    :type mech_contract: Web3Contract
     :param deliver_signature: Topic signature for Deliver event
     :type deliver_signature: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
@@ -267,19 +261,21 @@ async def watch_for_marketplace_data_url_from_wss(  # pylint: disable=too-many-a
                     executor, wait_for_receipt, tx_hash, ledger_api
                 )
 
-                rich_logs = (
-                    marketplace_contract.events.MarketplaceDeliver().process_receipt(
-                        tx_receipt
-                    )
-                )
+                rich_logs = mech_contract.events.Deliver().process_receipt(tx_receipt)
                 if len(rich_logs) == 0:
                     print("Empty logs")
                     return None
 
-                data = cast(bytes, rich_logs[0]["args"]["data"])
-                if request_id != str(rich_logs[0]["args"]["requestId"]):
+                data = rich_logs[0]["args"]
+                tx_request_id = data["requestId"]
+                deliver_data = data["data"]
+
+                if request_id != tx_request_id.hex():
                     continue
-                return f"https://gateway.autonolas.tech/ipfs/f01701220{data.hex()}"
+
+                return (
+                    f"https://gateway.autonolas.tech/ipfs/f01701220{deliver_data.hex()}"
+                )
         except websocket.WebSocketConnectionClosedException as e:
             print(f"WebSocketConnectionClosedException {repr(e)}")
             print(
