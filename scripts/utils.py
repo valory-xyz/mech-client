@@ -5,10 +5,6 @@ from web3.contract import Contract as Web3Contract
 from mech_client.marketplace_interact import get_contract, CHAIN_TO_WRAPPED_TOKEN
 
 
-# @note remove after testing
-CHAIN_TO_WRAPPED_TOKEN[10200] = "0xC36686E4eAa899734C8C1C7C7f48a8858039DD6D"
-
-
 # based on mech configs
 VALID_CHAINS = [
     "gnosis",
@@ -17,13 +13,10 @@ VALID_CHAINS = [
     "base",
     "celo",
     "optimism",
-    "chiado-native",
 ]
 
-# @todo update after mainnet deployments
 CHAIN_TO_NATIVE_BALANCE_TRACKER = {
-    100: "0x36c1beAFBeaf65DFcF16De60867BF9525455bf4E",
-    10200: "0x69b7f5FEd09356Cb7d3C64B0b6783b9d1d8cc116",
+    100: "0x21cE6799A22A3Da84B7c44a814a9c79ab1d2A50D",
     42161: "",
     137: "",
     8453: "",
@@ -31,10 +24,8 @@ CHAIN_TO_NATIVE_BALANCE_TRACKER = {
     10: "",
 }
 
-# @todo update after mainnet deployments
 CHAIN_TO_TOKEN_BALANCE_TRACKER = {
-    100: "0xe63e418f6384FEA54EF43a429b4721831080858D",
-    10200: "0x883790dBa073bd3463C47fD42BC9BE436fe2995d",
+    100: "0x53Bd432516707a5212A70216284a99A563aAC1D1",
     42161: "",
     137: "",
     8453: "",

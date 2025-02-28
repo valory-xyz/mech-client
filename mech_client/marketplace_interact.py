@@ -82,8 +82,8 @@ CHAIN_TO_WRAPPED_TOKEN = {
 
 CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
     100: {
-        "mech_marketplace_contract": "0xad380C51cd5297FbAE43494dD5D407A2a3260b58",
-        "priority_mech_address": "0x80e5a22fe1fbf8159c13b58811669e028a0b16ff",
+        "mech_marketplace_contract": "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB",
+        "priority_mech_address": "0x478ad20eD958dCC5AD4ABa6F4E4cc51e07a840E4",
         "response_timeout": 300,
         "payment_data": "0x",
     }

@@ -2,7 +2,7 @@
     "gnosis": {
         "agent_registry_contract": "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA",
         "service_registry_contract": "0x9338b5153AE39BB89f50468E608eD9d764B755fD",
-        "mech_marketplace_contract": "0xad380C51cd5297FbAE43494dD5D407A2a3260b58",
+        "mech_marketplace_contract": "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB",
         "rpc_url": "https://rpc.eu-central-2.gateway.fm/v4/gnosis/non-archival/mainnet",
         "wss_endpoint": "wss://rpc.gnosischain.com/wss",
         "ledger_config": {
