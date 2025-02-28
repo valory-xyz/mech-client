@@ -825,10 +825,9 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         print("  - Waiting for transaction receipt...")
 
         request_id = watch_for_marketplace_request_id(
-            wss=wss,
             marketplace_contract=mech_marketplace_contract,
             ledger_api=ledger_api,
-            request_signature=marketplace_request_event_signature,
+            tx_hash=transaction_digest,
         )
         request_id_int = int.from_bytes(bytes.fromhex(request_id), byteorder="big")
         print(f"  - Created on-chain request with ID {request_id_int}")

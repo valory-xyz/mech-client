@@ -144,29 +144,25 @@ def watch_for_request_id(  # pylint: disable=too-many-arguments
 
 
 def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments, unused-argument
-    wss: websocket.WebSocket,
     marketplace_contract: Web3Contract,
     ledger_api: EthereumApi,
-    request_signature: str,
+    tx_hash: str,
 ) -> str:
     """
     Watches for events on mech.
 
-    :param wss: The WebSocket connection object.
-    :type wss: websocket.WebSocket
     :param marketplace_contract: The marketplace contract instance.
     :type marketplace_contract: Web3Contract
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param tx_hash: Tx hash to wait for
+    :type tx_hash: str
     :return: The requested ID.
     :param request_signature: Topic signature for MarketplaceRequest event
     :type request_signature: str
     :rtype: str
     """
     while True:
-        msg = wss.recv()
-        data = json.loads(msg)
-        tx_hash = data["params"]["result"]["transactionHash"]
         tx_receipt = wait_for_receipt(tx_hash=tx_hash, ledger_api=ledger_api)
 
         rich_logs = marketplace_contract.events.MarketplaceRequest().process_receipt(
