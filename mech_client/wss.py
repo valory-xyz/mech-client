@@ -175,8 +175,8 @@ def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments, unu
         if len(rich_logs) == 0:
             return "Empty Logs"
 
-        request_id = str(rich_logs[0]["args"]["requestId"])
-        return request_id
+        request_id = rich_logs[0]["args"]["requestIds"][0]
+        return int.from_bytes(request_id, byteorder="big")
 
 
 async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
