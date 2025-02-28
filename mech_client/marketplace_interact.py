@@ -107,7 +107,7 @@ def fetch_mech_info(
     ledger_api: EthereumApi,
     mech_marketplace_contract: Web3Contract,
     priority_mech_address: str,
-) -> Tuple[str, int, int, str]:
+) -> Tuple[str, int, int, str, Web3Contract]:
     """
     Fetchs the info of the requested mech.
 
@@ -117,8 +117,8 @@ def fetch_mech_info(
     :type mech_marketplace_contract: Web3Contract
     :param priority_mech_address: Requested mech address
     :type priority_mech_address: str
-    :return: The mech info containing payment_type, service_id, max_delivery_rate and mech_payment_balance_tracker.
-    :rtype: Tuple[str, int, int, str]
+    :return: The mech info containing payment_type, service_id, max_delivery_rate, mech_payment_balance_tracker and Mech contract.
+    :rtype: Tuple[str, int, int, str, Contract]
     """
 
     with open(Path(__file__).parent / "abis" / "IMech.json", encoding="utf-8") as f:
@@ -142,7 +142,13 @@ def fetch_mech_info(
         print("  - Invalid mech type detected.")
         sys.exit(1)
 
-    return payment_type, service_id, max_delivery_rate, mech_payment_balance_tracker
+    return (
+        payment_type,
+        service_id,
+        max_delivery_rate,
+        mech_payment_balance_tracker,
+        mech_contract,
+    )
 
 
 def approve_price_tokens(
@@ -445,7 +451,7 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
 def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused-argument
     request_id: str,
     wss: websocket.WebSocket,
-    marketplace_contract: Web3Contract,
+    mech_contract: Web3Contract,
     subgraph_url: str,
     deliver_signature: str,
     ledger_api: EthereumApi,
@@ -459,8 +465,8 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     :type request_id: str
     :param wss: The WebSocket connection object.
     :type wss: websocket.WebSocket
-    :param marketplace_contract: The mech marketplace contract instance.
-    :type marketplace_contract: Web3Contract
+    :param mech_contract: The mech contract instance.
+    :type mech_contract: Web3Contract
     :param subgraph_url: Subgraph URL.
     :type subgraph_url: str
     :param deliver_signature: Topic signature for MarketplaceDeliver event
@@ -492,7 +498,7 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
             watch_for_marketplace_data_url_from_wss(
                 request_id=request_id,
                 wss=wss,
-                marketplace_contract=marketplace_contract,
+                mech_contract=mech_contract,
                 deliver_signature=deliver_signature,
                 ledger_api=ledger_api,
                 loop=loop,
@@ -709,6 +715,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         service_id,
         max_delivery_rate,
         mech_payment_balance_tracker,
+        mech_contract,
     ) = fetch_mech_info(
         ledger_api,
         mech_marketplace_contract,
@@ -822,14 +829,14 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             ledger_api=ledger_api,
             request_signature=marketplace_request_event_signature,
         )
-        print(f"  - Created on-chain request with ID {request_id}")
+        request_id_int = int.from_bytes(bytes.fromhex(request_id), byteorder="big")
+        print(f"  - Created on-chain request with ID {request_id_int}")
         print("")
 
-        print("Waiting for Mech Marketplace deliver...")
         data_url = wait_for_marketplace_data_url(
             request_id=request_id,
             wss=wss,
-            marketplace_contract=mech_marketplace_contract,
+            mech_contract=mech_contract,
             subgraph_url=mech_config.subgraph_url,
             deliver_signature=marketplace_deliver_event_signature,
             ledger_api=ledger_api,
@@ -839,7 +846,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
         if data_url:
             print(f"  - Data arrived: {data_url}")
-            data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+            data = requests.get(f"{data_url}/{request_id_int}", timeout=30).json()
             print("  - Data from agent:")
             print(json.dumps(data, indent=2))
             return data
