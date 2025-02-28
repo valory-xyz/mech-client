@@ -48,7 +48,6 @@ from mech_client.interact import (
     calculate_topic_id,
     get_contract,
     get_mech_config,
-    verify_or_retrieve_tool,
 )
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import (
@@ -621,7 +620,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     priority_mech: str,
     use_prepaid: bool = False,
     use_offchain: bool = False,
-    tool: Optional[str] = None,
+    tool: str = "",
     extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
     confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
@@ -642,7 +641,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     :param use_offchain: Whether to use offchain model or not.
     :type use_offchain: bool
     :param tool: The tool to interact with (optional).
-    :type tool: Optional[str]
+    :type tool: str
     :param extra_attributes: Extra attributes to be included in the request metadata (optional).
     :type extra_attributes: Optional[Dict[str, Any]]
     :param private_key_path: The path to the private key file (optional).
@@ -715,7 +714,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     )
     (
         payment_type,
-        service_id,
+        _,
         max_delivery_rate,
         mech_payment_balance_tracker,
         mech_contract,
@@ -726,16 +725,6 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     )
     mech_marketplace_request_config.delivery_rate = max_delivery_rate
     mech_marketplace_request_config.payment_type = payment_type
-
-    # Expected parameters: agent id and agent registry contract address
-    # Note: passing service id and service registry contract address as internal function calls are same
-    tool = verify_or_retrieve_tool(
-        agent_id=cast(int, service_id),
-        ledger_api=ledger_api,
-        tool=tool,
-        agent_registry_contract=mech_config.service_registry_contract,
-        contract_abi_url=mech_config.contract_abi_url,
-    )
 
     (
         marketplace_request_event_signature,
