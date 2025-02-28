@@ -98,6 +98,22 @@ The EOA you use must have enough funds to pay for the Mech requests, or alternat
 Mechs can receive requests via the [Mech Marketplace](https://github.com/valory-xyz/ai-registry-mech/) or directly. We call the last ones _Legacy Mechs_. 
 Mechs are deployed on several networks. Find the list of supported networks and corresponding mech addresses [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs). Additionally, on Gnosis you can find more available Mechs [here](https://mech.olas.network/) (click on the tab "Legacy Mech" in order to see Legacy Mech and "Mech Marketplace" for the ones which receive requests via the Mech Marketplace).
 
+
+### API Keys
+
+In order to fetch on-chain data for Gnosis and Base, mech client requires an API key from a blockchain data provider. You can find them here for [GnosisScan](https://gnosisscan.io/) and [BaseScan](https://basescan.org/). Follow these steps to generate your API key if you are planning to use mech client for gnosis and base:
+
+1. Sign up or log in 
+2. Go to API Dashboard on the left menu
+3. Add a new API key 
+4. Once generated copy your API key
+
+Once you have your API key, you'll need to configure it in your environment. Use the following command to set it for your environment.
+
+```bash
+export MECHX_API_KEY=<your api key>
+```
+
 ### Generate Mech requests
 
 #### Legacy Mechs
@@ -164,12 +180,19 @@ Data from agent: {'requestId': 1004074058566339663950817114309409628095686850319
 With the Mech Marketplace, the basic usage of the Mech Client is as follows.
 
 ```bash
-mechx interact <prompt> --chain-config <chain_config>
+mechx interact <prompt> --tool openai-gpt-3.5-turbo --chain-config <chain_config>
 ```
 
-The Mech agent which corresponds to the `priority_mech_address` in `<chain_config>` will process `<prompt>` with the default options. Additionally to other options which are the same as for legacy Mechs, this usage has the following option:
+To use a custom mech to send requests to, use the  `priority-mech` flag while sending the requests
 
-`--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Set to False in order to use the on-chain method.
+```bash
+mechx interact <prompt> --priority-mech <priority mech address> --tool openai-gpt-3.5-turbo --chain-config <chain_config>
+```
+
+Additionally to other options which are the same as for legacy Mechs, this usage has the following option:
+
+`--use-prepaid <bool>`: use the prepaid method to send requests to a Mech via the Mech Marketplace. Defaults to False.
+`--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Defaults to False.
 
 ### List tools available for agents
 
