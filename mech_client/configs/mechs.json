@@ -59,7 +59,7 @@
     "base": {
         "agent_registry_contract": "0x88DE734655184a09B70700aE4F72364d1ad23728",
         "service_registry_contract": "0x3C1fF68f5aa342D296d4DEe4Bb1cACCA912D95fE",
-        "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
+        "mech_marketplace_contract": "0x5FDc466f4A7547c876eF40CD30fFA2A89F1EcDE7",
         "rpc_url": "https://base.llamarpc.com",
         "wss_endpoint": "wss://base.gateway.tenderly.co",
         "ledger_config": {
@@ -69,7 +69,7 @@
             "default_gas_price_strategy": "eip1559",
             "is_gas_estimation_enabled": false
         },
-        "gas_limit": 250000,
+        "gas_limit": 500000,
         "price": 3000000000000,
         "contract_abi_url": "https://api.basescan.org/api?module=contract&action=getabi&address={contract_address}&apikey={api_key}",
         "transaction_url": "https://basescan.org/tx/{transaction_digest}",

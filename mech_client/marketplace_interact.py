@@ -65,8 +65,11 @@ PAYMENT_TYPE_NATIVE = (
 PAYMENT_TYPE_TOKEN = (
     "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
 )
-PAYMENT_TYPE_NVM = (
+PAYMENT_TYPE_NATIVE_NVM = (
     "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
+)
+PAYMENT_TYPE_TOKEN_NVM = (
+    "0d6fd99afa9c4c580fab5e341922c2a5c4b61d880da60506193d7bf88944dd14"  # nosec
 )
 
 CHAIN_TO_WRAPPED_TOKEN = {
@@ -85,7 +88,13 @@ CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
         "priority_mech_address": "0x478ad20eD958dCC5AD4ABa6F4E4cc51e07a840E4",
         "response_timeout": 300,
         "payment_data": "0x",
-    }
+    },
+    8453: {
+        "mech_marketplace_contract": "0x5FDc466f4A7547c876eF40CD30fFA2A89F1EcDE7",
+        "priority_mech_address": "0xE183610A420dBD8825fed49C589Fe2d5BFd5b17a",
+        "response_timeout": 300,
+        "payment_data": "0x",
+    },
 }
 
 
@@ -137,7 +146,12 @@ def fetch_mech_info(
         ).call()
     )
 
-    if payment_type not in [PAYMENT_TYPE_NATIVE, PAYMENT_TYPE_TOKEN, PAYMENT_TYPE_NVM]:
+    if payment_type not in [
+        PAYMENT_TYPE_NATIVE,
+        PAYMENT_TYPE_TOKEN,
+        PAYMENT_TYPE_NATIVE_NVM,
+        PAYMENT_TYPE_TOKEN_NVM,
+    ]:
         print("  - Invalid mech type detected.")
         sys.exit(1)
 
@@ -210,6 +224,7 @@ def fetch_requester_nvm_subscription_balance(
     requester: str,
     ledger_api: EthereumApi,
     mech_payment_balance_tracker: str,
+    payment_type: str,
 ) -> int:
     """
     Fetches the requester nvm subscription balance.
@@ -223,11 +238,19 @@ def fetch_requester_nvm_subscription_balance(
     :return: The requester balance.
     :rtype: int
     """
-    with open(
-        Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionNative.json",
-        encoding="utf-8",
-    ) as f:
-        abi = json.load(f)
+    if payment_type == PAYMENT_TYPE_NATIVE_NVM:
+        with open(
+            Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionNative.json",
+            encoding="utf-8",
+        ) as f:
+            abi = json.load(f)
+
+    if payment_type == PAYMENT_TYPE_TOKEN_NVM:
+        with open(
+            Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionToken.json",
+            encoding="utf-8",
+        ) as f:
+            abi = json.load(f)
 
     nvm_balance_tracker_contract = get_contract(
         contract_address=mech_payment_balance_tracker, abi=abi, ledger_api=ledger_api
@@ -772,11 +795,14 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             max_delivery_rate,
         )
 
-    if payment_type == PAYMENT_TYPE_NVM:
-        print("Nevermined Mech detected, subscription credits to be used")
+    if payment_type in [PAYMENT_TYPE_NATIVE_NVM, PAYMENT_TYPE_TOKEN_NVM]:
+        nvm_mech_type = "Native" if payment_type == PAYMENT_TYPE_NATIVE_NVM else "Token"
+        print(
+            f"{nvm_mech_type} Nevermined Mech detected, subscription credits to be used"
+        )
         requester = crypto.address
         requester_balance = fetch_requester_nvm_subscription_balance(
-            requester, ledger_api, mech_payment_balance_tracker
+            requester, ledger_api, mech_payment_balance_tracker, payment_type
         )
         if requester_balance < price:
             print(
