@@ -69,7 +69,7 @@
             "default_gas_price_strategy": "eip1559",
             "is_gas_estimation_enabled": false
         },
-        "gas_limit": 250000,
+        "gas_limit": 25000000,
         "price": 3000000000000,
         "contract_abi_url": "https://api.basescan.org/api?module=contract&action=getabi&address={contract_address}&apikey={api_key}",
         "transaction_url": "https://basescan.org/tx/{transaction_digest}",
