@@ -59,7 +59,7 @@
     "base": {
         "agent_registry_contract": "0x88DE734655184a09B70700aE4F72364d1ad23728",
         "service_registry_contract": "0x3C1fF68f5aa342D296d4DEe4Bb1cACCA912D95fE",
-        "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
+        "mech_marketplace_contract": "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020",
         "rpc_url": "https://base.llamarpc.com",
         "wss_endpoint": "wss://base.gateway.tenderly.co",
         "ledger_config": {
