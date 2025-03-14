@@ -58,6 +58,15 @@ from mech_client.wss import (
 )
 
 
+IMECH_ABI_PATH = Path(__file__).parent / "abis" / "IMech.json"
+BALANCE_TRACKER_NVM_NATIVE_ABI_PATH = (
+    Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionNative.json"
+)
+BALANCE_TRACKER_NVM_TOKEN_ABI_PATH = (
+    Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionToken.json"
+)
+
+
 # false positives for [B105:hardcoded_password_string] Possible hardcoded password
 PAYMENT_TYPE_NATIVE = (
     "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"  # nosec
@@ -71,6 +80,11 @@ PAYMENT_TYPE_NATIVE_NVM = (
 PAYMENT_TYPE_TOKEN_NVM = (
     "0d6fd99afa9c4c580fab5e341922c2a5c4b61d880da60506193d7bf88944dd14"  # nosec
 )
+
+PAYMENT_TYPE_TO_ABI_PATH = {
+    PAYMENT_TYPE_NATIVE_NVM: BALANCE_TRACKER_NVM_NATIVE_ABI_PATH,
+    PAYMENT_TYPE_TOKEN_NVM: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
+}
 
 CHAIN_TO_WRAPPED_TOKEN = {
     1: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
@@ -116,7 +130,7 @@ def fetch_mech_info(
     :rtype: Tuple[str, int, int, str, Contract]
     """
 
-    with open(Path(__file__).parent / "abis" / "IMech.json", encoding="utf-8") as f:
+    with open(IMECH_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
     mech_contract = get_contract(
@@ -227,19 +241,11 @@ def fetch_requester_nvm_subscription_balance(
     :return: The requester balance.
     :rtype: int
     """
-    if payment_type == PAYMENT_TYPE_NATIVE_NVM:
-        with open(
-            Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionNative.json",
-            encoding="utf-8",
-        ) as f:
-            abi = json.load(f)
-
-    if payment_type == PAYMENT_TYPE_TOKEN_NVM:
-        with open(
-            Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionToken.json",
-            encoding="utf-8",
-        ) as f:
-            abi = json.load(f)
+    with open(
+        PAYMENT_TYPE_TO_ABI_PATH[payment_type],
+        encoding="utf-8",
+    ) as f:
+        abi = json.load(f)
 
     nvm_balance_tracker_contract = get_contract(
         contract_address=mech_payment_balance_tracker, abi=abi, ledger_api=ledger_api
