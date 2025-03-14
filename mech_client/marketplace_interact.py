@@ -27,7 +27,7 @@ import time
 from dataclasses import asdict, make_dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, Optional, Tuple, cast
 
 import requests
 import websocket
@@ -46,8 +46,8 @@ from mech_client.interact import (
     TIMEOUT,
     WAIT_SLEEP,
     get_contract,
-    get_mech_config,
     get_event_signatures,
+    get_mech_config,
 )
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import (
@@ -222,6 +222,8 @@ def fetch_requester_nvm_subscription_balance(
     :type ledger_api: EthereumApi
     :param mech_payment_balance_tracker: Requested mech's balance tracker contract address
     :type mech_payment_balance_tracker: str
+    :param payment_type: Requested mech's payment type
+    :type payment_type: str
     :return: The requester balance.
     :rtype: int
     """
