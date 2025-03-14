@@ -104,7 +104,7 @@ CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
         "payment_data": "0x",
     },
     8453: {
-        "mech_marketplace_contract": "0x5FDc466f4A7547c876eF40CD30fFA2A89F1EcDE7",
+        "mech_marketplace_contract": "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020",
         "priority_mech_address": "0xE183610A420dBD8825fed49C589Fe2d5BFd5b17a",
         "response_timeout": 300,
         "payment_data": "0x",
