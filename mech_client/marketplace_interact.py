@@ -45,9 +45,9 @@ from mech_client.interact import (
     PRIVATE_KEY_FILE_PATH,
     TIMEOUT,
     WAIT_SLEEP,
-    calculate_topic_id,
     get_contract,
     get_mech_config,
+    get_event_signatures,
 )
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import (
@@ -96,19 +96,6 @@ CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
         "payment_data": "0x",
     },
 }
-
-
-def get_event_signatures(abi: List) -> Tuple[str, str]:
-    """Calculate `Marketplace Request` and `Marketplace Deliver` event topics"""
-    marketplace_request, marketplace_deliver = "", ""
-    for obj in abi:
-        if obj["type"] != "event":
-            continue
-        if obj["name"] == "MarketplaceDeliver":
-            marketplace_deliver = calculate_topic_id(event=obj)
-        if obj["name"] == "MarketplaceRequest":
-            marketplace_request = calculate_topic_id(event=obj)
-    return marketplace_request, marketplace_deliver
 
 
 def fetch_mech_info(
@@ -749,14 +736,16 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     mech_marketplace_request_config.delivery_rate = max_delivery_rate
     mech_marketplace_request_config.payment_type = payment_type
 
+    with open(Path(__file__).parent / "abis" / "IMech.json", encoding="utf-8") as f:
+        abi = json.load(f)
+
     (
         marketplace_request_event_signature,
         marketplace_deliver_event_signature,
     ) = get_event_signatures(abi=abi)
-
     register_event_handlers(
         wss=wss,
-        contract_address=contract_address,
+        contract_address=priority_mech_address,
         crypto=crypto,
         request_signature=marketplace_request_event_signature,
         deliver_signature=marketplace_deliver_event_signature,
