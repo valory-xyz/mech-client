@@ -26,6 +26,7 @@ import sys
 import time
 from dataclasses import asdict, make_dataclass
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, cast
 
@@ -58,32 +59,38 @@ from mech_client.wss import (
 )
 
 
-IMECH_ABI_PATH = Path(__file__).parent / "abis" / "IMech.json"
+# false positives for [B105:hardcoded_password_string] Possible hardcoded password
+class PaymentType(Enum):
+    """Payment type."""
+
+    NATIVE = "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"  # nosec
+    TOKEN = "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
+    NATIVE_NVM = (
+        "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
+    )
+    TOKEN_NVM = (
+        "0d6fd99afa9c4c580fab5e341922c2a5c4b61d880da60506193d7bf88944dd14"  # nosec
+    )
+
+
+ABI_DIR_PATH = Path(__file__).parent / "abis"
+IMECH_ABI_PATH = ABI_DIR_PATH / "IMech.json"
+
+BALANCE_TRACKER_NATIVE_ABI_PATH = ABI_DIR_PATH / "BalanceTrackerFixedPriceNative.json"
+BALANCE_TRACKER_TOKEN_ABI_PATH = ABI_DIR_PATH / "BalanceTrackerFixedPriceToken.json"
 BALANCE_TRACKER_NVM_NATIVE_ABI_PATH = (
-    Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionNative.json"
+    ABI_DIR_PATH / "BalanceTrackerNvmSubscriptionNative.json"
 )
 BALANCE_TRACKER_NVM_TOKEN_ABI_PATH = (
-    Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionToken.json"
+    ABI_DIR_PATH / "BalanceTrackerNvmSubscriptionToken.json"
 )
 
-
-# false positives for [B105:hardcoded_password_string] Possible hardcoded password
-PAYMENT_TYPE_NATIVE = (
-    "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"  # nosec
-)
-PAYMENT_TYPE_TOKEN = (
-    "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
-)
-PAYMENT_TYPE_NATIVE_NVM = (
-    "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
-)
-PAYMENT_TYPE_TOKEN_NVM = (
-    "0d6fd99afa9c4c580fab5e341922c2a5c4b61d880da60506193d7bf88944dd14"  # nosec
-)
 
 PAYMENT_TYPE_TO_ABI_PATH = {
-    PAYMENT_TYPE_NATIVE_NVM: BALANCE_TRACKER_NVM_NATIVE_ABI_PATH,
-    PAYMENT_TYPE_TOKEN_NVM: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
+    PaymentType.NATIVE.value: BALANCE_TRACKER_NATIVE_ABI_PATH,
+    PaymentType.TOKEN.value: BALANCE_TRACKER_TOKEN_ABI_PATH,
+    PaymentType.NATIVE_NVM.value: BALANCE_TRACKER_NVM_NATIVE_ABI_PATH,
+    PaymentType.TOKEN_NVM.value: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
 }
 
 CHAIN_TO_WRAPPED_TOKEN = {
@@ -147,12 +154,7 @@ def fetch_mech_info(
         ).call()
     )
 
-    if payment_type not in [
-        PAYMENT_TYPE_NATIVE,
-        PAYMENT_TYPE_TOKEN,
-        PAYMENT_TYPE_NATIVE_NVM,
-        PAYMENT_TYPE_TOKEN_NVM,
-    ]:
+    if payment_type not in PaymentType._value2member_map_:
         print("  - Invalid mech type detected.")
         sys.exit(1)
 
@@ -586,51 +588,33 @@ def check_prepaid_balances(
     :type max_delivery_rate: int
     """
     requester = crypto.address
-    if payment_type == PAYMENT_TYPE_NATIVE:
-        with open(
-            Path(__file__).parent / "abis" / "BalanceTrackerFixedPriceNative.json",
-            encoding="utf-8",
-        ) as f:
-            abi = json.load(f)
 
-        balance_tracker_contract = get_contract(
-            contract_address=mech_payment_balance_tracker,
-            abi=abi,
-            ledger_api=ledger_api,
+    payment_type_name = (PaymentType(payment_type).name).lower()
+    payment_type_abi_path = PAYMENT_TYPE_TO_ABI_PATH.get(payment_type)
+
+    with open(
+        payment_type_abi_path,
+        encoding="utf-8",
+    ) as f:
+        abi = json.load(f)
+
+    balance_tracker_contract = get_contract(
+        contract_address=mech_payment_balance_tracker,
+        abi=abi,
+        ledger_api=ledger_api,
+    )
+    requester_balance = balance_tracker_contract.functions.mapRequesterBalances(
+        requester
+    ).call()
+    if requester_balance < max_delivery_rate:
+        print(
+            f"  - Sender {payment_type_name.lower()} deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
         )
-        requester_balance = balance_tracker_contract.functions.mapRequesterBalances(
-            requester
-        ).call()
-        if requester_balance < max_delivery_rate:
-            print(
-                f"  - Sender Native deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
-            )
-            print(f"  - Sender Address: {requester}")
-            print("  - Please use scripts/deposit_native.py to add balance")
-            sys.exit(1)
-
-    if payment_type == PAYMENT_TYPE_TOKEN:
-        with open(
-            Path(__file__).parent / "abis" / "BalanceTrackerFixedPriceToken.json",
-            encoding="utf-8",
-        ) as f:
-            abi = json.load(f)
-
-        balance_tracker_contract = get_contract(
-            contract_address=mech_payment_balance_tracker,
-            abi=abi,
-            ledger_api=ledger_api,
+        print(f"  - Sender Address: {requester}")
+        print(
+            f"  - Please use scripts/deposit_{payment_type_name.lower()}.py to add balance"
         )
-        requester_balance = balance_tracker_contract.functions.mapRequesterBalances(
-            requester
-        ).call()
-        if requester_balance < max_delivery_rate:
-            print(
-                f"  - Sender Token deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
-            )
-            print(f"  - Sender Address: {requester}")
-            print("  - Please use scripts/deposit_token.py to add balance")
-            sys.exit(1)
+        sys.exit(1)
 
 
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
@@ -761,7 +745,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     if not use_prepaid:
         price = max_delivery_rate
-        if payment_type == PAYMENT_TYPE_TOKEN:
+        if payment_type == PaymentType.TOKEN.value:
             print("Token Mech detected, approving wrapped token for price payment...")
             wxdai = CHAIN_TO_WRAPPED_TOKEN[chain_id]
             approve_tx = approve_price_tokens(
@@ -792,8 +776,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             max_delivery_rate,
         )
 
-    if payment_type in [PAYMENT_TYPE_NATIVE_NVM, PAYMENT_TYPE_TOKEN_NVM]:
-        nvm_mech_type = "Native" if payment_type == PAYMENT_TYPE_NATIVE_NVM else "Token"
+    if payment_type in [PaymentType.NATIVE_NVM.value, PaymentType.TOKEN_NVM.value]:
+        nvm_mech_type = (PaymentType(payment_type).name).lower()
         print(
             f"{nvm_mech_type} Nevermined Mech detected, subscription credits to be used"
         )
