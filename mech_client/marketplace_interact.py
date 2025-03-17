@@ -589,32 +589,33 @@ def check_prepaid_balances(
     """
     requester = crypto.address
 
-    payment_type_name = (PaymentType(payment_type).name).lower()
-    payment_type_abi_path = cast(Path, PAYMENT_TYPE_TO_ABI_PATH.get(payment_type))
+    if payment_type in [PaymentType.NATIVE.value, PaymentType.TOKEN.value]:
+        payment_type_name = (PaymentType(payment_type).name).lower()
+        payment_type_abi_path = cast(Path, PAYMENT_TYPE_TO_ABI_PATH.get(payment_type))
 
-    with open(
-        payment_type_abi_path,
-        encoding="utf-8",
-    ) as f:
-        abi = json.load(f)
+        with open(
+            payment_type_abi_path,
+            encoding="utf-8",
+        ) as f:
+            abi = json.load(f)
 
-    balance_tracker_contract = get_contract(
-        contract_address=mech_payment_balance_tracker,
-        abi=abi,
-        ledger_api=ledger_api,
-    )
-    requester_balance = balance_tracker_contract.functions.mapRequesterBalances(
-        requester
-    ).call()
-    if requester_balance < max_delivery_rate:
-        print(
-            f"  - Sender {payment_type_name.lower()} deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
+        balance_tracker_contract = get_contract(
+            contract_address=mech_payment_balance_tracker,
+            abi=abi,
+            ledger_api=ledger_api,
         )
-        print(f"  - Sender Address: {requester}")
-        print(
-            f"  - Please use scripts/deposit_{payment_type_name.lower()}.py to add balance"
-        )
-        sys.exit(1)
+        requester_balance = balance_tracker_contract.functions.mapRequesterBalances(
+            requester
+        ).call()
+        if requester_balance < max_delivery_rate:
+            print(
+                f"  - Sender {payment_type_name.lower()} deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
+            )
+            print(f"  - Sender Address: {requester}")
+            print(
+                f"  - Please use scripts/deposit_{payment_type_name.lower()}.py to add balance"
+            )
+            sys.exit(1)
 
 
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
