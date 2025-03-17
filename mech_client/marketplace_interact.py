@@ -606,11 +606,11 @@ def check_prepaid_balances(
         ).call()
         if requester_balance < max_delivery_rate:
             print(
-                f"  - Sender {payment_type_name.lower()} deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
+                f"  - Sender {payment_type_name} deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
             )
             print(f"  - Sender Address: {requester}")
             print(
-                f"  - Please use scripts/deposit_{payment_type_name.lower()}.py to add balance"
+                f"  - Please use scripts/deposit_{payment_type_name}.py to add balance"
             )
             sys.exit(1)
 
@@ -773,7 +773,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         )
 
     if payment_type in [PaymentType.NATIVE_NVM.value, PaymentType.TOKEN_NVM.value]:
-        nvm_mech_type = (PaymentType(payment_type).name).lower()
+        nvm_mech_type = PaymentType(payment_type).name.lower()
         print(
             f"{nvm_mech_type} Nevermined Mech detected, subscription credits to be used"
         )
