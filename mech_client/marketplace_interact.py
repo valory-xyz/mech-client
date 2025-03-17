@@ -154,7 +154,7 @@ def fetch_mech_info(
         ).call()
     )
 
-    if payment_type not in PaymentType._value2member_map_:
+    if payment_type not in PaymentType._value2member_map_:  # pylint: disable=W0212
         print("  - Invalid mech type detected.")
         sys.exit(1)
 
@@ -590,7 +590,7 @@ def check_prepaid_balances(
     requester = crypto.address
 
     payment_type_name = (PaymentType(payment_type).name).lower()
-    payment_type_abi_path = PAYMENT_TYPE_TO_ABI_PATH.get(payment_type)
+    payment_type_abi_path = cast(Path, PAYMENT_TYPE_TO_ABI_PATH.get(payment_type))
 
     with open(
         payment_type_abi_path,
