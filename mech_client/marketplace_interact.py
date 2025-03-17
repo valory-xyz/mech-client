@@ -89,7 +89,7 @@ BALANCE_TRACKER_NVM_TOKEN_ABI_PATH = (
 )
 
 
-PAYMENT_TYPE_TO_ABI_PATH = {
+PAYMENT_TYPE_TO_ABI_PATH: Dict[str, Path] = {
     PaymentType.NATIVE.value: BALANCE_TRACKER_NATIVE_ABI_PATH,
     PaymentType.TOKEN.value: BALANCE_TRACKER_TOKEN_ABI_PATH,
     PaymentType.NATIVE_NVM.value: BALANCE_TRACKER_NVM_NATIVE_ABI_PATH,
@@ -591,7 +591,7 @@ def check_prepaid_balances(
 
     if payment_type in [PaymentType.NATIVE.value, PaymentType.TOKEN.value]:
         payment_type_name = PaymentType(payment_type).name.lower()
-        payment_type_abi_path = cast(Path, PAYMENT_TYPE_TO_ABI_PATH.get(payment_type))
+        payment_type_abi_path = PAYMENT_TYPE_TO_ABI_PATH[payment_type]
 
         with open(payment_type_abi_path, encoding="utf-8") as f:
             abi = json.load(f)
