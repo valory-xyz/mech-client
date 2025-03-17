@@ -75,6 +75,9 @@ class PaymentType(Enum):
 
 ABI_DIR_PATH = Path(__file__).parent / "abis"
 IMECH_ABI_PATH = ABI_DIR_PATH / "IMech.json"
+ITOKEN_ABI_PATH = ABI_DIR_PATH / "IToken.json"
+IERC1155_ABI_PATH = ABI_DIR_PATH / "IERC1155.json"
+MARKETPLACE_ABI_PATH = ABI_DIR_PATH / "MechMarketplace.json"
 
 BALANCE_TRACKER_NATIVE_ABI_PATH = ABI_DIR_PATH / "BalanceTrackerFixedPriceNative.json"
 BALANCE_TRACKER_TOKEN_ABI_PATH = ABI_DIR_PATH / "BalanceTrackerFixedPriceToken.json"
@@ -192,7 +195,7 @@ def approve_price_tokens(
     """
     sender = crypto.address
 
-    with open(Path(__file__).parent / "abis" / "IToken.json", encoding="utf-8") as f:
+    with open(ITOKEN_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
     token_contract = get_contract(
@@ -259,10 +262,7 @@ def fetch_requester_nvm_subscription_balance(
         nvm_balance_tracker_contract.functions.subscriptionTokenId().call()
     )
 
-    with open(
-        Path(__file__).parent / "abis" / "IERC1155.json",
-        encoding="utf-8",
-    ) as f:
+    with open(IERC1155_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
     subscription_nft_contract = get_contract(
@@ -590,13 +590,10 @@ def check_prepaid_balances(
     requester = crypto.address
 
     if payment_type in [PaymentType.NATIVE.value, PaymentType.TOKEN.value]:
-        payment_type_name = (PaymentType(payment_type).name).lower()
+        payment_type_name = PaymentType(payment_type).name.lower()
         payment_type_abi_path = cast(Path, PAYMENT_TYPE_TO_ABI_PATH.get(payment_type))
 
-        with open(
-            payment_type_abi_path,
-            encoding="utf-8",
-        ) as f:
+        with open(payment_type_abi_path, encoding="utf-8") as f:
             abi = json.load(f)
 
         balance_tracker_contract = get_contract(
@@ -702,9 +699,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     crypto = EthereumCrypto(private_key_path=private_key_path)
     ledger_api = EthereumApi(**asdict(ledger_config))
 
-    with open(
-        Path(__file__).parent / "abis" / "MechMarketplace.json", encoding="utf-8"
-    ) as f:
+    with open(MARKETPLACE_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
     mech_marketplace_contract = get_contract(
@@ -729,7 +724,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     mech_marketplace_request_config.delivery_rate = max_delivery_rate
     mech_marketplace_request_config.payment_type = payment_type
 
-    with open(Path(__file__).parent / "abis" / "IMech.json", encoding="utf-8") as f:
+    with open(IMECH_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
     (
