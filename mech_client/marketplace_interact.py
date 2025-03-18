@@ -26,8 +26,9 @@ import sys
 import time
 from dataclasses import asdict, make_dataclass
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, Optional, Tuple, cast
 
 import requests
 import websocket
@@ -45,8 +46,8 @@ from mech_client.interact import (
     PRIVATE_KEY_FILE_PATH,
     TIMEOUT,
     WAIT_SLEEP,
-    calculate_topic_id,
     get_contract,
+    get_event_signatures,
     get_mech_config,
 )
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
@@ -59,15 +60,41 @@ from mech_client.wss import (
 
 
 # false positives for [B105:hardcoded_password_string] Possible hardcoded password
-PAYMENT_TYPE_NATIVE = (
-    "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"  # nosec
+class PaymentType(Enum):
+    """Payment type."""
+
+    NATIVE = "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"  # nosec
+    TOKEN = "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
+    NATIVE_NVM = (
+        "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
+    )
+    TOKEN_NVM = (
+        "0d6fd99afa9c4c580fab5e341922c2a5c4b61d880da60506193d7bf88944dd14"  # nosec
+    )
+
+
+ABI_DIR_PATH = Path(__file__).parent / "abis"
+IMECH_ABI_PATH = ABI_DIR_PATH / "IMech.json"
+ITOKEN_ABI_PATH = ABI_DIR_PATH / "IToken.json"
+IERC1155_ABI_PATH = ABI_DIR_PATH / "IERC1155.json"
+MARKETPLACE_ABI_PATH = ABI_DIR_PATH / "MechMarketplace.json"
+
+BALANCE_TRACKER_NATIVE_ABI_PATH = ABI_DIR_PATH / "BalanceTrackerFixedPriceNative.json"
+BALANCE_TRACKER_TOKEN_ABI_PATH = ABI_DIR_PATH / "BalanceTrackerFixedPriceToken.json"
+BALANCE_TRACKER_NVM_NATIVE_ABI_PATH = (
+    ABI_DIR_PATH / "BalanceTrackerNvmSubscriptionNative.json"
 )
-PAYMENT_TYPE_TOKEN = (
-    "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
+BALANCE_TRACKER_NVM_TOKEN_ABI_PATH = (
+    ABI_DIR_PATH / "BalanceTrackerNvmSubscriptionToken.json"
 )
-PAYMENT_TYPE_NVM = (
-    "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
-)
+
+
+PAYMENT_TYPE_TO_ABI_PATH: Dict[str, Path] = {
+    PaymentType.NATIVE.value: BALANCE_TRACKER_NATIVE_ABI_PATH,
+    PaymentType.TOKEN.value: BALANCE_TRACKER_TOKEN_ABI_PATH,
+    PaymentType.NATIVE_NVM.value: BALANCE_TRACKER_NVM_NATIVE_ABI_PATH,
+    PaymentType.TOKEN_NVM.value: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
+}
 
 CHAIN_TO_WRAPPED_TOKEN = {
     1: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
@@ -85,21 +112,14 @@ CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
         "priority_mech_address": "0x478ad20eD958dCC5AD4ABa6F4E4cc51e07a840E4",
         "response_timeout": 300,
         "payment_data": "0x",
-    }
+    },
+    8453: {
+        "mech_marketplace_contract": "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020",
+        "priority_mech_address": "0xE183610A420dBD8825fed49C589Fe2d5BFd5b17a",
+        "response_timeout": 300,
+        "payment_data": "0x",
+    },
 }
-
-
-def get_event_signatures(abi: List) -> Tuple[str, str]:
-    """Calculate `Marketplace Request` and `Marketplace Deliver` event topics"""
-    marketplace_request, marketplace_deliver = "", ""
-    for obj in abi:
-        if obj["type"] != "event":
-            continue
-        if obj["name"] == "MarketplaceDeliver":
-            marketplace_deliver = calculate_topic_id(event=obj)
-        if obj["name"] == "MarketplaceRequest":
-            marketplace_request = calculate_topic_id(event=obj)
-    return marketplace_request, marketplace_deliver
 
 
 def fetch_mech_info(
@@ -120,7 +140,7 @@ def fetch_mech_info(
     :rtype: Tuple[str, int, int, str, Contract]
     """
 
-    with open(Path(__file__).parent / "abis" / "IMech.json", encoding="utf-8") as f:
+    with open(IMECH_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
     mech_contract = get_contract(
@@ -137,7 +157,7 @@ def fetch_mech_info(
         ).call()
     )
 
-    if payment_type not in [PAYMENT_TYPE_NATIVE, PAYMENT_TYPE_TOKEN, PAYMENT_TYPE_NVM]:
+    if payment_type not in PaymentType._value2member_map_:  # pylint: disable=W0212
         print("  - Invalid mech type detected.")
         sys.exit(1)
 
@@ -175,7 +195,7 @@ def approve_price_tokens(
     """
     sender = crypto.address
 
-    with open(Path(__file__).parent / "abis" / "IToken.json", encoding="utf-8") as f:
+    with open(ITOKEN_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
     token_contract = get_contract(
@@ -210,6 +230,7 @@ def fetch_requester_nvm_subscription_balance(
     requester: str,
     ledger_api: EthereumApi,
     mech_payment_balance_tracker: str,
+    payment_type: str,
 ) -> int:
     """
     Fetches the requester nvm subscription balance.
@@ -220,11 +241,13 @@ def fetch_requester_nvm_subscription_balance(
     :type ledger_api: EthereumApi
     :param mech_payment_balance_tracker: Requested mech's balance tracker contract address
     :type mech_payment_balance_tracker: str
+    :param payment_type: Requested mech's payment type
+    :type payment_type: str
     :return: The requester balance.
     :rtype: int
     """
     with open(
-        Path(__file__).parent / "abis" / "BalanceTrackerNvmSubscriptionNative.json",
+        PAYMENT_TYPE_TO_ABI_PATH[payment_type],
         encoding="utf-8",
     ) as f:
         abi = json.load(f)
@@ -239,10 +262,7 @@ def fetch_requester_nvm_subscription_balance(
         nvm_balance_tracker_contract.functions.subscriptionTokenId().call()
     )
 
-    with open(
-        Path(__file__).parent / "abis" / "IERC1155.json",
-        encoding="utf-8",
-    ) as f:
+    with open(IERC1155_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
     subscription_nft_contract = get_contract(
@@ -568,11 +588,12 @@ def check_prepaid_balances(
     :type max_delivery_rate: int
     """
     requester = crypto.address
-    if payment_type == PAYMENT_TYPE_NATIVE:
-        with open(
-            Path(__file__).parent / "abis" / "BalanceTrackerFixedPriceNative.json",
-            encoding="utf-8",
-        ) as f:
+
+    if payment_type in [PaymentType.NATIVE.value, PaymentType.TOKEN.value]:
+        payment_type_name = PaymentType(payment_type).name.lower()
+        payment_type_abi_path = PAYMENT_TYPE_TO_ABI_PATH[payment_type]
+
+        with open(payment_type_abi_path, encoding="utf-8") as f:
             abi = json.load(f)
 
         balance_tracker_contract = get_contract(
@@ -585,33 +606,12 @@ def check_prepaid_balances(
         ).call()
         if requester_balance < max_delivery_rate:
             print(
-                f"  - Sender Native deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
+                f"  - Sender {payment_type_name} deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
             )
             print(f"  - Sender Address: {requester}")
-            print("  - Please use scripts/deposit_native.py to add balance")
-            sys.exit(1)
-
-    if payment_type == PAYMENT_TYPE_TOKEN:
-        with open(
-            Path(__file__).parent / "abis" / "BalanceTrackerFixedPriceToken.json",
-            encoding="utf-8",
-        ) as f:
-            abi = json.load(f)
-
-        balance_tracker_contract = get_contract(
-            contract_address=mech_payment_balance_tracker,
-            abi=abi,
-            ledger_api=ledger_api,
-        )
-        requester_balance = balance_tracker_contract.functions.mapRequesterBalances(
-            requester
-        ).call()
-        if requester_balance < max_delivery_rate:
             print(
-                f"  - Sender Token deposited balance low. Needed: {max_delivery_rate}, Actual: {requester_balance}"
+                f"  - Please use scripts/deposit_{payment_type_name}.py to add balance"
             )
-            print(f"  - Sender Address: {requester}")
-            print("  - Please use scripts/deposit_token.py to add balance")
             sys.exit(1)
 
 
@@ -699,9 +699,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     crypto = EthereumCrypto(private_key_path=private_key_path)
     ledger_api = EthereumApi(**asdict(ledger_config))
 
-    with open(
-        Path(__file__).parent / "abis" / "MechMarketplace.json", encoding="utf-8"
-    ) as f:
+    with open(MARKETPLACE_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
     mech_marketplace_contract = get_contract(
@@ -726,14 +724,16 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     mech_marketplace_request_config.delivery_rate = max_delivery_rate
     mech_marketplace_request_config.payment_type = payment_type
 
+    with open(IMECH_ABI_PATH, encoding="utf-8") as f:
+        abi = json.load(f)
+
     (
         marketplace_request_event_signature,
         marketplace_deliver_event_signature,
     ) = get_event_signatures(abi=abi)
-
     register_event_handlers(
         wss=wss,
-        contract_address=contract_address,
+        contract_address=priority_mech_address,
         crypto=crypto,
         request_signature=marketplace_request_event_signature,
         deliver_signature=marketplace_deliver_event_signature,
@@ -741,7 +741,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     if not use_prepaid:
         price = max_delivery_rate
-        if payment_type == PAYMENT_TYPE_TOKEN:
+        if payment_type == PaymentType.TOKEN.value:
             print("Token Mech detected, approving wrapped token for price payment...")
             wxdai = CHAIN_TO_WRAPPED_TOKEN[chain_id]
             approve_tx = approve_price_tokens(
@@ -772,11 +772,14 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             max_delivery_rate,
         )
 
-    if payment_type == PAYMENT_TYPE_NVM:
-        print("Nevermined Mech detected, subscription credits to be used")
+    if payment_type in [PaymentType.NATIVE_NVM.value, PaymentType.TOKEN_NVM.value]:
+        nvm_mech_type = PaymentType(payment_type).name.lower()
+        print(
+            f"{nvm_mech_type} Nevermined Mech detected, subscription credits to be used"
+        )
         requester = crypto.address
         requester_balance = fetch_requester_nvm_subscription_balance(
-            requester, ledger_api, mech_payment_balance_tracker
+            requester, ledger_api, mech_payment_balance_tracker, payment_type
         )
         if requester_balance < price:
             print(
