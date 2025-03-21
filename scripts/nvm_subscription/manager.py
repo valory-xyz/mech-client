@@ -76,7 +76,7 @@ class NVMSubscriptionManager:
             seed += uuid.uuid4().hex
         return '0x' + seed[:length]
 
-    def create_subscription(self, did: str) -> Dict[str, Any]:
+    def create_subscription(self, did: str, wallet_pvt_key: str) -> Dict[str, Any]:
         """
         Execute the workflow to create a subscription for the given DID.
 
@@ -150,7 +150,7 @@ class NVMSubscriptionManager:
             value_eth=1.0
         )
 
-        signed_tx = self.web3.eth.account.sign_transaction(tx, private_key=os.getenv("PVT_KEY"))
+        signed_tx = self.web3.eth.account.sign_transaction(tx, private_key=wallet_pvt_key)
         tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
         receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
 
