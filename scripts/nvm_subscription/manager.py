@@ -20,7 +20,7 @@ from .contracts.agreement_manager import AgreementStorageManagerContract
 
 logger = logging.getLogger(__name__)
 
-CONFIGS = json.load(open('nvm_mech_integration/resources/networks.json', 'r'))
+CONFIGS = json.load(open('scripts/nvm_subscription/resources/networks.json', 'r'))
 
 class Network(Enum):
     GNOSIS = "GNOSIS"

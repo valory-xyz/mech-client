@@ -39,7 +39,7 @@ class BaseContract:
         Returns:
             dict: A dictionary containing the contract address and ABI.
         """
-        path = os.path.join('.nevermined', 'artifacts', f'{self.name}.json')
+        path = os.path.join('mech_client', 'abis', f'{self.name}.json')
         logger.debug(f"Loading contract info from: {path}")
         with open(path, 'r', encoding='utf-8') as f:
             info = json.load(f)  # Parse JSON containing ABI and address
