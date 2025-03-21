@@ -42,8 +42,8 @@ class NFTSalesTemplateContract(BaseContract):
         receivers: List[str],
         sender: str,
         value_eth: float,
-        gas: int = 17_000_000,
-        gas_price_gwei: int = 3,
+        gas: int = 520_478,
+        gas_price_gwei: int = 1,
         chain_id: int = 100
     ) -> Dict[str, Any]:
         """
