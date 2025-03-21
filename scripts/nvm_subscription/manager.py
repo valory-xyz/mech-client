@@ -51,7 +51,7 @@ class NVMSubscriptionManager:
         self.url = CONFIGS[network]["nvm"]['web3ProviderUri']
         self.web3 = Web3(Web3.HTTPProvider(self.url))
 
-        self.account = Account.from_key(os.getenv("PVT_KEY"))
+        self.account = Account.from_key(os.getenv("WALLET_PVT_KEY"))
         self.sender: ChecksumAddress = self.web3.to_checksum_address(self.account.address)
 
         self.did_registry = DIDRegistryContract(self.web3)
@@ -151,7 +151,7 @@ class NVMSubscriptionManager:
         )
 
         signed_tx = self.web3.eth.account.sign_transaction(tx, private_key=wallet_pvt_key)
-        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
         receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
 
         if receipt["status"] == 1:

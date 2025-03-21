@@ -42,7 +42,7 @@ class DIDRegistryContract(BaseContract):
 
         ddo = {
             "did": f"did:nv:{did}",
-            "serviceEndpoint": response,
+            "serviceEndpoint": registered_values[2],
             "checksum": registered_values[1],
             "owner": registered_values[0],
             "providers": registered_values[5],
@@ -50,8 +50,16 @@ class DIDRegistryContract(BaseContract):
             "immutableUrl": registered_values[7],
             "nftInitialized": registered_values[8],
             "service": response.get("service", []),
+            "proof": response.get("proof", [])
         }
 
+        print("================ SUBSCRIBGING TO NVM OLAS PLAN =======================")
+        print(f"PLAN : {ddo['did']}")
+        print(f"OWNER: {ddo['owner']}")
+        print(f"PROVIDERS: {ddo['providers']}")
+        print(f"ROYALTIES: {ddo['royalties']}")
+        print(f"IMMUTABLE URL: {ddo['immutableUrl']}")
+        print(f"NFT INITIALIZED: {ddo['nftInitialized']}")
         logger.info(f"DDO fetched successfully for DID: {did}")
         return ddo
 
