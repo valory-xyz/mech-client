@@ -16,8 +16,6 @@ class NFTSalesTemplateContract(BaseContract):
     to build a transaction for creating an agreement and paying escrow.
     """
 
-    CONTRACT_NAME = "NFTSalesTemplate"
-
     def __init__(self, w3: Web3):
         """
         Initialize the NFTSalesTemplateContract.

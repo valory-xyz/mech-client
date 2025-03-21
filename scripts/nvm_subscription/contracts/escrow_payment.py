@@ -1,6 +1,7 @@
 # subscription/contracts/escrow_payment.py
 import logging
 from typing import List, Union
+from weakref import proxy
 from web3 import Web3
 from eth_typing import ChecksumAddress
 from web3.types import ENS
@@ -15,8 +16,6 @@ class EscrowPaymentConditionContract(BaseContract):
     Wrapper for the EscrowPaymentCondition smart contract.
     Provides methods to hash values and generate condition IDs.
     """
-
-    CONTRACT_NAME = "EscrowPaymentCondition"
 
     def __init__(self, w3: Web3):
         """
@@ -70,7 +69,7 @@ class EscrowPaymentConditionContract(BaseContract):
         logger.debug(f"Escrow payment hash: {hash_.hex()}")
         return hash_
 
-    def generate_id(self, agreement_id: str, hash_value: bytes) -> bytes:
+    def generate_id(self, agreement_id: bytes, hash_value: bytes) -> bytes:
         """
         Generate the condition ID for the escrow payment.
 

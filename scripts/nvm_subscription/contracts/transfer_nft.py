@@ -15,8 +15,6 @@ class TransferNFTConditionContract(BaseContract):
     Wrapper for the TransferNFTCondition smart contract. Supports hash and ID generation.
     """
 
-    CONTRACT_NAME = "TransferNFTCondition"
-
     def __init__(self, w3: Web3):
         """
         Initialize the TransferNFTConditionContract instance.
@@ -36,7 +34,7 @@ class TransferNFTConditionContract(BaseContract):
         amount: int,
         lock_condition_id: bytes,
         nft_contract_address: Union[ChecksumAddress, ENS],
-        is_escrow: bool
+        _is_transfer: bool,
     ) -> bytes:
         """
         Compute the hash of parameters for the transfer condition.
@@ -61,12 +59,12 @@ class TransferNFTConditionContract(BaseContract):
             amount,
             lock_condition_id,
             nft_contract_address,
-            is_escrow
+            _is_transfer
         ).call()
         logger.debug(f"Transfer NFT hash: {hash_.hex()}")
         return hash_
 
-    def generate_id(self, agreement_id: str, hash_value: bytes) -> bytes:
+    def generate_id(self, agreement_id: bytes, hash_value: bytes) -> bytes:
         """
         Generate the condition ID for the transfer NFT condition.
 

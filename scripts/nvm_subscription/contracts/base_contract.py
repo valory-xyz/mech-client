@@ -28,6 +28,8 @@ class BaseContract:
         self.name = name
         logger.debug(f"Initializing contract wrapper for '{self.name}'")
         self.contract = self._load_contract()  # Load contract from artifact
+
+        self.address = self.contract.address
         logger.info(f"Contract '{self.name}' loaded successfully")
 
     def _load_contract_info(self) -> Dict[str, Any]:

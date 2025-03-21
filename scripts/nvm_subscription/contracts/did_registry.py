@@ -14,8 +14,6 @@ class DIDRegistryContract(BaseContract):
     Provides methods to interact with DID-related functionality.
     """
 
-    CONTRACT_NAME = "DIDRegistry"
-
     def __init__(self, w3: Web3):
         """
         Initialize the DIDRegistryContract with a Web3 instance.

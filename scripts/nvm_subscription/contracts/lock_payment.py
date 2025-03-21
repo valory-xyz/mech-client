@@ -15,7 +15,6 @@ class LockPaymentConditionContract(BaseContract):
     Wrapper class for the LockPaymentCondition smart contract.
     Provides methods for computing hash and generating IDs.
     """
-    CONTRACT_NAME = "LockPaymentCondition"
 
     def __init__(self, w3: Web3):
         """
@@ -60,7 +59,7 @@ class LockPaymentConditionContract(BaseContract):
         logger.debug(f"Computed hash: {hash_.hex()}")
         return hash_
 
-    def generate_id(self, agreement_id: str, hash_value: bytes) -> bytes:
+    def generate_id(self, agreement_id: bytes, hash_value: bytes) -> bytes:
         """
         Generate a condition ID for a given agreement ID and hash.
 
