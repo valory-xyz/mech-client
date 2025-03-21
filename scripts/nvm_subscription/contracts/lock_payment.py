@@ -15,6 +15,7 @@ class LockPaymentConditionContract(BaseContract):
     Wrapper class for the LockPaymentCondition smart contract.
     Provides methods for computing hash and generating IDs.
     """
+    CONTRACT_NAME = "LockPaymentCondition"
 
     def __init__(self, w3: Web3):
         """

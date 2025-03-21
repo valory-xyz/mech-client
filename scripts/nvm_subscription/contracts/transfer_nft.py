@@ -15,6 +15,8 @@ class TransferNFTConditionContract(BaseContract):
     Wrapper for the TransferNFTCondition smart contract. Supports hash and ID generation.
     """
 
+    CONTRACT_NAME = "TransferNFTCondition"
+
     def __init__(self, w3: Web3):
         """
         Initialize the TransferNFTConditionContract instance.

@@ -1,0 +1,139 @@
+# subscription/manager.py
+import json
+import logging
+import os
+
+import uuid
+from typing import Any, Dict, List
+from web3 import Web3
+from eth_account import Account
+from eth_typing import ChecksumAddress
+
+from config import NVMMechConfig
+from .contracts.did_registry import DIDRegistryContract
+from .contracts.nft_sales import NFTSalesTemplateContract
+from .contracts.lock_payment import LockPaymentConditionContract
+from .contracts.transfer_nft import TransferNFTConditionContract
+from .contracts.escrow_payment import EscrowPaymentConditionContract
+
+logger = logging.getLogger(__name__)
+
+CONFIGS = json.load(open('scripts/nvm_subscription/resources/networks.json', 'r'))
+
+
+class NVMSubscriptionManager:
+    """
+    Manages the process of creating NFT-based subscription agreements
+    using a series of smart contracts.
+    """
+
+    def __init__(self):
+        """
+        Initialize the SubscriptionManager, including contract instances
+        and Web3 connection.
+        """
+        self.url = CONFIGS.GNOSIS['web3_provider_uri']
+        self.web3 = Web3(Web3.HTTPProvider(self.url))
+
+        self.account = Account.from_key(os.getenv("PVT_KEY"))
+        self.sender: ChecksumAddress = self.web3.to_checksum_address(self.account.address)
+
+        self.did_registry = DIDRegistryContract(self.web3)
+        self.nft_sales = NFTSalesTemplateContract(self.web3)
+        self.lock_payment = LockPaymentConditionContract(self.web3)
+        self.transfer_nft = TransferNFTConditionContract(self.web3)
+        self.escrow_payment = EscrowPaymentConditionContract(self.web3)
+
+        self.token_address = self.web3.to_checksum_address(os.getenv("TOKEN_ADDRESS"))
+        self.subscription_nft_address = self.web3.to_checksum_address(os.getenv("SUBSCRIPTION_NFT_ADDRESS"))
+        self.subscription_credits = int(os.getenv("SUBSCRIPTION_CREDITS", "1"))
+        self.amounts = [int(os.getenv("PLAN_FEE_NVM", "0")), int(os.getenv("PLAN_PRICE_MECHS", "0"))]
+
+        logger.info("SubscriptionManager initialized")
+
+    def _generate_agreement_id_seed(self, length: int = 64) -> str:
+        """Generate a random hex string prefixed with 0x."""
+        seed = ''
+        while len(seed) < length:
+            seed += uuid.uuid4().hex
+        return '0x' + seed[:length]
+
+    def create_subscription(self, did: str) -> Dict[str, Any]:
+        """
+        Execute the workflow to create a subscription for the given DID.
+
+        Args:
+            did (str): Decentralized Identifier for the asset.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing transaction status and receipt.
+        """
+        logger.info(f"Creating subscription for DID: {did}")
+
+        ddo = self.did_registry.get_ddo(did)
+        service = next((s for s in ddo.get("service", []) if s.get("type") == "nft-sales"), None)
+        if not service:
+            logger.error("No nft-sales service found in DDO")
+            return {"status": "error", "message": "No nft-sales service in DDO"}
+
+        conditions = service["attributes"]["serviceAgreementTemplate"]["conditions"]
+        reward_address = conditions[0]["parameters"][1]["value"]
+        receivers = conditions[0]["parameters"][-1]["value"]
+
+        agreement_id_seed = self._generate_agreement_id_seed()
+        agreement_id = self.web3.solidity_keccak(['bytes32', 'address'], [agreement_id_seed.encode(), self.sender])
+
+        # Condition hashes
+        lock_hash = self.lock_payment.hash_values(did, reward_address, self.token_address, self.amounts, receivers)
+        lock_id = self.lock_payment.generate_id(agreement_id.hex(), lock_hash)
+
+        transfer_hash = self.transfer_nft.hash_values(
+            did,
+            self.sender,
+            self.sender,
+            self.subscription_credits,
+            lock_id,
+            self.subscription_nft_address,
+            False
+        )
+        transfer_id = self.transfer_nft.generate_id(agreement_id.hex(), transfer_hash)
+
+        escrow_hash = self.escrow_payment.hash_values(
+            did,
+            self.amounts,
+            receivers,
+            self.sender,
+            reward_address,
+            self.token_address,
+            lock_id,
+            transfer_id
+        )
+        escrow_id = self.escrow_payment.generate_id(agreement_id.hex(), escrow_hash)
+
+        # Build transaction
+        tx = self.nft_sales.build_create_agreement_tx(
+            agreement_id_seed=agreement_id_seed,
+            did=did,
+            condition_seeds=[lock_hash, transfer_hash, escrow_hash],
+            timelocks=[0, 0, 0],
+            timeouts=[0, 90, 0],
+            publisher=self.sender,
+            service_index=0,
+            reward_address=reward_address,
+            token_address=self.token_address,
+            amounts=self.amounts,
+            receivers=receivers,
+            sender=self.sender,
+            value_eth=1.0
+        )
+
+        signed_tx = self.web3.eth.account.sign_transaction(tx, private_key=os.getenv("PVT_KEY"))
+        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+
+        if receipt["status"] == 1:
+            logger.info("Subscription transaction validated successfully")
+            return {"status": "success", "tx_hash": tx_hash.hex()}
+        else:
+            logger.error("Subscription transaction failed")
+            return {"status": "failed", "receipt": dict(receipt)}

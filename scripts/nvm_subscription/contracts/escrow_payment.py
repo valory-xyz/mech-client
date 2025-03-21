@@ -16,6 +16,8 @@ class EscrowPaymentConditionContract(BaseContract):
     Provides methods to hash values and generate condition IDs.
     """
 
+    CONTRACT_NAME = "EscrowPaymentCondition"
+
     def __init__(self, w3: Web3):
         """
         Initialize the EscrowPaymentConditionContract.
