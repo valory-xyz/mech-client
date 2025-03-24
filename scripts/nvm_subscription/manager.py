@@ -17,6 +17,7 @@ from .contracts.lock_payment import LockPaymentConditionContract
 from .contracts.transfer_nft import TransferNFTConditionContract
 from .contracts.escrow_payment import EscrowPaymentConditionContract
 from .contracts.agreement_manager import AgreementStorageManagerContract
+from .contracts.token import SubscriptionToken
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,10 @@ class NVMSubscriptionManager:
         self.lock_payment = LockPaymentConditionContract(self.web3)
         self.transfer_nft = TransferNFTConditionContract(self.web3)
         self.escrow_payment = EscrowPaymentConditionContract(self.web3)
+
+        # load the subscription token to be used for base
+        if network == 'BASE':
+            self.subscription_token = SubscriptionToken(self.web3)
 
         self.agreement_storage_manager = AgreementStorageManagerContract(self.web3)
 
@@ -133,6 +138,29 @@ class NVMSubscriptionManager:
         )
         escrow_id = self.escrow_payment.generate_id(agreement_id, escrow_hash)
 
+        # we set value as xdai is used as subscription for gnosis
+        value_eth = 1.0
+        if chain_id == 8453:
+            # for base, usdc is used and so we don't send any value
+            value_eth = 0
+
+            approve_tx = self.subscription_token.build_approve_token_tx(
+                sender=self.sender,
+                to=self.lock_payment.address,
+                amount=10**6,
+                chain_id=chain_id,
+            )
+            signed_tx = self.web3.eth.account.sign_transaction(approve_tx, private_key=wallet_pvt_key)
+            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+
+            if receipt["status"] == 1:
+                logger.info("Approve transaction validated successfully")
+                logger.info({"status": "success", "tx_hash": tx_hash.hex()})
+            else:
+                logger.error("Approve transaction failed")
+                return {"status": "failed", "receipt": dict(receipt)}
+
         # Build transaction
         tx = self.nft_sales.build_create_agreement_tx(
             agreement_id_seed=agreement_id_seed,
@@ -147,7 +175,7 @@ class NVMSubscriptionManager:
             amounts=self.amounts,
             receivers=receivers,
             sender=self.sender,
-            value_eth=1.0,
+            value_eth=value_eth,
             chain_id=chain_id
         )
 

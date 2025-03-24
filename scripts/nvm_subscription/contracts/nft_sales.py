@@ -43,7 +43,6 @@ class NFTSalesTemplateContract(BaseContract):
         sender: str,
         value_eth: float,
         gas: int = 520_478,
-        gas_price_gwei: int = 1,
         chain_id: int = 100
     ) -> Dict[str, Any]:
         """
@@ -64,7 +63,6 @@ class NFTSalesTemplateContract(BaseContract):
             sender (str): Ethereum address initiating the transaction.
             value_eth (float): ETH value to include in the transaction.
             gas (int, optional): Gas limit. Defaults to 17,000,000.
-            gas_price_gwei (int, optional): Gas price in gwei. Defaults to 3.
             chain_id (int, optional): Ethereum network chain ID. Defaults to 100.
 
         Returns:
@@ -85,6 +83,10 @@ class NFTSalesTemplateContract(BaseContract):
         nonce = self.w3.eth.get_transaction_count(sender_address)
         logger.debug(f"Nonce for sender {sender_address}: {nonce}")
 
+        latest_block = self.w3.eth.get_block("latest")
+        base_fee = latest_block["baseFeePerGas"]
+        max_priority_fee = self.w3.eth.max_priority_fee
+
         # Build the transaction using the contract method
         tx = self.functions().createAgreementAndPayEscrow(
             agreement_id_seed,
@@ -103,8 +105,13 @@ class NFTSalesTemplateContract(BaseContract):
             "value": self.w3.to_wei(value_eth, "ether"),
             "chainId": chain_id,
             "gas": gas,
-            "gasPrice": self.w3.to_wei(gas_price_gwei, "gwei"),
             "nonce": nonce,
+        })
+        gas = self.w3.eth.estimate_gas(tx)
+        tx.update({
+            "gas": gas,
+            "maxFeePerGas": base_fee + max_priority_fee,
+            "maxPriorityFeePerGas": max_priority_fee,
         })
 
         logger.info(f"Transaction built successfully for agreement ID: {agreement_id_seed}")
