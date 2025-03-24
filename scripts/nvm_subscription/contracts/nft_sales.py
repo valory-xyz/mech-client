@@ -24,7 +24,7 @@ class NFTSalesTemplateContract(BaseContract):
             w3 (Web3): An instance of Web3 connected to an Ethereum network.
         """
         logger.debug("Initializing NFTSalesTemplateContract")
-        super().__init__(w3, name="NFTSalesTemplate.gnosis")
+        super().__init__(w3, name="NFTSalesTemplate")
         logger.info("NFTSalesTemplateContract initialized")
 
     def build_create_agreement_tx(

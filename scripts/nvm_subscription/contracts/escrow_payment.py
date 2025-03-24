@@ -1,7 +1,6 @@
 # subscription/contracts/escrow_payment.py
 import logging
 from typing import List, Union
-from weakref import proxy
 from web3 import Web3
 from eth_typing import ChecksumAddress
 from web3.types import ENS
@@ -25,7 +24,7 @@ class EscrowPaymentConditionContract(BaseContract):
             w3 (Web3): A connected Web3 instance.
         """
         logger.debug("Initializing EscrowPaymentConditionContract")
-        super().__init__(w3, name="EscrowPaymentCondition.gnosis")
+        super().__init__(w3, name="EscrowPaymentCondition")
         logger.info("EscrowPaymentConditionContract initialized")
 
     def hash_values(

@@ -23,7 +23,7 @@ class TransferNFTConditionContract(BaseContract):
             w3 (Web3): A connected Web3 instance.
         """
         logger.debug("Initializing TransferNFTConditionContract")
-        super().__init__(w3, name="TransferNFTCondition.gnosis")
+        super().__init__(w3, name="TransferNFTCondition")
         logger.info("TransferNFTConditionContract initialized")
 
     def hash_values(

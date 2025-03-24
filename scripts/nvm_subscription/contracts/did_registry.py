@@ -21,7 +21,7 @@ class DIDRegistryContract(BaseContract):
         Args:
             w3 (Web3): Web3 instance connected to the desired Ethereum network.
         """
-        super().__init__(w3, name="DIDRegistry.gnosis")
+        super().__init__(w3, name="DIDRegistry")
 
     def get_ddo(self, did: str) -> Dict[str, Any]:
         """

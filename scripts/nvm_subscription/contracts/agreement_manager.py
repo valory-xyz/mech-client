@@ -24,7 +24,7 @@ class AgreementStorageManagerContract(BaseContract):
             w3 (Web3): An instance of Web3 connected to the target Ethereum network.
         """
         logger.debug("Initializing AgreementStoreManager")
-        super().__init__(w3, name="AgreementStoreManager.gnosis")
+        super().__init__(w3, name="AgreementStoreManager")
         logger.info("AgreementStoreManagerContract initialized")
 
     def agreement_id(self, agreement_id_seed: str, subscriber: str) -> bytes:

@@ -24,7 +24,7 @@ class LockPaymentConditionContract(BaseContract):
             w3 (Web3): An instance of Web3 connected to the target Ethereum network.
         """
         logger.debug("Initializing LockPaymentConditionContract")
-        super().__init__(w3, name="LockPaymentCondition.gnosis")
+        super().__init__(w3, name="LockPaymentCondition")
         logger.info("LockPaymentConditionContract initialized")
 
     def hash_values(

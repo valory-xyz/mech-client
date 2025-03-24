@@ -26,6 +26,8 @@ class BaseContract:
         """
         self.w3 = w3
         self.name = name
+        self.chain_id = self.w3.eth.chain_id
+        self.chain_name = "gnosis" if self.chain_id == 100 else "base"
         logger.debug(f"Initializing contract wrapper for '{self.name}'")
         self.contract = self._load_contract()  # Load contract from artifact
 
@@ -39,7 +41,7 @@ class BaseContract:
         Returns:
             dict: A dictionary containing the contract address and ABI.
         """
-        path = os.path.join('mech_client', 'abis', f'{self.name}.json')
+        path = os.path.join('mech_client', 'abis', f'{self.name}.{self.chain_name}.json')
         logger.debug(f"Loading contract info from: {path}")
         with open(path, 'r', encoding='utf-8') as f:
             info = json.load(f)  # Parse JSON containing ABI and address
