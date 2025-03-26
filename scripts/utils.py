@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from aea_ledger_ethereum import EthereumApi
 from web3.contract import Contract as Web3Contract
-from mech_client.marketplace_interact import get_contract, CHAIN_TO_WRAPPED_TOKEN
+from mech_client.marketplace_interact import get_contract, CHAIN_TO_PRICE_TOKEN
 
 
 # based on mech configs
@@ -19,7 +19,7 @@ CHAIN_TO_NATIVE_BALANCE_TRACKER = {
     100: "0x21cE6799A22A3Da84B7c44a814a9c79ab1d2A50D",
     42161: "",
     137: "",
-    8453: "",
+    8453: "0xB3921F8D8215603f0Bd521341Ac45eA8f2d274c1",
     42220: "",
     10: "",
 }
@@ -28,7 +28,7 @@ CHAIN_TO_TOKEN_BALANCE_TRACKER = {
     100: "0x53Bd432516707a5212A70216284a99A563aAC1D1",
     42161: "",
     137: "",
-    8453: "",
+    8453: "0x43fB32f25dce34EB76c78C7A42C8F40F84BCD237",
     42220: "",
     10: "",
 }
@@ -119,7 +119,7 @@ def get_token_contract(ledger_api: EthereumApi, chain_id: int) -> Web3Contract:
         abi = json.load(f)
 
     token_contract = get_contract(
-        contract_address=CHAIN_TO_WRAPPED_TOKEN[chain_id],
+        contract_address=CHAIN_TO_PRICE_TOKEN[chain_id],
         abi=abi,
         ledger_api=ledger_api,
     )

@@ -96,12 +96,12 @@ PAYMENT_TYPE_TO_ABI_PATH: Dict[str, Path] = {
     PaymentType.TOKEN_NVM.value: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
 }
 
-CHAIN_TO_WRAPPED_TOKEN = {
+CHAIN_TO_PRICE_TOKEN = {
     1: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     10: "0x4200000000000000000000000000000000000006",
-    100: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
+    100: "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
     137: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
-    8453: "0x4200000000000000000000000000000000000006",
+    8453: "0x54330d28ca3357F294334BDC454a032e7f353416",
     42220: "0x471EcE3750Da237f93B8E339c536989b8978a438",
 }
 
@@ -743,9 +743,9 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         price = max_delivery_rate
         if payment_type == PaymentType.TOKEN.value:
             print("Token Mech detected, approving wrapped token for price payment...")
-            wxdai = CHAIN_TO_WRAPPED_TOKEN[chain_id]
+            price_token = CHAIN_TO_PRICE_TOKEN[chain_id]
             approve_tx = approve_price_tokens(
-                crypto, ledger_api, wxdai, mech_payment_balance_tracker, price
+                crypto, ledger_api, price_token, mech_payment_balance_tracker, price
             )
             if not approve_tx:
                 print("Unable to approve allowance")

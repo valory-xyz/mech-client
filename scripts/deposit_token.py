@@ -95,7 +95,7 @@ def deposit(
 
     print("Sending deposit tx")
     try:
-        tx_args = {"sender_address": sender, "value": 0, "gas": 80000}
+        tx_args = {"sender_address": sender, "value": 0, "gas": 100000}
         raw_transaction = ledger_api.build_transaction(
             contract_instance=token_balance_tracker_contract,
             method_name="deposit",
@@ -135,6 +135,8 @@ def main(
             f"Private key file `{private_key_path}` does not exist!"
         )
     crypto = EthereumCrypto(private_key_path=private_key_path)
+
+    print(f"Sender address: {crypto.address}")
 
     chain_id = mech_config.ledger_config.chain_id
     token_balance_tracker_contract = get_token_balance_tracker_contract(

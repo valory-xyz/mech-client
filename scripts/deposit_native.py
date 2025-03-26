@@ -96,6 +96,8 @@ def main(
         )
     crypto = EthereumCrypto(private_key_path=private_key_path)
 
+    print(f"Sender address: {crypto.address}")
+
     chain_id = mech_config.ledger_config.chain_id
     to = CHAIN_TO_NATIVE_BALANCE_TRACKER[chain_id]
 
