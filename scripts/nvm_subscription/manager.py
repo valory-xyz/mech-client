@@ -44,7 +44,7 @@ class NVMSubscriptionManager:
     using a series of smart contracts.
     """
 
-    def __init__(self, network: str):
+    def __init__(self, network: str, private_key: str):
         """
         Initialize the SubscriptionManager, including contract instances
         and Web3 connection.
@@ -52,7 +52,7 @@ class NVMSubscriptionManager:
         self.url = CONFIGS[network]["nvm"]['web3ProviderUri']
         self.web3 = Web3(Web3.HTTPProvider(self.url))
 
-        self.account = Account.from_key(os.getenv("WALLET_PVT_KEY"))
+        self.account = Account.from_key(private_key)
         self.sender: ChecksumAddress = self.web3.to_checksum_address(self.account.address)
 
         self.did_registry = DIDRegistryContract(self.web3)

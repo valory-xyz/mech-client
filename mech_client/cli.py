@@ -40,6 +40,7 @@ from mech_client.push_to_ipfs import main as push_to_ipfs_main
 from mech_client.to_png import main as to_png_main
 from scripts.deposit_native import main as deposit_native_main
 from scripts.deposit_token import main as deposit_token_main
+from scripts.nvm_subscribe import main as nvm_subscribe_main
 
 
 @click.group(name="mechx")  # type: ignore
@@ -380,6 +381,25 @@ def deposit_token(
     )
 
 
+@click.command(name="purchase-nvm-subscription")
+@click.option(
+    "--chain-config",
+    type=str,
+    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+)
+@click.option(
+    "--key",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    help="Path to private key to use for deposit",
+)
+def nvm_subscribe(
+    key: Optional[str],
+    chain_config: Optional[str] = None,
+) -> None:
+    """Deposits Token balance for prepaid requests."""
+    nvm_subscribe_main(private_key_path=key, chain_config=chain_config)
+
+
 cli.add_command(interact)
 cli.add_command(prompt_to_ipfs)
 cli.add_command(push_to_ipfs)
@@ -389,6 +409,7 @@ cli.add_command(tool_io_schema)
 cli.add_command(tool_description)
 cli.add_command(deposit_native)
 cli.add_command(deposit_token)
+cli.add_command(nvm_subscribe)
 
 
 if __name__ == "__main__":
