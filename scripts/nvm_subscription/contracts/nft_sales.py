@@ -42,7 +42,7 @@ class NFTSalesTemplateContract(BaseContract):
         receivers: List[str],
         sender: str,
         value_eth: float,
-        gas: int = 520_478,
+        gas: int = 600_000,
         chain_id: int = 100
     ) -> Dict[str, Any]:
         """
@@ -62,7 +62,7 @@ class NFTSalesTemplateContract(BaseContract):
             receivers (List[str]): List of payment receiver addresses.
             sender (str): Ethereum address initiating the transaction.
             value_eth (float): ETH value to include in the transaction.
-            gas (int, optional): Gas limit. Defaults to 17,000,000.
+            gas (int, optional): Gas limit. Defaults to 600,000.
             chain_id (int, optional): Ethereum network chain ID. Defaults to 100.
 
         Returns:

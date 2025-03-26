@@ -31,7 +31,7 @@ class SubscriptionToken(BaseContract):
         sender: Union[ChecksumAddress, ENS],
         to: Union[ChecksumAddress, ENS],
         amount: int,
-        gas: int = 50_000,
+        gas: int = 60_000,
         chain_id: int = 100,
     ) -> bytes:
         """
@@ -41,7 +41,7 @@ class SubscriptionToken(BaseContract):
             sender (ChecksumAddress | ENS): Address sending the approve tx.
             to_address (ChecksumAddress | ENS): Address getting the approval.
             amount (int): Number of tokens to approve.
-            gas (int, optional): Gas limit. Defaults to 50,000.
+            gas (int, optional): Gas limit. Defaults to 60,000.
             chain_id (int, optional): Ethereum network chain ID. Defaults to 100.
 
         Returns:
