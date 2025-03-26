@@ -20,6 +20,7 @@
 
 import sys
 from pathlib import Path
+from typing import Optional
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from dataclasses import asdict
 from web3.contract import Contract as Web3Contract
@@ -29,10 +30,8 @@ from mech_client.interact import (
     get_mech_config,
     PRIVATE_KEY_FILE_PATH,
 )
-from utils import (
+from .utils import (
     print_title,
-    input_select_chain,
-    input_with_default_value,
     get_token_contract,
     get_token_balance_tracker_contract,
 )
@@ -114,24 +113,18 @@ def deposit(
         print(f"Error occured while sending the transaction: {e}")
 
 
-def main() -> None:
+def main(
+    amount: str,
+    private_key_path: Optional[str] = None,
+    chain_config: Optional[str] = None,
+) -> None:
     """Runs the deposit functionality for the token mech type"""
     print_title("Token Deposit")
     print("This script will assist you in depositing token balance for mech requests.")
     print()
 
-    print("Select the chain to use")
-
-    chain_config = input_select_chain()
-
-    amount = input_with_default_value(
-        "Please provide the amount of token currency to deposit", "1"
-    )
     amount_to_deposit = int(float(amount) * 10**18)
-
-    private_key_path = input_with_default_value(
-        "Please provide path to your private key", PRIVATE_KEY_FILE_PATH
-    )
+    private_key_path = private_key_path or PRIVATE_KEY_FILE_PATH
 
     mech_config = get_mech_config(chain_config)
     ledger_config = mech_config.ledger_config
