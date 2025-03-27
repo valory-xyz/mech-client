@@ -184,7 +184,7 @@ payment model of the Mech. For a fixed price Mech receiving payments in native t
 mechx deposit-native --chain-config <chain_config> <amount>
 ```
 
-For a fixed price Mech receiving payments in OLAS, use: 
+For a fixed price Mech receiving payments in OLAS, use the following (the amount is in ether): 
 
 ```bash
 mechx deposit-token --chain-config <chain_config> <amount>
@@ -193,8 +193,10 @@ mechx deposit-token --chain-config <chain_config> <amount>
 For a Mech using Nevermined subscriptions, use the following: 
 
 ```bash 
-mechx purchase-nvm-subscription --chain-config <chain_config> --key <private_key_file_path>
+mechx purchase-nvm-subscription --chain-config <chain_config>
 ```
+
+You can use the option `--key <private_key_file_path>` in order to customize the path to the private key file.
 
 The basic usage of the Mech Client is then as follows.
 
