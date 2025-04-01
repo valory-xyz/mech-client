@@ -231,8 +231,8 @@ class NVMSubscriptionManager:
         receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
 
         if receipt["status"] == 1:
-            logger.info("Mint NFT transaction successfully")
+            logger.info("Transfer payment transaction successfully")
             logger.info({"status": "success", "tx_hash": tx_hash.hex()})
         else:
-            logger.error("Mint NFT transaction failed")
+            logger.error("Transfer payment transaction failed")
             return {"status": "failed", "receipt": dict(receipt)}
