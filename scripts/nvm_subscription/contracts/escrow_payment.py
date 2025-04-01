@@ -1,6 +1,6 @@
 # subscription/contracts/escrow_payment.py
 import logging
-from typing import List, Union
+from typing import List, Union, Dict, Any
 from web3 import Web3
 from eth_typing import ChecksumAddress
 from web3.types import ENS
@@ -83,3 +83,60 @@ class EscrowPaymentConditionContract(BaseContract):
         condition_id = self.functions().generateId(agreement_id, hash_value).call()
         logger.info(f"Escrow payment condition ID: {condition_id.hex()}")
         return condition_id
+    
+
+    def build_fulfill_tx(
+        self,
+        agreement_id: str,
+        data: List,
+        lock_condition: str,
+        release_condition: str,
+        sender: str,
+        value_eth: float,
+        gas: int = 600_000,
+        chain_id: int = 100,
+    ) -> Dict[str, Any]:
+        sender_address: ChecksumAddress = self.w3.to_checksum_address(sender)
+        nonce = self.w3.eth.get_transaction_count(sender_address)
+        logger.debug(f"Nonce for sender {sender_address}: {nonce}")
+
+        latest_block = self.w3.eth.get_block("latest")
+        base_fee = latest_block["baseFeePerGas"]
+        max_priority_fee = self.w3.eth.max_priority_fee
+
+        # Build the transaction using the contract method
+        tx = (
+            self.functions()
+            .fulfill(
+                agreement_id,
+                "0x" + data[0],
+                [int(v) for v in data[1]],
+                data[2],
+                sender,
+                self.address,
+                data[4],
+                lock_condition,
+                release_condition,
+            )
+            .build_transaction(
+                {
+                    "from": sender_address,
+                    "value": self.w3.to_wei(value_eth, "ether"),
+                    "chainId": chain_id,
+                    "gas": gas,
+                    "nonce": nonce,
+                }
+            )
+        )
+        gas = self.w3.eth.estimate_gas(tx)
+        tx.update(
+            {
+                "gas": gas,
+                "maxFeePerGas": base_fee + max_priority_fee,
+                "maxPriorityFeePerGas": max_priority_fee,
+            }
+        )
+
+        logger.info("Transaction built successfully for fulfill for delegate")
+        logger.debug(f"Transaction details: {tx}")
+        return tx

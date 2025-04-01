@@ -1,6 +1,6 @@
 # subscription/contracts/transfer_nft.py
 import logging
-from typing import Union
+from typing import Union, List, Any, Dict
 from web3 import Web3
 from eth_typing import ChecksumAddress
 from web3.types import ENS
@@ -79,3 +79,58 @@ class TransferNFTConditionContract(BaseContract):
         condition_id = self.functions().generateId(agreement_id, hash_value).call()
         logger.info(f"Transfer NFT condition ID: {condition_id.hex()}")
         return condition_id
+
+    def build_fulfill_for_delegate_tx(
+        self,
+        agreement_id: str,
+        data: List,
+        lock_payment_condition: str,
+        sender: str,
+        value_eth: float,
+        gas: int = 600_000,
+        chain_id: int = 100,
+    ) -> Dict[str, Any]:
+        sender_address: ChecksumAddress = self.w3.to_checksum_address(sender)
+        nonce = self.w3.eth.get_transaction_count(sender_address)
+        logger.debug(f"Nonce for sender {sender_address}: {nonce}")
+
+        latest_block = self.w3.eth.get_block("latest")
+        base_fee = latest_block["baseFeePerGas"]
+        max_priority_fee = self.w3.eth.max_priority_fee
+
+        # Build the transaction using the contract method
+        tx = (
+            self.functions()
+            .fulfillForDelegate(
+                agreement_id,
+                "0x" + data[0],
+                data[3],
+                sender,
+                int(data[2]),
+                lock_payment_condition,
+                data[4],
+                False,
+                int(data[7]),
+            )
+            .build_transaction(
+                {
+                    "from": sender_address,
+                    "value": self.w3.to_wei(value_eth, "ether"),
+                    "chainId": chain_id,
+                    "gas": gas,
+                    "nonce": nonce,
+                }
+            )
+        )
+        gas = self.w3.eth.estimate_gas(tx)
+        tx.update(
+            {
+                "gas": gas,
+                "maxFeePerGas": base_fee + max_priority_fee,
+                "maxPriorityFeePerGas": max_priority_fee,
+            }
+        )
+
+        logger.info("Transaction built successfully for fulfill for delegate")
+        logger.debug(f"Transaction details: {tx}")
+        return tx

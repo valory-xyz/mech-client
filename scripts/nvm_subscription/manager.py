@@ -185,7 +185,54 @@ class NVMSubscriptionManager:
 
         if receipt["status"] == 1:
             logger.info("Subscription transaction validated successfully")
-            return {"status": "success", "tx_hash": tx_hash.hex()}
+            logger.info({"status": "success", "tx_hash": tx_hash.hex()})
         else:
             logger.error("Subscription transaction failed")
+            return {"status": "failed", "receipt": dict(receipt)}
+        
+
+        transfer_nft_data = conditions[1]
+        data_values = [param['value'] for param in transfer_nft_data['parameters']]
+        tx = self.transfer_nft.build_fulfill_for_delegate_tx(
+            agreement_id=agreement_id,
+            data=data_values,
+            lock_payment_condition=lock_id,
+            sender=self.sender,
+            value_eth=0,
+            chain_id=chain_id
+        )
+
+        signed_tx = self.web3.eth.account.sign_transaction(tx, private_key=wallet_pvt_key)
+        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+
+        if receipt["status"] == 1:
+            logger.info("Mint NFT transaction successfully")
+            logger.info({"status": "success", "tx_hash": tx_hash.hex()})
+        else:
+            logger.error("Mint NFT transaction failed")
+            return {"status": "failed", "receipt": dict(receipt)}
+        
+
+        transfer_payment_data = conditions[2]
+        data_values = [param['value'] for param in transfer_payment_data['parameters']]
+        tx = self.escrow_payment.build_fulfill_tx(
+            agreement_id=agreement_id,
+            data=data_values,
+            lock_condition=lock_id,
+            release_condition=transfer_id,
+            sender=self.sender,
+            value_eth=0,
+            chain_id=chain_id
+        )
+
+        signed_tx = self.web3.eth.account.sign_transaction(tx, private_key=wallet_pvt_key)
+        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+
+        if receipt["status"] == 1:
+            logger.info("Mint NFT transaction successfully")
+            logger.info({"status": "success", "tx_hash": tx_hash.hex()})
+        else:
+            logger.error("Mint NFT transaction failed")
             return {"status": "failed", "receipt": dict(receipt)}
