@@ -61,7 +61,7 @@ def input_with_default_value(prompt: str, default_value: str) -> str:
     return str(user_input) if user_input else default_value
 
 
-def input_select_chain():
+def input_select_chain() -> str:
     """Chose a single option from the offered ones"""
     user_input = input(f"Chose one of the following options {VALID_CHAINS}: ").lower()
     if user_input in VALID_CHAINS:

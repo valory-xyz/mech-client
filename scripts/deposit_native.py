@@ -37,7 +37,7 @@ def deposit(
     crypto: EthereumCrypto,
     to: str,
     amount: int,
-):
+) -> str:
     sender = crypto.address
 
     try:
@@ -52,6 +52,7 @@ def deposit(
             sys.exit(1)
     except Exception as e:
         print(f"Error occured while fetching user balance: {e}")
+        return str(e)
 
     try:
         print("Sending deposit tx")
@@ -71,6 +72,7 @@ def deposit(
         return transaction_digest
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
+        return str(e)
 
 
 def main(
@@ -115,7 +117,3 @@ def main(
 
     print("")
     print("Deposit Successful")
-
-
-if __name__ == "__main__":
-    main()

@@ -16,9 +16,9 @@ CHAIN_TO_ENVS: Dict[str, Path] = {
 
 
 def main(
-    private_key_path: Optional[str] = None,
-    chain_config: Optional[str] = None,
-):
+    private_key_path: str,
+    chain_config: str,
+) -> None:
 
     chain_env = CHAIN_TO_ENVS.get(chain_config)
     if chain_env:
@@ -37,9 +37,9 @@ def main(
         content = file.read()
 
     WALLET_PVT_KEY = content
-    PLAN_DID = os.environ.get("PLAN_DID")
-    NETWORK = os.environ.get("NETWORK_NAME", "GNOSIS")
-    CHAIN_ID = int(os.environ.get("CHAIN_ID"))
+    PLAN_DID = os.environ["PLAN_DID"]
+    NETWORK = os.environ["NETWORK_NAME"]
+    CHAIN_ID = int(os.environ["CHAIN_ID"])
     SENDER = Web3().eth.account.from_key(WALLET_PVT_KEY).address
 
     print(f"Sender address: {SENDER}")
@@ -49,7 +49,3 @@ def main(
 
     print("Subscription created successfully")
     print(tx_receipt)
-
-
-if __name__ == "__main__":
-    main()

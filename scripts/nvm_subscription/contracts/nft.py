@@ -28,7 +28,7 @@ class SubscriptionNFT(BaseContract):
 
     def get_balance(
         self, sender: Union[ChecksumAddress, ENS], subscription_id: str
-    ) -> bytes:
+    ) -> int:
         """
         Gets the user subscription credit balance.
 

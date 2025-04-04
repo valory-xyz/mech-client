@@ -38,7 +38,7 @@ from .utils import (
 from mech_client.wss import wait_for_receipt
 
 
-def check_token_balance(token_contract: Web3Contract, sender: str, amount: int):
+def check_token_balance(token_contract: Web3Contract, sender: str, amount: int) -> None:
     try:
         print("Fetching user balance")
         user_token_balance = token_contract.functions.balanceOf(sender).call()
@@ -59,7 +59,7 @@ def approve(
     token_contract: Web3Contract,
     token_balance_tracker_contract: Web3Contract,
     amount: int,
-):
+) -> str:
     sender = crypto.address
 
     print("Sending approve tx")
@@ -83,6 +83,7 @@ def approve(
         return transaction_digest
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
+        return str(e)
 
 
 def deposit(
@@ -90,7 +91,7 @@ def deposit(
     crypto: EthereumCrypto,
     token_balance_tracker_contract: Web3Contract,
     amount: int,
-):
+) -> str:
     sender = crypto.address
 
     print("Sending deposit tx")
@@ -111,6 +112,7 @@ def deposit(
         return transaction_digest
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
+        return str(e)
 
 
 def main(
@@ -183,7 +185,3 @@ def main(
 
     print("")
     print("Deposit Successful")
-
-
-if __name__ == "__main__":
-    main()

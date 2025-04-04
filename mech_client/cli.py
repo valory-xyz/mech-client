@@ -393,8 +393,8 @@ def deposit_token(
     help="Path to private key to use for deposit",
 )
 def nvm_subscribe(
-    key: Optional[str],
-    chain_config: Optional[str] = None,
+    key: str,
+    chain_config: str,
 ) -> None:
     """Deposits Token balance for prepaid requests."""
     nvm_subscribe_main(private_key_path=key, chain_config=chain_config)

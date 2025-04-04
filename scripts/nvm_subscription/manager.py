@@ -30,7 +30,7 @@ class Network(Enum):
     BASE = "BASE"
 
 
-def get_variable_value(variable)->str:
+def get_variable_value(variable: str) -> str:
     try:
         var = os.getenv(variable)
         if var is None:
@@ -217,3 +217,5 @@ class NVMSubscriptionManager:
             )
             print(f"Sender credits After Purchase: {user_credit_balance_before}")
             return {"status": "success", "receipt": ""}
+
+        return {"status": response.text, "receipt": ""}
