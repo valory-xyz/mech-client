@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+import requests
 
 import uuid
 from typing import Any, Dict, List, Literal, Union
@@ -18,6 +19,7 @@ from .contracts.transfer_nft import TransferNFTConditionContract
 from .contracts.escrow_payment import EscrowPaymentConditionContract
 from .contracts.agreement_manager import AgreementStorageManagerContract
 from .contracts.token import SubscriptionToken
+from .contracts.nft import SubscriptionNFT
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,7 @@ class NVMSubscriptionManager:
         self.lock_payment = LockPaymentConditionContract(self.web3)
         self.transfer_nft = TransferNFTConditionContract(self.web3)
         self.escrow_payment = EscrowPaymentConditionContract(self.web3)
+        self.subscription_nft = SubscriptionNFT(self.web3)
 
         # load the subscription token to be used for base
         if network == 'BASE':
@@ -71,6 +74,7 @@ class NVMSubscriptionManager:
         self.subscription_nft_address = self.web3.to_checksum_address(get_variable_value("SUBSCRIPTION_NFT_ADDRESS"))
         self.subscription_credits = int(os.getenv("SUBSCRIPTION_CREDITS", "1"))
         self.amounts = [int(os.getenv("PLAN_FEE_NVM", "0")), int(os.getenv("PLAN_PRICE_MECHS", "0"))]
+        self.subscription_id = CONFIGS[network]["nvm"]["subscription_id"]
 
         logger.info("SubscriptionManager initialized")
 
@@ -100,7 +104,6 @@ class NVMSubscriptionManager:
         if not service:
             logger.error("No nft-sales service found in DDO")
             return {"status": "error", "message": "No nft-sales service in DDO"}
-
 
         self.publisher = service["templateId"]
 
@@ -137,6 +140,11 @@ class NVMSubscriptionManager:
             transfer_id
         )
         escrow_id = self.escrow_payment.generate_id(agreement_id, escrow_hash)
+
+        user_credit_balance_before = self.subscription_nft.get_balance(
+            self.sender, self.subscription_id
+        )
+        print(f"User credits Before Purchase: {user_credit_balance_before}")
 
         # we set value as xdai is used as subscription for gnosis
         value_eth = 1.0
@@ -185,7 +193,26 @@ class NVMSubscriptionManager:
 
         if receipt["status"] == 1:
             logger.info("Subscription transaction validated successfully")
-            return {"status": "success", "tx_hash": tx_hash.hex()}
+            logger.info({"status": "success", "tx_hash": tx_hash.hex()})
         else:
             logger.error("Subscription transaction failed")
             return {"status": "failed", "receipt": dict(receipt)}
+
+        url = service["serviceEndpoint"]
+        claim_data = {
+            "agreementId": "0x" + agreement_id.hex(),
+            "did": did[2:],
+            "nftHolder": ddo["proof"]["creator"],
+            "nftReceiver": self.sender,
+            "nftAmount": str(self.subscription_credits),
+            "nftType": 1155,
+            "serviceIndex": -1,
+        }
+        response = requests.post(url=url, json=claim_data)
+
+        if response.status_code == 201:
+            user_credit_balance_before = self.subscription_nft.get_balance(
+                self.sender, self.subscription_id
+            )
+            print(f"User credits After Purchase: {user_credit_balance_before}")
+            return {"status": "success", "receipt": ""}

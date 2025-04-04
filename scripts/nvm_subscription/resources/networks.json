@@ -13,6 +13,7 @@
       "neverminedNodeUri": "https://node.base.nevermined.app",
       "neverminedNodeAddress": "0x824dbcE5E9C96C5b8ce2A35a25a5ab87eD1D00b1",
       "neverminedBackendUri": "https://one-backend.base.nevermined.app",
+      "subscription_id": "50413016362950485991271150743187499870906117744058208429036668344255336389082",
       "verbose": true
     },
     "nativeToken": "ETH",
@@ -39,6 +40,7 @@
       "neverminedNodeUri": "https://node.gnosis.nevermined.app",
       "neverminedNodeAddress": "0x824dbcE5E9C96C5b8ce2A35a25a5ab87eD1D00b1",
       "neverminedBackendUri": "https://one-backend.gnosis.nevermined.app",
+      "subscription_id": "79922471236808376650579296325311587488574799199590951702510416090224804407991",
       "verbose": true
     },
     "nativeToken": "xDAI",
