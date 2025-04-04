@@ -57,9 +57,9 @@ class DIDRegistryContract(BaseContract):
         print(f"PLAN : {ddo['did']}")
         print(f"OWNER: {ddo['owner']}")
         print(f"PROVIDERS: {ddo['providers']}")
-        print(f"ROYALTIES: {ddo['royalties']}")
-        print(f"IMMUTABLE URL: {ddo['immutableUrl']}")
-        print(f"NFT INITIALIZED: {ddo['nftInitialized']}")
+        logger.info(f"ROYALTIES: {ddo['royalties']}")
+        logger.info(f"IMMUTABLE URL: {ddo['immutableUrl']}")
+        logger.info(f"NFT INITIALIZED: {ddo['nftInitialized']}")
         logger.info(f"DDO fetched successfully for DID: {did}")
         return ddo
 

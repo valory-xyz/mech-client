@@ -100,6 +100,7 @@ class NVMSubscriptionManager:
         did = did.replace("did:nv:", "0x")
 
         ddo = self.did_registry.get_ddo(did)
+        print(f"SUBSCRIPTION NFT : {self.subscription_nft_address}")
         service = next((s for s in ddo.get("service", []) if s.get("type") == "nft-sales"), None)
         if not service:
             logger.error("No nft-sales service found in DDO")
@@ -144,7 +145,7 @@ class NVMSubscriptionManager:
         user_credit_balance_before = self.subscription_nft.get_balance(
             self.sender, self.subscription_id
         )
-        print(f"User credits Before Purchase: {user_credit_balance_before}")
+        print(f"Sender credits Before Purchase: {user_credit_balance_before}")
 
         # we set value as xdai is used as subscription for gnosis
         value_eth = 1.0
@@ -214,5 +215,5 @@ class NVMSubscriptionManager:
             user_credit_balance_before = self.subscription_nft.get_balance(
                 self.sender, self.subscription_id
             )
-            print(f"User credits After Purchase: {user_credit_balance_before}")
+            print(f"Sender credits After Purchase: {user_credit_balance_before}")
             return {"status": "success", "receipt": ""}
