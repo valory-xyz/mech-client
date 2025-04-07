@@ -20,6 +20,7 @@
 
 import sys
 from pathlib import Path
+from typing import Optional
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from dataclasses import asdict
 from web3.contract import Contract as Web3Contract
@@ -29,17 +30,15 @@ from mech_client.interact import (
     get_mech_config,
     PRIVATE_KEY_FILE_PATH,
 )
-from utils import (
+from .utils import (
     print_title,
-    input_select_chain,
-    input_with_default_value,
     get_token_contract,
     get_token_balance_tracker_contract,
 )
 from mech_client.wss import wait_for_receipt
 
 
-def check_token_balance(token_contract: Web3Contract, sender: str, amount: int):
+def check_token_balance(token_contract: Web3Contract, sender: str, amount: int) -> None:
     try:
         print("Fetching user balance")
         user_token_balance = token_contract.functions.balanceOf(sender).call()
@@ -60,7 +59,7 @@ def approve(
     token_contract: Web3Contract,
     token_balance_tracker_contract: Web3Contract,
     amount: int,
-):
+) -> str:
     sender = crypto.address
 
     print("Sending approve tx")
@@ -84,6 +83,7 @@ def approve(
         return transaction_digest
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
+        return str(e)
 
 
 def deposit(
@@ -91,12 +91,12 @@ def deposit(
     crypto: EthereumCrypto,
     token_balance_tracker_contract: Web3Contract,
     amount: int,
-):
+) -> str:
     sender = crypto.address
 
     print("Sending deposit tx")
     try:
-        tx_args = {"sender_address": sender, "value": 0, "gas": 80000}
+        tx_args = {"sender_address": sender, "value": 0, "gas": 100000}
         raw_transaction = ledger_api.build_transaction(
             contract_instance=token_balance_tracker_contract,
             method_name="deposit",
@@ -112,26 +112,21 @@ def deposit(
         return transaction_digest
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
+        return str(e)
 
 
-def main() -> None:
+def main(
+    amount: str,
+    private_key_path: Optional[str] = None,
+    chain_config: Optional[str] = None,
+) -> None:
     """Runs the deposit functionality for the token mech type"""
     print_title("Token Deposit")
     print("This script will assist you in depositing token balance for mech requests.")
     print()
 
-    print("Select the chain to use")
-
-    chain_config = input_select_chain()
-
-    amount = input_with_default_value(
-        "Please provide the amount of token currency to deposit", "1"
-    )
     amount_to_deposit = int(float(amount) * 10**18)
-
-    private_key_path = input_with_default_value(
-        "Please provide path to your private key", PRIVATE_KEY_FILE_PATH
-    )
+    private_key_path = private_key_path or PRIVATE_KEY_FILE_PATH
 
     mech_config = get_mech_config(chain_config)
     ledger_config = mech_config.ledger_config
@@ -142,6 +137,8 @@ def main() -> None:
             f"Private key file `{private_key_path}` does not exist!"
         )
     crypto = EthereumCrypto(private_key_path=private_key_path)
+
+    print(f"Sender address: {crypto.address}")
 
     chain_id = mech_config.ledger_config.chain_id
     token_balance_tracker_contract = get_token_balance_tracker_contract(
@@ -188,7 +185,3 @@ def main() -> None:
 
     print("")
     print("Deposit Successful")
-
-
-if __name__ == "__main__":
-    main()

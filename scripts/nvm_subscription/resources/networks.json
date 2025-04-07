@@ -1,0 +1,56 @@
+{
+  "BASE": {
+    "envDescription": "The Base production environment where users can interact with Nevermined protocol.",
+    "envUrl": "https://base.nevermined.app/",
+    "envName": "Base",
+    "isProduction": true,
+    "nvm": {
+      "chainId": 8453,
+      "appUrl": "https://base.nevermined.app",
+      "web3ProviderUri": "https://1rpc.io/base",
+      "marketplaceUri": "https://marketplace-api.base.nevermined.app",
+      "graphHttpUri": "https://api.thegraph.com/subgraphs/name/nevermined-io/public",
+      "neverminedNodeUri": "https://node.base.nevermined.app",
+      "neverminedNodeAddress": "0x824dbcE5E9C96C5b8ce2A35a25a5ab87eD1D00b1",
+      "neverminedBackendUri": "https://one-backend.base.nevermined.app",
+      "subscription_id": "50413016362950485991271150743187499870906117744058208429036668344255336389082",
+      "verbose": true
+    },
+    "nativeToken": "ETH",
+    "networkName": "base",
+    "contractsVersion": "3.5.7",
+    "tagName": "public",
+    "etherscanUrl": "https://basescan.org",
+    "erc20TokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "gasMultiplier": 0,
+    "gasPriceMultiplier": 0,
+    "externalNetwork": true
+  },
+  "GNOSIS": {
+    "envDescription": "The Gnosis production environment where users can interact with Nevermined protocol.",
+    "envUrl": "https://gnosis.nevermined.app/",
+    "envName": "Gnosis",
+    "isProduction": true,
+    "nvm": {
+      "chainId": 100,
+      "appUrl": "https://gnosis.nevermined.app",
+      "web3ProviderUri": "https://rpc.gnosischain.com/",
+      "marketplaceUri": "https://marketplace-api.gnosis.nevermined.app",
+      "graphHttpUri": "https://api.thegraph.com/subgraphs/name/nevermined-io/public",
+      "neverminedNodeUri": "https://node.gnosis.nevermined.app",
+      "neverminedNodeAddress": "0x824dbcE5E9C96C5b8ce2A35a25a5ab87eD1D00b1",
+      "neverminedBackendUri": "https://one-backend.gnosis.nevermined.app",
+      "subscription_id": "79922471236808376650579296325311587488574799199590951702510416090224804407991",
+      "verbose": true
+    },
+    "nativeToken": "xDAI",
+    "networkName": "gnosis",
+    "contractsVersion": "3.5.7",
+    "tagName": "public",
+    "etherscanUrl": "https://gnosisscan.io",
+    "erc20TokenAddress": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+    "gasMultiplier": 1.1,
+    "gasPriceMultiplier": 0,
+    "externalNetwork": true
+  }
+}

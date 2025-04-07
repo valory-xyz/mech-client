@@ -155,7 +155,7 @@ Some useful options:
   - `on-chain`: Wait for the result using the Subgraph and the Websocket subscription (whichever arrives first).
   - `wait-for-both` (Default): Wait for the result using both `off-chain` and `on-chain` (whichever arrives first).
 
-### Example
+##### Example
 
 Example of a request specifying a key file and tool:
 
@@ -177,13 +177,30 @@ Data from agent: {'requestId': 1004074058566339663950817114309409628095686850319
 
 #### With the Mech Marketplace
 
-With the Mech Marketplace, the basic usage of the Mech Client is as follows.
+With the Mech Marketplace, in order to pay for the Mech fees, you can make a deposit before sending requests. The deposit depends on the 
+payment model of the Mech. For a fixed price Mech receiving payments in native token, use the following: 
 
 ```bash
-mechx interact <prompt> --tool openai-gpt-3.5-turbo --chain-config <chain_config>
+mechx deposit-native --chain-config <chain_config> <amount>
 ```
 
-To use a custom mech to send requests to, use the  `priority-mech` flag while sending the requests
+For a fixed price Mech receiving payments in OLAS, use the following (the amount is in ether): 
+
+```bash
+mechx deposit-token --chain-config <chain_config> <amount>
+```
+
+For a Mech using Nevermined subscriptions, to make requests, it is necessary to buy a subscription. To do that you can use the following command: 
+
+```bash 
+mechx purchase-nvm-subscription --chain-config <chain_config>
+```
+
+:warning: If you face issues with base RPC, please consider updating to a new one [here](https://github.com/valory-xyz/mech-client/blob/feat/nvm_sub_integration/scripts/nvm_subscription/resources/networks.json#L10).
+
+You can use the option `--key <private_key_file_path>` in order to customize the path to the private key file.
+
+The basic usage of the Mech Client is then as follows.
 
 ```bash
 mechx interact <prompt> --priority-mech <priority mech address> --tool openai-gpt-3.5-turbo --chain-config <chain_config>
@@ -193,6 +210,8 @@ Additionally to other options which are the same as for legacy Mechs, this usage
 
 `--use-prepaid <bool>`: use the prepaid method to send requests to a Mech via the Mech Marketplace. Defaults to False.
 `--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Defaults to False.
+
+
 
 ### List tools available for agents
 

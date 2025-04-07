@@ -38,6 +38,9 @@ from mech_client.mech_tool_management import (
 from mech_client.prompt_to_ipfs import main as prompt_to_ipfs_main
 from mech_client.push_to_ipfs import main as push_to_ipfs_main
 from mech_client.to_png import main as to_png_main
+from scripts.deposit_native import main as deposit_native_main
+from scripts.deposit_token import main as deposit_token_main
+from scripts.nvm_subscribe import main as nvm_subscribe_main
 
 
 @click.group(name="mechx")  # type: ignore
@@ -332,6 +335,71 @@ def tool_io_schema(tool_id: str, chain_config: str) -> None:
         click.echo(f"Network or I/O error: {str(e)}")
 
 
+@click.command(name="deposit-native")
+@click.argument("amount_to_deposit")
+@click.option(
+    "--chain-config",
+    type=str,
+    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+)
+@click.option(
+    "--key",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    help="Path to private key to use for deposit",
+)
+def deposit_native(
+    amount_to_deposit: str,
+    key: Optional[str],
+    chain_config: Optional[str] = None,
+) -> None:
+    """Deposits Native balance for prepaid requests."""
+    deposit_native_main(
+        amount=amount_to_deposit, private_key_path=key, chain_config=chain_config
+    )
+
+
+@click.command(name="deposit-token")
+@click.argument("amount_to_deposit")
+@click.option(
+    "--chain-config",
+    type=str,
+    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+)
+@click.option(
+    "--key",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    help="Path to private key to use for deposit",
+)
+def deposit_token(
+    amount_to_deposit: str,
+    key: Optional[str],
+    chain_config: Optional[str] = None,
+) -> None:
+    """Deposits Token balance for prepaid requests."""
+    deposit_token_main(
+        amount=amount_to_deposit, private_key_path=key, chain_config=chain_config
+    )
+
+
+@click.command(name="purchase-nvm-subscription")
+@click.option(
+    "--chain-config",
+    type=str,
+    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+)
+@click.option(
+    "--key",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    help="Path to private key to use for deposit",
+)
+def nvm_subscribe(
+    key: str,
+    chain_config: str,
+) -> None:
+    """Deposits Token balance for prepaid requests."""
+    nvm_subscribe_main(private_key_path=key, chain_config=chain_config)
+
+
 cli.add_command(interact)
 cli.add_command(prompt_to_ipfs)
 cli.add_command(push_to_ipfs)
@@ -339,6 +407,9 @@ cli.add_command(to_png)
 cli.add_command(tools_for_agents)
 cli.add_command(tool_io_schema)
 cli.add_command(tool_description)
+cli.add_command(deposit_native)
+cli.add_command(deposit_token)
+cli.add_command(nvm_subscribe)
 
 
 if __name__ == "__main__":
