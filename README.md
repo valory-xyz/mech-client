@@ -196,6 +196,8 @@ For a Mech using Nevermined subscriptions, to make requests, it is necessary to 
 mechx purchase-nvm-subscription --chain-config <chain_config>
 ```
 
+:warning: If you face issues with base RPC, please consider updating to a new one [here](https://github.com/valory-xyz/mech-client/blob/feat/nvm_sub_integration/scripts/nvm_subscription/resources/networks.json#L10).
+
 You can use the option `--key <private_key_file_path>` in order to customize the path to the private key file.
 
 The basic usage of the Mech Client is then as follows.
