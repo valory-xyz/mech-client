@@ -177,7 +177,7 @@ Data from agent: {'requestId': 1004074058566339663950817114309409628095686850319
 
 #### With the Mech Marketplace
 
-With the Mech Marketplace, in order to pay for the Mech fees, you need to make a deposit first. The method depends on the 
+With the Mech Marketplace, in order to pay for the Mech fees, you can make a deposit before sending requests. The deposit depends on the 
 payment model of the Mech. For a fixed price Mech receiving payments in native token, use the following: 
 
 ```bash
@@ -190,7 +190,7 @@ For a fixed price Mech receiving payments in OLAS, use the following (the amount
 mechx deposit-token --chain-config <chain_config> <amount>
 ```
 
-For a Mech using Nevermined subscriptions, use the following: 
+For a Mech using Nevermined subscriptions, to make requests, it is necessary to buy a subscription. To do that you can use the following command: 
 
 ```bash 
 mechx purchase-nvm-subscription --chain-config <chain_config>
