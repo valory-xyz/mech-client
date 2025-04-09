@@ -56,7 +56,6 @@ def deposit(
 
     try:
         print("Sending deposit tx")
-        print(f"{amount=}")
         raw_transaction = ledger_api.get_transfer_transaction(
             sender_address=sender,
             destination_address=to,
