@@ -108,14 +108,10 @@ CHAIN_TO_PRICE_TOKEN = {
 
 CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
     100: {
-        "mech_marketplace_contract": "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB",
-        "priority_mech_address": "0x478ad20eD958dCC5AD4ABa6F4E4cc51e07a840E4",
         "response_timeout": 300,
         "payment_data": "0x",
     },
     8453: {
-        "mech_marketplace_contract": "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020",
-        "priority_mech_address": "0xE183610A420dBD8825fed49C589Fe2d5BFd5b17a",
         "response_timeout": 300,
         "payment_data": "0x",
     },
@@ -671,15 +667,16 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         return None
 
     config_values = CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG[chain_id].copy()
-    if priority_mech_address is not None:
-        print("Custom Mech detected")
-        config_values.update(
-            {
-                "priority_mech_address": priority_mech_address,
-                "mech_marketplace_contract": mech_marketplace_contract,
-            }
-        )
+    if priority_mech_address is None:
+        print("Priority Mech Address not provided")
+        return None
 
+    config_values.update(
+        {
+            "priority_mech_address": priority_mech_address,
+            "mech_marketplace_contract": mech_marketplace_contract,
+        }
+    )
     mech_marketplace_request_config: MechMarketplaceRequestConfig = make_dataclass(
         "MechMarketplaceRequestConfig",
         ((k, type(v)) for k, v in config_values.items()),
