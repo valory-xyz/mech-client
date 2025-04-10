@@ -26,7 +26,7 @@ The detailed instructions to send a request to a Mech can be found below.
 **1.** Install mech-client: 
 
 ```
-poetry my_project
+poetry new my_project
 cd my_project
 poetry add mech-client
 poetry install
