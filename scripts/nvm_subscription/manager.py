@@ -145,8 +145,8 @@ class NVMSubscriptionManager:
         print(f"{self.subscription_credits=}")
         print(f"{lock_id.hex()=}")
         print(f"{self.subscription_nft_address=}")
-        print(f"{transfer_hash.hex()}")
-        print(f"{transfer_id.hex()}")
+        print(f"{transfer_hash.hex()=}")
+        print(f"{transfer_id.hex()=}")
         print("")
 
         escrow_hash = self.escrow_payment.hash_values(
@@ -167,10 +167,10 @@ class NVMSubscriptionManager:
         print(f"{self.sender=}")
         print(f"{reward_address=}")
         print(f"{self.token_address=}")
-        print(f"{lock_id.hex()}")
-        print(f"{transfer_id.hex()}")
-        print(f"{escrow_hash.hex()}")
-        print(f"{escrow_id.hex()}")
+        print(f"{lock_id.hex()=}")
+        print(f"{transfer_id.hex()=}")
+        print(f"{escrow_hash.hex()=}")
+        print(f"{escrow_id.hex()=}")
         print("")
 
         user_credit_balance_before = self.subscription_nft.get_balance(
