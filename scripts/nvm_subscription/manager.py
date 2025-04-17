@@ -114,10 +114,18 @@ class NVMSubscriptionManager:
 
         agreement_id_seed = self._generate_agreement_id_seed()
         agreement_id = self.agreement_storage_manager.agreement_id(agreement_id_seed, self.sender)
+        print("AGREEMENT VALUES")
+        print(f"{agreement_id_seed=}")
+        print(f"{agreement_id.hex()=}")
+        print("")
 
         # Condition hashes
         lock_hash = self.lock_payment.hash_values(did, reward_address, self.token_address, self.amounts, receivers)
         lock_id = self.lock_payment.generate_id(agreement_id, lock_hash)
+        print("LOCK VALUES")
+        print(f"{lock_hash.hex()=}")
+        print(f"{lock_id.hex()=}")
+        print("")
 
         transfer_hash = self.transfer_nft.hash_values(
             did,
@@ -129,6 +137,17 @@ class NVMSubscriptionManager:
             False
         )
         transfer_id = self.transfer_nft.generate_id(agreement_id, transfer_hash)
+        print("TRANSFER VALUES")
+        print(f"{did=}")
+        ddo_proof_creator = ddo["proof"]["creator"]
+        print(f"{ddo_proof_creator=}")
+        print(f"{self.sender=}")
+        print(f"{self.subscription_credits=}")
+        print(f"{lock_id.hex()=}")
+        print(f"{self.subscription_nft_address=}")
+        print(f"{transfer_hash.hex()}")
+        print(f"{transfer_id.hex()}")
+        print("")
 
         escrow_hash = self.escrow_payment.hash_values(
             did,
@@ -141,6 +160,18 @@ class NVMSubscriptionManager:
             transfer_id
         )
         escrow_id = self.escrow_payment.generate_id(agreement_id, escrow_hash)
+        print("ESCROW VALUES")
+        print(f"{did=}")
+        print(f"{self.amounts=}")
+        print(f"{receivers=}")
+        print(f"{self.sender=}")
+        print(f"{reward_address=}")
+        print(f"{self.token_address=}")
+        print(f"{lock_id.hex()}")
+        print(f"{transfer_id.hex()}")
+        print(f"{escrow_hash.hex()}")
+        print(f"{escrow_id.hex()}")
+        print("")
 
         user_credit_balance_before = self.subscription_nft.get_balance(
             self.sender, self.subscription_id
@@ -148,7 +179,7 @@ class NVMSubscriptionManager:
         print(f"Sender credits Before Purchase: {user_credit_balance_before}")
 
         # we set value as xdai is used as subscription for gnosis
-        value_eth = 1.0
+        value_eth = 0.1
         if chain_id == 8453:
             # for base, usdc is used and so we don't send any value
             value_eth = 0
@@ -194,28 +225,8 @@ class NVMSubscriptionManager:
 
         if receipt["status"] == 1:
             logger.info("Subscription transaction validated successfully")
-            logger.info({"status": "success", "tx_hash": tx_hash.hex()})
+            return ({"status": "success", "tx_hash": tx_hash.hex()})
         else:
             logger.error("Subscription transaction failed")
             return {"status": "failed", "receipt": dict(receipt)}
 
-        url = service["serviceEndpoint"]
-        claim_data = {
-            "agreementId": "0x" + agreement_id.hex(),
-            "did": did[2:],
-            "nftHolder": ddo["proof"]["creator"],
-            "nftReceiver": self.sender,
-            "nftAmount": str(self.subscription_credits),
-            "nftType": 1155,
-            "serviceIndex": -1,
-        }
-        response = requests.post(url=url, json=claim_data)
-
-        if response.status_code == 201:
-            user_credit_balance_before = self.subscription_nft.get_balance(
-                self.sender, self.subscription_id
-            )
-            print(f"Sender credits After Purchase: {user_credit_balance_before}")
-            return {"status": "success", "receipt": ""}
-
-        return {"status": response.text, "receipt": ""}
