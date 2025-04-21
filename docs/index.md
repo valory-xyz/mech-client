@@ -68,14 +68,14 @@ Each event whose name begins with "CreateMech", as on the following picture (the
 
 ![alt text](./imgs/image-1.png)
 
-Alternatively, for Gnosis network, you can find the list of Mech Marketplace Mechs on this [webpage](https://aimechs.autonolas.network/). Click on "Mech Marketplace" tab as on the following picture.
+Alternatively, for Gnosis network, you can find the list of Mech Marketplace Mechs on this [webpage](https://mech.olas.network/). Click on "Mech Marketplace" tab as on the following picture.
 
 ![alt text](./imgs/legacy_tab.png)
 
 You will then see the list of available Mech Marketplace Mechs.
 
 In order to find which tools the Mech uses, click on its service id, and then "View code" in the window which opens. Open the folder `mech` and then `service.yaml`. Copy the IPFS hash which follows `agent: valory/mech:0.1.0` and open the corresponding 
-file by going to https://gateway.autonolas.tech/ipfs/ with the copied hash at the end of this address. Open the `mech` folder and then the file `aea-config.yaml`. In this file, the keys of the dictionary `tools_to_package_hash` are the
+file by going to https://mech.olas.network/ with the copied hash at the end of this address. Open the `mech` folder and then the file `aea-config.yaml`. In this file, the keys of the dictionary `tools_to_package_hash` are the
 names of the tools that this service uses. 
 
 ### 1. 2. In terminal
@@ -200,7 +200,7 @@ Follow first the steps in the [setup](#setup) above, then [choose a Mech](#2-1-c
 
 ![List of Mechs](./imgs/list_of_mechs.png)
 
-For Gnosis, more legacy Mechs are listed on this [webpage](https://aimechs.autonolas.network/). Click on "Legacy" tab as on the following picture.
+For Gnosis, more legacy Mechs are listed on this [webpage](https://mech.olas.network/). Click on "Legacy" tab as on the following picture.
 
 ![Mech Marketplace vs Legacy](./imgs/legacy_tab.png)
 
