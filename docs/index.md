@@ -26,11 +26,7 @@ The detailed instructions to send a request to a Mech can be found below.
 **1.** Install mech-client: 
 
 ```bash
-poetry new my_project
-cd my_project
-poetry add mech-client
-poetry install
-poetry shell
+pip install mech-client
 ```
 
 **2.** Setting up an EOA account: 
