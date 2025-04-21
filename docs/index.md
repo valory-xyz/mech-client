@@ -25,7 +25,7 @@ The detailed instructions to send a request to a Mech can be found below.
 
 **1.** Install mech-client: 
 
-```
+```bash
 poetry new my_project
 cd my_project
 poetry add mech-client
@@ -45,7 +45,7 @@ poetry shell
 
 **3.** Create an API key for the network you want to use. For instance, follow the steps described [here](https://docs.gnosisscan.io/getting-started/viewing-api-usage-statistics#creating-an-api-key) for Gnosis. Then use the following:
 
-```
+```bash
 export MECHX_API_KEY=<api_key>
 ```
 
@@ -88,7 +88,7 @@ names of the tools that this service uses.
     
 - Use the command mechx in terminal, which is structured as follows: 
         
-```
+```bash
 mechx interact <prompt> --chain-config <chain-config> --use-offchain <bool> --tool <tool> --priority-mech <mech_address>
 ```
 
@@ -147,7 +147,7 @@ where `<request_id>` is replaced by the id of your request. Find the Mech on thi
 
 - Remark: If an "Out of gas" error is encountered, an increase of the gas limit, can solve the problem, using the following line: 
 
-```
+```bash
 export MECHX_GAS_LIMIT=200000
 ```
 
@@ -155,7 +155,7 @@ export MECHX_GAS_LIMIT=200000
 
 The following script can be used in order to automatize request sending:
 
-```
+```python
 from mech_client.marketplace_interact import marketplace_interact
 
 PRIORITY_MECH_ADDRESS = <priority_mech_address>
@@ -218,7 +218,7 @@ You will see the list of Legacy Mechs available.
     
 - Use the command mechx in terminal, which is structured as follows: 
         
-```
+```bash
 mechx interact <prompt> --agent_id <agent_id>
 ```
 
@@ -228,13 +228,13 @@ Replace `<agent_id>` with the following: the number (as an integer, not string) 
 
 - In order to select a tool, you can use the following to see which tools are used by which agents: 
 
-```
+```bash
 mechx tools-for-agents
 ```
 
 You can identify which tools are used by a Mech by looking at the "Agent ID" column. Using the unique identifier of the tool, you can find a description of the tool, using the following: 
 
-```
+```bash
 mechx tool-description <unique_identifier> --chain-config <chain_config>
 ```
 
@@ -244,7 +244,7 @@ where `<unique_identifier>` is replaced by the unique id of the tool and `<chain
 
 - In response to the request, a json file is printed below "Data for agent", in which the key ‘result’ corresponds to the mech’s response to the request. For instance, with the command  
 
-```
+```bash
 mechx interact "write a short poem" --agent_id 6
 ``` 
 
@@ -253,7 +253,7 @@ and after selecting `openai-gpt-3.5-turbo` for the tool, you will receive a resp
 
 - Remark: If an "Out of gas" error is encountered, an increase of the gas limit, can solve the problem, using the following line: 
 
-```
+```bash
 export MECHX_GAS_LIMIT=200000
 ```
 
@@ -261,7 +261,7 @@ export MECHX_GAS_LIMIT=200000
 
 The following script can be used in order to automatize request sending:
 
-```
+```python
 from mech_client.interact import interact
 
 PROMPT_TEXT = 'Will Gnosis pay reach 100k cards in 2024?'
