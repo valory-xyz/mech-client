@@ -39,14 +39,6 @@ pip install mech-client
 
 **d.** Copy this key in the file `ethereum_private_key.txt` in your project folder. Make sure the file contains only the private key, with no leading or trailing spaces, tabs, or newlines.
 
-**3.** Create an API key for the network you want to use. For instance, follow the steps described [here](https://docs.gnosisscan.io/getting-started/viewing-api-usage-statistics#creating-an-api-key) for Gnosis. Then use the following:
-
-```bash
-export MECHX_API_KEY=<api_key>
-```
-
-where `<api_key>` is the key just created.
-
 ## 1. How to Send a request to a Mech (registered on the Mech MarketPlace)
 
 To send a request to a Mech that is accessible through the Mech Marketplace, first complete the [setup](#setup), then follow the [instructions](#1-2-sending-requests) below.
