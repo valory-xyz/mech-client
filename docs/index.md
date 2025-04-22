@@ -207,6 +207,13 @@ printf "%x\n" <request_id>
 
 - Click on "Delivers Data" to view the response.
 
+**Troubleshooting: non-hexadecimal symbol**
+
+You may encounter an error indicating that the private key contains invalid (non-hexadecimal) characters.  
+This can happen, in particular, on Windows systems, where some IDEs may automatically add a newline character (`\n`) at the end of a file—for example, in `ethereum_private_key.txt`.
+
+To avoid this, check your IDE settings and ensure that the file contains only the private key with no trailing newline or whitespace.
+
 **Troubleshooting: out of gas** 
 
 If an "Out of gas" error is encountered, an increase of the gas limit can solve the problem. To do this: 
