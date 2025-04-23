@@ -276,8 +276,9 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     ledger_api: EthereumApi,
     marketplace_contract: Web3Contract,
     gas_limit: int,
-    prompt: str,
-    tool: str,
+    prompts: tuple,
+    tools: tuple,
+    num_requests: int,
     method_args_data: MechMarketplaceRequestConfig,
     extra_attributes: Optional[Dict[str, Any]] = None,
     price: int = 10_000_000_000_000_000,
@@ -296,10 +297,12 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :type marketplace_contract: Web3Contract
     :param gas_limit: Gas limit.
     :type gas_limit: int
-    :param prompt: The request prompt.
-    :type prompt: str
-    :param tool: The requested tool.
-    :type tool: str
+    :param prompt: The request prompts.
+    :type prompt: tuple
+    :param tool: The requested tools.
+    :type tool: tuple
+    :param num_requests: The total number of requests.
+    :type num_requests: int
     :param method_args_data: Method data to use to call the marketplace contract request
     :type method_args_data: MechMarketplaceRequestConfig
     :param extra_attributes: Extra attributes to be included in the request metadata.
@@ -315,21 +318,39 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :return: The transaction hash.
     :rtype: Optional[str]
     """
-    v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
-        prompt, tool, extra_attributes
-    )
-    print(
-        f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
-    )
-    method_name = "request"
+
     method_args = {
-        "requestData": v1_file_hash_hex_truncated,
         "maxDeliveryRate": method_args_data.delivery_rate,
         "paymentType": "0x" + cast(str, method_args_data.payment_type),
         "priorityMech": to_checksum_address(method_args_data.priority_mech_address),
         "responseTimeout": method_args_data.response_timeout,
         "paymentData": method_args_data.payment_data,
     }
+
+    if num_requests == 1:
+        v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
+            prompts[0], tools[0], extra_attributes
+        )
+        print(
+            f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
+        )
+        method_name = "request"
+        method_args["requestData"] = v1_file_hash_hex_truncated
+
+    else:
+        request_datas = []
+        for prompt, tool in zip(prompts, tools):
+            v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
+                prompt, tool, extra_attributes
+            )
+            print(
+                f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
+            )
+            request_datas.append(v1_file_hash_hex_truncated)
+
+        method_name = "requestBatch"
+        method_args["requestDatas"] = request_datas
+
     tx_args = {
         "sender_address": crypto.address,
         "value": price,
@@ -612,11 +633,11 @@ def check_prepaid_balances(
 
 
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
-    prompt: str,
+    prompts: tuple,
     priority_mech: str,
     use_prepaid: bool = False,
     use_offchain: bool = False,
-    tool: str = "",
+    tools: tuple = (),
     extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
     confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
@@ -661,6 +682,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     priority_mech_address = priority_mech
     mech_marketplace_contract = mech_config.mech_marketplace_contract
     chain_id = ledger_config.chain_id
+    num_requests = len(prompts)
 
     if mech_marketplace_contract == ADDRESS_ZERO:
         print(f"Mech Marketplace not yet supported on {chain_config}")
@@ -737,7 +759,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     )
 
     if not use_prepaid:
-        price = max_delivery_rate
+        price = max_delivery_rate * num_requests
         if payment_type == PaymentType.TOKEN.value:
             print("Token Mech detected, approving wrapped token for price payment...")
             price_token = CHAIN_TO_PRICE_TOKEN[chain_id]
@@ -796,8 +818,9 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             marketplace_contract=mech_marketplace_contract,
             gas_limit=mech_config.gas_limit,
             price=price,
-            prompt=prompt,
-            tool=tool,
+            prompts=prompts,
+            tools=tools,
+            num_requests=num_requests,
             method_args_data=mech_marketplace_request_config,
             extra_attributes=extra_attributes,
             retries=retries,
@@ -844,11 +867,12 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         return None
 
     print("Sending Offchain Mech Marketplace request...")
+    # @todo update to support batch
     response = send_offchain_marketplace_request(
         crypto=crypto,
         marketplace_contract=mech_marketplace_contract,
-        prompt=prompt,
-        tool=tool,
+        prompt=prompts[0],
+        tool=tools[0],
         method_args_data=mech_marketplace_request_config,
         extra_attributes=extra_attributes,
         retries=retries,

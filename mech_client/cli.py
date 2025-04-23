@@ -50,7 +50,7 @@ def cli() -> None:
 
 
 @click.command()
-@click.argument("prompt")
+@click.option("--prompts", type=str, multiple=True, help="Prompt to send for request")
 @click.option("--agent_id", type=int, help="Id of the agent to be used")
 @click.option(
     "--priority-mech",
@@ -73,8 +73,9 @@ def cli() -> None:
     help="Path to private key to use for request minting",
 )
 @click.option(
-    "--tool",
+    "--tools",
     type=str,
+    multiple=True,
     help="Name of the tool to be used",
 )
 @click.option(
@@ -112,13 +113,13 @@ def cli() -> None:
     help="Id of the mech's chain configuration (stored configs/mechs.json)",
 )
 def interact(  # pylint: disable=too-many-arguments,too-many-locals
-    prompt: str,
+    prompts: tuple,
     agent_id: int,
     priority_mech: str,
     use_prepaid: bool,
     use_offchain: bool,
     key: Optional[str],
-    tool: Optional[str],
+    tools: Optional[tuple],
     extra_attribute: Optional[List[str]] = None,
     confirm: Optional[str] = None,
     retries: Optional[int] = None,
@@ -138,13 +139,19 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         use_prepaid = use_prepaid or use_offchain
 
         if agent_id is None:
+            if len(prompts) != len(tools):
+                print(
+                    f"Error: The number of prompts ({len(prompts)}) must match the number of tools ({len(tools)})"
+                )
+                return
+
             marketplace_interact_(
-                prompt=prompt,
+                prompts=prompts,
                 priority_mech=priority_mech,
                 use_prepaid=use_prepaid,
                 use_offchain=use_offchain,
                 private_key_path=key,
-                tool=tool,
+                tools=tools,
                 extra_attributes=extra_attributes_dict,
                 confirmation_type=(
                     ConfirmationType(confirm)
@@ -168,11 +175,17 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                     "Offchain model can only be used for marketplace requests"
                 )
 
+            if len(prompts) > 1 or len(tools) > 1:
+                print(
+                    f"Error: Batch prompts ({len(prompts)}) or tools ({len(tools)}) not supported for legacy mechs"
+                )
+                return
+
             interact_(
-                prompt=prompt,
+                prompt=prompts[0],
                 agent_id=agent_id,
                 private_key_path=key,
-                tool=tool,
+                tool=tools[0] if tools else None,
                 extra_attributes=extra_attributes_dict,
                 confirmation_type=(
                     ConfirmationType(confirm)
