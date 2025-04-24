@@ -55,7 +55,7 @@ from mech_client.wss import (
     register_event_handlers,
     wait_for_receipt,
     watch_for_marketplace_data_url_from_wss,
-    watch_for_marketplace_request_id,
+    watch_for_marketplace_request_ids,
 )
 
 
@@ -838,32 +838,40 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         print(f"  - Transaction sent: {transaction_url_formatted}")
         print("  - Waiting for transaction receipt...")
 
-        request_id = watch_for_marketplace_request_id(
+        request_ids = watch_for_marketplace_request_ids(
             marketplace_contract=mech_marketplace_contract,
             ledger_api=ledger_api,
             tx_hash=transaction_digest,
         )
-        request_id_int = int.from_bytes(bytes.fromhex(request_id), byteorder="big")
-        print(f"  - Created on-chain request with ID {request_id_int}")
+        request_id_ints = [
+            int.from_bytes(bytes.fromhex(request_id), byteorder="big")
+            for request_id in request_ids
+        ]
+        if len(request_id_ints) == 1:
+            print(f"  - Created on-chain request with ID {request_id_ints[0]}")
+        else:
+            print(
+                f"  - Created on-chain requests with IDs: {', '.join(str(rid) for rid in request_id_ints)}"
+            )
         print("")
 
-        data_url = wait_for_marketplace_data_url(
-            request_id=request_id,
-            wss=wss,
-            mech_contract=mech_contract,
-            subgraph_url=mech_config.subgraph_url,
-            deliver_signature=marketplace_deliver_event_signature,
-            ledger_api=ledger_api,
-            crypto=crypto,
-            confirmation_type=confirmation_type,
-        )
+        for request_id, request_id_int in zip(request_ids, request_id_ints):
+            data_url = wait_for_marketplace_data_url(
+                request_id=request_id,
+                wss=wss,
+                mech_contract=mech_contract,
+                subgraph_url=mech_config.subgraph_url,
+                deliver_signature=marketplace_deliver_event_signature,
+                ledger_api=ledger_api,
+                crypto=crypto,
+                confirmation_type=confirmation_type,
+            )
 
-        if data_url:
-            print(f"  - Data arrived: {data_url}")
-            data = requests.get(f"{data_url}/{request_id_int}", timeout=30).json()
-            print("  - Data from agent:")
-            print(json.dumps(data, indent=2))
-            return data
+            if data_url:
+                print(f"  - Data arrived: {data_url}")
+                data = requests.get(f"{data_url}/{request_id_int}", timeout=30).json()
+                print("  - Data from agent:")
+                print(json.dumps(data, indent=2))
         return None
 
     print("Sending Offchain Mech Marketplace request...")
