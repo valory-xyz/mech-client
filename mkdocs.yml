@@ -1,4 +1,4 @@
-site_name: product/mech-client #Required format to work with monorepo including a specific route in the address.
+site_name: mech-client #Required format to work with monorepo including a specific route in the address.
 site_url: https://docs.olas.network/mech-client/
 site_description: Autonolas ContributionKit developer documentation
 repo_url: https://github.com/valory-xyz/mech-client
