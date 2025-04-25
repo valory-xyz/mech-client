@@ -175,9 +175,9 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                     "Offchain model can only be used for marketplace requests"
                 )
 
-            if len(prompts) > 1 or len(tools) > 1:
+            if len(prompts) > 1:
                 print(
-                    f"Error: Batch prompts ({len(prompts)}) or tools ({len(tools)}) not supported for legacy mechs"
+                    f"Error: Batch prompts ({len(prompts)}) not supported for legacy mechs"
                 )
                 return
 

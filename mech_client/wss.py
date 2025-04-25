@@ -167,7 +167,7 @@ def watch_for_marketplace_request_ids(  # pylint: disable=too-many-arguments, un
             tx_receipt
         )
         if len(rich_logs) == 0:
-            return "Empty Logs"
+            return ["Empty Logs"]
 
         request_ids = rich_logs[0]["args"]["requestIds"]
         request_ids_hex = [request_id.hex() for request_id in request_ids]

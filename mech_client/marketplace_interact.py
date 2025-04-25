@@ -877,7 +877,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         return None
 
     print("Sending Offchain Mech Marketplace request...")
-    curr_nonce = mech_marketplace_contract.functions.mapNonces(crypto.address).call()
+    curr_nonce = mech_marketplace_contract.functions.mapNonces(crypto.address).call()  # type: ignore
     responses = []
 
     for i in range(num_requests):
@@ -898,19 +898,19 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     if not responses and len(responses) != num_requests:
         return None
 
-    request_id_ints = [resp["request_id"] for resp in responses]
-    if len(request_id_ints) == 1:
-        print(f"  - Created off-chain request with ID {request_id_ints[0]}")
+    request_ids = [resp["request_id"] for resp in responses if resp is not None]
+    if len(request_ids) == 1:
+        print(f"  - Created off-chain request with ID {request_ids[0]}")
     else:
         print(
-            f"  - Created off-chain requests with IDs: {', '.join(str(rid) for rid in request_id_ints)}"
+            f"  - Created off-chain requests with IDs: {', '.join(str(rid) for rid in request_ids)}"
         )
     print("")
 
     # @note as we are directly querying data from done task list, we get the full data instead of the ipfs hash
     print("Waiting for Offchain Mech Marketplace deliver...")
 
-    for request_id in request_id_ints:
+    for request_id in request_ids:
         data = wait_for_offchain_marketplace_data(
             request_id=request_id,
         )
