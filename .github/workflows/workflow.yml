@@ -30,6 +30,7 @@ jobs:
         pip install tomte[tox]==0.2.15
         pip install --user --upgrade setuptools
         sudo npm install -g markdown-spellcheck
+        pip install 'marshmallow<4.0.0'
     - name: Security checks
       run: |
         tox -p -e bandit -e safety
