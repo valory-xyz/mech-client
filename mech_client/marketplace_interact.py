@@ -896,7 +896,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     if not responses and len(responses) != num_requests:
         return None
 
-    request_id_ints = [int(resp["request_id"]) for resp in responses]
+    request_id_ints = [resp["request_id"] for resp in responses]
     if len(request_id_ints) == 1:
         print(f"  - Created off-chain request with ID {request_id_ints[0]}")
     else:
@@ -907,16 +907,17 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     # @note as we are directly querying data from done task list, we get the full data instead of the ipfs hash
     print("Waiting for Offchain Mech Marketplace deliver...")
-    data = wait_for_offchain_marketplace_data(
-        request_id=request_id,
-    )
 
-    if data:
-        task_result = data["task_result"]
-        data_url = f"https://gateway.autonolas.tech/ipfs/f01701220{task_result}"
-        print(f"  - Data arrived: {data_url}")
-        data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
-        print("  - Data from agent:")
-        print(json.dumps(data, indent=2))
-        return data
+    for request_id in request_id_ints:
+        data = wait_for_offchain_marketplace_data(
+            request_id=request_id,
+        )
+
+        if data:
+            task_result = data["task_result"]
+            data_url = f"https://gateway.autonolas.tech/ipfs/f01701220{task_result}"
+            print(f"  - Data arrived: {data_url}")
+            data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+            print("  - Data from agent:")
+            print(json.dumps(data, indent=2))
     return None
