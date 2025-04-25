@@ -27,9 +27,9 @@ jobs:
         sudo apt-get update --fix-missing
         sudo apt-get autoremove
         sudo apt-get autoclean
-        pip install tomte[tox]==0.2.15
         pip install --user --upgrade setuptools
         sudo npm install -g markdown-spellcheck
+        pip install tomte[tox,cli]==0.2.14
         pip install 'marshmallow<4.0.0'
     - name: Security checks
       run: |
