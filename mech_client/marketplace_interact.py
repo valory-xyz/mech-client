@@ -393,6 +393,7 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     prompt: str,
     tool: str,
     method_args_data: MechMarketplaceRequestConfig,
+    nonce: int,
     extra_attributes: Optional[Dict[str, Any]] = None,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
@@ -446,7 +447,6 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     while tries < retries and datetime.now().timestamp() < deadline:
         tries += 1
         try:
-            nonce = marketplace_contract.functions.mapNonces(crypto.address).call()
             delivery_rate = method_args["maxDeliveryRate"]
             request_id = marketplace_contract.functions.getRequestId(
                 method_args["priorityMech"],
@@ -875,24 +875,34 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         return None
 
     print("Sending Offchain Mech Marketplace request...")
-    # @todo update to support batch
-    response = send_offchain_marketplace_request(
-        crypto=crypto,
-        marketplace_contract=mech_marketplace_contract,
-        prompt=prompts[0],
-        tool=tools[0],
-        method_args_data=mech_marketplace_request_config,
-        extra_attributes=extra_attributes,
-        retries=retries,
-        timeout=timeout,
-        sleep=sleep,
-    )
+    curr_nonce = mech_marketplace_contract.functions.mapNonces(crypto.address).call()
+    responses = []
 
-    if not response:
+    for i in range(num_requests):
+        response = send_offchain_marketplace_request(
+            crypto=crypto,
+            marketplace_contract=mech_marketplace_contract,
+            prompt=prompts[0],
+            tool=tools[0],
+            method_args_data=mech_marketplace_request_config,
+            nonce=curr_nonce + i,
+            extra_attributes=extra_attributes,
+            retries=retries,
+            timeout=timeout,
+            sleep=sleep,
+        )
+        responses.append(response)
+
+    if not responses and len(responses) != num_requests:
         return None
 
-    request_id = response["request_id"]
-    print(f"  - Created off-chain request with ID {request_id}")
+    request_id_ints = [int(resp["request_id"]) for resp in responses]
+    if len(request_id_ints) == 1:
+        print(f"  - Created off-chain request with ID {request_id_ints[0]}")
+    else:
+        print(
+            f"  - Created off-chain requests with IDs: {', '.join(str(rid) for rid in request_id_ints)}"
+        )
     print("")
 
     # @note as we are directly querying data from done task list, we get the full data instead of the ipfs hash
