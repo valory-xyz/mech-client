@@ -23,7 +23,7 @@ import asyncio
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, cast, List
+from typing import Any, Dict, List, cast
 
 import websocket
 from aea.crypto.base import Crypto

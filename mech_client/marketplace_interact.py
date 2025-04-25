@@ -297,10 +297,10 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :type marketplace_contract: Web3Contract
     :param gas_limit: Gas limit.
     :type gas_limit: int
-    :param prompt: The request prompts.
-    :type prompt: tuple
-    :param tool: The requested tools.
-    :type tool: tuple
+    :param prompts: The request prompts.
+    :type prompts: tuple
+    :param tools: The requested tools.
+    :type tools: tuple
     :param num_requests: The total number of requests.
     :type num_requests: int
     :param method_args_data: Method data to use to call the marketplace contract request
@@ -412,6 +412,8 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     :type tool: str
     :param method_args_data: Method data to use to call the marketplace contract request
     :type method_args_data: MechMarketplaceRequestConfig
+    :param nonce: Nonce to use to order offchain tasks
+    :type nonce: int
     :param extra_attributes: Extra attributes to be included in the request metadata.
     :type extra_attributes: Optional[Dict[str,Any]]
     :param retries: Number of retries for sending a transaction
@@ -649,16 +651,16 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     """
     Interact with mech marketplace contract.
 
-    :param prompt: The interaction prompt.
-    :type prompt: str
+    :param prompts: The interaction prompts.
+    :type prompts: tuple
     :param priority_mech: Priority mech address to use (Optional)
     :type priority_mech: str
     :param use_prepaid: Whether to use prepaid model or not.
     :type use_prepaid: bool
     :param use_offchain: Whether to use offchain model or not.
     :type use_offchain: bool
-    :param tool: The tool to interact with (optional).
-    :type tool: str
+    :param tools: The tools to interact with (optional).
+    :type tools: tuple
     :param extra_attributes: Extra attributes to be included in the request metadata (optional).
     :type extra_attributes: Optional[Dict[str, Any]]
     :param private_key_path: The path to the private key file (optional).
