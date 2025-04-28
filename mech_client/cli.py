@@ -22,6 +22,7 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
+from click import ClickException
 from tabulate import tabulate  # type: ignore
 
 from mech_client import __version__
@@ -202,7 +203,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 chain_config=chain_config,
             )
     except (ValueError, FileNotFoundError, Exception) as e:
-        raise click.ClickException(str(e)) from e
+        raise ClickException(str(e)) from e
 
 
 @click.command()
