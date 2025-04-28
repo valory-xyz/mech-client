@@ -73,6 +73,7 @@ class PaymentType(Enum):
     )
 
 
+IPFS_URL_TEMPLATE = "https://gateway.autonolas.tech/ipfs/f01701220{}"
 ABI_DIR_PATH = Path(__file__).parent / "abis"
 IMECH_ABI_PATH = ABI_DIR_PATH / "IMech.json"
 ITOKEN_ABI_PATH = ABI_DIR_PATH / "IToken.json"
@@ -278,7 +279,6 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     gas_limit: int,
     prompts: tuple,
     tools: tuple,
-    num_requests: int,
     method_args_data: MechMarketplaceRequestConfig,
     extra_attributes: Optional[Dict[str, Any]] = None,
     price: int = 10_000_000_000_000_000,
@@ -301,8 +301,6 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :type prompts: tuple
     :param tools: The requested tools.
     :type tools: tuple
-    :param num_requests: The total number of requests.
-    :type num_requests: int
     :param method_args_data: Method data to use to call the marketplace contract request
     :type method_args_data: MechMarketplaceRequestConfig
     :param extra_attributes: Extra attributes to be included in the request metadata.
@@ -318,6 +316,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :return: The transaction hash.
     :rtype: Optional[str]
     """
+    num_requests = len(prompts)
 
     method_args = {
         "maxDeliveryRate": method_args_data.delivery_rate,
@@ -822,7 +821,6 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             price=price,
             prompts=prompts,
             tools=tools,
-            num_requests=num_requests,
             method_args_data=mech_marketplace_request_config,
             extra_attributes=extra_attributes,
             retries=retries,
@@ -917,7 +915,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
         if data:
             task_result = data["task_result"]
-            data_url = f"https://gateway.autonolas.tech/ipfs/f01701220{task_result}"
+            data_url = IPFS_URL_TEMPLATE.format(task_result)
             print(f"  - Data arrived: {data_url}")
             data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
             print("  - Data from agent:")

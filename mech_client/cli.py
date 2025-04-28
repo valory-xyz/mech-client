@@ -50,7 +50,13 @@ def cli() -> None:
 
 
 @click.command()
-@click.option("--prompts", type=str, multiple=True, help="Prompt to send for request")
+@click.option(
+    "--prompts",
+    type=str,
+    multiple=True,
+    required=True,
+    help="One or more prompts to send as a request. Can be repeated.",
+)
 @click.option("--agent_id", type=int, help="Id of the agent to be used")
 @click.option(
     "--priority-mech",
@@ -76,7 +82,7 @@ def cli() -> None:
     "--tools",
     type=str,
     multiple=True,
-    help="Name of the tool to be used",
+    help="One or more tools to be used. Can be repeated.",
 )
 @click.option(
     "--extra-attribute",
@@ -140,10 +146,9 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 
         if agent_id is None:
             if len(prompts) != len(tools):
-                print(
-                    f"Error: The number of prompts ({len(prompts)}) must match the number of tools ({len(tools)})"
+                raise Exception(
+                    f"The number of prompts ({len(prompts)}) must match the number of tools ({len(tools)})"
                 )
-                return
 
             marketplace_interact_(
                 prompts=prompts,
@@ -176,10 +181,9 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 )
 
             if len(prompts) > 1:
-                print(
+                raise Exception(
                     f"Error: Batch prompts ({len(prompts)}) not supported for legacy mechs"
                 )
-                return
 
             interact_(
                 prompt=prompts[0],
