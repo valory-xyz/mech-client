@@ -23,7 +23,7 @@ import asyncio
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, cast
+from typing import Any, Dict, List, cast
 
 import websocket
 from aea.crypto.base import Crypto
@@ -143,11 +143,11 @@ def watch_for_request_id(  # pylint: disable=too-many-arguments
         return request_id
 
 
-def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments, unused-argument
+def watch_for_marketplace_request_ids(  # pylint: disable=too-many-arguments, unused-argument
     marketplace_contract: Web3Contract,
     ledger_api: EthereumApi,
     tx_hash: str,
-) -> str:
+) -> List[str]:
     """
     Watches for events on mech.
 
@@ -167,10 +167,11 @@ def watch_for_marketplace_request_id(  # pylint: disable=too-many-arguments, unu
             tx_receipt
         )
         if len(rich_logs) == 0:
-            return "Empty Logs"
+            return ["Empty Logs"]
 
-        request_id = rich_logs[0]["args"]["requestIds"][0]
-        return request_id.hex()
+        request_ids = rich_logs[0]["args"]["requestIds"]
+        request_ids_hex = [request_id.hex() for request_id in request_ids]
+        return request_ids_hex
 
 
 async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments

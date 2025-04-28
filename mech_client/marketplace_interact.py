@@ -55,7 +55,7 @@ from mech_client.wss import (
     register_event_handlers,
     wait_for_receipt,
     watch_for_marketplace_data_url_from_wss,
-    watch_for_marketplace_request_id,
+    watch_for_marketplace_request_ids,
 )
 
 
@@ -73,6 +73,7 @@ class PaymentType(Enum):
     )
 
 
+IPFS_URL_TEMPLATE = "https://gateway.autonolas.tech/ipfs/f01701220{}"
 ABI_DIR_PATH = Path(__file__).parent / "abis"
 IMECH_ABI_PATH = ABI_DIR_PATH / "IMech.json"
 ITOKEN_ABI_PATH = ABI_DIR_PATH / "IToken.json"
@@ -276,8 +277,8 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     ledger_api: EthereumApi,
     marketplace_contract: Web3Contract,
     gas_limit: int,
-    prompt: str,
-    tool: str,
+    prompts: tuple,
+    tools: tuple,
     method_args_data: MechMarketplaceRequestConfig,
     extra_attributes: Optional[Dict[str, Any]] = None,
     price: int = 10_000_000_000_000_000,
@@ -296,10 +297,10 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :type marketplace_contract: Web3Contract
     :param gas_limit: Gas limit.
     :type gas_limit: int
-    :param prompt: The request prompt.
-    :type prompt: str
-    :param tool: The requested tool.
-    :type tool: str
+    :param prompts: The request prompts.
+    :type prompts: tuple
+    :param tools: The requested tools.
+    :type tools: tuple
     :param method_args_data: Method data to use to call the marketplace contract request
     :type method_args_data: MechMarketplaceRequestConfig
     :param extra_attributes: Extra attributes to be included in the request metadata.
@@ -315,21 +316,40 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :return: The transaction hash.
     :rtype: Optional[str]
     """
-    v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
-        prompt, tool, extra_attributes
-    )
-    print(
-        f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
-    )
-    method_name = "request"
+    num_requests = len(prompts)
+
     method_args = {
-        "requestData": v1_file_hash_hex_truncated,
         "maxDeliveryRate": method_args_data.delivery_rate,
         "paymentType": "0x" + cast(str, method_args_data.payment_type),
         "priorityMech": to_checksum_address(method_args_data.priority_mech_address),
         "responseTimeout": method_args_data.response_timeout,
         "paymentData": method_args_data.payment_data,
     }
+
+    if num_requests == 1:
+        v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
+            prompts[0], tools[0], extra_attributes
+        )
+        print(
+            f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
+        )
+        method_name = "request"
+        method_args["requestData"] = v1_file_hash_hex_truncated
+
+    else:
+        request_datas = []
+        for prompt, tool in zip(prompts, tools):
+            v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
+                prompt, tool, extra_attributes
+            )
+            print(
+                f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}"
+            )
+            request_datas.append(v1_file_hash_hex_truncated)
+
+        method_name = "requestBatch"
+        method_args["requestDatas"] = request_datas
+
     tx_args = {
         "sender_address": crypto.address,
         "value": price,
@@ -372,6 +392,7 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     prompt: str,
     tool: str,
     method_args_data: MechMarketplaceRequestConfig,
+    nonce: int,
     extra_attributes: Optional[Dict[str, Any]] = None,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
@@ -390,6 +411,8 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     :type tool: str
     :param method_args_data: Method data to use to call the marketplace contract request
     :type method_args_data: MechMarketplaceRequestConfig
+    :param nonce: Nonce to use to order offchain tasks
+    :type nonce: int
     :param extra_attributes: Extra attributes to be included in the request metadata.
     :type extra_attributes: Optional[Dict[str,Any]]
     :param retries: Number of retries for sending a transaction
@@ -425,7 +448,6 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     while tries < retries and datetime.now().timestamp() < deadline:
         tries += 1
         try:
-            nonce = marketplace_contract.functions.mapNonces(crypto.address).call()
             delivery_rate = method_args["maxDeliveryRate"]
             request_id = marketplace_contract.functions.getRequestId(
                 method_args["priorityMech"],
@@ -612,11 +634,11 @@ def check_prepaid_balances(
 
 
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
-    prompt: str,
+    prompts: tuple,
     priority_mech: str,
     use_prepaid: bool = False,
     use_offchain: bool = False,
-    tool: str = "",
+    tools: tuple = (),
     extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
     confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
@@ -628,16 +650,16 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     """
     Interact with mech marketplace contract.
 
-    :param prompt: The interaction prompt.
-    :type prompt: str
+    :param prompts: The interaction prompts.
+    :type prompts: tuple
     :param priority_mech: Priority mech address to use (Optional)
     :type priority_mech: str
     :param use_prepaid: Whether to use prepaid model or not.
     :type use_prepaid: bool
     :param use_offchain: Whether to use offchain model or not.
     :type use_offchain: bool
-    :param tool: The tool to interact with (optional).
-    :type tool: str
+    :param tools: The tools to interact with (optional).
+    :type tools: tuple
     :param extra_attributes: Extra attributes to be included in the request metadata (optional).
     :type extra_attributes: Optional[Dict[str, Any]]
     :param private_key_path: The path to the private key file (optional).
@@ -661,6 +683,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     priority_mech_address = priority_mech
     mech_marketplace_contract = mech_config.mech_marketplace_contract
     chain_id = ledger_config.chain_id
+    num_requests = len(prompts)
 
     if mech_marketplace_contract == ADDRESS_ZERO:
         print(f"Mech Marketplace not yet supported on {chain_config}")
@@ -737,7 +760,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     )
 
     if not use_prepaid:
-        price = max_delivery_rate
+        price = max_delivery_rate * num_requests
         if payment_type == PaymentType.TOKEN.value:
             print("Token Mech detected, approving wrapped token for price payment...")
             price_token = CHAIN_TO_PRICE_TOKEN[chain_id]
@@ -796,8 +819,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             marketplace_contract=mech_marketplace_contract,
             gas_limit=mech_config.gas_limit,
             price=price,
-            prompt=prompt,
-            tool=tool,
+            prompts=prompts,
+            tools=tools,
             method_args_data=mech_marketplace_request_config,
             extra_attributes=extra_attributes,
             retries=retries,
@@ -815,66 +838,86 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         print(f"  - Transaction sent: {transaction_url_formatted}")
         print("  - Waiting for transaction receipt...")
 
-        request_id = watch_for_marketplace_request_id(
+        request_ids = watch_for_marketplace_request_ids(
             marketplace_contract=mech_marketplace_contract,
             ledger_api=ledger_api,
             tx_hash=transaction_digest,
         )
-        request_id_int = int.from_bytes(bytes.fromhex(request_id), byteorder="big")
-        print(f"  - Created on-chain request with ID {request_id_int}")
+        request_id_ints = [
+            int.from_bytes(bytes.fromhex(request_id), byteorder="big")
+            for request_id in request_ids
+        ]
+        if len(request_id_ints) == 1:
+            print(f"  - Created on-chain request with ID {request_id_ints[0]}")
+        else:
+            print(
+                f"  - Created on-chain requests with IDs: {', '.join(str(rid) for rid in request_id_ints)}"
+            )
         print("")
 
-        data_url = wait_for_marketplace_data_url(
-            request_id=request_id,
-            wss=wss,
-            mech_contract=mech_contract,
-            subgraph_url=mech_config.subgraph_url,
-            deliver_signature=marketplace_deliver_event_signature,
-            ledger_api=ledger_api,
-            crypto=crypto,
-            confirmation_type=confirmation_type,
-        )
+        for request_id, request_id_int in zip(request_ids, request_id_ints):
+            data_url = wait_for_marketplace_data_url(
+                request_id=request_id,
+                wss=wss,
+                mech_contract=mech_contract,
+                subgraph_url=mech_config.subgraph_url,
+                deliver_signature=marketplace_deliver_event_signature,
+                ledger_api=ledger_api,
+                crypto=crypto,
+                confirmation_type=confirmation_type,
+            )
 
-        if data_url:
-            print(f"  - Data arrived: {data_url}")
-            data = requests.get(f"{data_url}/{request_id_int}", timeout=30).json()
-            print("  - Data from agent:")
-            print(json.dumps(data, indent=2))
-            return data
+            if data_url:
+                print(f"  - Data arrived: {data_url}")
+                data = requests.get(f"{data_url}/{request_id_int}", timeout=30).json()
+                print("  - Data from agent:")
+                print(json.dumps(data, indent=2))
         return None
 
     print("Sending Offchain Mech Marketplace request...")
-    response = send_offchain_marketplace_request(
-        crypto=crypto,
-        marketplace_contract=mech_marketplace_contract,
-        prompt=prompt,
-        tool=tool,
-        method_args_data=mech_marketplace_request_config,
-        extra_attributes=extra_attributes,
-        retries=retries,
-        timeout=timeout,
-        sleep=sleep,
-    )
+    curr_nonce = mech_marketplace_contract.functions.mapNonces(crypto.address).call()  # type: ignore
+    responses = []
 
-    if not response:
+    for i in range(num_requests):
+        response = send_offchain_marketplace_request(
+            crypto=crypto,
+            marketplace_contract=mech_marketplace_contract,
+            prompt=prompts[0],
+            tool=tools[0],
+            method_args_data=mech_marketplace_request_config,
+            nonce=curr_nonce + i,
+            extra_attributes=extra_attributes,
+            retries=retries,
+            timeout=timeout,
+            sleep=sleep,
+        )
+        responses.append(response)
+
+    if not responses and len(responses) != num_requests:
         return None
 
-    request_id = response["request_id"]
-    print(f"  - Created off-chain request with ID {request_id}")
+    request_ids = [resp["request_id"] for resp in responses if resp is not None]
+    if len(request_ids) == 1:
+        print(f"  - Created off-chain request with ID {request_ids[0]}")
+    else:
+        print(
+            f"  - Created off-chain requests with IDs: {', '.join(str(rid) for rid in request_ids)}"
+        )
     print("")
 
     # @note as we are directly querying data from done task list, we get the full data instead of the ipfs hash
     print("Waiting for Offchain Mech Marketplace deliver...")
-    data = wait_for_offchain_marketplace_data(
-        request_id=request_id,
-    )
 
-    if data:
-        task_result = data["task_result"]
-        data_url = f"https://gateway.autonolas.tech/ipfs/f01701220{task_result}"
-        print(f"  - Data arrived: {data_url}")
-        data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
-        print("  - Data from agent:")
-        print(json.dumps(data, indent=2))
-        return data
+    for request_id in request_ids:
+        data = wait_for_offchain_marketplace_data(
+            request_id=request_id,
+        )
+
+        if data:
+            task_result = data["task_result"]
+            data_url = IPFS_URL_TEMPLATE.format(task_result)
+            print(f"  - Data arrived: {data_url}")
+            data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+            print("  - Data from agent:")
+            print(json.dumps(data, indent=2))
     return None
