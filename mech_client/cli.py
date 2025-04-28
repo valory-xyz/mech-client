@@ -146,7 +146,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 
         if agent_id is None:
             if len(prompts) != len(tools):
-                raise Exception(
+                raise ClickException(
                     f"The number of prompts ({len(prompts)}) must match the number of tools ({len(tools)})"
                 )
 
@@ -181,7 +181,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 )
 
             if len(prompts) > 1:
-                raise Exception(
+                raise ClickException(
                     f"Error: Batch prompts ({len(prompts)}) not supported for legacy mechs"
                 )
 
