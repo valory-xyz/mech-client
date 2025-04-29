@@ -70,6 +70,12 @@ def query_agent_address(  # pylint: disable=too-many-return-statements
     :rtype: Optional[str]
     """
     # temporary hard coded until subgraph present
+    if chain_config == "gnosis" and agent_id == 3:
+        return "0xFf82123dFB52ab75C417195c5fDB87630145ae81"
+    if chain_config == "gnosis" and agent_id == 6:
+        return "0x77af31De935740567Cf4fF1986D04B2c964A786a"
+    if chain_config == "gnosis" and agent_id == 11:
+        return "0x9aDe7A78A39B39a44b7a084923E93AA0B19Fd690"
     if chain_config == "base" and agent_id == 1:
         return "0x37C484cc34408d0F827DB4d7B6e54b8837Bf8BDA"
     if chain_config == "base" and agent_id == 2:
