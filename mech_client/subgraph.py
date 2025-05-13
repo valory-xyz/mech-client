@@ -74,8 +74,12 @@ def query_agent_address(  # pylint: disable=too-many-return-statements
         return "0xFf82123dFB52ab75C417195c5fDB87630145ae81"
     if chain_config == "gnosis" and agent_id == 6:
         return "0x77af31De935740567Cf4fF1986D04B2c964A786a"
+    if chain_config == "gnosis" and agent_id == 9:
+        return "0x552cea7bc33cbbeb9f1d90c1d11d2c6daeffd053"
     if chain_config == "gnosis" and agent_id == 11:
         return "0x9aDe7A78A39B39a44b7a084923E93AA0B19Fd690"
+    if chain_config == "gnosis" and agent_id == 19:
+        return "0x45b73d649c7b982548d5a6dd3d35e1c5c48997d0"
     if chain_config == "base" and agent_id == 1:
         return "0x37C484cc34408d0F827DB4d7B6e54b8837Bf8BDA"
     if chain_config == "base" and agent_id == 2:
