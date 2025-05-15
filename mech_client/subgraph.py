@@ -92,21 +92,7 @@ def query_agent_address(  # pylint: disable=too-many-return-statements
     if chain_data:
         return chain_data.get(agent_id, None)
 
-    client = Client(
-        transport=AIOHTTPTransport(url=url),
-        execute_timeout=timeout or 30.0,
-    )
-    response = client.execute(
-        document=gql(
-            request_string=AGENT_QUERY_TEMPLATE.substitute({"agent_id": agent_id})
-        )
-    )
-    mechs = response["createMeches"]  # pylint: disable=unsubscriptable-object
-    if len(mechs) == 0:
-        return None
-
-    (record,) = mechs
-    return record["mech"]
+    return None
 
 
 async def query_deliver_hash(
