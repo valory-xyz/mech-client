@@ -70,8 +70,8 @@ CHAIN_TO_ADDRESSES = {
 
 def query_agent_address(  # pylint: disable=too-many-return-statements
     agent_id: int,
-    url: str,
-    timeout: Optional[float] = None,
+    url: str,  # pylint: disable=unused-argument
+    timeout: Optional[float] = None,  # pylint: disable=unused-argument
     chain_config: Optional[str] = None,
 ) -> Optional[str]:
     """
@@ -88,7 +88,7 @@ def query_agent_address(  # pylint: disable=too-many-return-statements
     :rtype: Optional[str]
     """
     # temporary hard coded until subgraph present
-    return CHAIN_TO_ADDRESSES.get(chain_config, {}).get(agent_id, None)
+    return CHAIN_TO_ADDRESSES.get(chain_config, {}).get(agent_id, None)  # type: ignore
 
 
 async def query_deliver_hash(

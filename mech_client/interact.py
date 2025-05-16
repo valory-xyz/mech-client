@@ -28,7 +28,6 @@ python client.py <prompt> <tool>
 import asyncio
 import json
 import os
-import sys
 import time
 import warnings
 from dataclasses import asdict, dataclass, field
