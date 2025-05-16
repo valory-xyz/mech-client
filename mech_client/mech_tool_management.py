@@ -7,7 +7,13 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import requests
 from aea_ledger_ethereum import EthereumApi
 
-from mech_client.interact import fetch_tools, get_abi, get_contract, get_mech_config
+from mech_client.interact import (
+    AGENT_REGISTRY_ABI_PATH,
+    fetch_tools,
+    get_abi,
+    get_contract,
+    get_mech_config,
+)
 
 
 def get_total_supply(chain_config: str = "gnosis") -> int:
@@ -27,7 +33,7 @@ def get_total_supply(chain_config: str = "gnosis") -> int:
     ledger_api = EthereumApi(**asdict(ledger_config))
 
     # Fetch ABI and create contract instance
-    abi = get_abi(mech_config.agent_registry_contract, mech_config.contract_abi_url)
+    abi = get_abi(AGENT_REGISTRY_ABI_PATH)
     contract = get_contract(mech_config.agent_registry_contract, abi, ledger_api)
 
     # Call the totalSupply function
@@ -58,7 +64,7 @@ def get_agent_tools(
             agent_id=agent_id,
             ledger_api=ledger_api,
             agent_registry_contract=mech_config.agent_registry_contract,
-            contract_abi_url=mech_config.contract_abi_url,
+            contract_abi_path=AGENT_REGISTRY_ABI_PATH,
             include_metadata=include_metadata,
         )
     except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as e:
@@ -155,7 +161,7 @@ def get_tool_description(unique_identifier: str, chain_config: str = "gnosis") -
         agent_id=agent_id,
         ledger_api=ledger_api,
         agent_registry_contract=mech_config.agent_registry_contract,
-        contract_abi_url=mech_config.contract_abi_url,
+        contract_abi_path=AGENT_REGISTRY_ABI_PATH,
         include_metadata=True,
     )
     if isinstance(tools_result, tuple) and len(tools_result) == 2:
@@ -188,7 +194,7 @@ def get_tool_io_schema(
         agent_id=agent_id,
         ledger_api=ledger_api,
         agent_registry_contract=mech_config.agent_registry_contract,
-        contract_abi_url=mech_config.contract_abi_url,
+        contract_abi_path=AGENT_REGISTRY_ABI_PATH,
         include_metadata=True,
     )
     if isinstance(tools_result, tuple) and len(tools_result) == 2:
