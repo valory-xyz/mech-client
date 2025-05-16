@@ -56,6 +56,9 @@ from mech_client.wss import (
 
 PRIVATE_KEY_FILE_PATH = "ethereum_private_key.txt"
 MECH_CONFIGS = Path(__file__).parent / "configs" / "mechs.json"
+ABI_DIR_PATH = Path(__file__).parent / "abis"
+AGENT_REGISTRY_ABI_PATH = ABI_DIR_PATH / "AgentRegistry.json"
+AGENT_MECH_ABI_PATH = ABI_DIR_PATH / "AgentMech.json"
 
 MAX_RETRIES = 3
 WAIT_SLEEP = 3.0
@@ -122,7 +125,6 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     wss_endpoint: str
     ledger_config: LedgerConfig
     gas_limit: int
-    contract_abi_url: str
     transaction_url: str
     subgraph_url: str
     price: int
@@ -151,10 +153,6 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         if gas_limit:
             self.gas_limit = int(gas_limit)
 
-        contract_abi_url = os.getenv("MECHX_CONTRACT_ABI_URL")
-        if contract_abi_url:
-            self.contract_abi_url = contract_abi_url
-
         transaction_url = os.getenv("MECHX_TRANSACTION_URL")
         if transaction_url:
             self.transaction_url = transaction_url
@@ -162,13 +160,6 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
         if subgraph_url:
             self.subgraph_url = subgraph_url
-
-        api_key = os.getenv("MECHX_API_KEY")
-        if api_key:
-            updated_contract_abi_url = self.contract_abi_url.replace(
-                "{api_key}", api_key
-            )
-            self.contract_abi_url = updated_contract_abi_url
 
 
 class ConfirmationType(Enum):
@@ -222,20 +213,10 @@ def get_event_signatures(abi: List) -> Tuple[str, str]:
     return request, deliver
 
 
-def get_abi(contract_address: str, contract_abi_url: str) -> List:
+def get_abi(contract_abi_path: Path) -> List:
     """Get contract abi"""
-    abi_request_url = contract_abi_url.format(contract_address=contract_address)
-    response = requests.get(abi_request_url).json()
-
-    if "result" in response:
-        result = response["result"]
-        try:
-            abi = json.loads(result)
-        except json.JSONDecodeError:
-            print("Error: Failed to parse 'result' field as JSON")
-            sys.exit(1)
-    else:
-        abi = response.get("abi")
+    with open(contract_abi_path, encoding="utf-8") as f:
+        abi = json.load(f)
 
     return abi if abi else []
 
@@ -306,7 +287,7 @@ def verify_or_retrieve_tool(
     agent_id: int,
     ledger_api: EthereumApi,
     agent_registry_contract: str,
-    contract_abi_url: str,
+    contract_abi_path: Path,
     tool: Optional[str] = None,
 ) -> str:
     """
@@ -318,8 +299,8 @@ def verify_or_retrieve_tool(
     :type ledger_api: EthereumApi
     :param agent_registry_contract: Agent registry contract address.
     :type agent_registry_contract: str
-    :param contract_abi_url: Block explorer URL.
-    :type contract_abi_url: str
+    :param contract_abi_path: Path to agent registry abi.
+    :type contract_abi_path: Path
     :param tool: The tool to verify or retrieve (optional).
     :type tool: Optional[str]
     :return: The result of the verification or retrieval.
@@ -330,7 +311,7 @@ def verify_or_retrieve_tool(
         agent_id=agent_id,
         ledger_api=ledger_api,
         agent_registry_contract=agent_registry_contract,
-        contract_abi_url=contract_abi_url,
+        contract_abi_path=contract_abi_path,
         include_metadata=False,  # Ensure this is False to only get the list of tools
     )
     # Ensure only the list of tools is used
@@ -348,13 +329,13 @@ def fetch_tools(
     agent_id: int,
     ledger_api: EthereumApi,
     agent_registry_contract: str,
-    contract_abi_url: str,
+    contract_abi_path: Path,
     include_metadata: bool = False,
 ) -> Union[List[str], Tuple[List[str], Dict[str, Any]]]:
     """Fetch tools for specified agent ID, optionally include metadata."""
     mech_registry = get_contract(
         contract_address=agent_registry_contract,
-        abi=get_abi(agent_registry_contract, contract_abi_url),
+        abi=get_abi(contract_abi_path),
         ledger_api=ledger_api,
     )
     token_uri = mech_registry.functions.tokenURI(agent_id).call()
@@ -599,12 +580,9 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         ledger_api=ledger_api,
         tool=tool,
         agent_registry_contract=mech_config.agent_registry_contract,
-        contract_abi_url=mech_config.contract_abi_url,
+        contract_abi_path=AGENT_REGISTRY_ABI_PATH,
     )
-    abi = get_abi(
-        contract_address=contract_address,
-        contract_abi_url=mech_config.contract_abi_url,
-    )
+    abi = get_abi(AGENT_MECH_ABI_PATH)
     mech_contract = get_contract(
         contract_address=contract_address, abi=abi, ledger_api=ledger_api
     )

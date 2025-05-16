@@ -346,7 +346,6 @@ Additionally, you can override any configuration parameter by exporting any of t
 MECHX_CHAIN_RPC
 MECHX_WSS_ENDPOINT
 MECHX_GAS_LIMIT
-MECHX_CONTRACT_ABI_URL
 MECHX_TRANSACTION_URL
 MECHX_SUBGRAPH_URL
 
