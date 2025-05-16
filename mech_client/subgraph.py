@@ -70,8 +70,6 @@ CHAIN_TO_ADDRESSES = {
 
 def query_agent_address(  # pylint: disable=too-many-return-statements
     agent_id: int,
-    url: str,  # pylint: disable=unused-argument
-    timeout: Optional[float] = None,  # pylint: disable=unused-argument
     chain_config: Optional[str] = None,
 ) -> Optional[str]:
     """
@@ -79,16 +77,14 @@ def query_agent_address(  # pylint: disable=too-many-return-statements
 
     :param agent_id: The ID of the agent.
     :type agent_id: int
-    :param url: Subgraph URL.
-    :type url: str
-    :param timeout: Timeout for the request.
-    :type timeout: Optional[float]
     :type chain_config: Optional[str]:
     :return: The agent address if found, None otherwise.
     :rtype: Optional[str]
     """
     # temporary hard coded until subgraph present
-    return CHAIN_TO_ADDRESSES.get(chain_config, {}).get(agent_id, None)  # type: ignore
+    if not chain_config:
+        raise ValueError("Chain config not specified")
+    return CHAIN_TO_ADDRESSES.get(chain_config, {}).get(agent_id, None)
 
 
 async def query_deliver_hash(
