@@ -88,9 +88,7 @@ def query_agent_address(  # pylint: disable=too-many-return-statements
     :rtype: Optional[str]
     """
     # temporary hard coded until subgraph present
-    chain_data = CHAIN_TO_ADDRESSES.get(chain_config)
-    if chain_data:
-        return chain_data.get(agent_id, None)
+    return CHAIN_TO_ADDRESSES.get(chain_config, {}).get(agent_id, None)
 
     return None
 
