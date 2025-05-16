@@ -90,8 +90,6 @@ def query_agent_address(  # pylint: disable=too-many-return-statements
     # temporary hard coded until subgraph present
     return CHAIN_TO_ADDRESSES.get(chain_config, {}).get(agent_id, None)
 
-    return None
-
 
 async def query_deliver_hash(
     request_id: str, url: str, timeout: Optional[float] = None
