@@ -213,7 +213,7 @@ Additionally to other options which are the same as for legacy Mechs, this usage
 `--use-prepaid <bool>`: use the prepaid method to send requests to a Mech via the Mech Marketplace. Defaults to False. <br>
 `--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Defaults to False.
 
-The Mech Client can also be used to send batch requests as well. There are couple of different ways to achieve this
+The Mech Client can also be used to send batch requests. There are couple of different ways to achieve this: 
 
 ```bash
 mechx interact --prompts={<prompt-1>,<prompt-2>} --priority-mech <priority mech address> --tools={<tool-1>,<tool-2>} --chain-config <chain_config>
