@@ -28,7 +28,6 @@ python client.py <prompt> <tool>
 import asyncio
 import json
 import os
-import sys
 import time
 import warnings
 from dataclasses import asdict, dataclass, field
@@ -558,8 +557,6 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     ledger_config = mech_config.ledger_config
     contract_address = query_agent_address(
         agent_id=agent_id,
-        timeout=timeout,
-        url=mech_config.subgraph_url,
         chain_config=chain_config,
     )
     if contract_address is None:
