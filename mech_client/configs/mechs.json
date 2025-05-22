@@ -14,9 +14,8 @@
         },
         "gas_limit": 500000,
         "price": 10000000000000000,
-        "contract_abi_url": "https://api.gnosisscan.io/api?module=contract&action=getabi&address={contract_address}&apikey={api_key}",
         "transaction_url": "https://gnosisscan.io/tx/{transaction_digest}",
-        "subgraph_url": "https://api.studio.thegraph.com/query/57238/mech/version/latest"
+        "subgraph_url": ""
     },
     "arbitrum": {
         "agent_registry_contract": "0xa4799B083E0068732456EF45ff9fe5c683658327",
@@ -33,7 +32,6 @@
         },
         "gas_limit": 100000,
         "price": 3000000000000,
-        "contract_abi_url": "https://api.arbiscan.io/api?module=contract&action=getabi&address={contract_address}",
         "transaction_url": "https://arbiscan.io/tx/{transaction_digest}",
         "subgraph_url": ""
     },
@@ -52,7 +50,6 @@
         },
         "gas_limit": 100000,
         "price": 10000000000000000,
-        "contract_abi_url": "https://api.polygonscan.com/api?module=contract&action=getabi&address={contract_address}",
         "transaction_url": "https://polygonscan.com/tx/{transaction_digest}",
         "subgraph_url": ""
     },
@@ -71,7 +68,6 @@
         },
         "gas_limit": 500000,
         "price": 3000000000000,
-        "contract_abi_url": "https://api.basescan.org/api?module=contract&action=getabi&address={contract_address}&apikey={api_key}",
         "transaction_url": "https://basescan.org/tx/{transaction_digest}",
         "subgraph_url": ""
     },
@@ -90,7 +86,6 @@
         },
         "gas_limit": 250000,
         "price": 10000000000000000,
-        "contract_abi_url": "https://api.celoscan.io/api?module=contract&action=getabi&address={contract_address}",
         "transaction_url": "https://celoscan.io/tx/{transaction_digest}",
         "subgraph_url": ""
     },
@@ -109,7 +104,6 @@
         },
         "gas_limit": 100000,
         "price": 3000000000000,
-        "contract_abi_url": "https://api-optimistic.etherscan.io/api?module=contract&action=getabi&address={contract_address}",
         "transaction_url": "https://optimistic.etherscan.io/tx/{transaction_digest}",
         "subgraph_url": ""
     }

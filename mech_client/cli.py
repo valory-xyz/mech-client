@@ -22,6 +22,7 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
+from click import ClickException
 from tabulate import tabulate  # type: ignore
 
 from mech_client import __version__
@@ -50,7 +51,13 @@ def cli() -> None:
 
 
 @click.command()
-@click.argument("prompt")
+@click.option(
+    "--prompts",
+    type=str,
+    multiple=True,
+    required=True,
+    help="One or more prompts to send as a request. Can be repeated.",
+)
 @click.option("--agent_id", type=int, help="Id of the agent to be used")
 @click.option(
     "--priority-mech",
@@ -73,9 +80,10 @@ def cli() -> None:
     help="Path to private key to use for request minting",
 )
 @click.option(
-    "--tool",
+    "--tools",
     type=str,
-    help="Name of the tool to be used",
+    multiple=True,
+    help="One or more tools to be used. Can be repeated.",
 )
 @click.option(
     "--extra-attribute",
@@ -112,13 +120,13 @@ def cli() -> None:
     help="Id of the mech's chain configuration (stored configs/mechs.json)",
 )
 def interact(  # pylint: disable=too-many-arguments,too-many-locals
-    prompt: str,
+    prompts: tuple,
     agent_id: int,
     priority_mech: str,
     use_prepaid: bool,
     use_offchain: bool,
     key: Optional[str],
-    tool: Optional[str],
+    tools: Optional[tuple],
     extra_attribute: Optional[List[str]] = None,
     confirm: Optional[str] = None,
     retries: Optional[int] = None,
@@ -138,13 +146,18 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         use_prepaid = use_prepaid or use_offchain
 
         if agent_id is None:
+            if len(prompts) != len(tools):
+                raise ClickException(
+                    f"The number of prompts ({len(prompts)}) must match the number of tools ({len(tools)})"
+                )
+
             marketplace_interact_(
-                prompt=prompt,
+                prompts=prompts,
                 priority_mech=priority_mech,
                 use_prepaid=use_prepaid,
                 use_offchain=use_offchain,
                 private_key_path=key,
-                tool=tool,
+                tools=tools,
                 extra_attributes=extra_attributes_dict,
                 confirmation_type=(
                     ConfirmationType(confirm)
@@ -168,11 +181,16 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                     "Offchain model can only be used for marketplace requests"
                 )
 
+            if len(prompts) > 1:
+                raise ClickException(
+                    f"Error: Batch prompts ({len(prompts)}) not supported for legacy mechs"
+                )
+
             interact_(
-                prompt=prompt,
+                prompt=prompts[0],
                 agent_id=agent_id,
                 private_key_path=key,
-                tool=tool,
+                tool=tools[0] if tools else None,
                 extra_attributes=extra_attributes_dict,
                 confirmation_type=(
                     ConfirmationType(confirm)
@@ -185,7 +203,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 chain_config=chain_config,
             )
     except (ValueError, FileNotFoundError, Exception) as e:
-        raise click.ClickException(str(e)) from e
+        raise ClickException(str(e)) from e
 
 
 @click.command()

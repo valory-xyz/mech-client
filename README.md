@@ -121,15 +121,17 @@ export MECHX_API_KEY=<your api key>
 The basic usage of the Mech Client is as follows:
 
 ```bash
-mechx interact <prompt> --agent_id <agent_id>
+mechx interact --prompts <prompt> --tools <tool> --agent_id <agent_id>
 ```
 
-where agent with `<agent_id>` will process `<prompt>` with the default options. Each chain has its own set of Mech agents. You can find the agent IDs for each chain on the [Mech Hub](https://aimechs.autonolas.network/registry) or on the [Mech repository](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
+where agent with `<agent_id>` will process `<prompt>` with the `<tool>` and default options. Each chain has its own set of Mech agents. You can find the agent IDs for each chain on the [Mech Hub](https://aimechs.autonolas.network/registry) or on the [Mech repository](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
+
+⚠️ Batch requests and tools are not supported for legacy mechs
 
 Some useful options:
 
 - `--key <private_key_path>`: Specifies the path of the private key. The default value is `./ethereum_private_key.txt`.
-- `--tool  <name>`: Name of the tool to process the prompt. If you are aware about the tools that are provided by an agent you can directly provide its name using this option. If not provided, it will show a list of available tools for the agent so that you can select which one you want to use:
+- `--tools  <name>`: Name of the tool to process the prompt. If you are aware about the tools that are provided by an agent you can directly provide its name using this option. If not provided, it will show a list of available tools for the agent so that you can select which one you want to use:
 
   ```text
   Select prompting tool
@@ -160,7 +162,7 @@ Some useful options:
 Example of a request specifying a key file and tool:
 
 ```bash
-mechx interact "write a short poem" --agent_id 6 --key ~/ethereum_private_key.txt --tool openai-gpt-3.5-turbo --chain-config gnosis --confirm on-chain
+mechx interact --prompts "write a short poem" --agent_id 6 --key ~/ethereum_private_key.txt --tools openai-gpt-3.5-turbo --chain-config gnosis --confirm on-chain
 ```
 
 You will see an output like this:
@@ -203,14 +205,25 @@ You can use the option `--key <private_key_file_path>` in order to customize the
 The basic usage of the Mech Client is then as follows.
 
 ```bash
-mechx interact <prompt> --priority-mech <priority mech address> --tool openai-gpt-3.5-turbo --chain-config <chain_config>
+mechx interact --prompts <prompt> --priority-mech <priority mech address> --tools openai-gpt-3.5-turbo --chain-config <chain_config>
 ```
 
 Additionally to other options which are the same as for legacy Mechs, this usage has the following option:
 
-`--use-prepaid <bool>`: use the prepaid method to send requests to a Mech via the Mech Marketplace. Defaults to False.
+`--use-prepaid <bool>`: use the prepaid method to send requests to a Mech via the Mech Marketplace. Defaults to False. <br>
 `--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Defaults to False.
 
+The Mech Client can also be used to send batch requests. There are couple of different ways to achieve this: 
+
+```bash
+mechx interact --prompts={<prompt-1>,<prompt-2>} --priority-mech <priority mech address> --tools={<tool-1>,<tool-2>} --chain-config <chain_config>
+```
+
+or <br>
+
+```bash
+mechx interact --prompts <prompt-1> --prompts <prompt-2> --priority-mech <priority mech address> --tools <tool-1> --tools <tool-2> --chain-config <chain_config>
+```
 
 
 ### List tools available for agents
@@ -333,7 +346,6 @@ Additionally, you can override any configuration parameter by exporting any of t
 MECHX_CHAIN_RPC
 MECHX_WSS_ENDPOINT
 MECHX_GAS_LIMIT
-MECHX_CONTRACT_ABI_URL
 MECHX_TRANSACTION_URL
 MECHX_SUBGRAPH_URL
 
@@ -473,7 +485,7 @@ You can find the agent IDs for each chain on the [Mech Hub](https://aimechs.auto
 Use the `--chain-config <name>` parameter together with a valid `<agent_id>`, for example:
 
 ```bash
-mechx interact "write a short poem" 2 --key ./ethereum_private_key.txt --tool openai-gpt-4 --chain-config celo --confirm on-chain
+mechx interact --prompts "write a short poem" --agent_id 2 --key ./ethereum_private_key.txt --tools openai-gpt-4 --chain-config celo --confirm on-chain
 ```
 
 </details>
