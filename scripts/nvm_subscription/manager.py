@@ -20,6 +20,7 @@ from .contracts.escrow_payment import EscrowPaymentConditionContract
 from .contracts.agreement_manager import AgreementStorageManagerContract
 from .contracts.token import SubscriptionToken
 from .contracts.nft import SubscriptionNFT
+from .contracts.subscription_provider import SubscriptionProvider
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,8 @@ class NVMSubscriptionManager:
         Initialize the SubscriptionManager, including contract instances
         and Web3 connection.
         """
+        # use os.getenv("MECHX_CHAIN_RPC")
+        # update the readme
         self.url = CONFIGS[network]["nvm"]['web3ProviderUri']
         self.web3 = Web3(Web3.HTTPProvider(self.url))
 
@@ -63,6 +66,7 @@ class NVMSubscriptionManager:
         self.transfer_nft = TransferNFTConditionContract(self.web3)
         self.escrow_payment = EscrowPaymentConditionContract(self.web3)
         self.subscription_nft = SubscriptionNFT(self.web3)
+        self.subscription_provider = SubscriptionProvider(self.web3)
 
         # load the subscription token to be used for base
         if network == 'BASE':
@@ -114,18 +118,10 @@ class NVMSubscriptionManager:
 
         agreement_id_seed = self._generate_agreement_id_seed()
         agreement_id = self.agreement_storage_manager.agreement_id(agreement_id_seed, self.sender)
-        print("AGREEMENT VALUES")
-        print(f"{agreement_id_seed=}")
-        print(f"{agreement_id.hex()=}")
-        print("")
 
         # Condition hashes
         lock_hash = self.lock_payment.hash_values(did, reward_address, self.token_address, self.amounts, receivers)
         lock_id = self.lock_payment.generate_id(agreement_id, lock_hash)
-        print("LOCK VALUES")
-        print(f"{lock_hash.hex()=}")
-        print(f"{lock_id.hex()=}")
-        print("")
 
         transfer_hash = self.transfer_nft.hash_values(
             did,
@@ -137,17 +133,6 @@ class NVMSubscriptionManager:
             False
         )
         transfer_id = self.transfer_nft.generate_id(agreement_id, transfer_hash)
-        print("TRANSFER VALUES")
-        print(f"{did=}")
-        ddo_proof_creator = ddo["proof"]["creator"]
-        print(f"{ddo_proof_creator=}")
-        print(f"{self.sender=}")
-        print(f"{self.subscription_credits=}")
-        print(f"{lock_id.hex()=}")
-        print(f"{self.subscription_nft_address=}")
-        print(f"{transfer_hash.hex()=}")
-        print(f"{transfer_id.hex()=}")
-        print("")
 
         escrow_hash = self.escrow_payment.hash_values(
             did,
@@ -160,21 +145,12 @@ class NVMSubscriptionManager:
             transfer_id
         )
         escrow_id = self.escrow_payment.generate_id(agreement_id, escrow_hash)
-        print("ESCROW VALUES")
-        print(f"{did=}")
-        print(f"{self.amounts=}")
-        print(f"{receivers=}")
-        print(f"{self.sender=}")
-        print(f"{reward_address=}")
-        print(f"{self.token_address=}")
-        print(f"{lock_id.hex()=}")
-        print(f"{transfer_id.hex()=}")
-        print(f"{escrow_hash.hex()=}")
-        print(f"{escrow_id.hex()=}")
-        print("")
 
+        # @note Correct testing nft subscription token id
+        # prod replace with self.subscription_id
         user_credit_balance_before = self.subscription_nft.get_balance(
-            self.sender, self.subscription_id
+            self.sender,
+            "115046712577796339297653407011688774430822167172835254131359090200671084730272",
         )
         print(f"Sender credits Before Purchase: {user_credit_balance_before}")
 
@@ -221,12 +197,76 @@ class NVMSubscriptionManager:
 
         signed_tx = self.web3.eth.account.sign_transaction(tx, private_key=wallet_pvt_key)
         tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
-        receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+        receipt = self.web3.eth.wait_for_transaction_receipt(transaction_hash=tx_hash)
 
         if receipt["status"] == 1:
             logger.info("Subscription transaction validated successfully")
-            return ({"status": "success", "tx_hash": tx_hash.hex()})
+            logger.info({"status": "success", "tx_hash": tx_hash.hex()})
         else:
             logger.error("Subscription transaction failed")
             return {"status": "failed", "receipt": dict(receipt)}
 
+        fulfill_for_delegate_params = (
+            # nftHolder
+            ddo["proof"]["creator"],
+            # nftReceiver
+            self.sender,
+            # nftAmount
+            self.subscription_credits,
+            # lockPaymentCondition
+            "0x" + lock_id.hex(),
+            # nftContractAddress
+            self.subscription_nft_address,
+            # transfer
+            False,
+            # expirationBlock
+            0,
+        )
+
+        fulfill_params = (
+            # amounts
+            self.amounts,
+            # receivers
+            receivers,
+            # returnAddress
+            self.sender,
+            # lockPaymentAddress
+            reward_address,
+            # tokenAddress
+            self.token_address,
+            # lockCondition
+            "0x" + lock_id.hex(),
+            # releaseCondition
+            "0x" + transfer_id.hex(),
+        )
+
+        fulfill_tx = self.subscription_provider.build_create_fulfill_tx(
+            agreement_id_seed="0x" + agreement_id.hex(),
+            did=did,
+            fulfill_for_delegate_params=fulfill_for_delegate_params,
+            fulfill_params=fulfill_params,
+            sender=self.sender,
+            value_eth=0,
+            chain_id=chain_id,
+        )
+
+        signed_tx = self.web3.eth.account.sign_transaction(
+            fulfill_tx, private_key=wallet_pvt_key
+        )
+        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        receipt = self.web3.eth.wait_for_transaction_receipt(transaction_hash=tx_hash)
+
+        # @note Correct testing nft subscription token id
+        # prod replace with self.subscription_id
+        user_credit_balance_after = self.subscription_nft.get_balance(
+            self.sender,
+            "115046712577796339297653407011688774430822167172835254131359090200671084730272",
+        )
+        print(f"Sender credits After Purchase: {user_credit_balance_after}")
+
+        if receipt["status"] == 1:
+            logger.info("Subscription purchased transaction successfully")
+            return {"status": "success", "tx_hash": tx_hash.hex()}
+        else:
+            logger.error("Subscription purchase transaction failed")
+            return {"status": "failed", "receipt": dict(receipt)}
