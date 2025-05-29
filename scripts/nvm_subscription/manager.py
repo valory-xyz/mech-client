@@ -125,7 +125,7 @@ class NVMSubscriptionManager:
 
         transfer_hash = self.transfer_nft.hash_values(
             did,
-            ddo["proof"]["creator"],
+            ddo["owner"],
             self.sender,
             self.subscription_credits,
             lock_id,
@@ -208,7 +208,7 @@ class NVMSubscriptionManager:
 
         fulfill_for_delegate_params = (
             # nftHolder
-            ddo["proof"]["creator"],
+            ddo["owner"],
             # nftReceiver
             self.sender,
             # nftAmount
