@@ -74,6 +74,8 @@ class PaymentType(Enum):
 
 
 IPFS_URL_TEMPLATE = "https://gateway.autonolas.tech/ipfs/f01701220{}"
+MECH_OFFCHAIN_REQUEST_ENDPOINT = "send_signed_requests"
+MECH_OFFCHAIN_DELIVER_ENDPOINT = "fetch_offchain_info"
 ABI_DIR_PATH = Path(__file__).parent / "abis"
 IMECH_ABI_PATH = ABI_DIR_PATH / "IMech.json"
 ITOKEN_ABI_PATH = ABI_DIR_PATH / "IToken.json"
@@ -472,7 +474,7 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
                 "nonce": nonce,
                 "ipfs_data": ipfs_data,
             }
-            url = mech_offchain_url + "send_signed_requests"
+            url = mech_offchain_url + MECH_OFFCHAIN_REQUEST_ENDPOINT
             response = requests.post(
                 url=url,
                 data=payload,
@@ -578,7 +580,7 @@ def wait_for_offchain_marketplace_data(mech_offchain_url: str, request_id: str) 
     """
     while True:
         try:
-            url = mech_offchain_url + "fetch_offchain_info"
+            url = mech_offchain_url + MECH_OFFCHAIN_DELIVER_ENDPOINT
             response = requests.get(
                 url=url,
                 data={"request_id": request_id},
