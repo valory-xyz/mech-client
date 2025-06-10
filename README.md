@@ -212,6 +212,10 @@ Additionally to other options which are the same as for legacy Mechs, this usage
 
 `--use-prepaid <bool>`: use the prepaid method to send requests to a Mech via the Mech Marketplace. Defaults to False. <br>
 `--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Defaults to False.
+> To use offchain requests using `--use-offchain` flag, export the `MECHX_MECH_OFFCHAIN_URL` env variable before sending requests. For example if you want to connect to a mech running locally, you can do the following
+```bash
+export MECHX_MECH_OFFCHAIN_URL="http://localhost:8000/"
+```
 
 The Mech Client can also be used to send batch requests. There are couple of different ways to achieve this: 
 
