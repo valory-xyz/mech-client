@@ -216,6 +216,12 @@ Additionally to other options which are the same as for legacy Mechs, this usage
 ```bash
 export MECHX_MECH_OFFCHAIN_URL="http://localhost:8000/"
 ```
+If you want to use a Valory mech for offchain requests, below is the list of mechs and their address and offchain urls.
+
+| Service ID | Priority Mech Address                       | Offchain URL                                             |
+|    :---:   |                :---:                        |                        :---:                             |  
+|       2182 | 0xC05e7412439bD7e91730a6880E18d5D5873F632C  | https://609c7c777521116d.agent.propel.autonolas.tech/    |
+
 
 The Mech Client can also be used to send batch requests. There are couple of different ways to achieve this: 
 
