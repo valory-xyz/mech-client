@@ -19,6 +19,7 @@
 
 """Mech client CLI module."""
 import json
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
@@ -145,6 +146,12 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         use_offchain = use_offchain or False
         use_prepaid = use_prepaid or use_offchain
 
+        mech_offchain_url = os.getenv("MECHX_MECH_OFFCHAIN_URL")
+        if use_offchain and not mech_offchain_url:
+            raise Exception(
+                "To use offchain requests, please set MECHX_MECH_OFFCHAIN_URL"
+            )
+
         if agent_id is None:
             if len(prompts) != len(tools):
                 raise ClickException(
@@ -156,6 +163,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 priority_mech=priority_mech,
                 use_prepaid=use_prepaid,
                 use_offchain=use_offchain,
+                mech_offchain_url=mech_offchain_url,
                 private_key_path=key,
                 tools=tools,
                 extra_attributes=extra_attributes_dict,
