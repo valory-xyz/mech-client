@@ -226,8 +226,9 @@ mechx interact --prompts <prompt-1> --prompts <prompt-2> --priority-mech <priori
 ```
 
 
-### List tools available for agents
+### List tools available for agents and marketplace mechs
 
+#### For legacy mechs
 To list the tools available for a specific agent or for all agents, use the `tools-for-agents` command. You can specify an agent ID to get tools for a specific agent, or omit it to list tools for all agents.
 
 ```bash
@@ -268,8 +269,28 @@ You will see an output like this:
 +---------------------------------------------+-----------------------------------------------+
 ```
 
+#### For marketplace mechs
+To list the tools available for a specific marketplace mech, use the `tools-for-marketplace-mech` command. You can specify an service ID to get tools for a specific mech.
+
+```bash
+mechx mechx tools-for-marketplace-mech 1722 --chain-config gnosis
+```
+```bash
+You will see an output like this:
++---------------------------------------------+-----------------------------------------------+
+| Tool Name                                   | Unique Identifier                             |
++=============================================+===============================================+
+| claude-prediction-offline                   | 1722-claude-prediction-offline                |
++---------------------------------------------+-----------------------------------------------+
+| claude-prediction-online                    | 1722-claude-prediction-online                 |
++---------------------------------------------+-----------------------------------------------+
+| deepmind-optimization                       | 1722-deepmind-optimization                    |
++---------------------------------------------+-----------------------------------------------+
+```
+
 ### Get Tool Description
 
+#### For legacy mechs
 To get the description of a specific tool, use the `tool-description` command. You need to specify the unique identifier of the tool.
 
 ```bash
@@ -285,19 +306,36 @@ You will see an output like this:
 Description for tool 6-claude-prediction-offline: Makes a prediction using Claude
 ```
 
+#### For marketplace mechs
+To get the description of a specific tool, use the ` tool-description-for-marketplace-mech` command. You need to specify the unique identifier of the tool.
+
+```bash
+mechx  tool-description-for-marketplace-mech <unique_identifier> --chain-config <chain_config>
+```
+Example usage:
+
+```bash
+mechx  tool-description-for-marketplace-mech 1722-openai-gpt-4 --chain-config gnosis
+```
+You will see an output like this:
+```bash
+Description for tool 1722-openai-gpt-4: Performs a request to OpenAI's GPT-4 model.
+```
+
 
 ### Get Tool Input/Output Schema
 
-To get the input/output schema of a specific tool, use the `tool_io_schema` command. You need to specify the unique identifier of the tool.
+#### For legacy mechs
+To get the input/output schema of a specific tool, use the `tool-io-schema-for-marketplace-mech` command. You need to specify the unique identifier of the tool.
 
 ```bash
-mechx tool-io-schema <unique_identifier> --chain-config <chain_config>
+mechx tool-io-schema-for-marketplace-mech <unique_identifier> --chain-config <chain_config>
 ```
 
 Example usage:
 
 ```bash
-mechx tool-io-schema "6-prediction-offline" --chain-config gnosis
+mechx tool-io-schema-for-marketplace-mech 1722-openai-gpt-4 --chain-config gnosis
 ```
 You will see an output like this:
 ```bash
@@ -325,6 +363,47 @@ Output Schema:
 +-----------+---------+-----------------------------------------------+
 | prompt    | string  | Prompt used for probability estimation.       |
 +-----------+---------+-----------------------------------------------+
+```
+
+#### For marketplace mechs
+To get the input/output schema of a specific tool, use the `tool_io_schema` command. You need to specify the unique identifier of the tool.
+
+```bash
+mechx tool-io-schema <unique_identifier> --chain-config <chain_config>
+```
+
+Example usage:
+
+```bash
+mechx tool-io-schema "6-prediction-offline" --chain-config gnosis
+```
+You will see an output like this:
+```bash
+Tool Details:
+Tool Details:
++------------------------+---------------------------------------------+
+| Tool Name              | Tool Description                            |
++========================+=============================================+
+| OpenAI Request (GPT-4) | Performs a request to OpenAI's GPT-4 model. |
++------------------------+---------------------------------------------+
+Input Schema:
++-------------+-----------------------------------------------+
+| Field       | Value                                         |
++=============+===============================================+
+| type        | text                                          |
++-------------+-----------------------------------------------+
+| description | The request to relay to OpenAI's GPT-4 model. |
++-------------+-----------------------------------------------+
+Output Schema:
++-----------+---------+-----------------------------------+
+| Field     | Type    | Description                       |
++===========+=========+===================================+
+| requestId | integer | Unique identifier for the request |
++-----------+---------+-----------------------------------+
+| result    | string  | Response from OpenAI              |
++-----------+---------+-----------------------------------+
+| prompt    | string  | User prompt to send to OpenAI     |
++-----------+---------+-----------------------------------+
 ```
 
 > **:pencil2: Note** <br />
