@@ -52,9 +52,7 @@ class NVMSubscriptionManager:
         Initialize the SubscriptionManager, including contract instances
         and Web3 connection.
         """
-        # use os.getenv("MECHX_CHAIN_RPC")
-        # update the readme
-        self.url = CONFIGS[network]["nvm"]['web3ProviderUri']
+        self.url = os.getenv("MECHX_CHAIN_RPC", CONFIGS[network]["nvm"]['web3ProviderUri'])
         self.web3 = Web3(Web3.HTTPProvider(self.url))
 
         self.account = Account.from_key(private_key)
@@ -104,7 +102,6 @@ class NVMSubscriptionManager:
         did = did.replace("did:nv:", "0x")
 
         ddo = self.did_registry.get_ddo(did)
-        print(f"SUBSCRIPTION NFT : {self.subscription_nft_address}")
         service = next((s for s in ddo.get("service", []) if s.get("type") == "nft-sales"), None)
         if not service:
             logger.error("No nft-sales service found in DDO")
@@ -146,16 +143,13 @@ class NVMSubscriptionManager:
         )
         escrow_id = self.escrow_payment.generate_id(agreement_id, escrow_hash)
 
-        # @note Correct testing nft subscription token id
-        # prod replace with self.subscription_id
         user_credit_balance_before = self.subscription_nft.get_balance(
-            self.sender,
-            "115046712577796339297653407011688774430822167172835254131359090200671084730272",
+            self.sender, self.subscription_id
         )
         print(f"Sender credits Before Purchase: {user_credit_balance_before}")
 
         # we set value as xdai is used as subscription for gnosis
-        value_eth = 0.1
+        value_eth = 1
         if chain_id == 8453:
             # for base, usdc is used and so we don't send any value
             value_eth = 0
@@ -256,11 +250,8 @@ class NVMSubscriptionManager:
         tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
         receipt = self.web3.eth.wait_for_transaction_receipt(transaction_hash=tx_hash)
 
-        # @note Correct testing nft subscription token id
-        # prod replace with self.subscription_id
         user_credit_balance_after = self.subscription_nft.get_balance(
-            self.sender,
-            "115046712577796339297653407011688774430822167172835254131359090200671084730272",
+            self.sender, self.subscription_id
         )
         print(f"Sender credits After Purchase: {user_credit_balance_after}")
 
