@@ -31,6 +31,13 @@ from mech_client.interact import interact as interact_
 from mech_client.marketplace_interact import (
     marketplace_interact as marketplace_interact_,
 )
+from mech_client.mech_marketplace_tool_management import (
+    get_tool_description as get_tool_description_for_marketplace_mech,
+)
+from mech_client.mech_marketplace_tool_management import (
+    get_tool_io_schema as get_tool_io_schema_for_marketplace_mech,
+)
+from mech_client.mech_marketplace_tool_management import get_tools_for_marketplace_mech
 from mech_client.mech_tool_management import (
     get_tool_description,
     get_tool_io_schema,
@@ -353,6 +360,103 @@ def tool_io_schema(tool_id: str, chain_config: str) -> None:
         click.echo(f"Network or I/O error: {str(e)}")
 
 
+@click.command(name="tools-for-marketplace-mech")
+@click.argument(
+    "service-id",
+    type=int,
+)
+@click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
+def tools_for_marketplace_mech(service_id: int, chain_config: str) -> None:
+    """Fetch and display tools for marketplace mechs."""
+    try:
+        result = get_tools_for_marketplace_mech(service_id, chain_config)
+
+        if result:
+            headers = ["Tool Name", "Unique Identifier"]
+            data: List[Tuple[str, ...]] = [
+                (
+                    str(tool["tool_name"]),
+                    str(tool["unique_identifier"]),
+                )
+                for tool in result["tools"]
+            ]
+
+            click.echo(tabulate(data, headers=headers, tablefmt="grid"))
+
+    except (KeyError, TypeError) as e:
+        click.echo(f"Error processing tool data: {str(e)}")
+    except json.JSONDecodeError as e:
+        click.echo(f"Error decoding JSON response: {str(e)}")
+    except IOError as e:
+        click.echo(f"Network or I/O error: {str(e)}")
+
+
+@click.command(name="tool-description-for-marketplace-mech")
+@click.argument("tool_id")
+@click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
+def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> None:
+    """Fetch and display the description of a specific tool for marketplace mechs."""
+    try:
+        description = get_tool_description_for_marketplace_mech(tool_id, chain_config)
+        click.echo(f"Description for tool {tool_id}: {description}")
+    except KeyError as e:
+        click.echo(f"Tool not found or missing description: {str(e)}")
+    except json.JSONDecodeError as e:
+        click.echo(f"Error decoding JSON response: {str(e)}")
+    except IOError as e:
+        click.echo(f"Network or I/O error: {str(e)}")
+
+
+@click.command(name="tool-io-schema-for-marketplace-mech")
+@click.argument("tool_id")
+@click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
+def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None:
+    """Fetch and display the tool's name and description along with the input/output schema for a specific tool for marketplace mechs."""
+    try:
+        result = get_tool_io_schema_for_marketplace_mech(tool_id, chain_config)
+
+        name = result["name"]
+        description = result["description"]
+        # Prepare data for tabulation
+        input_schema = [(key, result["input"][key]) for key in result["input"]]
+
+        # Handling nested output schema
+        output_schema = []
+        if "properties" in result["output"]["schema"]:
+            for key, value in result["output"]["schema"]["properties"].items():
+                output_schema.append((key, value["type"], value.get("description", "")))
+
+        # Display tool details in tabulated format
+        click.echo("Tool Details:")
+        click.echo(
+            tabulate(
+                [
+                    [
+                        name,
+                        description,
+                    ]
+                ],
+                headers=["Tool Name", "Tool Description"],
+                tablefmt="grid",
+            )
+        )
+        # Display schemas in tabulated format
+        click.echo("Input Schema:")
+        click.echo(tabulate(input_schema, headers=["Field", "Value"], tablefmt="grid"))
+        click.echo("Output Schema:")
+        click.echo(
+            tabulate(
+                output_schema, headers=["Field", "Type", "Description"], tablefmt="grid"
+            )
+        )
+    except KeyError as e:
+        click.echo(f"Error accessing schema data: {str(e)}")
+    except json.JSONDecodeError as e:
+        click.echo(f"Error decoding JSON response: {str(e)}")
+    except IOError as e:
+        click.echo(f"Network or I/O error: {str(e)}")
+
+
 @click.command(name="deposit-native")
 @click.argument("amount_to_deposit")
 @click.option(
@@ -423,8 +527,11 @@ cli.add_command(prompt_to_ipfs)
 cli.add_command(push_to_ipfs)
 cli.add_command(to_png)
 cli.add_command(tools_for_agents)
+cli.add_command(tools_for_marketplace_mech)
 cli.add_command(tool_io_schema)
+cli.add_command(tool_io_schema_for_marketplace_mech)
 cli.add_command(tool_description)
+cli.add_command(tool_description_for_marketplace_mech)
 cli.add_command(deposit_native)
 cli.add_command(deposit_token)
 cli.add_command(nvm_subscribe)

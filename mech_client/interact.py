@@ -120,6 +120,7 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
 
     agent_registry_contract: str
     service_registry_contract: str
+    complementary_metadata_hash_address: str
     rpc_url: str
     wss_endpoint: str
     ledger_config: LedgerConfig
@@ -139,6 +140,14 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         service_registry_contract = os.getenv("MECHX_SERVICE_REGISTRY_CONTRACT")
         if service_registry_contract:
             self.service_registry_contract = service_registry_contract
+
+        complementary_metadata_hash_address = os.getenv(
+            "MECHX_COMPLEMENTARY_METADATA_HASH_ADDRESS"
+        )
+        if complementary_metadata_hash_address:
+            self.complementary_metadata_hash_address = (
+                complementary_metadata_hash_address
+            )
 
         rpc_url = os.getenv("MECHX_CHAIN_RPC")
         if rpc_url:
