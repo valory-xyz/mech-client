@@ -198,7 +198,10 @@ For a Mech using Nevermined subscriptions, to make requests, it is necessary to 
 mechx purchase-nvm-subscription --chain-config <chain_config>
 ```
 
-:warning: If you face issues with base RPC, please consider updating to a new one [here](https://github.com/valory-xyz/mech-client/blob/feat/nvm_sub_integration/scripts/nvm_subscription/resources/networks.json#L10).
+⚠️ To ensure optimal performance and reliability when using `purchase-nvm-subscription`, it is advisable to use a custom RPC provider as public RPC endpoints may be rate-limited or unreliable under high usage. You can configure your custom RPC URL in your environment variables using
+```bash
+export MECHX_CHAIN_RPC=
+```
 
 You can use the option `--key <private_key_file_path>` in order to customize the path to the private key file.
 
