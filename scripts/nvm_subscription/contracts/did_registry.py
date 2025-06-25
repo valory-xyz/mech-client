@@ -2,6 +2,7 @@
 import logging
 from typing import Dict, Any
 from web3 import Web3
+from web3.constants import ADDRESS_ZERO
 
 from .base_contract import BaseContract
 
@@ -53,10 +54,15 @@ class DIDRegistryContract(BaseContract):
             "proof": response.get("proof", [])
         }
 
+        non_zero_providers = [
+            addr
+            for addr in ddo["providers"]
+            if addr.lower() != ADDRESS_ZERO
+        ]
         print("================ SUBSCRIBGING TO NVM OLAS PLAN =======================")
         print(f"PLAN : {ddo['did']}")
         print(f"OWNER: {ddo['owner']}")
-        print(f"PROVIDERS: {ddo['providers']}")
+        print(f"PROVIDERS: {non_zero_providers}")
         logger.info(f"ROYALTIES: {ddo['royalties']}")
         logger.info(f"IMMUTABLE URL: {ddo['immutableUrl']}")
         logger.info(f"NFT INITIALIZED: {ddo['nftInitialized']}")
