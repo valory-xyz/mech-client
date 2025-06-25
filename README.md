@@ -93,12 +93,6 @@ The EOA you use must have enough funds to pay for the Mech requests, or alternat
 >    echo ethereum_private_key.txt >> .gitignore
 >    ```
 
-### Select the mech you are going to send requests to
-
-Mechs can receive requests via the [Mech Marketplace](https://github.com/valory-xyz/ai-registry-mech/) or directly. We call the last ones _Legacy Mechs_. 
-Mechs are deployed on several networks. Find the list of supported networks and corresponding mech addresses [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs). Additionally, on Gnosis you can find more available Mechs [here](https://mech.olas.network/) (click on the tab "Legacy Mech" in order to see Legacy Mech and "Mech Marketplace" for the ones which receive requests via the Mech Marketplace).
-
-
 ### API Keys
 
 In order to fetch on-chain data for Gnosis and Base, mech client requires an API key from a blockchain data provider. You can find them here for [GnosisScan](https://gnosisscan.io/) and [BaseScan](https://basescan.org/). Follow these steps to generate your API key if you are planning to use mech client for gnosis and base:
@@ -115,6 +109,11 @@ export MECHX_API_KEY=<your api key>
 ```
 
 ### Generate Mech requests
+
+#### Select the mech you are going to send requests to
+
+Mechs can receive requests via the [Mech Marketplace](https://github.com/valory-xyz/ai-registry-mech/) or directly. We call the last ones _Legacy Mechs_. 
+Mechs are deployed on several networks. Find the list of supported networks and corresponding mech addresses [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs). Additionally, you can find more available Mechs [here](https://mech.olas.network/) (click on the tab "Legacy Mech" in order to see Legacy Mech (available only on Gnosis) and "Mech Marketplace" for the ones which receive requests via the Mech Marketplace).
 
 #### Legacy Mechs
 
