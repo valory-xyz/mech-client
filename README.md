@@ -326,16 +326,16 @@ Description for tool 1722-openai-gpt-4: Performs a request to OpenAI's GPT-4 mod
 ### Get Tool Input/Output Schema
 
 #### For legacy mechs
-To get the input/output schema of a specific tool, use the `tool-io-schema-for-marketplace-mech` command. You need to specify the unique identifier of the tool.
+To get the input/output schema of a specific tool, use the `tool_io_schema` command. You need to specify the unique identifier of the tool.
 
 ```bash
-mechx tool-io-schema-for-marketplace-mech <unique_identifier> --chain-config <chain_config>
+mechx tool-io-schema <unique_identifier> --chain-config <chain_config>
 ```
 
 Example usage:
 
 ```bash
-mechx tool-io-schema-for-marketplace-mech 1722-openai-gpt-4 --chain-config gnosis
+mechx tool-io-schema "6-prediction-offline" --chain-config gnosis
 ```
 You will see an output like this:
 ```bash
@@ -366,16 +366,16 @@ Output Schema:
 ```
 
 #### For marketplace mechs
-To get the input/output schema of a specific tool, use the `tool_io_schema` command. You need to specify the unique identifier of the tool.
+To get the input/output schema of a specific tool, use the `tool-io-schema-for-marketplace-mech` command. You need to specify the unique identifier of the tool.
 
 ```bash
-mechx tool-io-schema <unique_identifier> --chain-config <chain_config>
+mechx tool-io-schema-for-marketplace-mech <unique_identifier> --chain-config <chain_config>
 ```
 
 Example usage:
 
 ```bash
-mechx tool-io-schema "6-prediction-offline" --chain-config gnosis
+mechx tool-io-schema-for-marketplace-mech 1722-openai-gpt-4 --chain-config gnosis
 ```
 You will see an output like this:
 ```bash
