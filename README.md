@@ -93,12 +93,6 @@ The EOA you use must have enough funds to pay for the Mech requests, or alternat
 >    echo ethereum_private_key.txt >> .gitignore
 >    ```
 
-### Select the mech you are going to send requests to
-
-Mechs can receive requests via the [Mech Marketplace](https://github.com/valory-xyz/ai-registry-mech/) or directly. We call the last ones _Legacy Mechs_. 
-Mechs are deployed on several networks. Find the list of supported networks and corresponding mech addresses [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs). Additionally, on Gnosis you can find more available Mechs [here](https://mech.olas.network/) (click on the tab "Legacy Mech" in order to see Legacy Mech and "Mech Marketplace" for the ones which receive requests via the Mech Marketplace).
-
-
 ### API Keys
 
 In order to fetch on-chain data for Gnosis and Base, mech client requires an API key from a blockchain data provider. You can find them here for [GnosisScan](https://gnosisscan.io/) and [BaseScan](https://basescan.org/). Follow these steps to generate your API key if you are planning to use mech client for gnosis and base:
@@ -115,6 +109,11 @@ export MECHX_API_KEY=<your api key>
 ```
 
 ### Generate Mech requests
+
+#### Select the mech you are going to send requests to
+
+Mechs can receive requests via the [Mech Marketplace](https://github.com/valory-xyz/ai-registry-mech/) or directly. We call the last ones _Legacy Mechs_. 
+Mechs are deployed on several networks. Find the list of supported networks and corresponding mech addresses [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs). Additionally, you can find more available Mechs [here](https://mech.olas.network/) (click on the tab "Legacy Mech" in order to see Legacy Mech (available only on Gnosis) and "Mech Marketplace" for the ones which receive requests via the Mech Marketplace).
 
 #### Legacy Mechs
 
@@ -198,7 +197,10 @@ For a Mech using Nevermined subscriptions, to make requests, it is necessary to 
 mechx purchase-nvm-subscription --chain-config <chain_config>
 ```
 
-:warning: If you face issues with base RPC, please consider updating to a new one [here](https://github.com/valory-xyz/mech-client/blob/feat/nvm_sub_integration/scripts/nvm_subscription/resources/networks.json#L10).
+⚠️ To ensure optimal performance and reliability when using `purchase-nvm-subscription`, it is advisable to use a custom RPC provider as public RPC endpoints may be rate-limited or unreliable under high usage. You can configure your custom RPC URL in your environment variables using
+```bash
+export MECHX_CHAIN_RPC=
+```
 
 You can use the option `--key <private_key_file_path>` in order to customize the path to the private key file.
 
