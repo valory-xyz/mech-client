@@ -141,14 +141,6 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         if service_registry_contract:
             self.service_registry_contract = service_registry_contract
 
-        complementary_metadata_hash_address = os.getenv(
-            "MECHX_COMPLEMENTARY_METADATA_HASH_ADDRESS"
-        )
-        if complementary_metadata_hash_address:
-            self.complementary_metadata_hash_address = (
-                complementary_metadata_hash_address
-            )
-
         rpc_url = os.getenv("MECHX_CHAIN_RPC")
         if rpc_url:
             self.rpc_url = rpc_url
