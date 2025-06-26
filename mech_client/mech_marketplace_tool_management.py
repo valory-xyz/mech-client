@@ -127,9 +127,12 @@ def get_tool_description(unique_identifier: str, chain_config: str = "gnosis") -
     :param chain_config: The chain configuration to use.
     :return: Description of the tool or a default message if not available.
     """
-    parts = unique_identifier.split("-")
-    service_id = int(parts[0])
-    tool_name = "-".join(parts[1:])
+    service_id_str, *tool_parts = unique_identifier.split("-")
+    try:
+        service_id = int(service_id_str)
+    except ValueError as exc:
+        raise ValueError(f"Unexpected unique identifier format: {unique_identifier}") from exc
+    tool_name = "-".join(tool_parts)
 
     # Get the mech configuration
     mech_config = get_mech_config(chain_config)
