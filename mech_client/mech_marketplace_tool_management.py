@@ -21,12 +21,16 @@ DEFAULT_TIMEOUT = 10
 
 @dataclass
 class ToolInfo:
+    """Tool info"""
+
     tool_name: str
     unique_identifier: str
 
 
 @dataclass
 class ToolsForMarketplaceMech:
+    """Tools info list"""
+
     service_id: int
     tools: List[ToolInfo]
 
@@ -96,7 +100,7 @@ def get_mech_tools(
 
 def get_tools_for_marketplace_mech(
     service_id: int, chain_config: str = "gnosis"
-) -> Dict[str, Any]:
+) -> ToolsForMarketplaceMech:
     """
     Retrieve tools for specified mech's service id.
 
@@ -206,11 +210,23 @@ def get_tool_io_schema(
     return {"input": {}, "output": {}}
 
 
-def extract_input_schema(input_data):
+def extract_input_schema(input_data: Dict[str, Any]) -> List[Tuple[str, Any]]:
+    """
+    Extract the schema from input data.
+
+    :param input_data: A dictionary representing the input data.
+    :return: A list of key-value pairs representing the input schema.
+    """
     return [(key, input_data[key]) for key in input_data]
 
 
-def extract_output_schema(output_data):
+def extract_output_schema(output_data: Dict[str, Any]) -> List[Tuple[str, str, str]]:
+    """
+    Extract the output schema from the output data.
+
+    :param output_data: A dictionary representing the output data.
+    :return: A list of list of tuples representing the output schema.
+    """
     schema = output_data.get("schema", {})
     if "properties" not in schema:
         return []
