@@ -1,7 +1,7 @@
 """Module for managing mechanical tools and their interactions with blockchain."""
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -15,6 +15,19 @@ ABI_DIR_PATH = Path(__file__).parent / "abis"
 COMPLEMENTARY_METADATA_HASH_ABI_PATH = (
     ABI_DIR_PATH / "ComplementaryServiceMetadata.json"
 )
+ENCODING = "utf-8"
+DEFAULT_TIMEOUT = 10
+
+@dataclass
+class ToolInfo:
+    tool_name: str
+    unique_identifier: str
+
+
+@dataclass
+class ToolsForMarketplaceMech:
+    service_id: int
+    tools: List[ToolInfo]
 
 
 def fetch_tools(
@@ -25,7 +38,7 @@ def fetch_tools(
     include_metadata: bool = False,
 ) -> Union[List[str], Tuple[List[str], Dict[str, Any]]]:
     """Fetch tools for specified mech's service ID, optionally include metadata."""
-    with open(contract_abi_path, encoding="utf-8") as f:
+    with open(contract_abi_path, encoding=ENCODING) as f:
         abi = json.load(f)
 
     metadata_contract = get_contract(
@@ -34,7 +47,7 @@ def fetch_tools(
         ledger_api=ledger_api,
     )
     metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
-    response = requests.get(metadata_uri, timeout=10).json()
+    response = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
     tools = response.get("tools", [])
 
     if include_metadata:
@@ -75,12 +88,7 @@ def get_mech_tools(
             contract_abi_path=COMPLEMENTARY_METADATA_HASH_ABI_PATH,
             include_metadata=include_metadata,
         )
-    except (
-        requests.exceptions.RequestException,
-        json.JSONDecodeError,
-        KeyError,
-        NotImplementedError,
-    ) as e:
+    except (json.JSONDecodeError, NotImplementedError) as e:
         print(f"An error occurred while fetching tools for mech with {service_id}: {e}")
         return None
 
@@ -95,24 +103,22 @@ def get_tools_for_marketplace_mech(
     :param chain_config: The chain configuration to use.
     :return: Dictionary of tools with identifiers or a mapping of service IDs to tools.
     """
+    empty_response = ToolsForMarketplaceMech(service_id=service_id, tools=[])
+
     try:
         result = get_mech_tools(service_id, chain_config, True)
+        if result is None:
+            return empty_response
 
-        if result is not None:
-            (tools, tool_metadata) = result
+        (tools, tool_metadata) = result
+        if not isinstance(tools, list) or not isinstance(tool_metadata, dict):
+            return empty_response
 
-            if isinstance(tools, list) and isinstance(tool_metadata, dict):
-                tools_with_ids = [
-                    {
-                        "tool_name": tool,
-                        "unique_identifier": f"{service_id}-{tool}",
-                    }
-                    for tool in tools
-                ]
-            else:
-                tools_with_ids = []
-
-        return {"service_id": service_id, "tools": tools_with_ids}
+        tools_with_ids = [
+            ToolInfo(tool_name=tool, unique_identifier=f"{service_id}-{tool}")
+            for tool in tools
+        ]
+        return ToolsForMarketplaceMech(service_id=service_id, tools=tools_with_ids)
 
     except Exception as e:
         print(f"Error in get_tools_for_agents: {str(e)}")
@@ -163,9 +169,12 @@ def get_tool_io_schema(
     :param chain_config: The chain configuration to use.
     :return: Dictionary containing name, description, input and output schemas.
     """
-    parts = unique_identifier.split("-")
-    service_id = int(parts[0])
-    tool_name = "-".join(parts[1:])
+    service_id_str, *tool_parts = unique_identifier.split("-")
+    try:
+        service_id = int(service_id_str)
+    except ValueError as exc:
+        raise ValueError(f"Unexpected unique identifier format: {unique_identifier}") from exc
+    tool_name = "-".join(tool_parts)
 
     # Get the mech configuration
     mech_config = get_mech_config(chain_config)
@@ -190,3 +199,18 @@ def get_tool_io_schema(
             }
 
     return {"input": {}, "output": {}}
+
+
+def extract_input_schema(input_data):
+    return [(key, input_data[key]) for key in input_data]
+
+
+def extract_output_schema(output_data):
+    schema = output_data.get("schema", {})
+    if "properties" not in schema:
+        return []
+
+    return [
+        (key, value.get("type", ""), value.get("description", ""))
+        for key, value in schema["properties"].items()
+    ]

@@ -43,6 +43,10 @@ from mech_client.mech_tool_management import (
     get_tool_io_schema,
     get_tools_for_agents,
 )
+from mech_client.mech_marketplace_tool_management import (
+    extract_input_schema,
+    extract_output_schema,
+)
 from mech_client.prompt_to_ipfs import main as prompt_to_ipfs_main
 from mech_client.push_to_ipfs import main as push_to_ipfs_main
 from mech_client.to_png import main as to_png_main
@@ -371,17 +375,16 @@ def tools_for_marketplace_mech(service_id: int, chain_config: str) -> None:
     try:
         result = get_tools_for_marketplace_mech(service_id, chain_config)
 
-        if result:
-            headers = ["Tool Name", "Unique Identifier"]
-            data: List[Tuple[str, ...]] = [
-                (
-                    str(tool["tool_name"]),
-                    str(tool["unique_identifier"]),
-                )
-                for tool in result["tools"]
-            ]
+        headers = ["Tool Name", "Unique Identifier"]
+        data: List[Tuple[str, ...]] = [
+            (
+                str(tool.tool_name),
+                str(tool.unique_identifier),
+            )
+            for tool in result.tools
+        ]
 
-            click.echo(tabulate(data, headers=headers, tablefmt="grid"))
+        click.echo(tabulate(data, headers=headers, tablefmt="grid"))
 
     except (KeyError, TypeError) as e:
         click.echo(f"Error processing tool data: {str(e)}")
@@ -417,30 +420,18 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
 
         name = result["name"]
         description = result["description"]
-        # Prepare data for tabulation
-        input_schema = [(key, result["input"][key]) for key in result["input"]]
+        input_schema = extract_input_schema(result["input"])
+        output_schema = extract_output_schema(result["output"])
 
-        # Handling nested output schema
-        output_schema = []
-        if "properties" in result["output"]["schema"]:
-            for key, value in result["output"]["schema"]["properties"].items():
-                output_schema.append((key, value["type"], value.get("description", "")))
-
-        # Display tool details in tabulated format
         click.echo("Tool Details:")
         click.echo(
             tabulate(
-                [
-                    [
-                        name,
-                        description,
-                    ]
-                ],
+                [[name, description]],
                 headers=["Tool Name", "Tool Description"],
                 tablefmt="grid",
             )
         )
-        # Display schemas in tabulated format
+
         click.echo("Input Schema:")
         click.echo(tabulate(input_schema, headers=["Field", "Value"], tablefmt="grid"))
         click.echo("Output Schema:")
