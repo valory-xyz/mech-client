@@ -226,7 +226,7 @@ mechx interact --prompts <prompt-1> --prompts <prompt-2> --priority-mech <priori
 ```
 
 
-### List tools available for agents and marketplace mechs
+### List tools available for legacy mechs and marketplace mechs
 
 #### For legacy mechs
 To list the tools available for a specific agent or for all agents, use the `tools-for-agents` command. You can specify an agent ID to get tools for a specific agent, or omit it to list tools for all agents.
@@ -270,10 +270,10 @@ You will see an output like this:
 ```
 
 #### For marketplace mechs
-To list the tools available for a specific marketplace mech, use the `tools-for-marketplace-mech` command. You can specify an service ID to get tools for a specific mech.
+To list the tools available for a specific marketplace mech, use the `tools-for-marketplace-mech` command. You can specify a service ID to get tools for a specific mech.
 
 ```bash
-mechx mechx tools-for-marketplace-mech 1722 --chain-config gnosis
+mechx tools-for-marketplace-mech 1722 --chain-config gnosis
 ```
 ```bash
 You will see an output like this:
