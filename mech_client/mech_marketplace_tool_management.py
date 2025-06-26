@@ -18,6 +18,7 @@ COMPLEMENTARY_METADATA_HASH_ABI_PATH = (
 ENCODING = "utf-8"
 DEFAULT_TIMEOUT = 10
 
+
 @dataclass
 class ToolInfo:
     tool_name: str
@@ -137,7 +138,9 @@ def get_tool_description(unique_identifier: str, chain_config: str = "gnosis") -
     try:
         service_id = int(service_id_str)
     except ValueError as exc:
-        raise ValueError(f"Unexpected unique identifier format: {unique_identifier}") from exc
+        raise ValueError(
+            f"Unexpected unique identifier format: {unique_identifier}"
+        ) from exc
     tool_name = "-".join(tool_parts)
 
     # Get the mech configuration
@@ -173,7 +176,9 @@ def get_tool_io_schema(
     try:
         service_id = int(service_id_str)
     except ValueError as exc:
-        raise ValueError(f"Unexpected unique identifier format: {unique_identifier}") from exc
+        raise ValueError(
+            f"Unexpected unique identifier format: {unique_identifier}"
+        ) from exc
     tool_name = "-".join(tool_parts)
 
     # Get the mech configuration

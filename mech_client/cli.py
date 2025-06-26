@@ -32,6 +32,10 @@ from mech_client.marketplace_interact import (
     marketplace_interact as marketplace_interact_,
 )
 from mech_client.mech_marketplace_tool_management import (
+    extract_input_schema,
+    extract_output_schema,
+)
+from mech_client.mech_marketplace_tool_management import (
     get_tool_description as get_tool_description_for_marketplace_mech,
 )
 from mech_client.mech_marketplace_tool_management import (
@@ -42,10 +46,6 @@ from mech_client.mech_tool_management import (
     get_tool_description,
     get_tool_io_schema,
     get_tools_for_agents,
-)
-from mech_client.mech_marketplace_tool_management import (
-    extract_input_schema,
-    extract_output_schema,
 )
 from mech_client.prompt_to_ipfs import main as prompt_to_ipfs_main
 from mech_client.push_to_ipfs import main as push_to_ipfs_main
