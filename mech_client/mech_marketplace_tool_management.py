@@ -44,7 +44,7 @@ def fetch_tools(
     complementary_metadata_hash_address: str,
     contract_abi_path: Path,
 ) -> Dict[str, Any]:
-    """Fetch tools for specified mech's service ID, optionally include metadata."""
+    """Fetch tools for specified mech's service ID."""
     with open(contract_abi_path, encoding=ENCODING) as f:
         abi = json.load(f)
 
@@ -65,7 +65,7 @@ def get_mech_tools(
 
     :param service_id: The service ID of the mech.
     :param chain_config: The chain configuration to use (default is "gnosis").
-    :return: A list of tools if successful and metadata, or None if an error occurs.
+    :return: A dictionary containing the JSON response from the `tokenURI` contract call, typically including tools and metadata.
     """
     # Get the mech configuration
     mech_config = get_mech_config(chain_config)
