@@ -43,7 +43,6 @@ def fetch_tools(
     ledger_api: EthereumApi,
     complementary_metadata_hash_address: str,
     contract_abi_path: Path,
-    include_metadata: bool = False,
 ) -> Dict[str, Any]:
     """Fetch tools for specified mech's service ID, optionally include metadata."""
     with open(contract_abi_path, encoding=ENCODING) as f:
@@ -55,25 +54,18 @@ def fetch_tools(
         ledger_api=ledger_api,
     )
     metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
-    response = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
-    tools = response.get(TOOLS, [])
-
-    if include_metadata:
-        tool_metadata = response.get(TOOL_METADATA, {})
-        return {TOOLS: tools, TOOL_METADATA: tool_metadata}
-    return {TOOLS: tools}
+    return requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
 
 
 def get_mech_tools(
-    service_id: int, chain_config: str = DEFAULT_CONFIG, include_metadata: bool = False
+    service_id: int, chain_config: str = DEFAULT_CONFIG
 ) -> Optional[Dict[str, Any]]:
     """
     Fetch tools for a given mech's service ID.
 
     :param service_id: The service ID of the mech.
     :param chain_config: The chain configuration to use (default is "gnosis").
-    :param include_metadata: To include tools metadata or not (default is False)
-    :return: A list of tools if successful, or a tuple of (list of tools, metadata) if metadata is included, or None if an error occurs.
+    :return: A list of tools if successful and metadata, or None if an error occurs.
     """
     # Get the mech configuration
     mech_config = get_mech_config(chain_config)
@@ -93,7 +85,6 @@ def get_mech_tools(
             ledger_api=ledger_api,
             complementary_metadata_hash_address=mech_config.complementary_metadata_hash_address,
             contract_abi_path=COMPLEMENTARY_METADATA_HASH_ABI_PATH,
-            include_metadata=include_metadata,
         )
     except (json.JSONDecodeError, NotImplementedError) as e:
         print(f"An error occurred while fetching tools for mech with {service_id}: {e}")
@@ -113,7 +104,7 @@ def get_tools_for_marketplace_mech(
     empty_response = ToolsForMarketplaceMech(service_id=service_id, tools=[])
 
     try:
-        result = get_mech_tools(service_id, chain_config, True)
+        result = get_mech_tools(service_id, chain_config)
         if result is None:
             return empty_response
 
@@ -194,7 +185,7 @@ def _get_tool_metadata(
         ) from exc
     tool_name = "-".join(tool_parts)
 
-    result = get_mech_tools(service_id, chain_config, True)
+    result = get_mech_tools(service_id, chain_config)
 
     if isinstance(result, dict):
         tool_metadata = result.get(TOOL_METADATA, {})
