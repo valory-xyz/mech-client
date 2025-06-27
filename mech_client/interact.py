@@ -120,6 +120,7 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
 
     agent_registry_contract: str
     service_registry_contract: str
+    complementary_metadata_hash_address: str
     rpc_url: str
     wss_endpoint: str
     ledger_config: LedgerConfig
