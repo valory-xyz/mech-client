@@ -388,8 +388,6 @@ def tools_for_marketplace_mech(service_id: int, chain_config: str) -> None:
 
     except (KeyError, TypeError) as e:
         click.echo(f"Error processing tool data: {str(e)}")
-    except json.JSONDecodeError as e:
-        click.echo(f"Error decoding JSON response: {str(e)}")
     except IOError as e:
         click.echo(f"Network or I/O error: {str(e)}")
 
@@ -404,8 +402,6 @@ def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> No
         click.echo(f"Description for tool {tool_id}: {description}")
     except KeyError as e:
         click.echo(f"Tool not found or missing description: {str(e)}")
-    except json.JSONDecodeError as e:
-        click.echo(f"Error decoding JSON response: {str(e)}")
     except IOError as e:
         click.echo(f"Network or I/O error: {str(e)}")
 
@@ -442,8 +438,6 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
         )
     except KeyError as e:
         click.echo(f"Error accessing schema data: {str(e)}")
-    except json.JSONDecodeError as e:
-        click.echo(f"Error decoding JSON response: {str(e)}")
     except IOError as e:
         click.echo(f"Network or I/O error: {str(e)}")
 

@@ -3,7 +3,7 @@
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from aea_ledger_ethereum import EthereumApi
@@ -17,6 +17,9 @@ COMPLEMENTARY_METADATA_HASH_ABI_PATH = (
 )
 ENCODING = "utf-8"
 DEFAULT_TIMEOUT = 10
+TOOLS = "tools"
+TOOL_METADATA = "toolMetadata"
+DEFAULT_CONFIG = "gnosis"
 
 
 @dataclass
@@ -41,7 +44,7 @@ def fetch_tools(
     complementary_metadata_hash_address: str,
     contract_abi_path: Path,
     include_metadata: bool = False,
-) -> Union[List[str], Tuple[List[str], Dict[str, Any]]]:
+) -> Dict[str, Any]:
     """Fetch tools for specified mech's service ID, optionally include metadata."""
     with open(contract_abi_path, encoding=ENCODING) as f:
         abi = json.load(f)
@@ -53,17 +56,17 @@ def fetch_tools(
     )
     metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
     response = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
-    tools = response.get("tools", [])
+    tools = response.get(TOOLS, [])
 
     if include_metadata:
-        tool_metadata = response.get("toolMetadata", {})
-        return tools, tool_metadata
-    return tools
+        tool_metadata = response.get(TOOL_METADATA, {})
+        return {TOOLS: tools, TOOL_METADATA: tool_metadata}
+    return {TOOLS: tools}
 
 
 def get_mech_tools(
-    service_id: int, chain_config: str = "gnosis", include_metadata: bool = False
-) -> Optional[Union[List[str], Tuple[List[str], Dict[str, Any]]]]:
+    service_id: int, chain_config: str = DEFAULT_CONFIG, include_metadata: bool = False
+) -> Optional[Dict[str, Any]]:
     """
     Fetch tools for a given mech's service ID.
 
@@ -72,19 +75,18 @@ def get_mech_tools(
     :param include_metadata: To include tools metadata or not (default is False)
     :return: A list of tools if successful, or a tuple of (list of tools, metadata) if metadata is included, or None if an error occurs.
     """
+    # Get the mech configuration
+    mech_config = get_mech_config(chain_config)
+    ledger_config = mech_config.ledger_config
+
+    # Setup Ethereum API
+    ledger_api = EthereumApi(**asdict(ledger_config))
+
+    if mech_config.complementary_metadata_hash_address == ADDRESS_ZERO:
+        print(f"Metadata hash not yet implemented on {chain_config}")
+        return None
+
     try:
-        # Get the mech configuration
-        mech_config = get_mech_config(chain_config)
-        ledger_config = mech_config.ledger_config
-
-        # Setup Ethereum API
-        ledger_api = EthereumApi(**asdict(ledger_config))
-
-        if mech_config.complementary_metadata_hash_address == ADDRESS_ZERO:
-            raise NotImplementedError(
-                f"Metadata hash not yet implemented on {chain_config}"
-            )
-
         # Fetch tools for the given mech's service ID
         return fetch_tools(
             service_id=service_id,
@@ -99,7 +101,7 @@ def get_mech_tools(
 
 
 def get_tools_for_marketplace_mech(
-    service_id: int, chain_config: str = "gnosis"
+    service_id: int, chain_config: str = DEFAULT_CONFIG
 ) -> ToolsForMarketplaceMech:
     """
     Retrieve tools for specified mech's service id.
@@ -115,7 +117,8 @@ def get_tools_for_marketplace_mech(
         if result is None:
             return empty_response
 
-        (tools, tool_metadata) = result
+        tools = result.get(TOOLS, [])
+        tool_metadata = result.get(TOOL_METADATA, {})
         if not isinstance(tools, list) or not isinstance(tool_metadata, dict):
             return empty_response
 
@@ -125,12 +128,14 @@ def get_tools_for_marketplace_mech(
         ]
         return ToolsForMarketplaceMech(service_id=service_id, tools=tools_with_ids)
 
-    except Exception as e:
-        print(f"Error in get_tools_for_agents: {str(e)}")
+    except (json.JSONDecodeError, NotImplementedError) as e:
+        print(f"Error in get_tools_for_marketplace_mech: {str(e)}")
         raise
 
 
-def get_tool_description(unique_identifier: str, chain_config: str = "gnosis") -> str:
+def get_tool_description(
+    unique_identifier: str, chain_config: str = DEFAULT_CONFIG
+) -> str:
     """
     Fetch the description of a specific tool based on a unique identifier.
 
@@ -138,36 +143,18 @@ def get_tool_description(unique_identifier: str, chain_config: str = "gnosis") -
     :param chain_config: The chain configuration to use.
     :return: Description of the tool or a default message if not available.
     """
-    service_id_str, *tool_parts = unique_identifier.split("-")
-    try:
-        service_id = int(service_id_str)
-    except ValueError as exc:
-        raise ValueError(
-            f"Unexpected unique identifier format: {unique_identifier}"
-        ) from exc
-    tool_name = "-".join(tool_parts)
+    default_response = "Description not available"
 
-    # Get the mech configuration
-    mech_config = get_mech_config(chain_config)
-    ledger_api = EthereumApi(**asdict(mech_config.ledger_config))
-
-    tools_result = fetch_tools(
-        service_id=service_id,
-        ledger_api=ledger_api,
-        complementary_metadata_hash_address=mech_config.complementary_metadata_hash_address,
-        contract_abi_path=COMPLEMENTARY_METADATA_HASH_ABI_PATH,
-        include_metadata=True,
+    _, tool_info = _get_tool_metadata(unique_identifier, chain_config)
+    return (
+        tool_info.get("description", default_response)
+        if tool_info
+        else default_response
     )
-    if isinstance(tools_result, tuple) and len(tools_result) == 2:
-        _, tool_metadata = tools_result
-        tool_info = tool_metadata.get(tool_name, {})
-        if isinstance(tool_info, dict):
-            return tool_info.get("description", "Description not available")
-    return "Description not available"
 
 
 def get_tool_io_schema(
-    unique_identifier: str, chain_config: str = "gnosis"
+    unique_identifier: str, chain_config: str = DEFAULT_CONFIG
 ) -> Dict[str, Any]:
     """
     Fetch the input and output schema along with tool name and description of a specific tool based on a unique identifier.
@@ -176,6 +163,28 @@ def get_tool_io_schema(
     :param chain_config: The chain configuration to use.
     :return: Dictionary containing name, description, input and output schemas.
     """
+    _, tool_info = _get_tool_metadata(unique_identifier, chain_config)
+    if tool_info:
+        return {
+            "name": tool_info.get("name", {}),
+            "description": tool_info.get("description", {}),
+            "input": tool_info.get("input", {}),
+            "output": tool_info.get("output", {}),
+        }
+
+    return {"input": {}, "output": {}}
+
+
+def _get_tool_metadata(
+    unique_identifier: str, chain_config: str = DEFAULT_CONFIG
+) -> Tuple[str, Optional[Dict[str, Any]]]:
+    """
+    Helper function to extract tool metadata from the chain config and unique identifier.
+
+    :param unique_identifier: The unique identifier in the format "<service_id>-<tool_name>".
+    :param chain_config: The chain configuration to use.
+    :return: Tuple of tool name and its metadata dictionary (or None if not found).
+    """
     service_id_str, *tool_parts = unique_identifier.split("-")
     try:
         service_id = int(service_id_str)
@@ -185,29 +194,15 @@ def get_tool_io_schema(
         ) from exc
     tool_name = "-".join(tool_parts)
 
-    # Get the mech configuration
-    mech_config = get_mech_config(chain_config)
-    ledger_api = EthereumApi(**asdict(mech_config.ledger_config))
+    result = get_mech_tools(service_id, chain_config, True)
 
-    tools_result = fetch_tools(
-        service_id=service_id,
-        ledger_api=ledger_api,
-        complementary_metadata_hash_address=mech_config.complementary_metadata_hash_address,
-        contract_abi_path=COMPLEMENTARY_METADATA_HASH_ABI_PATH,
-        include_metadata=True,
-    )
-    if isinstance(tools_result, tuple) and len(tools_result) == 2:
-        _, tool_metadata = tools_result
-        tool_info = tool_metadata.get(tool_name, {})
+    if isinstance(result, dict):
+        tool_metadata = result.get(TOOL_METADATA, {})
+        tool_info = tool_metadata.get(tool_name)
         if isinstance(tool_info, dict):
-            return {
-                "name": tool_info.get("name", {}),
-                "description": tool_info.get("description", {}),
-                "input": tool_info.get("input", {}),
-                "output": tool_info.get("output", {}),
-            }
+            return tool_name, tool_info
 
-    return {"input": {}, "output": {}}
+    return tool_name, None
 
 
 def extract_input_schema(input_data: Dict[str, Any]) -> List[Tuple[str, Any]]:
