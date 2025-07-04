@@ -24,7 +24,9 @@ from .contracts.subscription_provider import SubscriptionProvider
 
 logger = logging.getLogger(__name__)
 
-CONFIGS = json.load(open('scripts/nvm_subscription/resources/networks.json', 'r'))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+config_path = os.path.join(BASE_DIR, 'resources', 'networks.json')
+CONFIGS = json.load(open(config_path, 'r'))
 
 class Network(Enum):
     GNOSIS = "GNOSIS"
