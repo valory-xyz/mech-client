@@ -74,6 +74,8 @@ class PaymentType(Enum):
 
 
 IPFS_URL_TEMPLATE = "https://gateway.autonolas.tech/ipfs/f01701220{}"
+MECH_OFFCHAIN_REQUEST_ENDPOINT = "send_signed_requests"
+MECH_OFFCHAIN_DELIVER_ENDPOINT = "fetch_offchain_info"
 ABI_DIR_PATH = Path(__file__).parent / "abis"
 IMECH_ABI_PATH = ABI_DIR_PATH / "IMech.json"
 ITOKEN_ABI_PATH = ABI_DIR_PATH / "IToken.json"
@@ -389,6 +391,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
 def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
     crypto: EthereumCrypto,
     marketplace_contract: Web3Contract,
+    mech_offchain_url: str,
     prompt: str,
     tool: str,
     method_args_data: MechMarketplaceRequestConfig,
@@ -405,6 +408,8 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
     :type crypto: EthereumCrypto
     :param marketplace_contract: The mech marketplace contract instance.
     :type marketplace_contract: Web3Contract
+    :param mech_offchain_url: mech url to connect to.
+    :type mech_offchain_url: str
     :param prompt: The request prompt.
     :type prompt: str
     :param tool: The requested tool.
@@ -469,9 +474,9 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
                 "nonce": nonce,
                 "ipfs_data": ipfs_data,
             }
-            # @todo changed hardcoded url
+            url = mech_offchain_url + MECH_OFFCHAIN_REQUEST_ENDPOINT
             response = requests.post(
-                "http://localhost:8000/send_signed_requests",
+                url=url,
                 data=payload,
                 headers={"Content-Type": "application/json"},
             ).json()
@@ -562,10 +567,12 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     return result
 
 
-def wait_for_offchain_marketplace_data(request_id: str) -> Any:
+def wait_for_offchain_marketplace_data(mech_offchain_url: str, request_id: str) -> Any:
     """
     Watches for data off-chain on mech.
 
+    :param mech_offchain_url: mech url to connect to.
+    :type mech_offchain_url: str
     :param request_id: The ID of the request.
     :type request_id: str
     :return: The data returned by the mech.
@@ -573,15 +580,15 @@ def wait_for_offchain_marketplace_data(request_id: str) -> Any:
     """
     while True:
         try:
-            # @todo change hardcoded url
+            url = mech_offchain_url + MECH_OFFCHAIN_DELIVER_ENDPOINT
             response = requests.get(
-                "http://localhost:8000/fetch_offchain_info",
+                url=url,
                 data={"request_id": request_id},
             ).json()
             if response:
                 return response
         except Exception:  # pylint: disable=broad-except
-            time.sleep(1)
+            time.sleep(WAIT_SLEEP)
 
 
 def check_prepaid_balances(
@@ -638,6 +645,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     priority_mech: str,
     use_prepaid: bool = False,
     use_offchain: bool = False,
+    mech_offchain_url: str = "",
     tools: tuple = (),
     extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
@@ -658,6 +666,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     :type use_prepaid: bool
     :param use_offchain: Whether to use offchain model or not.
     :type use_offchain: bool
+    :param mech_offchain_url: mech url to connect to.
+    :type mech_offchain_url: str
     :param tools: The tools to interact with (optional).
     :type tools: tuple
     :param extra_attributes: Extra attributes to be included in the request metadata (optional).
@@ -882,6 +892,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         response = send_offchain_marketplace_request(
             crypto=crypto,
             marketplace_contract=mech_marketplace_contract,
+            mech_offchain_url=mech_offchain_url,
             prompt=prompts[0],
             tool=tools[0],
             method_args_data=mech_marketplace_request_config,
@@ -910,6 +921,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     for request_id in request_ids:
         data = wait_for_offchain_marketplace_data(
+            mech_offchain_url=mech_offchain_url,
             request_id=request_id,
         )
 
