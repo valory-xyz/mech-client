@@ -588,7 +588,7 @@ def wait_for_offchain_marketplace_data(mech_offchain_url: str, request_id: str) 
             if response:
                 return response
         except Exception:  # pylint: disable=broad-except
-            time.sleep(1)
+            time.sleep(WAIT_SLEEP)
 
 
 def check_prepaid_balances(
