@@ -222,7 +222,7 @@ If you want to use a Valory mech for offchain requests, below is the list of mec
 
 | Service ID | Priority Mech Address                       | Offchain URL                                             |
 |    :---:   |                :---:                        |                        :---:                             |  
-|       2182 | 0xC05e7412439bD7e91730a6880E18d5D5873F632C  | https://609c7c777521116d.agent.propel.autonolas.tech/    |
+|       2182 | 0xB3C6319962484602b00d5587e965946890b82101  | https://d19715222af5b940.agent.propel.autonolas.tech/    |
 
 
 The Mech Client can also be used to send batch requests. There are couple of different ways to achieve this: 
