@@ -1,10 +1,10 @@
 [tool.poetry]
 name = "mech-client"
-version = "0.6.0"
+version = "0.8.2"
 description = "Basic client to interact with a mech"
 authors = ["David Minarsch <david.minarsch@googlemail.com>"]
 readme = "README.md"
-packages = [{include = "mech_client"}]
+packages = [{include = "mech_client"}, {include = "scripts"}]
 license = "Apache-2.0"
 include = [
     "mech_client/helpers/acn/*",
