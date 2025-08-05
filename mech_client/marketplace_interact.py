@@ -50,6 +50,7 @@ from mech_client.interact import (
     get_event_signatures,
     get_mech_config,
 )
+from mech_client.mech_marketplace_tool_management import get_mech_tools
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import (
     register_event_handlers,
@@ -57,7 +58,6 @@ from mech_client.wss import (
     watch_for_marketplace_data_url_from_wss,
     watch_for_marketplace_request_ids,
 )
-from mech_client.mech_marketplace_tool_management import get_mech_tools
 
 
 # false positives for [B105:hardcoded_password_string] Possible hardcoded password
@@ -653,7 +653,7 @@ def verify_tools(tools: list, service_id: int, chain_config: str):
     :param service_id: Service id of the mech.
     :type service_id: int
     :param chain_config: Id of the mech's chain configuration (stored configs/mechs.json)
-    :type chain_config: str:
+    :type chain_config: str
     """
     mech_tools_data = get_mech_tools(service_id=service_id, chain_config=chain_config)
     mech_tools = mech_tools_data.get("tools", [])
