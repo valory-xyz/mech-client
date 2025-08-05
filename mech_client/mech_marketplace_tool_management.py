@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from aea_ledger_ethereum import EthereumApi
-
 from web3.constants import ADDRESS_ZERO
+
 from mech_client.interact import get_contract, get_mech_config
 
 
