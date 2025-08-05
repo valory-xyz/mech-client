@@ -254,6 +254,9 @@ def fetch_requester_nvm_subscription_balance(
     nvm_balance_tracker_contract = get_contract(
         contract_address=mech_payment_balance_tracker, abi=abi, ledger_api=ledger_api
     )
+    requester_balance_tracker_balance = (
+        nvm_balance_tracker_contract.functions.mapRequesterBalances(requester).call()
+    )
     subscription_nft_address = (
         nvm_balance_tracker_contract.functions.subscriptionNFT().call()
     )
@@ -271,7 +274,7 @@ def fetch_requester_nvm_subscription_balance(
         requester, subscription_id
     ).call()
 
-    return requester_balance
+    return requester_balance_tracker_balance + requester_balance
 
 
 def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
@@ -802,22 +805,29 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             max_delivery_rate,
         )
 
-    if payment_type in [PaymentType.NATIVE_NVM.value, PaymentType.TOKEN_NVM.value]:
+    is_nvm_mech = payment_type in [
+        PaymentType.NATIVE_NVM.value,
+        PaymentType.TOKEN_NVM.value,
+    ]
+    if is_nvm_mech:
         nvm_mech_type = PaymentType(payment_type).name.lower()
         print(
             f"{nvm_mech_type} Nevermined Mech detected, subscription credits to be used"
         )
         requester = crypto.address
-        requester_balance = fetch_requester_nvm_subscription_balance(
+        requester_total_balance_before = fetch_requester_nvm_subscription_balance(
             requester, ledger_api, mech_payment_balance_tracker, payment_type
         )
-        if requester_balance < price:
+        if requester_total_balance_before < price:
             print(
-                f"  - Sender Subscription balance low. Needed: {price}, Actual: {requester_balance}"
+                f"  - Sender Subscription balance low. Needed: {price}, Actual: {requester_total_balance_before}"
             )
             print(f"  - Sender Address: {requester}")
             sys.exit(1)
 
+        print(
+            f"  - Sender Subscription balance before request: {requester_total_balance_before}"
+        )
         # set price 0 to not send any msg.value in request transaction for nvm type mech
         price = 0
 
@@ -878,6 +888,19 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             )
 
             if data_url:
+                if is_nvm_mech:
+                    requester_total_balance_after = (
+                        fetch_requester_nvm_subscription_balance(
+                            requester,
+                            ledger_api,
+                            mech_payment_balance_tracker,
+                            payment_type,
+                        )
+                    )
+                    print(
+                        f"  - Sender Subscription balance after delivery: {requester_total_balance_after}"
+                    )
+
                 print(f"  - Data arrived: {data_url}")
                 data = requests.get(f"{data_url}/{request_id_int}", timeout=30).json()
                 print("  - Data from agent:")
