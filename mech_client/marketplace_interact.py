@@ -644,18 +644,22 @@ def check_prepaid_balances(
             sys.exit(1)
 
 
-def verify_tools(tools: list, service_id: int, chain_config: str):
+def verify_tools(tools: tuple, service_id: int, chain_config: Optional[str]) -> None:
     """
     Verifies user supplied tool(s) with the mech's metadata
 
     :param tools: The user supplied tools.
-    :type tools: list
+    :type tools: tuple
     :param service_id: Service id of the mech.
     :type service_id: int
     :param chain_config: Id of the mech's chain configuration (stored configs/mechs.json)
     :type chain_config: str
+    :rtype: None
     """
     mech_tools_data = get_mech_tools(service_id=service_id, chain_config=chain_config)
+    if not mech_tools_data:
+        raise ValueError("Error while fetching mech tools data")
+
     mech_tools = mech_tools_data.get("tools", [])
     invalid_tools = [tool for tool in tools if tool not in mech_tools]
     if invalid_tools:
