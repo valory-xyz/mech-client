@@ -303,7 +303,13 @@
             {
                 "indexed": false,
                 "internalType": "bytes",
-                "name": "data",
+                "name": "requestData",
+                "type": "bytes"
+            },
+            {
+                "indexed": false,
+                "internalType": "bytes",
+                "name": "deliveryData",
                 "type": "bytes"
             }
         ],
@@ -333,7 +339,7 @@
                 "type": "address"
             },
             {
-                "indexed": true,
+                "indexed": false,
                 "internalType": "address[]",
                 "name": "requesters",
                 "type": "address[]"
@@ -442,6 +448,12 @@
                 "internalType": "bytes32[]",
                 "name": "requestIds",
                 "type": "bytes32[]"
+            },
+            {
+                "indexed": false,
+                "internalType": "bytes[]",
+                "name": "requestDatas",
+                "type": "bytes[]"
             }
         ],
         "name": "MarketplaceRequest",
