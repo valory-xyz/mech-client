@@ -591,8 +591,8 @@ def wait_for_offchain_marketplace_data(mech_offchain_url: str, request_id: str) 
             ).json()
             if response:
                 return response
-            else:
-                time.sleep(WAIT_SLEEP)
+
+            time.sleep(WAIT_SLEEP)
         except Exception:  # pylint: disable=broad-except
             time.sleep(WAIT_SLEEP)
 
