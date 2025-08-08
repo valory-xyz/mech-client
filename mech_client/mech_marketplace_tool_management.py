@@ -7,8 +7,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from aea_ledger_ethereum import EthereumApi
+from web3.constants import ADDRESS_ZERO
 
-from mech_client.marketplace_interact import ADDRESS_ZERO, get_contract, get_mech_config
+from mech_client.interact import get_contract, get_mech_config
 
 
 ABI_DIR_PATH = Path(__file__).parent / "abis"
@@ -58,7 +59,7 @@ def fetch_tools(
 
 
 def get_mech_tools(
-    service_id: int, chain_config: str = DEFAULT_CONFIG
+    service_id: int, chain_config: Optional[str] = DEFAULT_CONFIG
 ) -> Optional[Dict[str, Any]]:
     """
     Fetch tools for a given mech's service ID.
