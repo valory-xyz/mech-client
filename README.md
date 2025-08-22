@@ -9,6 +9,12 @@ A basic client to interact with an AI Mech. [AI Mechs](https://github.com/valory
 
 - Python >=3.10
 
+## Developing, running and deploying Mechs and Mech tools
+
+The easiest way to create, run, deploy and test your own Mech and Mech tools is to follow the Mech and Mech tool docs [here](https://open-autonomy.docs.autonolas.tech/mech-tools-dev/). The [Mech tools dev repo](https://github.com/valory-xyz/mech-tools-dev) used in those docs greatly simplifies the development flow and dev experience.
+
+Only continue reading this README if you know what you are doing and you are specifically interested in this repo.
+
 ## Installation
 
 Find the latest available release on [PyPi](https://pypi.org/project/mech-client/#description).
@@ -97,9 +103,9 @@ The EOA you use must have enough funds to pay for the Mech requests, or alternat
 
 In order to fetch on-chain data for Gnosis and Base, mech client requires an API key from a blockchain data provider. You can find them here for [GnosisScan](https://gnosisscan.io/) and [BaseScan](https://basescan.org/). Follow these steps to generate your API key if you are planning to use mech client for gnosis and base:
 
-1. Sign up or log in 
+1. Sign up or log in
 2. Go to API Dashboard on the left menu
-3. Add a new API key 
+3. Add a new API key
 4. Once generated copy your API key
 
 Once you have your API key, you'll need to configure it in your environment. Use the following command to set it for your environment.
@@ -112,7 +118,7 @@ export MECHX_API_KEY=<your api key>
 
 #### Select the mech you are going to send requests to
 
-Mechs can receive requests via the [Mech Marketplace](https://github.com/valory-xyz/ai-registry-mech/) or directly. We call the last ones _Legacy Mechs_. 
+Mechs can receive requests via the [Mech Marketplace](https://github.com/valory-xyz/ai-registry-mech/) or directly. We call the last ones _Legacy Mechs_.
 Mechs are deployed on several networks. Find the list of supported networks and corresponding mech addresses [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs). Additionally, you can find more available Mechs [here](https://mech.olas.network/) (click on the tab "Legacy Mech" in order to see Legacy Mech (available only on Gnosis) and "Mech Marketplace" for the ones which receive requests via the Mech Marketplace).
 
 #### Legacy Mechs
@@ -178,22 +184,22 @@ Data from agent: {'requestId': 1004074058566339663950817114309409628095686850319
 
 #### With the Mech Marketplace
 
-With the Mech Marketplace, in order to pay for the Mech fees, you can make a deposit before sending requests. The deposit depends on the 
-payment model of the Mech. For a fixed price Mech receiving payments in native token, use the following: 
+With the Mech Marketplace, in order to pay for the Mech fees, you can make a deposit before sending requests. The deposit depends on the
+payment model of the Mech. For a fixed price Mech receiving payments in native token, use the following:
 
 ```bash
 mechx deposit-native --chain-config <chain_config> <amount>
 ```
 
-For a fixed price Mech receiving payments in OLAS, use the following (the amount is in ether): 
+For a fixed price Mech receiving payments in OLAS, use the following (the amount is in ether):
 
 ```bash
 mechx deposit-token --chain-config <chain_config> <amount>
 ```
 
-For a Mech using Nevermined subscriptions, to make requests, it is necessary to buy a subscription. To do that you can use the following command: 
+For a Mech using Nevermined subscriptions, to make requests, it is necessary to buy a subscription. To do that you can use the following command:
 
-```bash 
+```bash
 mechx purchase-nvm-subscription --chain-config <chain_config>
 ```
 
@@ -221,11 +227,11 @@ export MECHX_MECH_OFFCHAIN_URL="http://localhost:8000/"
 If you want to use a Valory mech for offchain requests, below is the list of mechs and their address and offchain urls.
 
 | Service ID | Priority Mech Address                       | Offchain URL                                             |
-|    :---:   |                :---:                        |                        :---:                             |  
+|    :---:   |                :---:                        |                        :---:                             |
 |       2182 | 0xB3C6319962484602b00d5587e965946890b82101  | https://d19715222af5b940.agent.propel.autonolas.tech/    |
 
 
-The Mech Client can also be used to send batch requests. There are couple of different ways to achieve this: 
+The Mech Client can also be used to send batch requests. There are couple of different ways to achieve this:
 
 ```bash
 mechx interact --prompts={<prompt-1>,<prompt-2>} --priority-mech <priority mech address> --tools={<tool-1>,<tool-2>} --chain-config <chain_config>
@@ -264,7 +270,7 @@ You will see an output like this:
 ```bash
 mechx tools-for-agents --agent-id "agent_id"
 ```
-Eaxmple usage 
+Eaxmple usage
 ```bash
 mechx tools-for-agents --agent-id 6
 ```
@@ -522,7 +528,7 @@ This script will:
 
 #### For Mechs receiving requests via the Mech Marketplace
 
-In this case, the script is the same, except for the function result. When this function has no argument agent_id, 
+In this case, the script is the same, except for the function result. When this function has no argument agent_id,
 the request is sent to the Mech Marketplace. The target Mech to which the request is relayed should be in the chain_config file (key `priority_mech_address`).
 
 ## Developer installation
