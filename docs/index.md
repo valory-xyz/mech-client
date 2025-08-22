@@ -1,35 +1,35 @@
-## **Overview** 
+## **Overview**
 
 This guide contains practical guidelines for interacting with Mechs.
-A requester - whether it is an agent or an application - can choose between two methods for sending service requests: 
+A requester - whether it is an agent or an application - can choose between two methods for sending service requests:
 
-- On-chain: The request is sent to the Mech contract. For Mechs registered on the [Mech Marketplace](../mech-tool/index.md#appendix-what-is-the-mech-marketplace), it is relayed via the Mech Marketplace. 
+- On-chain: The request is sent to the Mech contract. For Mechs registered on the [Mech Marketplace](../mech-tools-dev/index.md#appendix-what-is-the-mech-marketplace), it is relayed via the Mech Marketplace.
 
 - Off-chain: The request is sent directly to the Mech service. The Mech then sends the result (or delivery) to the Mech contract, which is subsequently relayed by the Mech Marketplace if the Mech is registered there.
 
 To send a request, follow these steps:
 
-**1.** Choose a Mech; 
+**1.** Choose a Mech;
 
-**2.** Make an on-chain deposit according to the Mech’s [payment model](../mech-tool/index.md#overview).
+**2.** Make an on-chain deposit according to the Mech’s [payment model](../mech-tools-dev/index.md#overview).
 
 **3.** Choose a method for sending the request (on-chain or off-chain).
 
 **4.** Send the request.
-		
+
 Detailed instructions for each step are provided below.
 
 ## Setup
 
 **Requirements**: [Python](https://www.python.org/) >= 3.10, [Poetry](https://github.com/python-poetry/poetry) == 1.8.4
 
-**1.** Install mech-client: 
+**1.** Install mech-client:
 
 ```bash
 pip install mech-client
 ```
 
-**2.** Setting up an EOA ([Externally Owned Account](https://ethereum.org/en/developers/docs/accounts/)) account: 
+**2.** Setting up an EOA ([Externally Owned Account](https://ethereum.org/en/developers/docs/accounts/)) account:
 
 **a.** Install browser extension of Metamask and open it.
 
@@ -97,9 +97,9 @@ To find the Mechs deployed on a given network, follow these steps:
 ### 1. 2. In terminal
 
 ### 1. 2. 1. Request command
-    
-- Use the command mechx in terminal, which is structured as follows: 
-        
+
+- Use the command mechx in terminal, which is structured as follows:
+
 ```bash
 mechx interact <prompt> --chain-config <chain-config> --use-offchain <bool> --tool <tool> --priority-mech <mech_address>
 ```
@@ -136,7 +136,7 @@ Note: For Mechs using the Nevermined subscription model, this value corresponds 
 
 **Making a deposit**
 
-- For fixed-price Mechs using native tokens: 
+- For fixed-price Mechs using native tokens:
 
 ```bash
 mechx deposit-native --chain-config <network_name> <amount>
@@ -152,7 +152,7 @@ In both cases above, `<amount>` must be at least the Mech's price (as given by m
 
 - For Mechs using Nevermined subscriptions:
 
-```bash 
+```bash
 mechx purchase-nvm-subscription --chain-config <network_name>
 ```
 
@@ -170,10 +170,10 @@ For example, the following command:
 mechx interact "write a short poem" --tool openai-gpt-3.5-turbo --chain-config gnosis --priority-mech <mech_address>
 ```
 
-you should receive a response as follows: 
+you should receive a response as follows:
         ![screenshot_response](./imgs/screenshot_request.png)
 
-**Troubleshooting: websocket connection lost** 
+**Troubleshooting: websocket connection lost**
 
 For some Mechs, the response may take a few minutes to arrive. During that time, the WebSocket connection might be lost. To avoid this, you can configure a custom WebSocket provider (we suggest QuickNode as an example). Once you have your WebSocket URL, set the following environment variable:
 
@@ -201,14 +201,14 @@ printf "%x\n" <request_id>
 
 **Troubleshooting: non-hexadecimal symbol**
 
-You may encounter an error indicating that the private key contains invalid (non-hexadecimal) characters.  
+You may encounter an error indicating that the private key contains invalid (non-hexadecimal) characters.
 This can happen, in particular, on Windows systems, where some IDEs may automatically add a newline character (`\n`) at the end of a file—for example, in `ethereum_private_key.txt`.
 
 To avoid this, check your IDE settings and ensure that the file contains only the private key with no trailing newline or whitespace.
 
-**Troubleshooting: out of gas** 
+**Troubleshooting: out of gas**
 
-If an "Out of gas" error is encountered, an increase of the gas limit can solve the problem. To do this: 
+If an "Out of gas" error is encountered, an increase of the gas limit can solve the problem. To do this:
 
 ```bash
 export MECHX_GAS_LIMIT=200000
@@ -248,11 +248,11 @@ Replace the placeholders as follows:
 
 - `USE_OFFCHAIN`: set to True to use off-chain request delivery, or leave to False for on-chain.
 
-The variable **result** contains the response of the mech. 
+The variable **result** contains the response of the mech.
 
 ### 1. 4. Sending requests through the web interface
 
-**1.** Create a wallet (e.g., using [MetaMask](https://metamask.io/)) and connect it to the [web interface](https://mech.olas.network/gnosis/mechs) by clicking the **“Connect wallet”** button at the top of the page.  
+**1.** Create a wallet (e.g., using [MetaMask](https://metamask.io/)) and connect it to the [web interface](https://mech.olas.network/gnosis/mechs) by clicking the **“Connect wallet”** button at the top of the page.
 The wallet must have some xDAI to pay for requests.
 
 **2.** On the [web interface](https://mech.olas.network/gnosis/mechs), click on the address of the Mech you want to interact with.
@@ -277,15 +277,15 @@ Once the request is fulfilled, a **"Delivers Data"** link will appear in the sam
 
 You can also send requests to Mechs that were deployed before the introduction of the Mech Marketplace. We refer to these as _legacy Mechs_. This section explains how to interact with them.
 
-First, complete the steps in the [setup](#setup) section, then [choose a Mech](#2-1-choosing-a-mech).  
+First, complete the steps in the [setup](#setup) section, then [choose a Mech](#2-1-choosing-a-mech).
 After that, there are three ways to send a request to a legacy Mech: via the [terminal](#2-2-in-terminal), using a Python [script](#2-3-script-for-automatizing-request-sending), or through the [web interface](#2-4-sending-requests-through-the-web-interface).
 
 ### 2. 1. Choosing a Mech
 
-- A list of chains where legacy Mechs are deployed, along with their contract addresses, can be found [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).  
+- A list of chains where legacy Mechs are deployed, along with their contract addresses, can be found [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
   The relevant section is also shown in the image below.
 
-  **Important**: Choose a Mech from the **"Mech Instance (Fixed Pricing)"** column, **not** the "Mech Instance (Nevermined)" column.  
+  **Important**: Choose a Mech from the **"Mech Instance (Fixed Pricing)"** column, **not** the "Mech Instance (Nevermined)" column.
   Then, note the **agent ID** (the number following the dash `-` in the agent identifier).
 
   ![List of Mechs](./imgs/list_of_mechs.png)
@@ -302,37 +302,37 @@ Once you have selected a Mech:
 
 **Finding the Mech’s price per request**
 
-1. Open the Mech’s contract in the block explorer of its network.  
+1. Open the Mech’s contract in the block explorer of its network.
    For example, [this contract](https://gnosisscan.io/address/0x77af31De935740567Cf4fF1986D04B2c964A786a#readContract) is for a Mech on the Gnosis chain.
 
 2. Click on **“Contract”**, then **“Read Contract”**.
 
 3. Scroll down to find the `price` function and click on it.
 
-4. The result is given as an integer. Divide the value by \(10^8\) to obtain the price per request in the native token.  
+4. The result is given as an integer. Divide the value by \(10^8\) to obtain the price per request in the native token.
    (In the example above, this gives 0.01 xDAI.)
 
 ### 2. 2. In terminal
 
-**1.** Send a request: 
-    
-- Use the command mechx in terminal, which is structured as follows: 
-        
+**1.** Send a request:
+
+- Use the command mechx in terminal, which is structured as follows:
+
 ```bash
 mechx interact <prompt> --agent_id <agent_id>
 ```
 
-Replace the placeholders as follows: `<agent_id>`: the number (as an integer, not string) after the character “-” in the column “Mech Instance (Fixed Pricing) - Agent Id” of the table [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs) for the chosen mech; `<prompt>`: string which corresponds to the request to send to the Mech. 
+Replace the placeholders as follows: `<agent_id>`: the number (as an integer, not string) after the character “-” in the column “Mech Instance (Fixed Pricing) - Agent Id” of the table [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs) for the chosen mech; `<prompt>`: string which corresponds to the request to send to the Mech.
 
 - The list of ids and the names of the tools that the Mech can use will appear. You will be prompted to enter the id of a tool that the Mech will use to respond to the request.
 
-- In order to select a tool, you can use the following to see which tools are used by which agents: 
+- In order to select a tool, you can use the following to see which tools are used by which agents:
 
 ```bash
 mechx tools-for-agents
 ```
 
-You can identify which tools are used by a Mech by looking at the "Agent ID" column. Using the unique identifier of the tool, you can find a description of the tool, using the following: 
+You can identify which tools are used by a Mech by looking at the "Agent ID" column. Using the unique identifier of the tool, you can find a description of the tool, using the following:
 
 ```bash
 mechx tool-description <unique_identifier> --chain-config <chain_config>
@@ -340,18 +340,18 @@ mechx tool-description <unique_identifier> --chain-config <chain_config>
 
 where `<unique_identifier>` is replaced by the unique id of the tool and `<chain_config>` by the name of the network.
 
-**2.** Receive the response: 
+**2.** Receive the response:
 
-- In response to the request, a JSON file is printed below "Data for agent". In this JSON file, the key ‘result’ corresponds to the mech’s response to the request. For instance, with the command  
+- In response to the request, a JSON file is printed below "Data for agent". In this JSON file, the key ‘result’ corresponds to the mech’s response to the request. For instance, with the command
 
 ```bash
 mechx interact "write a short poem" --agent_id 6
-``` 
+```
 
-and after selecting `openai-gpt-3.5-turbo` for the tool, you will receive a response as follows: 
+and after selecting `openai-gpt-3.5-turbo` for the tool, you will receive a response as follows:
         ![screenshot_response](./imgs/screenshot_request.png)
 
-- Remark: If an "Out of gas" error is encountered, an increase of the gas limit, can solve the problem, using the following line: 
+- Remark: If an "Out of gas" error is encountered, an increase of the gas limit, can solve the problem, using the following line:
 
 ```bash
 export MECHX_GAS_LIMIT=200000
@@ -375,7 +375,7 @@ result = interact(
 )
 ```
 
-The variables **PROMPT_TEXT**, **AGENT_ID** and **TOOL_NAME** can be changed. The variable **result** contains the response of the mech. 
+The variables **PROMPT_TEXT**, **AGENT_ID** and **TOOL_NAME** can be changed. The variable **result** contains the response of the mech.
 
 ### 2. 4. Sending requests through the web interface
 
@@ -383,12 +383,12 @@ The variables **PROMPT_TEXT**, **AGENT_ID** and **TOOL_NAME** can be changed. Th
 
 **2.** Go to the webpage [here](https://mech.olas.network/gnosis/mechs?legacy=true). Click on the address of the Mech you want to send a request to.
 
-**4.** Click on "New Request". The following pop-up will appear: 
+**4.** Click on "New Request". The following pop-up will appear:
 ![screenshot](./imgs/screenshot.png)
 
-**5.** Enter a prompt and select the tool, then click on "Request". 
+**5.** Enter a prompt and select the tool, then click on "Request".
 
-**6.** A window like the one as follows will appear: 
+**6.** A window like the one as follows will appear:
 ![confirmation](./imgs/confirmation.png)
 Click on "Confirm".
 
