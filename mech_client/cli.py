@@ -29,9 +29,11 @@ from tabulate import tabulate  # type: ignore
 from mech_client import __version__
 from mech_client.interact import ConfirmationType
 from mech_client.interact import interact as interact_
+from mech_client.marketplace_interact import IPFS_URL_TEMPLATE
 from mech_client.marketplace_interact import (
     marketplace_interact as marketplace_interact_,
 )
+from mech_client.mech_marketplace_subgraph import query_mm_mechs_info
 from mech_client.mech_marketplace_tool_management import (
     extract_input_schema,
     extract_output_schema,
@@ -515,6 +517,57 @@ def nvm_subscribe(
     nvm_subscribe_main(private_key_path=key, chain_config=chain_config)
 
 
+@click.command(name="fetch-mm-mechs-info")
+@click.option(
+    "--chain-config",
+    type=str,
+    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+)
+def query_mm_mechs_info_cli(
+    chain_config: str,
+) -> None:
+    """Fetches info of mm mechs"""
+    try:
+        mech_list = query_mm_mechs_info(chain_config=chain_config)
+        if mech_list is None:
+            print("No mechs found")
+            return None
+
+        headers = [
+            "Service Id",
+            "Mech Type",
+            "Mech Address",
+            "Total Deliveries",
+            "Metadata Link",
+        ]
+
+        data = [
+            (
+                items["service"]["id"],
+                items["mech_type"],
+                items["address"],
+                items["service"]["totalDeliveries"],
+                (
+                    IPFS_URL_TEMPLATE.format(
+                        items["service"]["metadata"]["metadata"][2:]
+                    )
+                    if items["service"].get("metadata") is not None
+                    else None
+                ),
+            )
+            for items in mech_list
+        ]
+
+        click.echo(tabulate(data, headers=headers, tablefmt="grid"))
+        return None
+    except Exception as e:  # pylint: disable=broad-except
+        click.echo(f"Error: {str(e)}")
+        import traceback as tb
+
+        tb.print_stack()
+        return None
+
+
 cli.add_command(interact)
 cli.add_command(prompt_to_ipfs)
 cli.add_command(push_to_ipfs)
@@ -528,6 +581,7 @@ cli.add_command(tool_description_for_marketplace_mech)
 cli.add_command(deposit_native)
 cli.add_command(deposit_token)
 cli.add_command(nvm_subscribe)
+cli.add_command(query_mm_mechs_info_cli)
 
 
 if __name__ == "__main__":
