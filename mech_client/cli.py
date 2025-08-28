@@ -562,9 +562,6 @@ def query_mm_mechs_info_cli(
         return None
     except Exception as e:  # pylint: disable=broad-except
         click.echo(f"Error: {str(e)}")
-        import traceback as tb
-
-        tb.print_stack()
         return None
 
 
