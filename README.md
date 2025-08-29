@@ -244,7 +244,7 @@ mechx interact --prompts <prompt-1> --prompts <prompt-2> --priority-mech <priori
 ```
 
 ### List marketplace mechs
-To list the top marketplace mechs based on deliveries, use the `fetch-mm-mechs-info` command. You can specify the chain you want to query.
+To list the top marketplace mechs based on deliveries, use the `fetch-mm-mechs-info` command. You can specify the chain you want to query. Please note that only the first 20 mechs sorted by number of deliveries will be shown.
 Currently supported chains are gnosis and base
 ```bash
 mechx fetch-mm-mechs-info --chain-config gnosis
