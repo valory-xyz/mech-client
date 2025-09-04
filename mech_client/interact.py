@@ -45,7 +45,7 @@ from web3.contract import Contract as Web3Contract
 
 from mech_client.acn import watch_for_data_url_from_mech
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
-from mech_client.subgraph import query_agent_address, watch_for_data_url_from_subgraph
+from mech_client.subgraph import query_agent_address
 from mech_client.wss import (
     register_event_handlers,
     watch_for_data_url_from_wss,
