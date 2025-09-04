@@ -117,34 +117,3 @@ async def query_deliver_hash(
 
     (record,) = delivers
     return record["ipfsHash"]
-
-
-async def watch_for_data_url_from_subgraph(
-    request_id: str, url: str, timeout: Optional[float] = None
-) -> Optional[str]:
-    """
-    Continuously query for data URL until it's available or timeout is reached.
-
-    :param request_id: The ID of the mech request.
-    :type request_id: str
-    :param url: Subgraph URL.
-    :type url: str
-    :param timeout: Maximum time to wait for the data URL in seconds. Defaults to DEFAULT_TIMEOUT.
-    :type timeout: Optional[float]
-    :return: Data URL if available within timeout, otherwise None.
-    :rtype: Optional[str]
-    """
-    timeout = timeout or DEFAULT_TIMEOUT
-    start_time = asyncio.get_event_loop().time()
-    while True:
-        response = await query_deliver_hash(request_id=request_id, url=url)
-        if response is not None:
-            return f"https://gateway.autonolas.tech/ipfs/{response}"
-
-        if asyncio.get_event_loop().time() - start_time >= timeout:
-            print(f"Error: No response received after {timeout} seconds.")
-            break
-
-        await asyncio.sleep(5)
-
-    return None
