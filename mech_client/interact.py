@@ -45,7 +45,7 @@ from web3.contract import Contract as Web3Contract
 
 from mech_client.acn import watch_for_data_url_from_mech
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
-from mech_client.subgraph import query_agent_address, watch_for_data_url_from_subgraph
+from mech_client.subgraph import query_agent_address
 from mech_client.wss import (
     register_event_handlers,
     watch_for_data_url_from_wss,
@@ -433,7 +433,7 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     return None
 
 
-def wait_for_data_url(  # pylint: disable=too-many-arguments
+def wait_for_data_url(  # pylint: disable=too-many-arguments, unused-argument
     request_id: str,
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
@@ -491,14 +491,6 @@ def wait_for_data_url(  # pylint: disable=too-many-arguments
             )
         )
         tasks.append(on_chain_task)
-
-        if subgraph_url:
-            mech_task = loop.create_task(
-                watch_for_data_url_from_subgraph(
-                    request_id=request_id, url=subgraph_url
-                )
-            )
-            tasks.append(mech_task)
 
     async def _wait_for_tasks() -> Any:  # type: ignore
         """Wait for tasks to finish."""

@@ -19,12 +19,8 @@
 
 """Subgraph client for mech."""
 
-import asyncio
 from string import Template
 from typing import Optional
-
-from gql import Client, gql
-from gql.transport.aiohttp import AIOHTTPTransport
 
 
 AGENT_QUERY_TEMPLATE = Template(
@@ -35,18 +31,7 @@ AGENT_QUERY_TEMPLATE = Template(
 }
 """
 )
-DELIVER_QUERY_TEMPLATE = Template(
-    """{
-    delivers(
-        orderBy: blockTimestamp
-        where: {requestId:"$request_id"}
-        orderDirection: desc
-    ) {
-        ipfsHash
-  }
-}
-"""
-)
+
 DEFAULT_TIMEOUT = 600.0
 CHAIN_TO_ADDRESSES = {
     "gnosis": {
@@ -85,66 +70,3 @@ def query_agent_address(  # pylint: disable=too-many-return-statements
     if not chain_config:
         raise ValueError("Chain config not specified")
     return CHAIN_TO_ADDRESSES.get(chain_config, {}).get(agent_id, None)
-
-
-async def query_deliver_hash(
-    request_id: str, url: str, timeout: Optional[float] = None
-) -> Optional[str]:
-    """
-    Query deliver IPFS hash from subgraph.
-
-    :param request_id: The ID of the mech request.
-    :type request_id: str
-    :param url: Subgraph URL.
-    :type url: str
-    :param timeout: Timeout for the request.
-    :type timeout: Optional[float]
-    :return: The deliver IPFS hash if found, None otherwise.
-    :rtype: Optional[str]
-    """
-    client = Client(
-        transport=AIOHTTPTransport(url=url),
-        execute_timeout=timeout or 30.0,
-    )
-    response = await client.execute_async(
-        document=gql(
-            request_string=DELIVER_QUERY_TEMPLATE.substitute({"request_id": request_id})
-        )
-    )
-    delivers = response["delivers"]  # pylint: disable=unsubscriptable-object
-    if len(delivers) == 0:
-        return None
-
-    (record,) = delivers
-    return record["ipfsHash"]
-
-
-async def watch_for_data_url_from_subgraph(
-    request_id: str, url: str, timeout: Optional[float] = None
-) -> Optional[str]:
-    """
-    Continuously query for data URL until it's available or timeout is reached.
-
-    :param request_id: The ID of the mech request.
-    :type request_id: str
-    :param url: Subgraph URL.
-    :type url: str
-    :param timeout: Maximum time to wait for the data URL in seconds. Defaults to DEFAULT_TIMEOUT.
-    :type timeout: Optional[float]
-    :return: Data URL if available within timeout, otherwise None.
-    :rtype: Optional[str]
-    """
-    timeout = timeout or DEFAULT_TIMEOUT
-    start_time = asyncio.get_event_loop().time()
-    while True:
-        response = await query_deliver_hash(request_id=request_id, url=url)
-        if response is not None:
-            return f"https://gateway.autonolas.tech/ipfs/{response}"
-
-        if asyncio.get_event_loop().time() - start_time >= timeout:
-            print(f"Error: No response received after {timeout} seconds.")
-            break
-
-        await asyncio.sleep(5)
-
-    return None
