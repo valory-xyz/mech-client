@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mech-client"
-version = "0.11.0"
+version = "0.12.0"
 description = "Basic client to interact with a mech"
 authors = ["David Minarsch <david.minarsch@googlemail.com>"]
 readme = "README.md"
