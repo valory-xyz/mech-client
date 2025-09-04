@@ -433,7 +433,7 @@ def send_request(  # pylint: disable=too-many-arguments,too-many-locals
     return None
 
 
-def wait_for_data_url(  # pylint: disable=too-many-arguments
+def wait_for_data_url(  # pylint: disable=too-many-arguments, unused-argument
     request_id: str,
     wss: websocket.WebSocket,
     mech_contract: Web3Contract,
