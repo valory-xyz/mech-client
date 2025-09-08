@@ -53,15 +53,26 @@ Follow the instructions in the corresponding section.
 
 ### 1. 1. Choosing a Mech
 
-- Use the command mechx in terminal, which is structured as follows:
-
+- Use the command mechx in terminal, which is structured as follows. Please note that only the first 20 mechs sorted by number of deliveries will be shown. Currently supported chains are gnosis and base
 ```bash
-mechx fetch-mm-mechs-info --chain-config <chain-config>
+mechx fetch-mm-mechs-info --chain-config gnosis
+```
+```bash
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
+|   Service Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
++==============+====================+============================================+====================+===============================================================================================================+
+|         2182 | Fixed Price Native | 0xc05e7412439bd7e91730a6880e18d5d5873f632c |              41246 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
+|         2235 | Fixed Price Native | 0xb3c6319962484602b00d5587e965946890b82101 |              10127 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
+|         2198 | Fixed Price Native | 0x601024e27f1c67b28209e24272ced8a31fc8151f |               5714 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
+|         1722 | Fixed Price Token  | 0x13f36b1a516290b7563b1de574a02ebeb48926a1 |                399 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
+|         2135 | Fixed Price Native | 0xbead38e4c4777341bb3fd44e8cd4d1ba1a7ad9d7 |                353 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
 ```
 
-Replace the placeholder as follows: 
-
-- `<chain-config>`: One of the keys in the dictionary defined in `.mech_client/configs/mechs.json` (e.g., "gnosis"). This provides the client with a configuration for the chosen network.
 
 ### 1. 2. In terminal
 
