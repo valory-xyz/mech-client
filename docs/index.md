@@ -53,46 +53,15 @@ Follow the instructions in the corresponding section.
 
 ### 1. 1. Choosing a Mech
 
-You can directly browse available Mechs on the [Mech Marketplace web interface](https://mech.olas.network/). Click on the **“Mech Marketplace”** tab:
+- Use the command mechx in terminal, which is structured as follows:
 
-![alt text](./imgs/legacy_tab.png)
+```bash
+mechx fetch-mm-mechs-info --chain-config <chain-config>
+```
 
-You will then see a list of available Mechs.
+Replace the placeholder as follows: 
 
-To find out which tools a Mech uses:
-
-1. Click on the **service ID** of the Mech you are interested in.
-
-2. In the window that opens, click **“View code”**.
-
-3. Navigate to the `mech` folder and open the file `service.yaml`.
-
-4. Copy the IPFS hash following `agent: valory/mech:0.1.0`.
-
-5. Visit `https://mech.olas.network/<copied_hash>` (replacing `<copied_hash>` with the actual hash).
-
-6. In that view, open the `mech` folder and then the file `aea-config.yaml`.
-
-7. In this file, the dictionary `tools_to_package_hash` contains the names of the tools used by the Mech (they are the dictionary’s keys).
-
-Alternatively, you can find the list of chains on which the Mech Marketplace contracts are deployed in this [configuration file](https://github.com/valory-xyz/ai-registry-mech/blob/main/docs/configuration.json). The keys of this dictionary represent the supported chains.
-
-To find the Mechs deployed on a given network, follow these steps:
-
-1. Copy the corresponding MechMarketplace contract address from the configuration file.
-
-2. Visit the block explorer for that network (e.g., [Gnosisscan](https://gnosisscan.io/) for Gnosis) and search for the contract address.
-
-3. Click on the **“Events”** tab, as shown below:
-
-   ![alt text](./imgs/image.png)
-
-4. Look for events whose name begins with `"CreateMech"`, such as `"CreateMechFixedPriceNative"`. These events correspond to the creation of Mech contracts.
-
-5. Click on the name of the event. The address of the newly created Mech contract will be displayed just below the event name, as shown in the example below:
-
-   ![alt text](./imgs/image-1.png)
-
+- `<chain-config>`: One of the keys in the dictionary defined in `.mech_client/configs/mechs.json` (e.g., "gnosis"). This provides the client with a configuration for the chosen network.
 
 ### 1. 2. In terminal
 
