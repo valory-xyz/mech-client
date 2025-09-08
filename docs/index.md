@@ -53,7 +53,7 @@ Follow the instructions in the corresponding section.
 
 ### 1. 1. Choosing a Mech
 
-- Use the command mechx in terminal, which is structured as follows. Please note that only the first 20 mechs sorted by number of deliveries will be shown. Currently supported chains are gnosis and base
+- Use the command mechx in terminal, which is structured as follows. 
 ```bash
 mechx fetch-mm-mechs-info --chain-config gnosis
 ```
