@@ -55,7 +55,9 @@ Follow the instructions in the corresponding section.
 
 - Use the command mechx in terminal, which is structured as follows. 
 ```bash
-mechx fetch-mm-mechs-info --chain-config gnosis
+mechx fetch-mm-mechs-info --chain-config <chain-config>
+
+Replace `<chain-config>` by the chosen network. Currently supported chains are gnosis and base.
 ```
 ```bash
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
