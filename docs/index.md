@@ -53,45 +53,27 @@ Follow the instructions in the corresponding section.
 
 ### 1. 1. Choosing a Mech
 
-You can directly browse available Mechs on the [Mech Marketplace web interface](https://mech.olas.network/). Click on the **“Mech Marketplace”** tab:
+- Use the command mechx in terminal, which is structured as follows. 
+```bash
+mechx fetch-mm-mechs-info --chain-config <chain-config>
 
-![alt text](./imgs/legacy_tab.png)
-
-You will then see a list of available Mechs.
-
-To find out which tools a Mech uses:
-
-1. Click on the **service ID** of the Mech you are interested in.
-
-2. In the window that opens, click **“View code”**.
-
-3. Navigate to the `mech` folder and open the file `service.yaml`.
-
-4. Copy the IPFS hash following `agent: valory/mech:0.1.0`.
-
-5. Visit `https://mech.olas.network/<copied_hash>` (replacing `<copied_hash>` with the actual hash).
-
-6. In that view, open the `mech` folder and then the file `aea-config.yaml`.
-
-7. In this file, the dictionary `tools_to_package_hash` contains the names of the tools used by the Mech (they are the dictionary’s keys).
-
-Alternatively, you can find the list of chains on which the Mech Marketplace contracts are deployed in this [configuration file](https://github.com/valory-xyz/ai-registry-mech/blob/main/docs/configuration.json). The keys of this dictionary represent the supported chains.
-
-To find the Mechs deployed on a given network, follow these steps:
-
-1. Copy the corresponding MechMarketplace contract address from the configuration file.
-
-2. Visit the block explorer for that network (e.g., [Gnosisscan](https://gnosisscan.io/) for Gnosis) and search for the contract address.
-
-3. Click on the **“Events”** tab, as shown below:
-
-   ![alt text](./imgs/image.png)
-
-4. Look for events whose name begins with `"CreateMech"`, such as `"CreateMechFixedPriceNative"`. These events correspond to the creation of Mech contracts.
-
-5. Click on the name of the event. The address of the newly created Mech contract will be displayed just below the event name, as shown in the example below:
-
-   ![alt text](./imgs/image-1.png)
+Replace `<chain-config>` by the chosen network. Currently supported chains are gnosis and base.
+```
+```bash
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
+|   Service Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
++==============+====================+============================================+====================+===============================================================================================================+
+|         2182 | Fixed Price Native | 0xc05e7412439bd7e91730a6880e18d5d5873f632c |              41246 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
+|         2235 | Fixed Price Native | 0xb3c6319962484602b00d5587e965946890b82101 |              10127 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
+|         2198 | Fixed Price Native | 0x601024e27f1c67b28209e24272ced8a31fc8151f |               5714 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
+|         1722 | Fixed Price Token  | 0x13f36b1a516290b7563b1de574a02ebeb48926a1 |                399 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
+|         2135 | Fixed Price Native | 0xbead38e4c4777341bb3fd44e8cd4d1ba1a7ad9d7 |                353 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
++--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
+```
 
 
 ### 1. 2. In terminal
