@@ -24,11 +24,12 @@ import asyncio
 import json
 import sys
 import time
+from collections import defaultdict
 from dataclasses import asdict, make_dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, cast
+from typing import Any, Dict, Optional, Tuple, cast, List
 
 import requests
 import websocket
@@ -47,7 +48,8 @@ from mech_client.interact import (
     TIMEOUT,
     WAIT_SLEEP,
     get_contract,
-    get_event_signatures,
+    get_mech_event_signatures,
+    get_marketplace_event_signatures,
     get_mech_config,
 )
 from mech_client.mech_marketplace_tool_management import get_mech_tools
@@ -55,7 +57,8 @@ from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import (
     register_event_handlers,
     wait_for_receipt,
-    watch_for_marketplace_data_url_from_wss,
+    watch_for_marketplace_data_from_wss,
+    watch_for_mech_data_url_from_wss,
     watch_for_marketplace_request_ids,
 )
 
@@ -495,14 +498,11 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
 
 
 def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused-argument
-    request_id: str,
+    request_ids: List[str],
     wss: websocket.WebSocket,
-    mech_contract: Web3Contract,
-    subgraph_url: str,
+    marketplace_contract: Web3Contract,
     deliver_signature: str,
     ledger_api: EthereumApi,
-    crypto: Crypto,
-    confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
 ) -> Any:
     """
     Wait for data from on-chain/off-chain.
@@ -511,11 +511,11 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     :type request_id: str
     :param wss: The WebSocket connection object.
     :type wss: websocket.WebSocket
-    :param mech_contract: The mech contract instance.
-    :type mech_contract: Web3Contract
+    :param marketplace_contract: The mech contract instance.
+    :type marketplace_contract: Web3Contract
     :param subgraph_url: Subgraph URL.
     :type subgraph_url: str
-    :param deliver_signature: Topic signature for MarketplaceDeliver event
+    :param deliver_signature: Topic signature for Deliver event
     :type deliver_signature: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
@@ -528,47 +528,52 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    tasks = []
 
-    if confirmation_type in (
-        ConfirmationType.OFF_CHAIN,
-        ConfirmationType.WAIT_FOR_BOTH,
-    ):
-        print("Off chain to be implemented")
+    async def _wait_for_marketplace_delivery_event() -> Any:  # type: ignore
+        data = await watch_for_marketplace_data_from_wss(
+            request_ids=request_ids,
+            wss=wss,
+            marketplace_contract=marketplace_contract,
+            ledger_api=ledger_api,
+            loop=loop,
+        )
+        return data
 
-    if confirmation_type in (
-        ConfirmationType.ON_CHAIN,
-        ConfirmationType.WAIT_FOR_BOTH,
-    ):
-        on_chain_task = loop.create_task(
-            watch_for_marketplace_data_url_from_wss(
-                request_id=request_id,
+    async def _wait_for_mech_data(future) -> Any:  # type: ignore
+        marketplace_data_wss_result = await future
+        results = {}
+        # group by block number and delivery address
+        requests_by_block_and_address = defaultdict(list)
+        [
+            requests_by_block_and_address[
+                (info["block_number"], info["delivery_mech"])
+            ].append(request_id)
+            for request_id, info in marketplace_data_wss_result.items()
+        ]
+
+        for (
+            block_number,
+            delivery_mech,
+        ), request_ids in requests_by_block_and_address.items():
+            data = await watch_for_mech_data_url_from_wss(
+                request_ids=request_ids,
+                from_block=block_number,
                 wss=wss,
-                mech_contract=mech_contract,
-                deliver_signature=deliver_signature,
-                ledger_api=ledger_api,
+                mech_contract_address=delivery_mech,
+                mech_deliver_signature=deliver_signature,
                 loop=loop,
             )
-        )
-        tasks.append(on_chain_task)
+            results.update(data)
 
-        if subgraph_url:
-            print("Subgraph to be implemented")
+        return results
 
-    async def _wait_for_tasks() -> Any:  # type: ignore
-        """Wait for tasks to finish."""
-        (finished, *_), unfinished = await asyncio.wait(
-            tasks,
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        for task in unfinished:
-            task.cancel()
-        if unfinished:
-            await asyncio.wait(unfinished)
-        return finished.result()
+    task1_future = loop.create_task(_wait_for_marketplace_delivery_event())
+    task2_future = loop.create_task(_wait_for_mech_data(task1_future))
 
-    result = loop.run_until_complete(_wait_for_tasks())
-    return result
+    loop.run_until_complete(asyncio.gather(task1_future, task2_future))
+    loop.close()
+
+    return task2_future.result()
 
 
 def wait_for_offchain_marketplace_data(mech_offchain_url: str, request_id: str) -> Any:
@@ -745,7 +750,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         ((k, type(v)) for k, v in config_values.items()),
     )(**config_values)
 
-    contract_address = cast(
+    marketplace_contract_address = cast(
         str, mech_marketplace_request_config.mech_marketplace_contract
     )
 
@@ -762,8 +767,13 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     with open(MARKETPLACE_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
+    (
+        _,
+        marketplace_deliver_event_signature,
+    ) = get_marketplace_event_signatures(abi=abi)
+
     mech_marketplace_contract = get_contract(
-        contract_address=contract_address, abi=abi, ledger_api=ledger_api
+        contract_address=marketplace_contract_address, abi=abi, ledger_api=ledger_api
     )
 
     print("Fetching Mech Info...")
@@ -784,21 +794,23 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     mech_marketplace_request_config.delivery_rate = max_delivery_rate
     mech_marketplace_request_config.payment_type = payment_type
 
-    verify_tools(tools, service_id, chain_config)
+    # verify_tools(tools, service_id, chain_config)
 
     with open(IMECH_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
     (
-        marketplace_request_event_signature,
-        marketplace_deliver_event_signature,
-    ) = get_event_signatures(abi=abi)
+        mech_request_event_signature,
+        mech_deliver_event_signature,
+    ) = get_mech_event_signatures(abi=abi)
+
     register_event_handlers(
         wss=wss,
-        contract_address=priority_mech_address,
+        mech_contract_address=priority_mech_address,
+        marketplace_contract_address=marketplace_contract_address,
         crypto=crypto,
-        request_signature=marketplace_request_event_signature,
-        deliver_signature=marketplace_deliver_event_signature,
+        mech_request_signature=mech_request_event_signature,
+        marketplace_deliver_signature=marketplace_deliver_event_signature,
     )
 
     if not use_prepaid:
@@ -904,32 +916,32 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             )
         print("")
 
-        for request_id, request_id_int in zip(request_ids, request_id_ints):
-            data_url = wait_for_marketplace_data_url(
-                request_id=request_id,
-                wss=wss,
-                mech_contract=mech_contract,
-                subgraph_url=mech_config.subgraph_url,
-                deliver_signature=marketplace_deliver_event_signature,
-                ledger_api=ledger_api,
-                crypto=crypto,
-                confirmation_type=confirmation_type,
-            )
+        data_urls = wait_for_marketplace_data_url(
+            request_ids=request_ids,
+            wss=wss,
+            marketplace_contract=mech_marketplace_contract,
+            deliver_signature=mech_deliver_event_signature,
+            ledger_api=ledger_api,
+        )
 
-            if data_url:
-                if is_nvm_mech:
-                    requester_total_balance_after = (
-                        fetch_requester_nvm_subscription_balance(
-                            requester,
-                            ledger_api,
-                            mech_payment_balance_tracker,
-                            payment_type,
-                        )
+        if data_urls:
+            if is_nvm_mech:
+                requester_total_balance_after = (
+                    fetch_requester_nvm_subscription_balance(
+                        requester,
+                        ledger_api,
+                        mech_payment_balance_tracker,
+                        payment_type,
                     )
-                    print(
-                        f"  - Sender Subscription balance after delivery: {requester_total_balance_after}"
-                    )
+                )
+                print(
+                    f"  - Sender Subscription balance after delivery: {requester_total_balance_after}"
+                )
 
+            for request_id, data_url in data_urls.items():
+                request_id_int = int.from_bytes(
+                    bytes.fromhex(request_id), byteorder="big"
+                )
                 print(f"  - Data arrived: {data_url}")
                 data = requests.get(f"{data_url}/{request_id_int}", timeout=30).json()
                 print("  - Data from agent:")

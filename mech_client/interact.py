@@ -200,7 +200,7 @@ def calculate_topic_id(event: Dict) -> str:
     return Web3.keccak(text=text).hex()
 
 
-def get_event_signatures(abi: List) -> Tuple[str, str]:
+def get_mech_event_signatures(abi: List) -> Tuple[str, str]:
     """Calculate `Request` and `Deliver` event topics"""
     request, deliver = "", ""
     for obj in abi:
@@ -209,6 +209,19 @@ def get_event_signatures(abi: List) -> Tuple[str, str]:
         if obj["name"] == "Deliver":
             deliver = calculate_topic_id(event=obj)
         if obj["name"] == "Request":
+            request = calculate_topic_id(event=obj)
+    return request, deliver
+
+
+def get_marketplace_event_signatures(abi: List) -> Tuple[str, str]:
+    """Calculate `MarketplaceRequest` and `MarketplaceDelivery` event topics"""
+    request, deliver = "", ""
+    for obj in abi:
+        if obj["type"] != "event":
+            continue
+        if obj["name"] == "MarketplaceDelivery":
+            deliver = calculate_topic_id(event=obj)
+        if obj["name"] == "MarketplaceRequest":
             request = calculate_topic_id(event=obj)
     return request, deliver
 
@@ -576,7 +589,9 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     mech_contract = get_contract(
         contract_address=contract_address, abi=abi, ledger_api=ledger_api
     )
-    request_event_signature, deliver_event_signature = get_event_signatures(abi=abi)
+    request_event_signature, deliver_event_signature = get_mech_event_signatures(
+        abi=abi
+    )
     register_event_handlers(
         wss=wss,
         contract_address=contract_address,

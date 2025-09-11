@@ -29,14 +29,16 @@ import websocket
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi
 from web3.contract import Contract as Web3Contract
+from eth_abi import decode
 
 
 def register_event_handlers(
     wss: websocket.WebSocket,
-    contract_address: str,
+    mech_contract_address: str,
+    marketplace_contract_address: str,
     crypto: Crypto,
-    request_signature: str,
-    deliver_signature: str,
+    mech_request_signature: str,
+    marketplace_deliver_signature: str,
 ) -> None:
     """
     Register event handlers.
@@ -60,9 +62,9 @@ def register_event_handlers(
         "params": [
             "logs",
             {
-                "address": contract_address,
+                "address": mech_contract_address,
                 "topics": [
-                    request_signature,
+                    mech_request_signature,
                     ["0x" + "0" * 24 + crypto.address[2:]],
                 ],
             },
@@ -73,16 +75,20 @@ def register_event_handlers(
 
     # registration confirmation
     _ = wss.recv()
-    subscription_deliver = {
+
+    marketplace_subscription_deliver = {
         "jsonrpc": "2.0",
         "id": 1,
         "method": "eth_subscribe",
         "params": [
             "logs",
-            {"address": contract_address, "topics": [deliver_signature]},
+            {
+                "address": marketplace_contract_address,
+                "topics": [marketplace_deliver_signature],
+            },
         ],
     }
-    content = bytes(json.dumps(subscription_deliver), "utf-8")
+    content = bytes(json.dumps(marketplace_subscription_deliver), "utf-8")
     wss.send(content)
 
     # registration confirmation
@@ -226,12 +232,81 @@ async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
             return None
 
 
-async def watch_for_marketplace_data_url_from_wss(  # pylint: disable=too-many-arguments, unused-argument
-    request_id: str,
+async def watch_for_marketplace_data_from_wss(  # pylint: disable=too-many-arguments, unused-argument
+    request_ids: List[str],
     wss: websocket.WebSocket,
-    mech_contract: Web3Contract,
-    deliver_signature: str,
+    marketplace_contract: Web3Contract,
     ledger_api: EthereumApi,
+    loop: asyncio.AbstractEventLoop,
+) -> Any:
+    """
+    Watches for data on-chain.
+
+    :param request_id: The ID of the request.
+    :type request_id: str
+    :param wss: The WebSocket connection object.
+    :type wss: websocket.WebSocket
+    :param marketplace_contract: The marketplace contract instance.
+    :type marketplace_contract: Web3Contract
+    :param deliver_signature: Topic signature for Deliver event
+    :type deliver_signature: str
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param loop: The event loop used for asynchronous operations.
+    :type loop: asyncio.AbstractEventLoop
+    :return: The data received from on-chain.
+    :rtype: Any
+    """
+    with ThreadPoolExecutor() as executor:
+        try:
+            request_ids_data = {}
+            while True:
+                msg = await loop.run_in_executor(executor=executor, func=wss.recv)
+                data = json.loads(msg)
+                block_number = data["params"]["result"]["blockNumber"]
+                tx_hash = data["params"]["result"]["transactionHash"]
+                tx_receipt = await loop.run_in_executor(
+                    executor, wait_for_receipt, tx_hash, ledger_api
+                )
+
+                rich_logs = (
+                    marketplace_contract.events.MarketplaceDelivery().process_receipt(
+                        tx_receipt
+                    )
+                )
+                if len(rich_logs) == 0:
+                    print("Empty logs")
+                    return None
+
+                data = rich_logs[0]["args"]
+                tx_request_ids = data["requestIds"]
+                delivery_mech = data["deliveryMech"]
+
+                for tx_request_id in tx_request_ids:
+                    tx_request_id_hex = tx_request_id.hex()
+                    if tx_request_id_hex in request_ids:
+                        request_ids_data[tx_request_id_hex] = {
+                            "block_number": block_number,
+                            "delivery_mech": delivery_mech,
+                        }
+
+                if len(request_ids_data) == len(request_ids):
+                    return request_ids_data
+
+        except websocket.WebSocketConnectionClosedException as e:
+            print(f"WebSocketConnectionClosedException {repr(e)}")
+            print(
+                "Error: The WSS connection was likely closed by the remote party. Please, try using another WSS provider."
+            )
+            return None
+
+
+async def watch_for_mech_data_url_from_wss(  # pylint: disable=too-many-arguments, unused-argument
+    request_ids: List[str],
+    from_block: str,
+    wss: websocket.WebSocket,
+    mech_contract_address: str,
+    mech_deliver_signature: str,
     loop: asyncio.AbstractEventLoop,
 ) -> Any:
     """
@@ -252,31 +327,47 @@ async def watch_for_marketplace_data_url_from_wss(  # pylint: disable=too-many-a
     :return: The data received from on-chain.
     :rtype: Any
     """
+    deliver_logs = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_getLogs",
+        "params": [
+            {
+                "fromBlock": from_block,
+                # search one block as all events are emitted in the same block
+                "toBlock": from_block,
+                "address": mech_contract_address,
+                "topics": [mech_deliver_signature],
+            },
+        ],
+    }
+    content = bytes(json.dumps(deliver_logs), "utf-8")
+    wss.send(content)
+
+    results = {}
+
     with ThreadPoolExecutor() as executor:
         try:
             while True:
                 msg = await loop.run_in_executor(executor=executor, func=wss.recv)
                 data = json.loads(msg)
-                tx_hash = data["params"]["result"]["transactionHash"]
-                tx_receipt = await loop.run_in_executor(
-                    executor, wait_for_receipt, tx_hash, ledger_api
-                )
+                logs = data["result"]
+                if logs:
+                    for log in logs:
+                        data_types = ["bytes32", "uint256", "bytes"]
+                        data_bytes = bytes.fromhex(log["data"][2:])
+                        request_id_bytes, _, delivery_data = decode(
+                            data_types, data_bytes
+                        )
+                        request_id = request_id_bytes.hex()
+                        if request_id in request_ids:
+                            results[request_id] = (
+                                f"https://gateway.autonolas.tech/ipfs/f01701220{delivery_data.hex()}"
+                            )
 
-                rich_logs = mech_contract.events.Deliver().process_receipt(tx_receipt)
-                if len(rich_logs) == 0:
-                    print("Empty logs")
-                    return None
+                    if len(results) == len(request_ids):
+                        return results
 
-                data = rich_logs[0]["args"]
-                tx_request_id = data["requestId"]
-                deliver_data = data["data"]
-
-                if request_id != tx_request_id.hex():
-                    continue
-
-                return (
-                    f"https://gateway.autonolas.tech/ipfs/f01701220{deliver_data.hex()}"
-                )
         except websocket.WebSocketConnectionClosedException as e:
             print(f"WebSocketConnectionClosedException {repr(e)}")
             print(
