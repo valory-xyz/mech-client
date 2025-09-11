@@ -794,7 +794,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     mech_marketplace_request_config.delivery_rate = max_delivery_rate
     mech_marketplace_request_config.payment_type = payment_type
 
-    # verify_tools(tools, service_id, chain_config)
+    verify_tools(tools, service_id, chain_config)
 
     with open(IMECH_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
