@@ -32,7 +32,7 @@ from eth_abi import decode
 from web3.contract import Contract as Web3Contract
 
 
-def register_event_handlers(
+def register_event_handlers(  # pylint: disable=too-many-arguments
     wss: websocket.WebSocket,
     mech_contract_address: str,
     marketplace_contract_address: str,
@@ -232,7 +232,7 @@ async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
             return None
 
 
-async def watch_for_marketplace_data_from_wss(  # pylint: disable=too-many-arguments, unused-argument
+async def watch_for_marketplace_data_from_wss(  # pylint: disable=too-many-arguments, unused-argument, too-many-locals
     request_ids: List[str],
     wss: websocket.WebSocket,
     marketplace_contract: Web3Contract,
@@ -301,7 +301,7 @@ async def watch_for_marketplace_data_from_wss(  # pylint: disable=too-many-argum
             return None
 
 
-async def watch_for_mech_data_url_from_wss(  # pylint: disable=too-many-arguments, unused-argument
+async def watch_for_mech_data_url_from_wss(  # pylint: disable=too-many-arguments, unused-argument, too-many-locals
     request_ids: List[str],
     from_block: str,
     wss: websocket.WebSocket,

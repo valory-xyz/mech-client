@@ -41,7 +41,6 @@ from web3.contract import Contract as Web3Contract
 
 from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.interact import (
-    ConfirmationType,
     MAX_RETRIES,
     MechMarketplaceRequestConfig,
     PRIVATE_KEY_FILE_PATH,
@@ -129,7 +128,7 @@ def fetch_mech_info(
     ledger_api: EthereumApi,
     mech_marketplace_contract: Web3Contract,
     priority_mech_address: str,
-) -> Tuple[str, int, int, str, Web3Contract]:
+) -> Tuple[str, int, int, str]:
     """
     Fetchs the info of the requested mech.
 
@@ -139,8 +138,8 @@ def fetch_mech_info(
     :type mech_marketplace_contract: Web3Contract
     :param priority_mech_address: Requested mech address
     :type priority_mech_address: str
-    :return: The mech info containing payment_type, service_id, max_delivery_rate, mech_payment_balance_tracker and Mech contract.
-    :rtype: Tuple[str, int, int, str, Contract]
+    :return: The mech info containing payment_type, service_id, max_delivery_rate, mech_payment_balance_tracker.
+    :rtype: Tuple[str, int, int, str]
     """
 
     with open(IMECH_ABI_PATH, encoding="utf-8") as f:
@@ -169,7 +168,6 @@ def fetch_mech_info(
         service_id,
         max_delivery_rate,
         mech_payment_balance_tracker,
-        mech_contract,
     )
 
 
@@ -544,7 +542,7 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
         results = {}
         # group by block number and delivery address
         requests_by_block_and_address = defaultdict(list)
-        [
+        [  # pylint: disable=expression-not-assigned
             requests_by_block_and_address[  # type: ignore
                 (info["block_number"], info["delivery_mech"])
             ].append(request_id)
@@ -684,7 +682,6 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     tools: tuple = (),
     extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
-    confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
@@ -709,8 +706,6 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     :type extra_attributes: Optional[Dict[str, Any]]
     :param private_key_path: The path to the private key file (optional).
     :type private_key_path: Optional[str]
-    :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
-    :type confirmation_type: ConfirmationType
     :return: The data received from on-chain/off-chain.
     :param retries: Number of retries for sending a transaction
     :type retries: int
@@ -785,7 +780,6 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         service_id,
         max_delivery_rate,
         mech_payment_balance_tracker,
-        mech_contract,
     ) = fetch_mech_info(
         ledger_api,
         mech_marketplace_contract,
