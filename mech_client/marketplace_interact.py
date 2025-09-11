@@ -559,13 +559,19 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
 
         return results
 
-    task1_future = loop.create_task(_wait_for_marketplace_delivery_event())
-    task2_future = loop.create_task(_wait_for_mech_data(task1_future))
+    marketplace_delivery_event_future = loop.create_task(
+        _wait_for_marketplace_delivery_event()
+    )
+    mech_data_future = loop.create_task(
+        _wait_for_mech_data(marketplace_delivery_event_future)
+    )
 
-    loop.run_until_complete(asyncio.gather(task1_future, task2_future))
+    loop.run_until_complete(
+        asyncio.gather(marketplace_delivery_event_future, mech_data_future)
+    )
     loop.close()
 
-    return task2_future.result()
+    return mech_data_future.result()
 
 
 def wait_for_offchain_marketplace_data(mech_offchain_url: str, request_id: str) -> Any:
