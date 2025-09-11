@@ -595,6 +595,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     register_event_handlers(
         wss=wss,
         mech_contract_address=contract_address,
+        marketplace_contract_address=contract_address,
         crypto=crypto,
         mech_request_signature=request_event_signature,
         marketplace_deliver_signature=deliver_event_signature,
