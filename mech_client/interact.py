@@ -594,10 +594,10 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     )
     register_event_handlers(
         wss=wss,
-        contract_address=contract_address,
+        mech_contract_address=contract_address,
         crypto=crypto,
-        request_signature=request_event_signature,
-        deliver_signature=deliver_event_signature,
+        mech_request_signature=request_event_signature,
+        marketplace_deliver_signature=deliver_event_signature,
     )
     print("Sending Mech request...")
     price = mech_config.price or 10_000_000_000_000_000
