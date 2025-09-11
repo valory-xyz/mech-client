@@ -28,8 +28,8 @@ from typing import Any, Dict, List, cast
 import websocket
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi
-from web3.contract import Contract as Web3Contract
 from eth_abi import decode
+from web3.contract import Contract as Web3Contract
 
 
 def register_event_handlers(
@@ -361,9 +361,9 @@ async def watch_for_mech_data_url_from_wss(  # pylint: disable=too-many-argument
                         )
                         request_id = request_id_bytes.hex()
                         if request_id in request_ids:
-                            results[request_id] = (
-                                f"https://gateway.autonolas.tech/ipfs/f01701220{delivery_data.hex()}"
-                            )
+                            results[
+                                request_id
+                            ] = f"https://gateway.autonolas.tech/ipfs/f01701220{delivery_data.hex()}"
 
                     if len(results) == len(request_ids):
                         return results

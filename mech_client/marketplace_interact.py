@@ -29,7 +29,7 @@ from dataclasses import asdict, make_dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, cast, List
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import requests
 import websocket
@@ -48,9 +48,9 @@ from mech_client.interact import (
     TIMEOUT,
     WAIT_SLEEP,
     get_contract,
-    get_mech_event_signatures,
     get_marketplace_event_signatures,
     get_mech_config,
+    get_mech_event_signatures,
 )
 from mech_client.mech_marketplace_tool_management import get_mech_tools
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
@@ -58,8 +58,8 @@ from mech_client.wss import (
     register_event_handlers,
     wait_for_receipt,
     watch_for_marketplace_data_from_wss,
-    watch_for_mech_data_url_from_wss,
     watch_for_marketplace_request_ids,
+    watch_for_mech_data_url_from_wss,
 )
 
 
