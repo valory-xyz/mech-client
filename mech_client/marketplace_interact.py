@@ -505,22 +505,16 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     """
     Wait for data from on-chain/off-chain.
 
-    :param request_id: The ID of the request.
-    :type request_id: str
+    :param request_ids: The IDs of the request.
+    :type request_ids: List[str]
     :param wss: The WebSocket connection object.
     :type wss: websocket.WebSocket
     :param marketplace_contract: The mech contract instance.
     :type marketplace_contract: Web3Contract
-    :param subgraph_url: Subgraph URL.
-    :type subgraph_url: str
     :param deliver_signature: Topic signature for Deliver event
     :type deliver_signature: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
-    :param crypto: The cryptographic object.
-    :type crypto: Crypto
-    :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
-    :type confirmation_type: ConfirmationType
     :return: The data received from on-chain/off-chain.
     :rtype: Any
     """

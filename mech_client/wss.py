@@ -45,14 +45,16 @@ def register_event_handlers(  # pylint: disable=too-many-arguments
 
     :param wss: The WebSocket connection object.
     :type wss: websocket.WebSocket
-    :param contract_address: The address of the contract.
-    :type contract_address: str
+    :param mech_contract_address: The address of the mech contract.
+    :type mech_contract_address: str
+    :param marketplace_contract_address: The address of the marketplace contract.
+    :type marketplace_contract_address: str
     :param crypto: The cryptographic object.
     :type crypto: Crypto
-    :param request_signature: Topic signature for Request event
-    :type request_signature: str
-    :param deliver_signature: Topic signature for Deliver event
-    :type deliver_signature: str
+    :param mech_request_signature: Topic signature for Request event
+    :type mech_request_signature: str
+    :param marketplace_deliver_signature: Topic signature for MarketplaceDelivery event
+    :type marketplace_deliver_signature: str
     """
 
     subscription_request = {
@@ -242,14 +244,12 @@ async def watch_for_marketplace_data_from_wss(  # pylint: disable=too-many-argum
     """
     Watches for data on-chain.
 
-    :param request_id: The ID of the request.
-    :type request_id: str
+    :param request_ids: The IDs of the request.
+    :type request_ids: List[str]
     :param wss: The WebSocket connection object.
     :type wss: websocket.WebSocket
     :param marketplace_contract: The marketplace contract instance.
     :type marketplace_contract: Web3Contract
-    :param deliver_signature: Topic signature for Deliver event
-    :type deliver_signature: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
     :param loop: The event loop used for asynchronous operations.
@@ -312,16 +312,16 @@ async def watch_for_mech_data_url_from_wss(  # pylint: disable=too-many-argument
     """
     Watches for data on-chain.
 
-    :param request_id: The ID of the request.
-    :type request_id: str
+    :param request_ids: The IDs of the request.
+    :type request_ids: List[str]
+    :param from_block: The from block to search requests from.
+    :type from_block: str
     :param wss: The WebSocket connection object.
     :type wss: websocket.WebSocket
-    :param mech_contract: The mech contract instance.
-    :type mech_contract: Web3Contract
-    :param deliver_signature: Topic signature for Deliver event
-    :type deliver_signature: str
-    :param ledger_api: The Ethereum API used for interacting with the ledger.
-    :type ledger_api: EthereumApi
+    :param mech_contract_address: The mech contract instance.
+    :type mech_contract_address: str
+    :param mech_deliver_signature: Topic signature for Deliver event
+    :type mech_deliver_signature: str
     :param loop: The event loop used for asynchronous operations.
     :type loop: asyncio.AbstractEventLoop
     :return: The data received from on-chain.
