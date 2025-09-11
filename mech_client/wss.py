@@ -32,6 +32,9 @@ from eth_abi import decode
 from web3.contract import Contract as Web3Contract
 
 
+IPFS_URL_TEMPLATE = "https://gateway.autonolas.tech/ipfs/f01701220{}"
+
+
 def register_event_handlers(  # pylint: disable=too-many-arguments
     wss: websocket.WebSocket,
     mech_contract_address: str,
@@ -361,9 +364,9 @@ async def watch_for_mech_data_url_from_wss(  # pylint: disable=too-many-argument
                         )
                         request_id = request_id_bytes.hex()
                         if request_id in request_ids:
-                            results[
-                                request_id
-                            ] = f"https://gateway.autonolas.tech/ipfs/f01701220{delivery_data.hex()}"
+                            results[request_id] = IPFS_URL_TEMPLATE.format(
+                                delivery_data.hex()
+                            )
 
                     if len(results) == len(request_ids):
                         return results
