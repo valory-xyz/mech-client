@@ -4,6 +4,7 @@ mech_client/helpers/acn_data_share
 mech_client/helpers/p2p_libp2p_client
 
 ethereum_private_key.txt
+mech_private_key.txt
 acn_cert.txt
 
 *.DS_Store
@@ -11,4 +12,13 @@ dist/
 temp/
 .tox/
 __pycache__
-.env
+.env.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+Icon?
+.AppleDouble
+.LSOverride
+._*
