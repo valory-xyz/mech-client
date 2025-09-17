@@ -33,6 +33,20 @@ AGENT_KEY = "ethereum_private_key.txt"
 SERVICE_KEY = "keys.json"
 
 
+def fetch_safe_address() -> str:
+    """Returns the safe address from .operate folder"""
+    matching_paths = OPERATE_DIR.glob(OPERATE_CONFIG_PATH)
+    data = {}
+    for file_path in matching_paths:
+        print(f"Reading from: {file_path}")
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            data = json.loads(content)
+
+    safe_contract_address = data["chain_configs"]["gnosis"]["chain_data"]["multisig"]
+    return safe_contract_address
+
+
 def create_private_key_files(data: dict) -> None:
     """Reads the generated env from operate and creates the required keys.json and ethereum_private_key.txt. Skips if files already exists"""
     agent_key_path = BASE_DIR / AGENT_KEY
