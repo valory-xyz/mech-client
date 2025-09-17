@@ -37,6 +37,8 @@ from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from eth_utils import to_checksum_address
 from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
+from safe_eth.eth import EthereumClient  # pylint:disable=import-error
+from safe_eth.safe import Safe  # pylint:disable=import-error
 
 from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.interact import (
@@ -58,6 +60,7 @@ from mech_client.wss import (
     watch_for_marketplace_data_url_from_wss,
     watch_for_marketplace_request_ids,
 )
+from scripts.setup import fetch_safe_address
 
 
 # false positives for [B105:hardcoded_password_string] Possible hardcoded password
@@ -281,10 +284,12 @@ def fetch_requester_nvm_subscription_balance(
 def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
+    ethereum_client: EthereumClient,
     marketplace_contract: Web3Contract,
     gas_limit: int,
     prompts: tuple,
     tools: tuple,
+    agent_mode: bool,
     method_args_data: MechMarketplaceRequestConfig,
     extra_attributes: Optional[Dict[str, Any]] = None,
     price: int = 10_000_000_000_000_000,
@@ -371,19 +376,42 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     while tries < retries and datetime.now().timestamp() < deadline:
         tries += 1
         try:
-            raw_transaction = ledger_api.build_transaction(
-                contract_instance=marketplace_contract,
-                method_name=method_name,
-                method_args=method_args,
-                tx_args=tx_args,
-                raise_on_try=True,
+            if not agent_mode:
+                raw_transaction = ledger_api.build_transaction(
+                    contract_instance=marketplace_contract,
+                    method_name=method_name,
+                    method_args=method_args,
+                    tx_args=tx_args,
+                    raise_on_try=True,
+                )
+                signed_transaction = crypto.sign_transaction(raw_transaction)
+                transaction_digest = ledger_api.send_signed_transaction(
+                    signed_transaction,
+                    raise_on_try=True,
+                )
+                return transaction_digest
+
+            function = marketplace_contract.functions[method_name](**method_args)
+            safe_address = fetch_safe_address()
+            # @todo how to set proper gas limit
+            transaction = function.build_transaction(
+                {
+                    "chainId": int(ledger_api._chain_id),
+                    "gas": 1000000,
+                    "nonce": get_safe_nonce(ethereum_client, safe_address),
+                }
             )
-            signed_transaction = crypto.sign_transaction(raw_transaction)
-            transaction_digest = ledger_api.send_signed_transaction(
-                signed_transaction,
-                raise_on_try=True,
+            # @todo how to set proper gas limit
+            transaction_digest = send_safe_tx(
+                ethereum_client=ethereum_client,
+                tx_data=transaction["data"],
+                to_adress=marketplace_contract.address,
+                safe_address=safe_address,
+                signer_pkey=crypto.private_key,
+                gas=1000000,
+                value=price,
             )
-            return transaction_digest
+            return transaction_digest.hex()
         except Exception as e:  # pylint: disable=broad-except
             print(
                 f"Error occured while sending the transaction: {e}; Retrying in {sleep}"
@@ -670,11 +698,56 @@ def verify_tools(tools: tuple, service_id: int, chain_config: Optional[str]) -> 
         )
 
 
+def send_safe_tx(
+    ethereum_client: EthereumClient,
+    tx_data: str,
+    to_adress: str,
+    safe_address: str,
+    signer_pkey: str,
+    gas: int,
+    value: int = 0,
+) -> Optional[str]:
+    """Send a Safe transaction"""
+    # Get the safe
+    safe = Safe(  # pylint:disable=abstract-class-instantiated
+        safe_address, ethereum_client
+    )
+
+    # Build, sign and send the safe transaction
+    safe_tx = safe.build_multisig_tx(
+        to=to_adress,
+        value=value,
+        data=bytes.fromhex(tx_data[2:]),
+        operation=0,
+        safe_tx_gas=gas,
+        base_gas=0,
+        gas_price=0,
+        gas_token=ADDRESS_ZERO,
+        refund_receiver=ADDRESS_ZERO,
+    )
+    safe_tx.sign(signer_pkey)
+    try:
+        tx_hash, _ = safe_tx.execute(signer_pkey)
+        return tx_hash
+    except Exception as e:
+        print(f"Exception while sending a safe transaction: {e}")
+        return False
+
+
+def get_safe_nonce(ethereum_client: EthereumClient, safe_address: str) -> int:
+    """Get the Safe nonce"""
+    safe = Safe(  # pylint:disable=abstract-class-instantiated
+        safe_address, ethereum_client
+    )
+    return safe.retrieve_nonce()
+
+
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
     prompts: tuple,
     priority_mech: str,
     use_prepaid: bool = False,
     use_offchain: bool = False,
+    agent_mode: bool = True,
     mech_offchain_url: str = "",
     tools: tuple = (),
     extra_attributes: Optional[Dict[str, Any]] = None,
@@ -719,6 +792,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     """
 
     mech_config = get_mech_config(chain_config)
+    ledger_rpc = mech_config.ledger_config.address
+    ethereum_client = EthereumClient(ledger_rpc)
     ledger_config = mech_config.ledger_config
     priority_mech_address = priority_mech
     mech_marketplace_contract = mech_config.mech_marketplace_contract
@@ -865,11 +940,13 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         transaction_digest = send_marketplace_request(
             crypto=crypto,
             ledger_api=ledger_api,
+            ethereum_client=ethereum_client,
             marketplace_contract=mech_marketplace_contract,
             gas_limit=mech_config.gas_limit,
             price=price,
             prompts=prompts,
             tools=tools,
+            agent_mode=agent_mode,
             method_args_data=mech_marketplace_request_config,
             extra_attributes=extra_attributes,
             retries=retries,
