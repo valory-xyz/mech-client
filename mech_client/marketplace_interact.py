@@ -742,6 +742,7 @@ def get_safe_nonce(ethereum_client: EthereumClient, safe_address: str) -> int:
     return safe.retrieve_nonce()
 
 
+# @todo remove default agent mode flag value
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
     prompts: tuple,
     priority_mech: str,
