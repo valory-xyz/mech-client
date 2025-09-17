@@ -56,13 +56,75 @@ from mech_client.to_png import main as to_png_main
 from scripts.deposit_native import main as deposit_native_main
 from scripts.deposit_token import main as deposit_token_main
 from scripts.nvm_subscribe import main as nvm_subscribe_main
-
+from operate.cli import OperateApp
+from operate.quickstart.run_service import ask_password_if_needed, ensure_enough_funds, _maybe_create_master_eoa, configure_local_config, get_service, load_local_config
 
 @click.group(name="mechx")  # type: ignore
 @click.version_option(__version__, prog_name="mechx")
-def cli() -> None:
+@click.option(
+    "--agent-mode",
+    is_flag=True,
+    help="Enables agent mode",
+)
+@click.pass_context
+def cli(ctx: click.Context, agent_mode: bool) -> None:
     """Command-line tool for interacting with mechs."""
+    ctx.ensure_object(dict)
+    ctx.obj["agent_mode"] = agent_mode
 
+    if agent_mode:
+        click.echo("Agent mode enabled")
+        operate = OperateApp()        
+        operate.setup()
+
+        skip_dependency_check = True
+        template = {
+            "name": "Mech Predict",
+            "hash": "bafybeihrjvinvcljb3hqb6gucbadnnknszdw6742zd2oy2sz7k4vn25e5u",
+            "description": "The mech executes AI tasks requested on-chain and delivers the results to the requester.",
+            "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
+            "service_version": "v0.9.0",
+            "home_chain": "gnosis",
+            "configurations": {
+                "gnosis": {
+                    "agent_id": 37,
+                    "nft": "bafybeiguk5i657q5bvyxzha66finzxpbaef4uvl6knjuwxlrs6cr7v33sa",
+                    "threshold": 1,
+                    "use_mech_marketplace": false,
+                    "fund_requirements": {
+                        "0x0000000000000000000000000000000000000000": {
+                            "agent": 1500000000000000000,
+                            "safe": 0
+                        }
+                    }
+                }
+            },
+            "env_variables": {
+            }
+        }
+        
+        ask_password_if_needed(operate)
+        _maybe_create_master_eoa(operate)
+
+        config = configure_local_config(template, operate)
+        manager = operate.service_manager()
+        service = get_service(manager, template)
+
+        # reload manger and config after setting operate.password
+        manager = operate.service_manager(skip_dependency_check=skip_dependency_check)
+        config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
+        ensure_enough_funds(operate, service)
+
+        click.echo("PLEASE, DO NOT INTERRUPT THIS PROCESS.")
+        click.echo(f"Deploying on-chain service on {config.principal_chain}...")
+        click.echo(
+            "Cancelling the on-chain service update prematurely could lead to an inconsistent state of the Safe or the on-chain service state, which may require manual intervention to resolve.\n"
+        )
+        manager.deploy_service_onchain_from_safe(
+            service_config_id=service.service_config_id
+        )
+        click.echo("Funding the service")
+        manager.fund_service(service_config_id=service.service_config_id)
 
 @click.command()
 @click.option(
@@ -133,7 +195,9 @@ def cli() -> None:
     type=str,
     help="Id of the mech's chain configuration (stored configs/mechs.json)",
 )
-def interact(  # pylint: disable=too-many-arguments,too-many-locals
+@click.pass_context
+def interact(   # pylint: disable=too-many-arguments,too-many-locals
+    ctx: click.Context,
     prompts: tuple,
     agent_id: int,
     priority_mech: str,
@@ -150,6 +214,11 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
+        agent_mode = ctx.obj.get("agent_mode", False)
+        click.echo(f"Running interact with agent_mode={agent_mode}")    
+
+        import sys
+        sys.exit(1)    
         extra_attributes_dict: Dict[str, Any] = {}
         if extra_attribute:
             for pair in extra_attribute:
