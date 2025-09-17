@@ -12,3 +12,5 @@ temp/
 .tox/
 __pycache__
 .env
+.operate*
+keys.json
