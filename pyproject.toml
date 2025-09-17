@@ -36,6 +36,7 @@ websocket-client = ">=0.32.0,<1"
 tabulate = "^0.9.0"
 setuptools = "^77.0.3"
 olas-operate-middleware = "0.10.6"
+safe-eth-py = "v6.4.0"
 
 [tool.poetry.scripts]
 mechx = "mech_client.cli:cli"
