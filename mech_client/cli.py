@@ -21,6 +21,7 @@
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -34,6 +35,7 @@ from operate.quickstart.run_service import (
     load_local_config,
     run_service,
 )
+from operate.services.manage import KeysManager
 from tabulate import tabulate  # type: ignore
 
 from mech_client import __version__
@@ -120,9 +122,9 @@ def cli(ctx: click.Context, agent_mode: bool) -> None:
         operate = OperateApp()
         operate.setup()
 
-        sys.modules[
-            "operate.quickstart.run_service"
-        ].configure_local_config = my_configure_local_config
+        sys.modules["operate.quickstart.run_service"].configure_local_config = (
+            my_configure_local_config
+        )
 
         run_service(
             operate=operate,
@@ -223,9 +225,6 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         agent_mode = ctx.obj.get("agent_mode", False)
         click.echo(f"Running interact with agent_mode={agent_mode}")
 
-        import sys
-
-        sys.exit(1)
         extra_attributes_dict: Dict[str, Any] = {}
         if extra_attribute:
             for pair in extra_attribute:
@@ -247,9 +246,38 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                     f"The number of prompts ({len(prompts)}) must match the number of tools ({len(tools)})"
                 )
 
+            safe = ""
+            if agent_mode:
+                operate = OperateApp()
+                keys_manager = KeysManager(
+                    path=operate._keys,  # pylint: disable=protected-access
+                    logger=operate.wallet_manager.logger,
+                )
+                service_manager = operate.service_manager()
+                service_config_id = service_manager.json[0]["service_config_id"]
+                service = operate.service_manager().load(service_config_id)
+
+                agent_eoa_key = keys_manager.get(service.agent_addresses[0]).private_key
+                safe = service.chain_configs["gnosis"].chain_data.multisig
+
+                # @todo temp hack
+                with tempfile.NamedTemporaryFile(
+                    dir=BASE_DIR,
+                    mode="w",
+                    suffix=".txt",
+                    delete=False,  # Handle cleanup manually
+                ) as temp_file:
+                    temp_file.write(agent_eoa_key)
+                    temp_file.flush()
+                    temp_file.close()  # Close the file before reading
+
+                    key = temp_file.name
+
             marketplace_interact_(
                 prompts=prompts,
                 priority_mech=priority_mech,
+                agent_mode=agent_mode,
+                safe_address=safe,
                 use_prepaid=use_prepaid,
                 use_offchain=use_offchain,
                 mech_offchain_url=mech_offchain_url,

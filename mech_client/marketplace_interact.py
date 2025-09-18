@@ -60,7 +60,6 @@ from mech_client.wss import (
     watch_for_marketplace_data_url_from_wss,
     watch_for_marketplace_request_ids,
 )
-from scripts.setup import fetch_safe_address
 
 
 # false positives for [B105:hardcoded_password_string] Possible hardcoded password
@@ -290,6 +289,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     prompts: tuple,
     tools: tuple,
     agent_mode: bool,
+    safe_address: str,
     method_args_data: MechMarketplaceRequestConfig,
     extra_attributes: Optional[Dict[str, Any]] = None,
     price: int = 10_000_000_000_000_000,
@@ -392,7 +392,6 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
                 return transaction_digest
 
             function = marketplace_contract.functions[method_name](**method_args)
-            safe_address = fetch_safe_address()
             # @todo how to set proper gas limit
             transaction = function.build_transaction(
                 {
@@ -742,13 +741,13 @@ def get_safe_nonce(ethereum_client: EthereumClient, safe_address: str) -> int:
     return safe.retrieve_nonce()
 
 
-# @todo remove default agent mode flag value
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
     prompts: tuple,
     priority_mech: str,
+    agent_mode: bool,
+    safe_address: str,
     use_prepaid: bool = False,
     use_offchain: bool = False,
-    agent_mode: bool = True,
     mech_offchain_url: str = "",
     tools: tuple = (),
     extra_attributes: Optional[Dict[str, Any]] = None,
@@ -948,6 +947,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             prompts=prompts,
             tools=tools,
             agent_mode=agent_mode,
+            safe_address=safe_address,
             method_args_data=mech_marketplace_request_config,
             extra_attributes=extra_attributes,
             retries=retries,
