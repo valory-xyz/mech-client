@@ -20,10 +20,20 @@
 """Mech client CLI module."""
 import json
 import os
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from click import ClickException
+from operate.cli import OperateApp
+from operate.constants import NO_STAKING_PROGRAM_ID
+from operate.operate_types import ServiceTemplate
+from operate.quickstart.run_service import (
+    QuickstartConfig,
+    load_local_config,
+    run_service,
+)
 from tabulate import tabulate  # type: ignore
 
 from mech_client import __version__
@@ -58,10 +68,68 @@ from scripts.deposit_token import main as deposit_token_main
 from scripts.nvm_subscribe import main as nvm_subscribe_main
 
 
+CURR_DIR = Path(__file__).resolve().parent
+BASE_DIR = CURR_DIR.parent
+GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
+
+
+def my_configure_local_config(
+    template: ServiceTemplate, operate: "OperateApp"
+) -> QuickstartConfig:
+    """Configure local quickstart configuration."""
+    config = load_local_config(operate=operate, service_name=template["name"])
+
+    if config.rpc is None:
+        config.rpc = {}
+
+    for chain in template["configurations"]:
+        config.rpc[chain] = os.getenv("MECHX_RPC_URL")
+
+    config.principal_chain = template["home_chain"]
+
+    # set chain configs in the service template
+    for chain in template["configurations"]:
+        template["configurations"][chain] |= {
+            "staking_program_id": NO_STAKING_PROGRAM_ID,
+            "rpc": config.rpc[chain],
+            "cost_of_bond": 1,
+        }
+
+    if config.user_provided_args is None:
+        config.user_provided_args = {}
+
+    config.store()
+    return config
+
+
 @click.group(name="mechx")  # type: ignore
 @click.version_option(__version__, prog_name="mechx")
-def cli() -> None:
+@click.option(
+    "--agent-mode",
+    is_flag=True,
+    help="Enables agent mode",
+)
+@click.pass_context
+def cli(ctx: click.Context, agent_mode: bool) -> None:
     """Command-line tool for interacting with mechs."""
+    ctx.ensure_object(dict)
+    ctx.obj["agent_mode"] = agent_mode
+
+    if agent_mode:
+        click.echo("Agent mode enabled")
+        operate = OperateApp()
+        operate.setup()
+
+        sys.modules[
+            "operate.quickstart.run_service"
+        ].configure_local_config = my_configure_local_config
+
+        run_service(
+            operate=operate,
+            config_path=GNOSIS_TEMPLATE_CONFIG_PATH,
+            build_only=True,
+            skip_dependency_check=False,
+        )
 
 
 @click.command()
@@ -133,7 +201,9 @@ def cli() -> None:
     type=str,
     help="Id of the mech's chain configuration (stored configs/mechs.json)",
 )
+@click.pass_context
 def interact(  # pylint: disable=too-many-arguments,too-many-locals
+    ctx: click.Context,
     prompts: tuple,
     agent_id: int,
     priority_mech: str,
@@ -150,6 +220,12 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
+        agent_mode = ctx.obj.get("agent_mode", False)
+        click.echo(f"Running interact with agent_mode={agent_mode}")
+
+        import sys
+
+        sys.exit(1)
         extra_attributes_dict: Dict[str, Any] = {}
         if extra_attribute:
             for pair in extra_attribute:

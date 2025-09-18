@@ -1,7 +1,7 @@
 {
-    "name": "Mech Client",
+    "name": "Mech Client (agent mode)",
     "hash": "bafybeigb5a6ptwtfx5wpnvqv6mp5jg6dpjt5scgjgnq74d4mri2i7vntbm",
-    "description": "The mech executes AI tasks requested on-chain and delivers the results to the requester.",
+    "description": "The mech client requests tasks to AI mechs.",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
     "service_version": "v0.9.0",
     "home_chain": "gnosis",
@@ -11,56 +11,15 @@
             "nft": "bafybeifgj3kackzfoq4fxjiuousm6epgwx7jbc3n2gjwzjgvtbbz7fc3su",
             "threshold": 1,
             "use_mech_marketplace": false,
+            "cost_of_bond": 1,
             "fund_requirements": {
                 "0x0000000000000000000000000000000000000000": {
-                    "agent": 1500000000000000000,
-                    "safe": 0
+                    "agent": 1000000000000000000,
+                    "safe": 1000000000000000000
                 }
             }
         }
     },
     "env_variables": {
-        "GNOSIS_LEDGER_RPC": {
-            "name": "Gnosis ledger RPC",
-            "description": "",
-            "value": "",
-            "provision_type": "computed"
-        },
-        "SERVICE_REGISTRY_ADDRESS": {
-            "name": "Service registry address",
-            "description": "",
-            "value": "0x9338b5153AE39BB89f50468E608eD9d764B755fD",
-            "provision_type": "fixed"
-        },
-        "STAKING_TOKEN_CONTRACT_ADDRESS": {
-            "name": "Staking contract address",
-            "description": "",
-            "value": "",
-            "provision_type": "computed"
-        },
-        "AGENT_ID": {
-            "name": "Agent ID",
-            "description": "",
-            "value": "",
-            "provision_type": "computed"
-        },
-        "ON_CHAIN_SERVICE_ID": {
-            "name": "On-chain service ID",
-            "description": "",
-            "value": "",
-            "provision_type": "computed"
-        },
-        "ETHEREUM_LEDGER_RPC_0": {
-            "name": "Gnosis ledger RPC 0",
-            "description": "",
-            "value": "",
-            "provision_type": "computed"
-        },
-        "GNOSIS_LEDGER_RPC_0": {
-            "name": "Gnosis ledger RPC 0",
-            "description": "",
-            "value": "",
-            "provision_type": "computed"
-        }
     }
 }
