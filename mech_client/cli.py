@@ -20,10 +20,20 @@
 """Mech client CLI module."""
 import json
 import os
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from click import ClickException
+from operate.cli import OperateApp
+from operate.constants import NO_STAKING_PROGRAM_ID
+from operate.operate_types import ServiceTemplate
+from operate.quickstart.run_service import (
+    QuickstartConfig,
+    load_local_config,
+    run_service,
+)
 from tabulate import tabulate  # type: ignore
 
 from mech_client import __version__
@@ -56,8 +66,41 @@ from mech_client.to_png import main as to_png_main
 from scripts.deposit_native import main as deposit_native_main
 from scripts.deposit_token import main as deposit_token_main
 from scripts.nvm_subscribe import main as nvm_subscribe_main
-from operate.cli import OperateApp
-from operate.quickstart.run_service import ask_password_if_needed, ensure_enough_funds, _maybe_create_master_eoa, configure_local_config, get_service, load_local_config
+
+
+CURR_DIR = Path(__file__).resolve().parent
+BASE_DIR = CURR_DIR.parent
+GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
+
+
+def my_configure_local_config(
+    template: ServiceTemplate, operate: "OperateApp"
+) -> QuickstartConfig:
+    """Configure local quickstart configuration."""
+    config = load_local_config(operate=operate, service_name=template["name"])
+
+    if config.rpc is None:
+        config.rpc = {}
+
+    for chain in template["configurations"]:
+        config.rpc[chain] = os.getenv("MECHX_RPC_URL")
+
+    config.principal_chain = template["home_chain"]
+
+    # set chain configs in the service template
+    for chain in template["configurations"]:
+        template["configurations"][chain] |= {
+            "staking_program_id": NO_STAKING_PROGRAM_ID,
+            "rpc": config.rpc[chain],
+            "cost_of_bond": 1,
+        }
+
+    if config.user_provided_args is None:
+        config.user_provided_args = {}
+
+    config.store()
+    return config
+
 
 @click.group(name="mechx")  # type: ignore
 @click.version_option(__version__, prog_name="mechx")
@@ -74,57 +117,20 @@ def cli(ctx: click.Context, agent_mode: bool) -> None:
 
     if agent_mode:
         click.echo("Agent mode enabled")
-        operate = OperateApp()        
+        operate = OperateApp()
         operate.setup()
 
-        skip_dependency_check = True
-        template = {
-            "name": "Mech Predict",
-            "hash": "bafybeihrjvinvcljb3hqb6gucbadnnknszdw6742zd2oy2sz7k4vn25e5u",
-            "description": "The mech executes AI tasks requested on-chain and delivers the results to the requester.",
-            "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
-            "service_version": "v0.9.0",
-            "home_chain": "gnosis",
-            "configurations": {
-                "gnosis": {
-                    "agent_id": 37,
-                    "nft": "bafybeiguk5i657q5bvyxzha66finzxpbaef4uvl6knjuwxlrs6cr7v33sa",
-                    "threshold": 1,
-                    "use_mech_marketplace": false,
-                    "fund_requirements": {
-                        "0x0000000000000000000000000000000000000000": {
-                            "agent": 1500000000000000000,
-                            "safe": 0
-                        }
-                    }
-                }
-            },
-            "env_variables": {
-            }
-        }
-        
-        ask_password_if_needed(operate)
-        _maybe_create_master_eoa(operate)
+        sys.modules[
+            "operate.quickstart.run_service"
+        ].configure_local_config = my_configure_local_config
 
-        config = configure_local_config(template, operate)
-        manager = operate.service_manager()
-        service = get_service(manager, template)
-
-        # reload manger and config after setting operate.password
-        manager = operate.service_manager(skip_dependency_check=skip_dependency_check)
-        config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
-        ensure_enough_funds(operate, service)
-
-        click.echo("PLEASE, DO NOT INTERRUPT THIS PROCESS.")
-        click.echo(f"Deploying on-chain service on {config.principal_chain}...")
-        click.echo(
-            "Cancelling the on-chain service update prematurely could lead to an inconsistent state of the Safe or the on-chain service state, which may require manual intervention to resolve.\n"
+        run_service(
+            operate=operate,
+            config_path=GNOSIS_TEMPLATE_CONFIG_PATH,
+            build_only=True,
+            skip_dependency_check=False,
         )
-        manager.deploy_service_onchain_from_safe(
-            service_config_id=service.service_config_id
-        )
-        click.echo("Funding the service")
-        manager.fund_service(service_config_id=service.service_config_id)
+
 
 @click.command()
 @click.option(
@@ -196,7 +202,7 @@ def cli(ctx: click.Context, agent_mode: bool) -> None:
     help="Id of the mech's chain configuration (stored configs/mechs.json)",
 )
 @click.pass_context
-def interact(   # pylint: disable=too-many-arguments,too-many-locals
+def interact(  # pylint: disable=too-many-arguments,too-many-locals
     ctx: click.Context,
     prompts: tuple,
     agent_id: int,
@@ -215,10 +221,11 @@ def interact(   # pylint: disable=too-many-arguments,too-many-locals
     """Interact with a mech specifying a prompt and tool."""
     try:
         agent_mode = ctx.obj.get("agent_mode", False)
-        click.echo(f"Running interact with agent_mode={agent_mode}")    
+        click.echo(f"Running interact with agent_mode={agent_mode}")
 
         import sys
-        sys.exit(1)    
+
+        sys.exit(1)
         extra_attributes_dict: Dict[str, Any] = {}
         if extra_attribute:
             for pair in extra_attribute:
