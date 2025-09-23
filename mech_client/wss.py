@@ -357,22 +357,19 @@ async def watch_for_mech_data_url_from_wss(  # pylint: disable=too-many-argument
             while True:
                 msg = await loop.run_in_executor(executor=executor, func=wss.recv)
                 data = json.loads(msg)
-                logs = data["result"]
-                if logs:
-                    for log in logs:
-                        data_types = ["bytes32", "uint256", "bytes"]
-                        data_bytes = bytes.fromhex(log["data"][2:])
-                        request_id_bytes, _, delivery_data = decode(
-                            data_types, data_bytes
+                logs = data.get("result", [])
+                for log in logs:
+                    data_types = ["bytes32", "uint256", "bytes"]
+                    data_bytes = bytes.fromhex(log["data"][2:])
+                    request_id_bytes, _, delivery_data = decode(data_types, data_bytes)
+                    request_id = request_id_bytes.hex()
+                    if request_id in request_ids:
+                        results[request_id] = IPFS_URL_TEMPLATE.format(
+                            delivery_data.hex()
                         )
-                        request_id = request_id_bytes.hex()
-                        if request_id in request_ids:
-                            results[request_id] = IPFS_URL_TEMPLATE.format(
-                                delivery_data.hex()
-                            )
 
-                    if len(results) == len(request_ids):
-                        return results
+                if len(results) == len(request_ids):
+                    return results
 
         except websocket.WebSocketConnectionClosedException as e:
             print(f"WebSocketConnectionClosedException {repr(e)}")
