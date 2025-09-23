@@ -536,12 +536,10 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
         results = {}
         # group by block number and delivery address
         requests_by_block_and_address = defaultdict(list)
-        [  # pylint: disable=expression-not-assigned
-            requests_by_block_and_address[  # type: ignore
-                (info["block_number"], info["delivery_mech"])
-            ].append(request_id)
-            for request_id, info in marketplace_data_wss_result.items()
-        ]
+        for request_id, info in marketplace_data_wss_result.items():
+            key = (info["block_number"], info["delivery_mech"])
+            value = request_id
+            requests_by_block_and_address[key].append(value)
 
         for (
             block_number,
@@ -918,28 +916,26 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             ledger_api=ledger_api,
         )
 
-        if data_urls:
-            if is_nvm_mech:
-                requester_total_balance_after = (
-                    fetch_requester_nvm_subscription_balance(
-                        requester,
-                        ledger_api,
-                        mech_payment_balance_tracker,
-                        payment_type,
-                    )
-                )
-                print(
-                    f"  - Sender Subscription balance after delivery: {requester_total_balance_after}"
-                )
+        if not data_urls:
+            return None
 
-            for request_id, data_url in data_urls.items():
-                request_id_int = int.from_bytes(
-                    bytes.fromhex(request_id), byteorder="big"
-                )
-                print(f"  - Data arrived: {data_url}")
-                data = requests.get(f"{data_url}/{request_id_int}", timeout=30).json()
-                print("  - Data from agent:")
-                print(json.dumps(data, indent=2))
+        if is_nvm_mech:
+            requester_total_balance_after = fetch_requester_nvm_subscription_balance(
+                requester,
+                ledger_api,
+                mech_payment_balance_tracker,
+                payment_type,
+            )
+            print(
+                f"  - Sender Subscription balance after delivery: {requester_total_balance_after}"
+            )
+
+        for request_id, data_url in data_urls.items():
+            request_id_int = int.from_bytes(bytes.fromhex(request_id), byteorder="big")
+            print(f"  - Data arrived: {data_url}")
+            data = requests.get(f"{data_url}/{request_id_int}", timeout=30).json()
+            print("  - Data from agent:")
+            print(json.dumps(data, indent=2))
         return None
 
     print("Sending Offchain Mech Marketplace request...")

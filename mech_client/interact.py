@@ -214,15 +214,18 @@ def get_mech_event_signatures(abi: List) -> Tuple[str, str]:
 
 
 def get_marketplace_event_signatures(abi: List) -> Tuple[str, str]:
-    """Calculate `MarketplaceRequest` and `MarketplaceDelivery` event topics"""
+    """Calculate `MarketplaceRequest` and `MarketplaceDelivery` event topics."""
     request, deliver = "", ""
     for obj in abi:
-        if obj["type"] != "event":
+        if obj.get("type") != "event":
             continue
-        if obj["name"] == "MarketplaceDelivery":
+        if obj.get("name") == "MarketplaceDelivery":
             deliver = calculate_topic_id(event=obj)
-        if obj["name"] == "MarketplaceRequest":
+        elif obj.get("name") == "MarketplaceRequest":
             request = calculate_topic_id(event=obj)
+        if request and deliver:
+            # both found, exit early
+            break
     return request, deliver
 
 

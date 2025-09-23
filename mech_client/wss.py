@@ -285,13 +285,16 @@ async def watch_for_marketplace_data_from_wss(  # pylint: disable=too-many-argum
                 tx_request_ids = data["requestIds"]
                 delivery_mech = data["deliveryMech"]
 
-                for tx_request_id in tx_request_ids:
-                    tx_request_id_hex = tx_request_id.hex()
-                    if tx_request_id_hex in request_ids:
-                        request_ids_data[tx_request_id_hex] = {
+                request_ids_data.update(
+                    {
+                        tx_id.hex(): {
                             "block_number": block_number,
                             "delivery_mech": delivery_mech,
                         }
+                        for tx_id in tx_request_ids
+                        if tx_id.hex() in request_ids
+                    }
+                )
 
                 if len(request_ids_data) == len(request_ids):
                     return request_ids_data
