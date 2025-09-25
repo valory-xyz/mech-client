@@ -538,8 +538,7 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
         requests_by_block_and_address = defaultdict(list)
         for request_id, info in marketplace_data_wss_result.items():
             key = (info["block_number"], info["delivery_mech"])
-            value = request_id
-            requests_by_block_and_address[key].append(value)
+            requests_by_block_and_address[key].append(request_id)
 
         for (
             block_number,
