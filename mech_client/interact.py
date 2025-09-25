@@ -200,7 +200,7 @@ def calculate_topic_id(event: Dict) -> str:
     return Web3.keccak(text=text).hex()
 
 
-def get_event_signatures(abi: List) -> Tuple[str, str]:
+def get_mech_event_signatures(abi: List) -> Tuple[str, str]:
     """Calculate `Request` and `Deliver` event topics"""
     request, deliver = "", ""
     for obj in abi:
@@ -210,6 +210,22 @@ def get_event_signatures(abi: List) -> Tuple[str, str]:
             deliver = calculate_topic_id(event=obj)
         if obj["name"] == "Request":
             request = calculate_topic_id(event=obj)
+    return request, deliver
+
+
+def get_marketplace_event_signatures(abi: List) -> Tuple[str, str]:
+    """Calculate `MarketplaceRequest` and `MarketplaceDelivery` event topics."""
+    request, deliver = "", ""
+    for obj in abi:
+        if obj.get("type") != "event":
+            continue
+        if obj.get("name") == "MarketplaceDelivery":
+            deliver = calculate_topic_id(event=obj)
+        elif obj.get("name") == "MarketplaceRequest":
+            request = calculate_topic_id(event=obj)
+        if request and deliver:
+            # both found, exit early
+            break
     return request, deliver
 
 
@@ -576,13 +592,16 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     mech_contract = get_contract(
         contract_address=contract_address, abi=abi, ledger_api=ledger_api
     )
-    request_event_signature, deliver_event_signature = get_event_signatures(abi=abi)
+    request_event_signature, deliver_event_signature = get_mech_event_signatures(
+        abi=abi
+    )
     register_event_handlers(
         wss=wss,
-        contract_address=contract_address,
+        mech_contract_address=contract_address,
+        marketplace_contract_address=contract_address,
         crypto=crypto,
-        request_signature=request_event_signature,
-        deliver_signature=deliver_event_signature,
+        mech_request_signature=request_event_signature,
+        marketplace_deliver_signature=deliver_event_signature,
     )
     print("Sending Mech request...")
     price = mech_config.price or 10_000_000_000_000_000
