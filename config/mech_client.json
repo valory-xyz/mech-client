@@ -1,0 +1,25 @@
+{
+    "name": "Mech Client (agent mode)",
+    "hash": "bafybeigb5a6ptwtfx5wpnvqv6mp5jg6dpjt5scgjgnq74d4mri2i7vntbm",
+    "description": "The mech client requests tasks to AI mechs.",
+    "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
+    "service_version": "v0.9.0",
+    "home_chain": "gnosis",
+    "configurations": {
+        "gnosis": {
+            "agent_id": 37,
+            "nft": "bafybeifgj3kackzfoq4fxjiuousm6epgwx7jbc3n2gjwzjgvtbbz7fc3su",
+            "threshold": 1,
+            "use_mech_marketplace": false,
+            "cost_of_bond": 1,
+            "fund_requirements": {
+                "0x0000000000000000000000000000000000000000": {
+                    "agent": 1000000000000000000,
+                    "safe": 1000000000000000000
+                }
+            }
+        }
+    },
+    "env_variables": {
+    }
+}
