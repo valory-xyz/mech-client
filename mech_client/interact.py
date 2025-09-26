@@ -213,22 +213,6 @@ def get_mech_event_signatures(abi: List) -> Tuple[str, str]:
     return request, deliver
 
 
-def get_marketplace_event_signatures(abi: List) -> Tuple[str, str]:
-    """Calculate `MarketplaceRequest` and `MarketplaceDelivery` event topics."""
-    request, deliver = "", ""
-    for obj in abi:
-        if obj.get("type") != "event":
-            continue
-        if obj.get("name") == "MarketplaceDelivery":
-            deliver = calculate_topic_id(event=obj)
-        elif obj.get("name") == "MarketplaceRequest":
-            request = calculate_topic_id(event=obj)
-        if request and deliver:
-            # both found, exit early
-            break
-    return request, deliver
-
-
 def get_abi(contract_abi_path: Path) -> List:
     """Get contract abi"""
     with open(contract_abi_path, encoding="utf-8") as f:
