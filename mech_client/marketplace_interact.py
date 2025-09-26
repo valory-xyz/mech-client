@@ -35,10 +35,11 @@ import requests
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from eth_utils import to_checksum_address
+from web3._utils.events import event_abi_to_log_topic
 from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
-from web3._utils.events import event_abi_to_log_topic
 
+from mech_client.delivery import watch_for_marketplace_data, watch_for_mech_data_url
 from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.interact import (
     MAX_RETRIES,
@@ -51,11 +52,7 @@ from mech_client.interact import (
 )
 from mech_client.mech_marketplace_tool_management import get_mech_tools
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
-from mech_client.wss import (
-    wait_for_receipt,
-    watch_for_marketplace_request_ids,
-)
-from mech_client.delivery import watch_for_marketplace_data, watch_for_mech_data_url
+from mech_client.wss import wait_for_receipt, watch_for_marketplace_request_ids
 
 
 # false positives for [B105:hardcoded_password_string] Possible hardcoded password

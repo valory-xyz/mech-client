@@ -24,8 +24,8 @@ from typing import Any, List
 
 from aea_ledger_ethereum import EthereumApi
 from eth_abi import decode
-from web3.contract import Contract as Web3Contract
 from web3.constants import ADDRESS_ZERO
+from web3.contract import Contract as Web3Contract
 
 
 WAIT_SLEEP = 3.0
