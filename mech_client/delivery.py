@@ -80,12 +80,14 @@ async def watch_for_mech_data_url(  # pylint: disable=too-many-arguments, unused
 
     :param request_ids: The IDs of the request.
     :type request_ids: List[str]
+    :param from_block: The from block to start searching logs.
+    :type from_block: int
     :param mech_contract_address: The mech contract instance.
     :type mech_contract_address: str
     :param mech_deliver_signature: Topic signature for Deliver event
     :type mech_deliver_signature: str
-    :param loop: The event loop used for asynchronous operations.
-    :type loop: asyncio.AbstractEventLoop
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
     :return: The data received from on-chain.
     :rtype: Any
     """
