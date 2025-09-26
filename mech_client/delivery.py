@@ -20,7 +20,7 @@
 """Websocket helpers."""
 
 import time
-from typing import Any, List
+from typing import Any, Dict, List, Tuple
 
 from aea_ledger_ethereum import EthereumApi
 from eth_abi import decode
@@ -92,7 +92,7 @@ async def watch_for_mech_data_url(  # pylint: disable=too-many-arguments, unused
 
     results = {}
 
-    def get_logs():
+    def get_logs() -> List:
         logs = ledger_api.api.eth.get_logs(
             {
                 "fromBlock": from_block,
@@ -103,7 +103,7 @@ async def watch_for_mech_data_url(  # pylint: disable=too-many-arguments, unused
         )
         return logs
 
-    def get_event_data(log):
+    def get_event_data(log: Dict) -> Tuple:
         data_types = ["bytes32", "uint256", "bytes"]
         data_bytes = bytes(log["data"])
         request_id_bytes, _, delivery_data_bytes = decode(data_types, data_bytes)
