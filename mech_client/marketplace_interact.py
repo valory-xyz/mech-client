@@ -32,12 +32,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import requests
-import websocket
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from eth_utils import to_checksum_address
 from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
+from web3._utils.events import event_abi_to_log_topic
 
 from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.interact import (
@@ -47,19 +47,15 @@ from mech_client.interact import (
     TIMEOUT,
     WAIT_SLEEP,
     get_contract,
-    get_marketplace_event_signatures,
     get_mech_config,
-    get_mech_event_signatures,
 )
 from mech_client.mech_marketplace_tool_management import get_mech_tools
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import (
-    register_event_handlers,
     wait_for_receipt,
-    watch_for_marketplace_data_from_wss,
     watch_for_marketplace_request_ids,
-    watch_for_mech_data_url_from_wss,
 )
+from mech_client.delivery import watch_for_marketplace_data, watch_for_mech_data_url
 
 
 # false positives for [B105:hardcoded_password_string] Possible hardcoded password
@@ -128,7 +124,7 @@ def fetch_mech_info(
     ledger_api: EthereumApi,
     mech_marketplace_contract: Web3Contract,
     priority_mech_address: str,
-) -> Tuple[str, int, int, str]:
+) -> Tuple[str, int, int, str, str]:
     """
     Fetchs the info of the requested mech.
 
@@ -138,8 +134,8 @@ def fetch_mech_info(
     :type mech_marketplace_contract: Web3Contract
     :param priority_mech_address: Requested mech address
     :type priority_mech_address: str
-    :return: The mech info containing payment_type, service_id, max_delivery_rate, mech_payment_balance_tracker.
-    :rtype: Tuple[str, int, int, str]
+    :return: The mech info containing payment_type, service_id, max_delivery_rate, mech_payment_balance_tracker, mech_deliver_event_signature.
+    :rtype: Tuple[str, int, int, str, str]
     """
 
     with open(IMECH_ABI_PATH, encoding="utf-8") as f:
@@ -163,11 +159,15 @@ def fetch_mech_info(
         print("  - Invalid mech type detected.")
         sys.exit(1)
 
+    deliver_event_abi = mech_contract.events.Deliver().abi
+    mech_deliver_event_signature = event_abi_to_log_topic(deliver_event_abi)
+
     return (
         payment_type,
         service_id,
         max_delivery_rate,
         mech_payment_balance_tracker,
+        mech_deliver_event_signature.hex(),
     )
 
 
@@ -497,7 +497,7 @@ def send_offchain_marketplace_request(  # pylint: disable=too-many-arguments,too
 
 def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused-argument
     request_ids: List[str],
-    wss: websocket.WebSocket,
+    from_block: int,
     marketplace_contract: Web3Contract,
     deliver_signature: str,
     ledger_api: EthereumApi,
@@ -507,50 +507,41 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
 
     :param request_ids: The IDs of the request.
     :type request_ids: List[str]
-    :param wss: The WebSocket connection object.
-    :type wss: websocket.WebSocket
+    :param from_block: The from block to start searching logs.
+    :type from_block: int
     :param marketplace_contract: The mech contract instance.
     :type marketplace_contract: Web3Contract
     :param deliver_signature: Topic signature for Deliver event
     :type deliver_signature: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
-    :return: The data received from on-chain/off-chain.
+    :return: The data received from on-chain.
     :rtype: Any
     """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
     async def _wait_for_marketplace_delivery_event() -> Any:  # type: ignore
-        data = await watch_for_marketplace_data_from_wss(
+        data = await watch_for_marketplace_data(
             request_ids=request_ids,
-            wss=wss,
             marketplace_contract=marketplace_contract,
-            ledger_api=ledger_api,
-            loop=loop,
         )
         return data
 
     async def _wait_for_mech_data(future) -> Any:  # type: ignore
-        marketplace_data_wss_result = await future
+        marketplace_data_result = await future
+        requests_by_delivery_mech = defaultdict(list)
         results = {}
-        # group by block number and delivery address
-        requests_by_block_and_address = defaultdict(list)
-        for request_id, info in marketplace_data_wss_result.items():
-            key = (info["block_number"], info["delivery_mech"])
-            requests_by_block_and_address[key].append(request_id)
+        for request_id, delivery_mech in marketplace_data_result.items():
+            requests_by_delivery_mech[delivery_mech].append(request_id)
 
-        for (
-            block_number,
-            delivery_mech,
-        ), request_ids in requests_by_block_and_address.items():
-            data = await watch_for_mech_data_url_from_wss(
+        for delivery_mech, request_ids in requests_by_delivery_mech.items():
+            data = await watch_for_mech_data_url(
                 request_ids=request_ids,
-                from_block=block_number,
-                wss=wss,
+                from_block=from_block,
                 mech_contract_address=delivery_mech,
                 mech_deliver_signature=deliver_signature,
-                loop=loop,
+                ledger_api=ledger_api,
             )
             results.update(data)
 
@@ -752,17 +743,11 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             f"Private key file `{private_key_path}` does not exist!"
         )
 
-    wss = websocket.create_connection(mech_config.wss_endpoint)
     crypto = EthereumCrypto(private_key_path=private_key_path)
     ledger_api = EthereumApi(**asdict(ledger_config))
 
     with open(MARKETPLACE_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
-
-    (
-        _,
-        marketplace_deliver_event_signature,
-    ) = get_marketplace_event_signatures(abi=abi)
 
     mech_marketplace_contract = get_contract(
         contract_address=marketplace_contract_address, abi=abi, ledger_api=ledger_api
@@ -777,6 +762,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         service_id,
         max_delivery_rate,
         mech_payment_balance_tracker,
+        mech_deliver_event_signature,
     ) = fetch_mech_info(
         ledger_api,
         mech_marketplace_contract,
@@ -786,23 +772,6 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     mech_marketplace_request_config.payment_type = payment_type
 
     verify_tools(tools, service_id, chain_config)
-
-    with open(IMECH_ABI_PATH, encoding="utf-8") as f:
-        abi = json.load(f)
-
-    (
-        mech_request_event_signature,
-        mech_deliver_event_signature,
-    ) = get_mech_event_signatures(abi=abi)
-
-    register_event_handlers(
-        wss=wss,
-        mech_contract_address=priority_mech_address,
-        marketplace_contract_address=marketplace_contract_address,
-        crypto=crypto,
-        mech_request_signature=mech_request_event_signature,
-        marketplace_deliver_signature=marketplace_deliver_event_signature,
-    )
 
     if not use_prepaid:
         price = max_delivery_rate * num_requests
@@ -863,6 +832,10 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         # set price 0 to not send any msg.value in request transaction for nvm type mech
         price = 0
 
+    # from block to be used to search for onchain events
+    w3 = ledger_api.api.eth
+    latest_block = w3.block_number
+
     if not use_offchain:
         print("Sending Mech Marketplace request...")
         transaction_digest = send_marketplace_request(
@@ -909,7 +882,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
         data_urls = wait_for_marketplace_data_url(
             request_ids=request_ids,
-            wss=wss,
+            from_block=latest_block,
             marketplace_contract=mech_marketplace_contract,
             deliver_signature=mech_deliver_event_signature,
             ledger_api=ledger_api,
