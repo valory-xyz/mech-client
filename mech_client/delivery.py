@@ -63,7 +63,7 @@ async def watch_for_marketplace_data(  # pylint: disable=too-many-arguments, unu
             if len(request_ids_data) == len(request_ids):
                 return request_ids_data
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(f"Exception {repr(e)}")
         return None
 
@@ -126,6 +126,6 @@ async def watch_for_mech_data_url(  # pylint: disable=too-many-arguments, unused
 
             time.sleep(WAIT_SLEEP)
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(f"Exception {repr(e)}")
         return None
