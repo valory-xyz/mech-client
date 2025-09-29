@@ -392,22 +392,19 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
                 return transaction_digest
 
             function = marketplace_contract.functions[method_name](**method_args)
-            # @todo how to set proper gas limit
             transaction = function.build_transaction(
                 {
                     "chainId": int(ledger_api._chain_id),
-                    "gas": 1000000,
+                    "gas": 0,
                     "nonce": get_safe_nonce(ethereum_client, safe_address),
                 }
             )
-            # @todo how to set proper gas limit
             transaction_digest = send_safe_tx(
                 ethereum_client=ethereum_client,
                 tx_data=transaction["data"],
                 to_adress=marketplace_contract.address,
                 safe_address=safe_address,
                 signer_pkey=crypto.private_key,
-                gas=1000000,
                 value=price,
             )
             return transaction_digest.hex()
@@ -703,7 +700,6 @@ def send_safe_tx(
     to_adress: str,
     safe_address: str,
     signer_pkey: str,
-    gas: int,
     value: int = 0,
 ) -> Optional[str]:
     """Send a Safe transaction"""
@@ -712,13 +708,17 @@ def send_safe_tx(
         safe_address, ethereum_client
     )
 
+    estimated_gas = safe.estimate_tx_gas_with_safe(
+        to=to_adress, value=value, data=bytes.fromhex(tx_data[2:]), operation=0
+    )
+
     # Build, sign and send the safe transaction
     safe_tx = safe.build_multisig_tx(
         to=to_adress,
         value=value,
         data=bytes.fromhex(tx_data[2:]),
         operation=0,
-        safe_tx_gas=gas,
+        safe_tx_gas=estimated_gas,
         base_gas=0,
         gas_price=0,
         gas_token=ADDRESS_ZERO,
