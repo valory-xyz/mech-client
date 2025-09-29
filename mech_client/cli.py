@@ -107,17 +107,17 @@ def my_configure_local_config(
 @click.group(name="mechx")  # type: ignore
 @click.version_option(__version__, prog_name="mechx")
 @click.option(
-    "--agent-mode",
+    "--client-mode",
     is_flag=True,
-    help="Enables agent mode",
+    help="Enables client mode",
 )
 @click.pass_context
-def cli(ctx: click.Context, agent_mode: bool) -> None:
+def cli(ctx: click.Context, client_mode: bool) -> None:
     """Command-line tool for interacting with mechs."""
     ctx.ensure_object(dict)
-    ctx.obj["agent_mode"] = agent_mode
+    ctx.obj["client_mode"] = client_mode
 
-    if agent_mode:
+    if not client_mode:
         click.echo("Agent mode enabled")
         operate = OperateApp()
         operate.setup()
@@ -222,7 +222,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
-        agent_mode = ctx.obj.get("agent_mode", False)
+        client_mode = ctx.obj.get("client_mode", False)
+        agent_mode = not client_mode
         click.echo(f"Running interact with agent_mode={agent_mode}")
 
         extra_attributes_dict: Dict[str, Any] = {}
