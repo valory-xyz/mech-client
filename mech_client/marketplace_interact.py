@@ -248,7 +248,7 @@ def approve_price_tokens(
         to_adress=token_contract.address,
         safe_address=safe_address,
         signer_pkey=crypto.private_key,
-        value=price,
+        value=0,
     )
     return transaction_digest.hex()
 
