@@ -104,6 +104,35 @@ def my_configure_local_config(
     return config
 
 
+def fetch_agent_mode_data() -> Tuple[str, str]:
+    operate = OperateApp()
+    keys_manager = KeysManager(
+        path=operate._keys,  # pylint: disable=protected-access
+        logger=operate.wallet_manager.logger,
+    )
+    service_manager = operate.service_manager()
+    service_config_id = service_manager.json[0]["service_config_id"]
+    service = operate.service_manager().load(service_config_id)
+
+    agent_eoa_key = keys_manager.get(service.agent_addresses[0]).private_key
+    safe = service.chain_configs["gnosis"].chain_data.multisig
+
+    # @todo temp hack
+    with tempfile.NamedTemporaryFile(
+        dir=BASE_DIR,
+        mode="w",
+        suffix=".txt",
+        delete=False,  # Handle cleanup manually
+    ) as temp_file:
+        temp_file.write(agent_eoa_key)
+        temp_file.flush()
+        temp_file.close()  # Close the file before reading
+
+        key = temp_file.name
+
+    return (safe, key)
+
+
 @click.group(name="mechx")  # type: ignore
 @click.version_option(__version__, prog_name="mechx")
 @click.option(
@@ -249,30 +278,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 
             safe = ""
             if agent_mode:
-                operate = OperateApp()
-                keys_manager = KeysManager(
-                    path=operate._keys,  # pylint: disable=protected-access
-                    logger=operate.wallet_manager.logger,
-                )
-                service_manager = operate.service_manager()
-                service_config_id = service_manager.json[0]["service_config_id"]
-                service = operate.service_manager().load(service_config_id)
-
-                agent_eoa_key = keys_manager.get(service.agent_addresses[0]).private_key
-                safe = service.chain_configs["gnosis"].chain_data.multisig
-
-                # @todo temp hack
-                with tempfile.NamedTemporaryFile(
-                    dir=BASE_DIR,
-                    mode="w",
-                    suffix=".txt",
-                    delete=False,  # Handle cleanup manually
-                ) as temp_file:
-                    temp_file.write(agent_eoa_key)
-                    temp_file.flush()
-                    temp_file.close()  # Close the file before reading
-
-                    key = temp_file.name
+                safe, key = fetch_agent_mode_data()
 
             marketplace_interact_(
                 prompts=prompts,
@@ -570,13 +576,26 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
     help="Path to private key to use for deposit",
 )
 def deposit_native(
+    ctx: click.Context,
     amount_to_deposit: str,
     key: Optional[str],
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Native balance for prepaid requests."""
+    client_mode = ctx.obj.get("client_mode", False)
+    agent_mode = not client_mode
+    click.echo(f"Running deposit native with agent_mode={agent_mode}")
+
+    safe = ""
+    if agent_mode:
+        safe, key = fetch_agent_mode_data()
+
     deposit_native_main(
-        amount=amount_to_deposit, private_key_path=key, chain_config=chain_config
+        agent_mode=agent_mode,
+        safe_address=safe,
+        amount=amount_to_deposit,
+        private_key_path=key,
+        chain_config=chain_config,
     )
 
 
