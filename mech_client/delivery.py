@@ -47,25 +47,20 @@ async def watch_for_marketplace_data(  # pylint: disable=too-many-arguments, unu
     :return: The data received from on-chain.
     :rtype: Any
     """
-    try:
-        request_ids_data = {}
-        while True:
-            for request_id in request_ids:
-                request_id_info = marketplace_contract.functions.mapRequestIdInfos(
-                    bytes.fromhex(request_id)
-                ).call()
-                delivery_mech = request_id_info[DELIVERY_MECH_INDEX]
-                if delivery_mech != ADDRESS_ZERO:
-                    request_ids_data.update({request_id: delivery_mech})
+    request_ids_data = {}
+    while True:
+        for request_id in request_ids:
+            request_id_info = marketplace_contract.functions.mapRequestIdInfos(
+                bytes.fromhex(request_id)
+            ).call()
+            delivery_mech = request_id_info[DELIVERY_MECH_INDEX]
+            if delivery_mech != ADDRESS_ZERO:
+                request_ids_data.update({request_id: delivery_mech})
 
-                time.sleep(WAIT_SLEEP)
+            time.sleep(WAIT_SLEEP)
 
-            if len(request_ids_data) == len(request_ids):
-                return request_ids_data
-
-    except Exception as e:  # pylint: disable=broad-except
-        print(f"Exception {repr(e)}")
-        return None
+        if len(request_ids_data) == len(request_ids):
+            return request_ids_data
 
 
 async def watch_for_mech_data_url(  # pylint: disable=too-many-arguments, unused-argument, too-many-locals
@@ -111,23 +106,18 @@ async def watch_for_mech_data_url(  # pylint: disable=too-many-arguments, unused
         request_id_bytes, _, delivery_data_bytes = decode(data_types, data_bytes)
         return request_id_bytes, delivery_data_bytes
 
-    try:
-        while True:
-            logs = get_logs()
-            for log in logs:
-                event_data = get_event_data(log)
-                request_id, delivery_data = (data.hex() for data in event_data)
-                if request_id in results:
-                    continue
+    while True:
+        logs = get_logs()
+        for log in logs:
+            event_data = get_event_data(log)
+            request_id, delivery_data = (data.hex() for data in event_data)
+            if request_id in results:
+                continue
 
-                if request_id in request_ids:
-                    results[request_id] = IPFS_URL_TEMPLATE.format(delivery_data)
+            if request_id in request_ids:
+                results[request_id] = IPFS_URL_TEMPLATE.format(delivery_data)
 
-                if len(results) == len(request_ids):
-                    return results
+            if len(results) == len(request_ids):
+                return results
 
-            time.sleep(WAIT_SLEEP)
-
-    except Exception as e:  # pylint: disable=broad-except
-        print(f"Exception {repr(e)}")
-        return None
+        time.sleep(WAIT_SLEEP)
