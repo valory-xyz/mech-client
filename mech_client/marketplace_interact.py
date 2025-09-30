@@ -117,11 +117,36 @@ CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
 }
 
 
+def fetch_mech_deliver_event_signature(
+    ledger_api: EthereumApi,
+    priority_mech_address: str,
+) -> str:
+    """
+    Fetchs the mech's deliver event signature.
+
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param priority_mech_address: Requested mech address
+    :type priority_mech_address: str
+    :return: The event signature.
+    :rtype: str
+    """
+    with open(IMECH_ABI_PATH, encoding="utf-8") as f:
+        abi = json.load(f)
+
+    mech_contract = get_contract(
+        contract_address=priority_mech_address, abi=abi, ledger_api=ledger_api
+    )
+    deliver_event_abi = mech_contract.events.Deliver().abi
+    mech_deliver_event_signature = event_abi_to_log_topic(deliver_event_abi)
+    return mech_deliver_event_signature.hex()
+
+
 def fetch_mech_info(
     ledger_api: EthereumApi,
     mech_marketplace_contract: Web3Contract,
     priority_mech_address: str,
-) -> Tuple[str, int, int, str, str]:
+) -> Tuple[str, int, int, str]:
     """
     Fetchs the info of the requested mech.
 
@@ -131,8 +156,8 @@ def fetch_mech_info(
     :type mech_marketplace_contract: Web3Contract
     :param priority_mech_address: Requested mech address
     :type priority_mech_address: str
-    :return: The mech info containing payment_type, service_id, max_delivery_rate, mech_payment_balance_tracker, mech_deliver_event_signature.
-    :rtype: Tuple[str, int, int, str, str]
+    :return: The mech info containing payment_type, service_id, max_delivery_rate and mech_payment_balance_tracker.
+    :rtype: Tuple[str, int, int, str]
     """
 
     with open(IMECH_ABI_PATH, encoding="utf-8") as f:
@@ -156,15 +181,11 @@ def fetch_mech_info(
         print("  - Invalid mech type detected.")
         sys.exit(1)
 
-    deliver_event_abi = mech_contract.events.Deliver().abi
-    mech_deliver_event_signature = event_abi_to_log_topic(deliver_event_abi)
-
     return (
         payment_type,
         service_id,
         max_delivery_rate,
         mech_payment_balance_tracker,
-        mech_deliver_event_signature.hex(),
     )
 
 
@@ -759,7 +780,6 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         service_id,
         max_delivery_rate,
         mech_payment_balance_tracker,
-        mech_deliver_event_signature,
     ) = fetch_mech_info(
         ledger_api,
         mech_marketplace_contract,
@@ -767,6 +787,10 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     )
     mech_marketplace_request_config.delivery_rate = max_delivery_rate
     mech_marketplace_request_config.payment_type = payment_type
+
+    mech_deliver_event_signature = fetch_mech_deliver_event_signature(
+        ledger_api, priority_mech_address
+    )
 
     verify_tools(tools, service_id, chain_config)
 
