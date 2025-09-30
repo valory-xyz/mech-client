@@ -612,13 +612,28 @@ def deposit_native(
     help="Path to private key to use for deposit",
 )
 def deposit_token(
+    ctx: click.Context,
+    agent_mode: bool,
+    safe_address: str,
     amount_to_deposit: str,
     key: Optional[str],
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Token balance for prepaid requests."""
+    client_mode = ctx.obj.get("client_mode", False)
+    agent_mode = not client_mode
+    click.echo(f"Running deposit native with agent_mode={agent_mode}")
+
+    safe = ""
+    if agent_mode:
+        safe, key = fetch_agent_mode_data()
+
     deposit_token_main(
-        amount=amount_to_deposit, private_key_path=key, chain_config=chain_config
+        agent_mode=agent_mode,
+        safe_address=safe,
+        amount=amount_to_deposit,
+        private_key_path=key,
+        chain_config=chain_config,
     )
 
 

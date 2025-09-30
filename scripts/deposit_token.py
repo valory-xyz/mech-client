@@ -24,6 +24,9 @@ from typing import Optional
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from dataclasses import asdict
 from web3.contract import Contract as Web3Contract
+from web3.constants import ADDRESS_ZERO
+from safe_eth.eth import EthereumClient  # pylint:disable=import-error
+from safe_eth.safe import Safe  # pylint:disable=import-error
 
 
 from mech_client.interact import (
@@ -36,6 +39,53 @@ from .utils import (
     get_token_balance_tracker_contract,
 )
 from mech_client.wss import wait_for_receipt
+
+
+def send_safe_tx(
+    ethereum_client: EthereumClient,
+    tx_data: str,
+    to_adress: str,
+    safe_address: str,
+    signer_pkey: str,
+    value: int = 0,
+) -> Optional[str]:
+    """Send a Safe transaction"""
+    # Get the safe
+    safe = Safe(  # pylint:disable=abstract-class-instantiated
+        safe_address, ethereum_client
+    )
+
+    estimated_gas = safe.estimate_tx_gas_with_safe(
+        to=to_adress, value=value, data=bytes.fromhex(tx_data[2:]), operation=0
+    )
+
+    # Build, sign and send the safe transaction
+    safe_tx = safe.build_multisig_tx(
+        to=to_adress,
+        value=value,
+        data=bytes.fromhex(tx_data[2:]),
+        operation=0,
+        safe_tx_gas=estimated_gas,
+        base_gas=0,
+        gas_price=0,
+        gas_token=ADDRESS_ZERO,
+        refund_receiver=ADDRESS_ZERO,
+    )
+    safe_tx.sign(signer_pkey)
+    try:
+        tx_hash, _ = safe_tx.execute(signer_pkey)
+        return tx_hash
+    except Exception as e:
+        print(f"Exception while sending a safe transaction: {e}")
+        return False
+
+
+def get_safe_nonce(ethereum_client: EthereumClient, safe_address: str) -> int:
+    """Get the Safe nonce"""
+    safe = Safe(  # pylint:disable=abstract-class-instantiated
+        safe_address, ethereum_client
+    )
+    return safe.retrieve_nonce()
 
 
 def check_token_balance(token_contract: Web3Contract, sender: str, amount: int) -> None:
@@ -56,6 +106,9 @@ def check_token_balance(token_contract: Web3Contract, sender: str, amount: int) 
 def approve(
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
+    ethereum_client: EthereumClient,
+    agent_mode: bool,
+    safe_address: str,
     token_contract: Web3Contract,
     token_balance_tracker_contract: Web3Contract,
     amount: int,
@@ -65,22 +118,48 @@ def approve(
     print("Sending approve tx")
     try:
         tx_args = {"sender_address": sender, "value": 0, "gas": 60000}
-        raw_transaction = ledger_api.build_transaction(
-            contract_instance=token_contract,
-            method_name="approve",
-            method_args={
-                "_to": token_balance_tracker_contract.address,
-                "_value": amount,
-            },
-            tx_args=tx_args,
-            raise_on_try=True,
+        method_name = "approve"
+        method_args = {
+            "_to": token_balance_tracker_contract.address,
+            "_value": amount,
+        }
+
+        if not agent_mode:
+            raw_transaction = ledger_api.build_transaction(
+                contract_instance=token_contract,
+                method_name="approve",
+                method_args={
+                    "_to": token_balance_tracker_contract.address,
+                    "_value": amount,
+                },
+                tx_args=tx_args,
+                raise_on_try=True,
+            )
+            signed_transaction = crypto.sign_transaction(raw_transaction)
+            transaction_digest = ledger_api.send_signed_transaction(
+                signed_transaction,
+                raise_on_try=True,
+            )
+            return transaction_digest
+
+        function = token_contract.functions[method_name](**method_args)
+        transaction = function.build_transaction(
+            {
+                "chainId": int(ledger_api._chain_id),
+                "gas": 0,
+                "nonce": get_safe_nonce(ethereum_client, safe_address),
+            }
         )
-        signed_transaction = crypto.sign_transaction(raw_transaction)
-        transaction_digest = ledger_api.send_signed_transaction(
-            signed_transaction,
-            raise_on_try=True,
+        transaction_digest = send_safe_tx(
+            ethereum_client=ethereum_client,
+            tx_data=transaction["data"],
+            to_adress=token_contract.address,
+            safe_address=safe_address,
+            signer_pkey=crypto.private_key,
+            value=0,
         )
-        return transaction_digest
+        return transaction_digest.hex()
+
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
         return str(e)
@@ -89,6 +168,9 @@ def approve(
 def deposit(
     ledger_api: EthereumApi,
     crypto: EthereumCrypto,
+    ethereum_client: EthereumClient,
+    agent_mode: bool,
+    safe_address: str,
     token_balance_tracker_contract: Web3Contract,
     amount: int,
 ) -> str:
@@ -97,25 +179,50 @@ def deposit(
     print("Sending deposit tx")
     try:
         tx_args = {"sender_address": sender, "value": 0, "gas": 100000}
-        raw_transaction = ledger_api.build_transaction(
-            contract_instance=token_balance_tracker_contract,
-            method_name="deposit",
-            method_args={"amount": amount},
-            tx_args=tx_args,
-            raise_on_try=True,
+        method_name = "deposit"
+        method_args = {"amount": amount}
+
+        if not agent_mode:
+            raw_transaction = ledger_api.build_transaction(
+                contract_instance=token_balance_tracker_contract,
+                method_name=method_name,
+                method_args=method_args,
+                tx_args=tx_args,
+                raise_on_try=True,
+            )
+            signed_transaction = crypto.sign_transaction(raw_transaction)
+            transaction_digest = ledger_api.send_signed_transaction(
+                signed_transaction,
+                raise_on_try=True,
+            )
+            return transaction_digest
+
+        function = token_balance_tracker_contract.functions[method_name](**method_args)
+        transaction = function.build_transaction(
+            {
+                "chainId": int(ledger_api._chain_id),
+                "gas": 0,
+                "nonce": get_safe_nonce(ethereum_client, safe_address),
+            }
         )
-        signed_transaction = crypto.sign_transaction(raw_transaction)
-        transaction_digest = ledger_api.send_signed_transaction(
-            signed_transaction,
-            raise_on_try=True,
+        transaction_digest = send_safe_tx(
+            ethereum_client=ethereum_client,
+            tx_data=transaction["data"],
+            to_adress=token_balance_tracker_contract.address,
+            safe_address=safe_address,
+            signer_pkey=crypto.private_key,
+            value=0,
         )
-        return transaction_digest
+        return transaction_digest.hex()
+
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
         return str(e)
 
 
 def main(
+    agent_mode: bool,
+    safe_address: str,
     amount: str,
     private_key_path: Optional[str] = None,
     chain_config: Optional[str] = None,
@@ -129,6 +236,8 @@ def main(
     private_key_path = private_key_path or PRIVATE_KEY_FILE_PATH
 
     mech_config = get_mech_config(chain_config)
+    ledger_rpc = mech_config.ledger_config.address
+    ethereum_client = EthereumClient(ledger_rpc)
     ledger_config = mech_config.ledger_config
     ledger_api = EthereumApi(**asdict(ledger_config))
 
@@ -151,6 +260,9 @@ def main(
     approve_tx = approve(
         crypto,
         ledger_api,
+        ethereum_client,
+        agent_mode,
+        safe_address,
         token_contract,
         token_balance_tracker_contract,
         amount_to_deposit,
@@ -169,6 +281,9 @@ def main(
     deposit_tx = deposit(
         ledger_api,
         crypto,
+        ethereum_client,
+        agent_mode,
+        safe_address,
         token_balance_tracker_contract,
         amount_to_deposit,
     )
