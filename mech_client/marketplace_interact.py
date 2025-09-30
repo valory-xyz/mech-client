@@ -175,6 +175,9 @@ def fetch_mech_info(
 def approve_price_tokens(
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
+    ethereum_client: EthereumClient,
+    agent_mode: bool,
+    safe_address: str,
     wrapped_token: str,
     mech_payment_balance_tracker: str,
     price: int,
@@ -213,19 +216,41 @@ def approve_price_tokens(
         sys.exit(1)
 
     tx_args = {"sender_address": sender, "value": 0, "gas": 60000}
-    raw_transaction = ledger_api.build_transaction(
-        contract_instance=token_contract,
-        method_name="approve",
-        method_args={"_to": mech_payment_balance_tracker, "_value": price},
-        tx_args=tx_args,
-        raise_on_try=True,
+    method_name = "approve"
+    method_args = {"_to": mech_payment_balance_tracker, "_value": price}
+
+    if not agent_mode:
+        raw_transaction = ledger_api.build_transaction(
+            contract_instance=token_contract,
+            method_name=method_name,
+            method_args=method_args,
+            tx_args=tx_args,
+            raise_on_try=True,
+        )
+        signed_transaction = crypto.sign_transaction(raw_transaction)
+        transaction_digest = ledger_api.send_signed_transaction(
+            signed_transaction,
+            raise_on_try=True,
+        )
+        return transaction_digest
+
+    function = token_contract.functions[method_name](**method_args)
+    transaction = function.build_transaction(
+        {
+            "chainId": int(ledger_api._chain_id),
+            "gas": 0,
+            "nonce": get_safe_nonce(ethereum_client, safe_address),
+        }
     )
-    signed_transaction = crypto.sign_transaction(raw_transaction)
-    transaction_digest = ledger_api.send_signed_transaction(
-        signed_transaction,
-        raise_on_try=True,
+    transaction_digest = send_safe_tx(
+        ethereum_client=ethereum_client,
+        tx_data=transaction["data"],
+        to_adress=token_contract.address,
+        safe_address=safe_address,
+        signer_pkey=crypto.private_key,
+        value=price,
     )
-    return transaction_digest
+    return transaction_digest.hex()
 
 
 def fetch_requester_nvm_subscription_balance(
@@ -882,7 +907,14 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             print("Token Mech detected, approving wrapped token for price payment...")
             price_token = CHAIN_TO_PRICE_TOKEN[chain_id]
             approve_tx = approve_price_tokens(
-                crypto, ledger_api, price_token, mech_payment_balance_tracker, price
+                crypto,
+                ledger_api,
+                ethereum_client,
+                agent_mode,
+                safe_address,
+                price_token,
+                mech_payment_balance_tracker,
+                price,
             )
             if not approve_tx:
                 print("Unable to approve allowance")
