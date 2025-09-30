@@ -151,9 +151,9 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
         operate = OperateApp()
         operate.setup()
 
-        sys.modules["operate.quickstart.run_service"].configure_local_config = (
-            my_configure_local_config
-        )
+        sys.modules[
+            "operate.quickstart.run_service"
+        ].configure_local_config = my_configure_local_config
 
         run_service(
             operate=operate,

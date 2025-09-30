@@ -1,8 +1,8 @@
 from typing import Optional
 
-from web3.constants import ADDRESS_ZERO
 from safe_eth.eth import EthereumClient  # pylint:disable=import-error
 from safe_eth.safe import Safe  # pylint:disable=import-error
+from web3.constants import ADDRESS_ZERO
 
 
 def send_safe_tx(
