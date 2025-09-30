@@ -37,8 +37,6 @@ from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from eth_utils import to_checksum_address
 from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
-from safe_eth.eth import EthereumClient  # pylint:disable=import-error
-from safe_eth.safe import Safe  # pylint:disable=import-error
 
 from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.interact import (
@@ -60,6 +58,7 @@ from mech_client.wss import (
     watch_for_marketplace_data_url_from_wss,
     watch_for_marketplace_request_ids,
 )
+from mech_client.safe import get_safe_nonce, send_safe_tx, EthereumClient
 
 
 # false positives for [B105:hardcoded_password_string] Possible hardcoded password
@@ -717,53 +716,6 @@ def verify_tools(tools: tuple, service_id: int, chain_config: Optional[str]) -> 
         raise ValueError(
             f"Tool(s) {invalid_tools} not found in mech tools: {mech_tools}"
         )
-
-
-def send_safe_tx(
-    ethereum_client: EthereumClient,
-    tx_data: str,
-    to_adress: str,
-    safe_address: str,
-    signer_pkey: str,
-    value: int = 0,
-) -> Optional[str]:
-    """Send a Safe transaction"""
-    # Get the safe
-    safe = Safe(  # pylint:disable=abstract-class-instantiated
-        safe_address, ethereum_client
-    )
-
-    estimated_gas = safe.estimate_tx_gas_with_safe(
-        to=to_adress, value=value, data=bytes.fromhex(tx_data[2:]), operation=0
-    )
-
-    # Build, sign and send the safe transaction
-    safe_tx = safe.build_multisig_tx(
-        to=to_adress,
-        value=value,
-        data=bytes.fromhex(tx_data[2:]),
-        operation=0,
-        safe_tx_gas=estimated_gas,
-        base_gas=0,
-        gas_price=0,
-        gas_token=ADDRESS_ZERO,
-        refund_receiver=ADDRESS_ZERO,
-    )
-    safe_tx.sign(signer_pkey)
-    try:
-        tx_hash, _ = safe_tx.execute(signer_pkey)
-        return tx_hash
-    except Exception as e:
-        print(f"Exception while sending a safe transaction: {e}")
-        return False
-
-
-def get_safe_nonce(ethereum_client: EthereumClient, safe_address: str) -> int:
-    """Get the Safe nonce"""
-    safe = Safe(  # pylint:disable=abstract-class-instantiated
-        safe_address, ethereum_client
-    )
-    return safe.retrieve_nonce()
 
 
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
