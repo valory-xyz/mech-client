@@ -53,7 +53,15 @@ async def watch_for_marketplace_data(  # pylint: disable=too-many-arguments, unu
             request_id_info = marketplace_contract.functions.mapRequestIdInfos(
                 bytes.fromhex(request_id)
             ).call()
+
+            # return empty data which is handled in the main method
+            if len(request_id_info) <= DELIVERY_MECH_INDEX:
+                return request_ids_data
+
             delivery_mech = request_id_info[DELIVERY_MECH_INDEX]
+            if not isinstance(delivery_mech, str) or not delivery_mech.startswith("0x"):
+                return request_id_info
+
             if delivery_mech != ADDRESS_ZERO:
                 request_ids_data.update({request_id: delivery_mech})
 

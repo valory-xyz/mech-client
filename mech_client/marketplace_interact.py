@@ -550,6 +550,11 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
         marketplace_data_result = await future
         requests_by_delivery_mech = defaultdict(list)
         results = {}
+
+        # return with empty data is result is unexpected
+        if len(marketplace_data_result) == 0:
+            return results
+
         for request_id, delivery_mech in marketplace_data_result.items():
             requests_by_delivery_mech[delivery_mech].append(request_id)
 
@@ -912,6 +917,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         )
 
         if not data_urls:
+            print("Cannot find any data urls for the request(s)")
             return None
 
         if is_nvm_mech:
