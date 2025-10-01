@@ -519,6 +519,7 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     marketplace_contract: Web3Contract,
     deliver_signature: str,
     ledger_api: EthereumApi,
+    timeout: Optional[float] = None,
 ) -> Any:
     """
     Wait for data from on-chain/off-chain.
@@ -533,6 +534,8 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     :type deliver_signature: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param timeout: Timeout to wait for the onchain data
+    :type timeout: float
     :return: The data received from on-chain.
     :rtype: Any
     """
@@ -543,6 +546,7 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
         data = await watch_for_marketplace_data(
             request_ids=request_ids,
             marketplace_contract=marketplace_contract,
+            timeout=timeout,
         )
         return data
 
@@ -914,6 +918,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             marketplace_contract=mech_marketplace_contract,
             deliver_signature=mech_deliver_event_signature,
             ledger_api=ledger_api,
+            timeout=timeout,
         )
 
         if not data_urls:

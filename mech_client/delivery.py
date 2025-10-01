@@ -20,7 +20,7 @@
 """Onchain delivery helpers."""
 
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 from aea_ledger_ethereum import EthereumApi
 from eth_abi import decode
@@ -30,12 +30,14 @@ from web3.contract import Contract as Web3Contract
 
 WAIT_SLEEP = 3.0
 DELIVERY_MECH_INDEX = 1
+DEFAULT_TIMEOUT = 900.0  # 15mins
 IPFS_URL_TEMPLATE = "https://gateway.autonolas.tech/ipfs/f01701220{}"
 
 
 async def watch_for_marketplace_data(  # pylint: disable=too-many-arguments, unused-argument, too-many-locals
     request_ids: List[str],
     marketplace_contract: Web3Contract,
+    timeout: Optional[float] = None,
 ) -> Any:
     """
     Watches for data on-chain.
@@ -48,6 +50,9 @@ async def watch_for_marketplace_data(  # pylint: disable=too-many-arguments, unu
     :rtype: Any
     """
     request_ids_data: Dict = {}
+    start_time = time.time()
+    # either use the timeout supplied by user or the default timeout of 15mins
+    timeout = timeout or DEFAULT_TIMEOUT
     while True:
         for request_id in request_ids:
             request_id_info = marketplace_contract.functions.mapRequestIdInfos(
@@ -66,6 +71,11 @@ async def watch_for_marketplace_data(  # pylint: disable=too-many-arguments, unu
                 request_ids_data.update({request_id: delivery_mech})
 
             time.sleep(WAIT_SLEEP)
+
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= timeout:
+                print("Timeout reached. Breaking the loop and returning empty data.")
+                return request_ids_data
 
         if len(request_ids_data) == len(request_ids):
             return request_ids_data
