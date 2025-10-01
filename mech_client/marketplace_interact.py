@@ -854,6 +854,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         price = 0
 
     # from block to be used to search for onchain events
+    # and is selected before the request is sent
+    # so searching for deliver events in the logs will not be missed
     w3 = ledger_api.api.eth
     latest_block = w3.block_number
 
