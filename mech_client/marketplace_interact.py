@@ -569,6 +569,7 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
                 mech_contract_address=delivery_mech,
                 mech_deliver_signature=deliver_signature,
                 ledger_api=ledger_api,
+                timeout=timeout,
             )
             results.update(data)
 

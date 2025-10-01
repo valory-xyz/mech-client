@@ -89,6 +89,7 @@ async def watch_for_mech_data_url(  # pylint: disable=too-many-arguments, unused
     mech_contract_address: str,
     mech_deliver_signature: str,
     ledger_api: EthereumApi,
+    timeout: Optional[float] = None,
 ) -> Any:
     """
     Watches for data on-chain.
@@ -103,11 +104,16 @@ async def watch_for_mech_data_url(  # pylint: disable=too-many-arguments, unused
     :type mech_deliver_signature: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param timeout: Timeout to wait for the onchain data
+    :type timeout: float
     :return: The data received from on-chain.
     :rtype: Any
     """
 
     results = {}
+    start_time = time.time()
+    # either use the timeout supplied by user or the default timeout of 15mins
+    timeout = timeout or DEFAULT_TIMEOUT
 
     def get_logs() -> List:
         logs = ledger_api.api.eth.get_logs(
@@ -141,3 +147,7 @@ async def watch_for_mech_data_url(  # pylint: disable=too-many-arguments, unused
                 return results
 
         time.sleep(WAIT_SLEEP)
+        elapsed_time = time.time() - start_time
+        if elapsed_time >= timeout:
+            print("Timeout reached. Breaking the loop and returning empty data.")
+            return results
