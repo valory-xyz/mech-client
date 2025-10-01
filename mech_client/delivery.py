@@ -20,7 +20,7 @@
 """Onchain delivery helpers."""
 
 import time
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from aea_ledger_ethereum import EthereumApi
 from eth_abi import decode
@@ -46,6 +46,8 @@ async def watch_for_marketplace_data(  # pylint: disable=too-many-arguments, unu
     :type request_ids: List[str]
     :param marketplace_contract: The marketplace contract instance.
     :type marketplace_contract: Web3Contract
+    :param timeout: Timeout to wait for the onchain data
+    :type timeout: float
     :return: The data received from on-chain.
     :rtype: Any
     """
