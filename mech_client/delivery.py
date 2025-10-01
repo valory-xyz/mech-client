@@ -47,7 +47,7 @@ async def watch_for_marketplace_data(  # pylint: disable=too-many-arguments, unu
     :return: The data received from on-chain.
     :rtype: Any
     """
-    request_ids_data = {}
+    request_ids_data: Dict = {}
     while True:
         for request_id in request_ids:
             request_id_info = marketplace_contract.functions.mapRequestIdInfos(

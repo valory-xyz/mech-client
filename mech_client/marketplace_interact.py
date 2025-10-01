@@ -549,7 +549,7 @@ def wait_for_marketplace_data_url(  # pylint: disable=too-many-arguments, unused
     async def _wait_for_mech_data(future) -> Any:  # type: ignore
         marketplace_data_result = await future
         requests_by_delivery_mech = defaultdict(list)
-        results = {}
+        results: Dict = {}
 
         # return with empty data is result is unexpected
         if len(marketplace_data_result) == 0:
