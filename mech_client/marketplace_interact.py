@@ -197,7 +197,9 @@ def approve_price_tokens(
     :return: The transaction digest.
     :rtype: str
     """
-    sender = crypto.address
+    # Tokens will be on the safe and EOA pays for gas
+    # so for agent mode, sender has to be safe
+    sender = safe_address or crypto.address
 
     with open(ITOKEN_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
@@ -648,6 +650,7 @@ def wait_for_offchain_marketplace_data(mech_offchain_url: str, request_id: str) 
 def check_prepaid_balances(
     crypto: Crypto,
     ledger_api: EthereumApi,
+    safe_address: str,
     mech_payment_balance_tracker: str,
     payment_type: str,
     max_delivery_rate: int,
@@ -666,7 +669,7 @@ def check_prepaid_balances(
     :param max_delivery_rate: The max_delivery_rate of the mech
     :type max_delivery_rate: int
     """
-    requester = crypto.address
+    requester = safe_address or crypto.address
 
     if payment_type in [PaymentType.NATIVE.value, PaymentType.TOKEN.value]:
         payment_type_name = PaymentType(payment_type).name.lower()
@@ -888,6 +891,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         check_prepaid_balances(
             crypto,
             ledger_api,
+            safe_address,
             mech_payment_balance_tracker,
             payment_type,
             max_delivery_rate,

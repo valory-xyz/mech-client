@@ -64,7 +64,9 @@ def approve(
     token_balance_tracker_contract: Web3Contract,
     amount: int,
 ) -> str:
-    sender = crypto.address
+    # Tokens will be on the safe and EOA pays for gas
+    # so for agent mode, sender has to be safe
+    sender = safe_address or crypto.address
 
     print("Sending approve tx")
     try:
@@ -125,7 +127,9 @@ def deposit(
     token_balance_tracker_contract: Web3Contract,
     amount: int,
 ) -> str:
-    sender = crypto.address
+    # Tokens will be on the safe and EOA pays for gas
+    # so for agent mode, sender has to be safe
+    sender = safe_address or crypto.address
 
     print("Sending deposit tx")
     try:
@@ -198,15 +202,18 @@ def main(
         )
     crypto = EthereumCrypto(private_key_path=private_key_path)
 
-    print(f"Sender address: {crypto.address}")
-
     chain_id = mech_config.ledger_config.chain_id
     token_balance_tracker_contract = get_token_balance_tracker_contract(
         ledger_api, chain_id
     )
     token_contract = get_token_contract(ledger_api, chain_id)
 
-    check_token_balance(token_contract, crypto.address, amount_to_deposit)
+    # Tokens will be on the safe and EOA pays for gas
+    # so for agent mode, sender has to be safe
+    sender = safe_address or crypto.address
+    print(f"Sender address: {sender}")
+
+    check_token_balance(token_contract, sender, amount_to_deposit)
 
     approve_tx = approve(
         crypto,

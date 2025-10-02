@@ -575,6 +575,7 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="Path to private key to use for deposit",
 )
+@click.pass_context
 def deposit_native(
     ctx: click.Context,
     amount_to_deposit: str,
@@ -611,10 +612,9 @@ def deposit_native(
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="Path to private key to use for deposit",
 )
+@click.pass_context
 def deposit_token(
     ctx: click.Context,
-    agent_mode: bool,
-    safe_address: str,
     amount_to_deposit: str,
     key: Optional[str],
     chain_config: Optional[str] = None,
