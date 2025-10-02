@@ -1,23 +1,13 @@
 name: mech_client
 author: valory
 version: 0.1.0
-description: The mech_client to allow interacting with onchain mechs
+description: The mech_client service to allow interacting with onchain mechs
 aea_version: '>=2.0.0, <3.0.0'
 license: Apache-2.0
 fingerprint:
-  README.md: bafybeidoybzzjch4djhhafqm4e4jcrpaqmlthntcnonlsjtowwpykbc5xi
+  README.md: bafybeibgcfkkosavrzc5oubkvrmq467dmpns2h54iwnlfaxlrbam5f6z5y
 fingerprint_ignore_patterns: []
 number_of_agents: 1
-agent: valory/mech_client:0.1.0:bafybeif5l4s3vckmqxujoxmrpusm4xta2puha47nxtoz4fgeqlg7izqg44
+agent: valory/mech_client:0.1.0:bafybeiffdoovoiqbibymi5v2dqzpxyocq722g7fvwx5chxz7lrtbiyfxdy
 deployment: {}
 dependencies: {}
----
-public_id: valory/ledger:0.19.0
-type: connection
-config:
-  ledger_apis:
-    ethereum:
-      address: ${MECH_CLIENT_RPC:str:http://host.docker.internal:8545}
-      chain_id: 1
-      poa_chain: false
-      default_gas_price_strategy: eip1559
