@@ -1,9 +1,9 @@
 {
     "name": "Mech Client (agent mode)",
-    "hash": "bafybeigb5a6ptwtfx5wpnvqv6mp5jg6dpjt5scgjgnq74d4mri2i7vntbm",
-    "description": "The mech client requests tasks to AI mechs.",
+    "hash": "bafybeiczb3blzzvwjnfqmyphve3qudad5mnfjrv7yvrthsiofw7alj437q",
+    "description": "The mech_client service to allow interacting with on-chain mechs",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
-    "service_version": "v0.9.0",
+    "service_version": "v0.1.0",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
