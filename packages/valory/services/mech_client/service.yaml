@@ -1,0 +1,13 @@
+name: mech_client
+author: valory
+version: 0.1.0
+description: The mech_client service to allow interacting with on-chain mechs
+aea_version: '>=2.0.0, <3.0.0'
+license: Apache-2.0
+fingerprint:
+  README.md: bafybeibgcfkkosavrzc5oubkvrmq467dmpns2h54iwnlfaxlrbam5f6z5y
+fingerprint_ignore_patterns: []
+number_of_agents: 1
+agent: valory/mech_client:0.1.0:bafybeifom2jvlftyujm55w7di4itlnoy2xrpj6s4heelynicspe73ezsee
+deployment: {}
+dependencies: {}

@@ -20,10 +20,22 @@
 """Mech client CLI module."""
 import json
 import os
+import sys
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from click import ClickException
+from operate.cli import OperateApp
+from operate.constants import NO_STAKING_PROGRAM_ID
+from operate.operate_types import ServiceTemplate
+from operate.quickstart.run_service import (
+    QuickstartConfig,
+    load_local_config,
+    run_service,
+)
+from operate.services.manage import KeysManager
 from tabulate import tabulate  # type: ignore
 
 from mech_client import __version__
@@ -58,10 +70,97 @@ from scripts.deposit_token import main as deposit_token_main
 from scripts.nvm_subscribe import main as nvm_subscribe_main
 
 
+CURR_DIR = Path(__file__).resolve().parent
+BASE_DIR = CURR_DIR.parent
+GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
+
+
+def my_configure_local_config(
+    template: ServiceTemplate, operate: "OperateApp"
+) -> QuickstartConfig:
+    """Configure local quickstart configuration."""
+    config = load_local_config(operate=operate, service_name=template["name"])
+
+    if config.rpc is None:
+        config.rpc = {}
+
+    for chain in template["configurations"]:
+        config.rpc[chain] = os.getenv("MECHX_RPC_URL")
+
+    config.principal_chain = template["home_chain"]
+
+    # set chain configs in the service template
+    for chain in template["configurations"]:
+        template["configurations"][chain] |= {
+            "staking_program_id": NO_STAKING_PROGRAM_ID,
+            "rpc": config.rpc[chain],
+            "cost_of_bond": 1,
+        }
+
+    if config.user_provided_args is None:
+        config.user_provided_args = {}
+
+    config.store()
+    return config
+
+
+def fetch_agent_mode_data() -> Tuple[str, str]:
+    operate = OperateApp()
+    keys_manager = KeysManager(
+        path=operate._keys,  # pylint: disable=protected-access
+        logger=operate.wallet_manager.logger,
+    )
+    service_manager = operate.service_manager()
+    service_config_id = service_manager.json[0]["service_config_id"]
+    service = operate.service_manager().load(service_config_id)
+
+    agent_eoa_key = keys_manager.get(service.agent_addresses[0]).private_key
+    safe = service.chain_configs["gnosis"].chain_data.multisig
+
+    # @todo temp hack
+    with tempfile.NamedTemporaryFile(
+        dir=BASE_DIR,
+        mode="w",
+        suffix=".txt",
+        delete=False,  # Handle cleanup manually
+    ) as temp_file:
+        temp_file.write(agent_eoa_key)
+        temp_file.flush()
+        temp_file.close()  # Close the file before reading
+
+        key = temp_file.name
+
+    return (safe, key)
+
+
 @click.group(name="mechx")  # type: ignore
 @click.version_option(__version__, prog_name="mechx")
-def cli() -> None:
+@click.option(
+    "--client-mode",
+    is_flag=True,
+    help="Enables client mode",
+)
+@click.pass_context
+def cli(ctx: click.Context, client_mode: bool) -> None:
     """Command-line tool for interacting with mechs."""
+    ctx.ensure_object(dict)
+    ctx.obj["client_mode"] = client_mode
+
+    if not client_mode:
+        click.echo("Agent mode enabled")
+        operate = OperateApp()
+        operate.setup()
+
+        sys.modules[
+            "operate.quickstart.run_service"
+        ].configure_local_config = my_configure_local_config
+
+        run_service(
+            operate=operate,
+            config_path=GNOSIS_TEMPLATE_CONFIG_PATH,
+            build_only=True,
+            skip_dependency_check=False,
+        )
 
 
 @click.command()
@@ -133,7 +232,9 @@ def cli() -> None:
     type=str,
     help="Id of the mech's chain configuration (stored configs/mechs.json)",
 )
+@click.pass_context
 def interact(  # pylint: disable=too-many-arguments,too-many-locals
+    ctx: click.Context,
     prompts: tuple,
     agent_id: int,
     priority_mech: str,
@@ -150,6 +251,10 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
+        client_mode = ctx.obj.get("client_mode", False)
+        agent_mode = not client_mode
+        click.echo(f"Running interact with agent_mode={agent_mode}")
+
         extra_attributes_dict: Dict[str, Any] = {}
         if extra_attribute:
             for pair in extra_attribute:
@@ -171,9 +276,15 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                     f"The number of prompts ({len(prompts)}) must match the number of tools ({len(tools)})"
                 )
 
+            safe = ""
+            if agent_mode:
+                safe, key = fetch_agent_mode_data()
+
             marketplace_interact_(
                 prompts=prompts,
                 priority_mech=priority_mech,
+                agent_mode=agent_mode,
+                safe_address=safe,
                 use_prepaid=use_prepaid,
                 use_offchain=use_offchain,
                 mech_offchain_url=mech_offchain_url,
@@ -459,14 +570,28 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="Path to private key to use for deposit",
 )
+@click.pass_context
 def deposit_native(
+    ctx: click.Context,
     amount_to_deposit: str,
     key: Optional[str],
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Native balance for prepaid requests."""
+    client_mode = ctx.obj.get("client_mode", False)
+    agent_mode = not client_mode
+    click.echo(f"Running deposit native with agent_mode={agent_mode}")
+
+    safe = ""
+    if agent_mode:
+        safe, key = fetch_agent_mode_data()
+
     deposit_native_main(
-        amount=amount_to_deposit, private_key_path=key, chain_config=chain_config
+        agent_mode=agent_mode,
+        safe_address=safe,
+        amount=amount_to_deposit,
+        private_key_path=key,
+        chain_config=chain_config,
     )
 
 
@@ -482,14 +607,28 @@ def deposit_native(
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="Path to private key to use for deposit",
 )
+@click.pass_context
 def deposit_token(
+    ctx: click.Context,
     amount_to_deposit: str,
     key: Optional[str],
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Token balance for prepaid requests."""
+    client_mode = ctx.obj.get("client_mode", False)
+    agent_mode = not client_mode
+    click.echo(f"Running deposit native with agent_mode={agent_mode}")
+
+    safe = ""
+    if agent_mode:
+        safe, key = fetch_agent_mode_data()
+
     deposit_token_main(
-        amount=amount_to_deposit, private_key_path=key, chain_config=chain_config
+        agent_mode=agent_mode,
+        safe_address=safe,
+        amount=amount_to_deposit,
+        private_key_path=key,
+        chain_config=chain_config,
     )
 
 
