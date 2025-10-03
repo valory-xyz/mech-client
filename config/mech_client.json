@@ -1,6 +1,6 @@
 {
     "name": "Mech Client (agent mode)",
-    "hash": "bafybeiczb3blzzvwjnfqmyphve3qudad5mnfjrv7yvrthsiofw7alj437q",
+    "hash": "bafybeifciqowfd4no7vjkbjk7eqd2mipx4b5jovjql6gcrbil7tdknqut4",
     "description": "The mech_client service to allow interacting with on-chain mechs",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
     "service_version": "v0.1.0",
@@ -20,6 +20,5 @@
             }
         }
     },
-    "env_variables": {
-    }
+    "env_variables": {}
 }
