@@ -16,6 +16,8 @@ CHAIN_TO_ENVS: Dict[str, Path] = {
 
 
 def main(
+    agent_mode: bool,
+    safe_address: str,
     private_key_path: str,
     chain_config: str,
 ) -> None:
@@ -40,11 +42,14 @@ def main(
     PLAN_DID = os.environ["PLAN_DID"]
     NETWORK = os.environ["NETWORK_NAME"]
     CHAIN_ID = int(os.environ["CHAIN_ID"])
-    SENDER = Web3().eth.account.from_key(WALLET_PVT_KEY).address
+    # NVM Subscription has to be purchased for the safe and EOA pays for gas
+    # so for agent mode, sender has to be safe
+    EOA = Web3().eth.account.from_key(WALLET_PVT_KEY).address
+    SENDER = safe_address or EOA
 
     print(f"Sender address: {SENDER}")
 
-    manager = NVMSubscriptionManager(NETWORK, WALLET_PVT_KEY)
+    manager = NVMSubscriptionManager(NETWORK, SENDER, agent_mode, safe_address)
     tx_receipt = manager.create_subscription(PLAN_DID, WALLET_PVT_KEY, CHAIN_ID)
 
     print("Subscription created successfully")

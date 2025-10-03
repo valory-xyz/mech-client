@@ -22,6 +22,8 @@ from .contracts.token import SubscriptionToken
 from .contracts.nft import SubscriptionNFT
 from .contracts.subscription_provider import SubscriptionProvider
 
+from mech_client.safe import EthereumClient, get_safe_nonce, send_safe_tx
+
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -49,16 +51,18 @@ class NVMSubscriptionManager:
     using a series of smart contracts.
     """
 
-    def __init__(self, network: str, private_key: str):
+    def __init__(self, network: str, sender: str, agent_mode: bool, safe_address: str):
         """
         Initialize the SubscriptionManager, including contract instances
         and Web3 connection.
         """
-        self.url = os.getenv("MECHX_CHAIN_RPC", CONFIGS[network]["nvm"]['web3ProviderUri'])
+        self.url = os.getenv("MECHX_RPC_URL", CONFIGS[network]["nvm"]['web3ProviderUri'])
         self.web3 = Web3(Web3.HTTPProvider(self.url))
+        self.agent_mode = agent_mode
+        self.safe_address = safe_address
+        self.ethereum_client = EthereumClient(self.url)
 
-        self.account = Account.from_key(private_key)
-        self.sender: ChecksumAddress = self.web3.to_checksum_address(self.account.address)
+        self.sender: ChecksumAddress = self.web3.to_checksum_address(sender)
 
         self.did_registry = DIDRegistryContract(self.web3)
         self.nft_sales = NFTSalesTemplateContract(self.web3)
@@ -173,6 +177,12 @@ class NVMSubscriptionManager:
                 logger.error("Approve transaction failed")
                 return {"status": "failed", "receipt": dict(receipt)}
 
+
+        if not self.agent_mode:
+            nonce = self.web3.eth.get_transaction_count(self.sender)
+        else:
+            nonce = get_safe_nonce(self.ethereum_client, self.safe_address)
+
         # Build transaction
         tx = self.nft_sales.build_create_agreement_tx(
             agreement_id_seed=agreement_id_seed,
@@ -187,12 +197,24 @@ class NVMSubscriptionManager:
             amounts=self.amounts,
             receivers=receivers,
             sender=self.sender,
+            nonce=nonce,
             value_eth=value_eth,
             chain_id=chain_id
         )
 
-        signed_tx = self.web3.eth.account.sign_transaction(tx, private_key=wallet_pvt_key)
-        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        if not self.agent_mode:
+            signed_tx = self.web3.eth.account.sign_transaction(tx, private_key=wallet_pvt_key)
+            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        else:
+            tx_hash = send_safe_tx(
+                ethereum_client=self.ethereum_client,
+                tx_data=tx["data"],
+                to_adress=self.nft_sales.address,
+                safe_address=self.safe_address,
+                signer_pkey=wallet_pvt_key,
+                value=self.web3.to_wei(value_eth, "ether"),
+            )
+
         receipt = self.web3.eth.wait_for_transaction_receipt(transaction_hash=tx_hash)
 
         if receipt["status"] == 1:
@@ -236,20 +258,37 @@ class NVMSubscriptionManager:
             "0x" + transfer_id.hex(),
         )
 
+        if not self.agent_mode:
+            nonce = self.web3.eth.get_transaction_count(self.sender)
+        else:
+            nonce = get_safe_nonce(self.ethereum_client, self.safe_address)
+
         fulfill_tx = self.subscription_provider.build_create_fulfill_tx(
             agreement_id_seed="0x" + agreement_id.hex(),
             did=did,
             fulfill_for_delegate_params=fulfill_for_delegate_params,
             fulfill_params=fulfill_params,
             sender=self.sender,
+            nonce=nonce,
             value_eth=0,
             chain_id=chain_id,
         )
 
-        signed_tx = self.web3.eth.account.sign_transaction(
-            fulfill_tx, private_key=wallet_pvt_key
-        )
-        tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        if not self.agent_mode:
+            signed_tx = self.web3.eth.account.sign_transaction(
+                fulfill_tx, private_key=wallet_pvt_key
+            )
+            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        else:
+            tx_hash = send_safe_tx(
+                ethereum_client=self.ethereum_client,
+                tx_data=fulfill_tx["data"],
+                to_adress=self.subscription_provider.address,
+                safe_address=self.safe_address,
+                signer_pkey=wallet_pvt_key,
+                value=0,
+            )
+
         receipt = self.web3.eth.wait_for_transaction_receipt(transaction_hash=tx_hash)
 
         user_credit_balance_after = self.subscription_nft.get_balance(

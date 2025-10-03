@@ -648,12 +648,27 @@ def deposit_token(
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="Path to private key to use for deposit",
 )
+@click.pass_context
 def nvm_subscribe(
+    ctx: click.Context,
     key: str,
     chain_config: str,
 ) -> None:
     """Allows to purchase nvm subscription for nvm mech requests."""
-    nvm_subscribe_main(private_key_path=key, chain_config=chain_config)
+    client_mode = ctx.obj.get("client_mode", False)
+    agent_mode = not client_mode
+    click.echo(f"Running deposit native with agent_mode={agent_mode}")
+
+    safe = ""
+    if agent_mode:
+        safe, key = fetch_agent_mode_data()
+
+    nvm_subscribe_main(
+        agent_mode=agent_mode,
+        safe_address=safe,
+        private_key_path=key,
+        chain_config=chain_config,
+    )
 
 
 @click.command(name="fetch-mm-mechs-info")
