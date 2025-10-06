@@ -56,7 +56,7 @@ from mech_client.to_png import main as to_png_main
 from scripts.deposit_native import main as deposit_native_main
 from scripts.deposit_token import main as deposit_token_main
 from scripts.nvm_subscribe import main as nvm_subscribe_main
-from mech_client.deliver import deliver_via_safe
+from mech_client.post_deliver import deliver_via_safe
 
 
 @click.group(name="mechx")  # type: ignore
