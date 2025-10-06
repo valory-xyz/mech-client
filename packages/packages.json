@@ -1,7 +1,7 @@
 {
     "dev": {
-        "agent/valory/mech_client/0.1.0": "bafybeifom2jvlftyujm55w7di4itlnoy2xrpj6s4heelynicspe73ezsee",
-        "service/valory/mech_client/0.1.0": "bafybeifciqowfd4no7vjkbjk7eqd2mipx4b5jovjql6gcrbil7tdknqut4"
+        "agent/valory/mech_client/0.1.0": "bafybeifxorv7uf5qzsr52bztkucaqa7ljflp6kotr4cwagb2rsn6en6dtm",
+        "service/valory/mech_client/0.1.0": "bafybeig3dyk4udnsuh7gut5gyxke7bwdctodamllkecmljm2utdqc6tn2u"
     },
     "third_party": {
         "protocol/valory/abci/0.1.0": "bafybeiatodhboj6a3p35x4f4b342lzk6ckxpud23awnqbxwjeon3k5y36u",

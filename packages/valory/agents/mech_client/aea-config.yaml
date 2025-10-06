@@ -1,7 +1,7 @@
 agent_name: mech_client
 author: valory
 version: 0.1.0
-description: The mech_client agent to allow interacting with on-chain mechs
+description: The mech_client agent for client interactions with on-chain mechs
 license: Apache-2.0
 aea_version: '>=2.0.0, <3.0.0'
 fingerprint:
