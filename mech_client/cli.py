@@ -73,6 +73,7 @@ from scripts.nvm_subscribe import main as nvm_subscribe_main
 CURR_DIR = Path(__file__).resolve().parent
 BASE_DIR = CURR_DIR.parent
 GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
+OPERATE_FOLDER_NAME = ".operate_mech_client"
 
 
 def my_configure_local_config(
@@ -148,7 +149,9 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
 
     if not client_mode:
         click.echo("Agent mode enabled")
-        operate = OperateApp()
+        home = Path.home()
+        operate_path = home.joinpath(OPERATE_FOLDER_NAME)
+        operate = OperateApp(operate_path)
         operate.setup()
 
         sys.modules[
