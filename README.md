@@ -1,6 +1,16 @@
 # Mech Client
 
-A basic client to interact with an AI Mech. [AI Mechs](https://github.com/valory-xyz/mech) allow users to post requests for AI tasks on-chain, and get their result delivered.
+A comprehensive client to interact with AI Mechs. [AI Mechs](https://github.com/valory-xyz/mech) allow users to post requests for AI tasks on-chain, and get their result delivered.
+
+## 🚀 New Features
+
+The mech client now includes advanced functionality for production mech operations:
+
+- **Post-Only Mode**: Send requests without waiting for delivery confirmation
+- **Marketplace Request Querying**: Query past requests with optional IPFS data enrichment
+- **Production Delivery**: Post delivery results via Gnosis Safe multi-signature wallets
+- **IPFS Integration**: Automatic upload to Autonolas Registry and data fetching
+- **Enhanced CLI**: New commands for delivery and advanced querying
 
 > **:warning: Warning** <br />
 > **This is a *hacky* alpha version of the client. Don't rely on it as production software.**
@@ -61,6 +71,7 @@ Commands:
   tools-for-agents List tools available for all agents or a specific agent.
   tool-description Get the description of a specific tool.
   tool_io_schema   Get the input/output schema of a specific tool.
+  deliver          Deliver result via Gnosis Safe to AgentMech.deliverToMarketplace.
 
  ```
 
@@ -136,7 +147,8 @@ where agent with `<agent_id>` will process `<prompt>` with the `<tool>` and defa
 Some useful options:
 
 - `--key <private_key_path>`: Specifies the path of the private key. The default value is `./ethereum_private_key.txt`.
-- `--tools  <name>`: Name of the tool to process the prompt. If you are aware about the tools that are provided by an agent you can directly provide its name using this option. If not provided, it will show a list of available tools for the agent so that you can select which one you want to use:
+- `--tools  <name>`: Name of the tool to process the prompt. If you are aware about the tools that are provided by an agent you can directly provide its name using this option. If not provided, it will show a list of available tools for the agent so that you can select which one you want to use.
+- `--post-only`: Send request and return immediately without waiting for delivery confirmation. Useful for fire-and-forget requests.
 
   ```text
   Select prompting tool
@@ -219,7 +231,8 @@ mechx interact --prompts <prompt> --priority-mech <priority mech address> --tool
 Additionally to other options which are the same as for legacy Mechs, this usage has the following option:
 
 `--use-prepaid <bool>`: use the prepaid method to send requests to a Mech via the Mech Marketplace. Defaults to False. <br>
-`--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Defaults to False.
+`--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Defaults to False. <br>
+`--post-only`: send request(s) and return immediately without waiting for delivery confirmation. Useful for fire-and-forget requests.
 > To use offchain requests using `--use-offchain` flag, export the `MECHX_MECH_OFFCHAIN_URL` env variable before sending requests. For example if you want to connect to a mech running locally, you can do the following
 ```bash
 export MECHX_MECH_OFFCHAIN_URL="http://localhost:8000/"
@@ -242,6 +255,169 @@ or <br>
 ```bash
 mechx interact --prompts <prompt-1> --prompts <prompt-2> --priority-mech <priority mech address> --tools <tool-1> --tools <tool-2> --chain-config <chain_config>
 ```
+
+### Query Marketplace Requests
+
+The mech client now supports querying past marketplace requests with optional IPFS data enrichment. This allows you to retrieve request history, check delivery status, and access the actual request metadata and delivery payloads.
+
+#### Basic Query Usage
+
+```python
+from mech_client.mech_marketplace_subgraph import query_mech_requests
+
+# Query recent requests
+requests = query_mech_requests(chain_config="base", limit=10)
+
+# Query requests by requester address
+requests = query_mech_requests(
+    chain_config="base", 
+    requester_address="0xcaf63282FBC500A0c09a1eCC8876b0d0f2A509f8",
+    limit=20
+)
+
+# Query requests by mech address
+requests = query_mech_requests(
+    chain_config="base",
+    mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+    limit=50
+)
+
+# Query requests by date range
+requests = query_mech_requests(
+    chain_config="base",
+    from_date="2024-01-01",
+    to_date="2024-01-31",
+    limit=100
+)
+```
+
+#### IPFS Data Enrichment
+
+The query function can optionally fetch and embed IPFS data for both request metadata and delivery payloads:
+
+```python
+# Query with IPFS data enrichment
+requests = query_mech_requests(
+    chain_config="base",
+    include_request_data=True,  # Fetch request metadata from IPFS
+    include_delivery_data=True,  # Fetch delivery payloads from IPFS
+    limit=10
+)
+
+# Access enriched data
+for request in requests:
+    print(f"Request ID: {request['requestId']}")
+    print(f"Requester: {request['requester']}")
+    print(f"Mech: {request['mech']}")
+    print(f"Timestamp: {request['timestamp']}")
+    
+    # Request metadata (if include_request_data=True)
+    if request.get('request_data'):
+        print(f"Request URL: {request['request_data']['url']}")
+        print(f"Request JSON: {request['request_data']['json']}")
+    
+    # Delivery payload (if include_delivery_data=True)
+    if request.get('delivery_data'):
+        print(f"Delivery URL: {request['delivery_data']['url']}")
+        print(f"Delivery JSON: {request['delivery_data']['json']}")
+```
+
+#### Query Parameters
+
+- `chain_config`: Chain configuration to use (e.g., "base", "gnosis")
+- `requester_address`: Filter by requester address (optional)
+- `mech_address`: Filter by priority mech address (optional)
+- `from_date`: Inclusive start date in YYYY-MM-DD format (optional)
+- `to_date`: Inclusive end date in YYYY-MM-DD format (optional)
+- `include_request_data`: Whether to fetch request IPFS metadata (default: False)
+- `include_delivery_data`: Whether to fetch delivery IPFS payloads (default: False)
+- `limit`: Maximum number of results to return (default: 100)
+- `offset`: Pagination offset (default: 0)
+
+### Deliver Results via Gnosis Safe
+
+The mech client now supports posting delivery results to the marketplace via Gnosis Safe multi-signature wallets. This is the production-ready method for mechs to deliver results to requests.
+
+#### CLI Usage
+
+```bash
+mechx deliver --request-id <request_id> --result-file <json_file> --target-mech <mech_address> --multisig <safe_address> --key <private_key_file> --chain-config <chain_config>
+```
+
+**Parameters:**
+- `--request-id`: The request ID (hex or decimal format)
+- `--result-file`: Path to JSON file containing the delivery result
+- `--target-mech`: AgentMech contract address
+- `--multisig`: Gnosis Safe address to execute the delivery
+- `--key`: Path to EOA private key file for Safe execution signer
+- `--chain-config`: Chain configuration to use (default: "base")
+
+**Example:**
+```bash
+mechx deliver \
+  --request-id 0x4f23d7dcf1fc02fd13bebace0327ed96f5d86f343d3a4a436c8f48e82c728d2d \
+  --result-file result.json \
+  --target-mech 0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7 \
+  --multisig 0x0ca9F2a6b6b4d8459f887C04f2D7de5442662392 \
+  --key ethereum_private_key.txt \
+  --chain-config base
+```
+
+#### Programmatic Usage
+
+```python
+from mech_client.deliver import deliver_via_safe
+
+# Prepare your result content
+result_content = {
+    "requestId": "0x4f23d7dcf1fc02fd13bebace0327ed96f5d86f343d3a4a436c8f48e82c728d2d",
+    "result": "Your AI-generated result here",
+    "metadata": {"model": "gpt-4", "tool": "text-generation"}
+}
+
+# Deliver via Safe
+delivery_result = deliver_via_safe(
+    chain_config="base",
+    request_id="0x4f23d7dcf1fc02fd13bebace0327ed96f5d86f343d3a4a436c8f48e82c728d2d",
+    result_content=result_content,
+    target_mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+    safe_address="0x0ca9F2a6b6b4d8459f887C04f2D7de5442662392",
+    private_key_path="ethereum_private_key.txt",
+    wait=True
+)
+
+print(f"Delivery transaction: {delivery_result['tx_hash']}")
+print(f"Status: {delivery_result['status']}")
+if delivery_result['status'] == 'confirmed':
+    print(f"Block: {delivery_result['block_number']}")
+    print(f"Gas used: {delivery_result['gas_used']}")
+```
+
+#### Delivery Process
+
+The delivery process involves several steps:
+
+1. **IPFS Upload**: The result JSON is uploaded to the Autonolas Registry IPFS
+2. **CID Processing**: The SHA256 digest is extracted from the IPFS CID
+3. **Smart Contract Call**: An `AgentMech.deliverToMarketplace` call is encoded
+4. **Safe Execution**: The call is executed via the Gnosis Safe multi-signature wallet
+5. **Confirmation**: The transaction is confirmed on-chain
+
+#### Requirements
+
+- **Gnosis Safe**: A properly configured multi-signature wallet
+- **Signer Key**: An EOA private key that's authorized to execute transactions on the Safe
+- **Sufficient Gas**: The signer EOA must have enough ETH for gas fees
+- **Safe Threshold**: The Safe must have the required number of signatures for execution
+
+#### Error Handling
+
+The delivery function includes comprehensive error handling:
+- IPFS upload failures
+- CID parsing errors
+- Smart contract encoding issues
+- Gas estimation problems
+- Transaction confirmation timeouts
 
 ### List marketplace mechs
 To list the top marketplace mechs based on deliveries, use the `fetch-mm-mechs-info` command. You can specify the chain you want to query. Please note that only the first 20 mechs sorted by number of deliveries will be shown.
@@ -551,6 +727,122 @@ This script will:
 
 In this case, the script is the same, except for the function result. When this function has no argument agent_id,
 the request is sent to the Mech Marketplace. The target Mech to which the request is relayed should be in the chain_config file (key `priority_mech_address`).
+
+#### Enhanced Programmatic Usage with New Features
+
+The mech client now supports advanced programmatic usage with the new querying and delivery features:
+
+```python
+from mech_client.mech_marketplace_subgraph import query_mech_requests
+from mech_client.deliver import deliver_via_safe
+from mech_client.marketplace_interact import marketplace_interact
+
+# 1. Send a post-only request (fire-and-forget)
+marketplace_interact(
+    prompts=["What is the weather like today?"],
+    priority_mech="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+    tools=["weather-tool"],
+    chain_config="base",
+    post_only=True  # Don't wait for delivery
+)
+
+# 2. Query requests with IPFS data enrichment
+requests = query_mech_requests(
+    chain_config="base",
+    mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+    include_request_data=True,
+    include_delivery_data=True,
+    limit=10
+)
+
+# 3. Process undelivered requests and deliver results
+for request in requests:
+    if not request.get('delivery_data'):  # No delivery yet
+        # Generate your AI result
+        ai_result = generate_ai_response(request['request_data']['json'])
+        
+        # Deliver the result
+        delivery_result = deliver_via_safe(
+            chain_config="base",
+            request_id=request['requestId'],
+            result_content=ai_result,
+            target_mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+            safe_address="0x0ca9F2a6b6b4d8459f887C04f2D7de5442662392",
+            private_key_path="ethereum_private_key.txt",
+            wait=True
+        )
+        print(f"Delivered {request['requestId']}: {delivery_result['tx_hash']}")
+```
+
+#### Complete Workflow Example
+
+Here's a complete example that demonstrates the full workflow:
+
+```python
+import json
+from mech_client.mech_marketplace_subgraph import query_mech_requests
+from mech_client.deliver import deliver_via_safe
+from mech_client.marketplace_interact import marketplace_interact
+
+def complete_mech_workflow():
+    """Complete workflow: send request, query status, deliver result."""
+    
+    # 1. Send a request
+    print("Sending request...")
+    marketplace_interact(
+        prompts=["Write a haiku about blockchain"],
+        priority_mech="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+        tools=["text-generation"],
+        chain_config="base",
+        post_only=True
+    )
+    
+    # 2. Query for recent requests
+    print("Querying recent requests...")
+    requests = query_mech_requests(
+        chain_config="base",
+        mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+        include_request_data=True,
+        include_delivery_data=True,
+        limit=5
+    )
+    
+    # 3. Process undelivered requests
+    for request in requests:
+        if not request.get('delivery_data'):
+            print(f"Processing request {request['requestId']}")
+            
+            # Simulate AI processing
+            request_data = request['request_data']['json']
+            prompt = request_data.get('prompt', '')
+            
+            # Generate result (replace with your AI logic)
+            result = {
+                "requestId": request['requestId'],
+                "result": f"AI-generated response for: {prompt}",
+                "metadata": {"model": "gpt-4", "tool": "text-generation"}
+            }
+            
+            # Deliver result
+            try:
+                delivery_result = deliver_via_safe(
+                    chain_config="base",
+                    request_id=request['requestId'],
+                    result_content=result,
+                    target_mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+                    safe_address="0x0ca9F2a6b6b4d8459f887C04f2D7de5442662392",
+                    private_key_path="ethereum_private_key.txt",
+                    wait=True
+                )
+                print(f"✅ Delivered {request['requestId']}: {delivery_result['tx_hash']}")
+            except Exception as e:
+                print(f"❌ Failed to deliver {request['requestId']}: {e}")
+        else:
+            print(f"✅ Request {request['requestId']} already delivered")
+
+if __name__ == "__main__":
+    complete_mech_workflow()
+```
 
 ## Developer installation
 

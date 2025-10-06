@@ -56,6 +56,7 @@ from mech_client.to_png import main as to_png_main
 from scripts.deposit_native import main as deposit_native_main
 from scripts.deposit_token import main as deposit_token_main
 from scripts.nvm_subscribe import main as nvm_subscribe_main
+from mech_client.deliver import deliver_via_safe
 
 
 @click.group(name="mechx")  # type: ignore
@@ -133,6 +134,11 @@ def cli() -> None:
     type=str,
     help="Id of the mech's chain configuration (stored configs/mechs.json)",
 )
+@click.option(
+    "--post-only",
+    is_flag=True,
+    help="Send request and return immediately without waiting for delivery confirmation",
+)
 def interact(  # pylint: disable=too-many-arguments,too-many-locals
     prompts: tuple,
     agent_id: int,
@@ -147,6 +153,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
     chain_config: Optional[str] = None,
+    post_only: bool = False,
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
@@ -189,6 +196,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 timeout=timeout,
                 sleep=sleep,
                 chain_config=chain_config,
+                post_only=post_only,
             )
 
         else:
@@ -222,6 +230,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 timeout=timeout,
                 sleep=sleep,
                 chain_config=chain_config,
+                post_only=post_only,
             )
     except (ValueError, FileNotFoundError, Exception) as e:
         raise ClickException(str(e)) from e
@@ -579,6 +588,33 @@ cli.add_command(deposit_native)
 cli.add_command(deposit_token)
 cli.add_command(nvm_subscribe)
 cli.add_command(query_mm_mechs_info_cli)
+
+
+@click.command(name="deliver")
+@click.option("--request-id", required=True, type=str, help="Request ID (hex or decimal)")
+@click.option("--result-file", required=True, type=click.Path(exists=True, dir_okay=False), help="Path to JSON result file")
+@click.option("--target-mech", required=True, type=str, help="AgentMech contract address")
+@click.option("--multisig", required=True, type=str, help="Gnosis Safe address to execute the delivery")
+@click.option("--key", required=True, type=click.Path(exists=True, dir_okay=False), help="Path to EOA private key for Safe exec signer")
+@click.option("--chain-config", default="base", show_default=True, help="Chain config to use")
+def deliver_cli(request_id: str, result_file: str, target_mech: str, multisig: str, key: str, chain_config: str) -> None:
+    """Deliver result via Gnosis Safe to AgentMech.deliverToMarketplace (production path)."""
+    try:
+        with open(result_file, "r", encoding="utf-8") as f:
+            content = json.load(f)
+        res = deliver_via_safe(
+            chain_config=chain_config,
+            request_id=request_id,
+            result_content=content,
+            target_mech_address=target_mech,
+            safe_address=multisig,
+            private_key_path=key,
+            wait=True,
+        )
+        click.echo(json.dumps(res, indent=2))
+    except Exception as e:  # pylint: disable=broad-except
+        raise ClickException(str(e)) from e
+cli.add_command(deliver_cli)
 
 
 if __name__ == "__main__":

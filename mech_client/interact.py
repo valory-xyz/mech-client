@@ -61,7 +61,7 @@ AGENT_MECH_ABI_PATH = ABI_DIR_PATH / "AgentMech.json"
 
 MAX_RETRIES = 3
 WAIT_SLEEP = 3.0
-TIMEOUT = 60.0
+TIMEOUT = 300.0
 
 # Ignore a specific warning message
 warnings.filterwarnings("ignore", "The log with transaction hash.*")
@@ -518,6 +518,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
+    post_only: bool = False,
     chain_config: Optional[str] = None,
 ) -> Any:
     """
@@ -618,6 +619,13 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     print(f"  - Created on-chain request with ID {request_id}")
     print("")
 
+    if post_only:
+        return {
+            "transaction_hash": transaction_digest,
+            "transaction_url": transaction_url_formatted,
+            "request_id": request_id,
+        }
+
     print("Waiting for Mech deliver...")
     data_url = wait_for_data_url(
         request_id=request_id,
@@ -631,7 +639,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     )
     if data_url:
         print(f"  - Data arrived: {data_url}")
-        data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+        data = requests.get(f"{data_url}/{request_id}", timeout=60).json()
         print("  - Data from agent:")
         print(json.dumps(data, indent=2))
         return data

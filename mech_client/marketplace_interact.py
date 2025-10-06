@@ -663,6 +663,12 @@ def verify_tools(tools: tuple, service_id: int, chain_config: Optional[str]) -> 
         raise ValueError("Error while fetching mech tools data")
 
     mech_tools = mech_tools_data.get("tools", [])
+    
+    # Skip validation if mech has no metadata (zero hash) - assume tools are available
+    if not mech_tools:
+        print(f"Warning: Mech has no metadata, skipping tool validation for: {list(tools)}")
+        return
+    
     invalid_tools = [tool for tool in tools if tool not in mech_tools]
     if invalid_tools:
         raise ValueError(
@@ -683,6 +689,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
+    post_only: bool = False,
     chain_config: Optional[str] = None,
 ) -> Any:
     """
@@ -904,6 +911,14 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             )
         print("")
 
+        if post_only:
+            return {
+                "transaction_hash": transaction_digest,
+                "transaction_url": transaction_url_formatted,
+                "request_ids": request_ids,
+                "request_id_ints": request_id_ints,
+            }
+
         for request_id, request_id_int in zip(request_ids, request_id_ints):
             data_url = wait_for_marketplace_data_url(
                 request_id=request_id,
@@ -931,7 +946,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
                     )
 
                 print(f"  - Data arrived: {data_url}")
-                data = requests.get(f"{data_url}/{request_id_int}", timeout=30).json()
+                data = requests.get(f"{data_url}/{request_id_int}", timeout=60).json()
                 print("  - Data from agent:")
                 print(json.dumps(data, indent=2))
         return None
@@ -945,8 +960,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             crypto=crypto,
             marketplace_contract=mech_marketplace_contract,
             mech_offchain_url=mech_offchain_url,
-            prompt=prompts[0],
-            tool=tools[0],
+            prompt=prompts[i],
+            tool=tools[i],
             method_args_data=mech_marketplace_request_config,
             nonce=curr_nonce + i,
             extra_attributes=extra_attributes,
@@ -971,6 +986,12 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     # @note as we are directly querying data from done task list, we get the full data instead of the ipfs hash
     print("Waiting for Offchain Mech Marketplace deliver...")
 
+    if post_only:
+        return {
+            "responses": responses,
+            "request_ids": request_ids,
+        }
+
     for request_id in request_ids:
         data = wait_for_offchain_marketplace_data(
             mech_offchain_url=mech_offchain_url,
@@ -981,7 +1002,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             task_result = data["task_result"]
             data_url = IPFS_URL_TEMPLATE.format(task_result)
             print(f"  - Data arrived: {data_url}")
-            data = requests.get(f"{data_url}/{request_id}", timeout=30).json()
+            data = requests.get(f"{data_url}/{request_id}", timeout=60).json()
             print("  - Data from agent:")
             print(json.dumps(data, indent=2))
     return None

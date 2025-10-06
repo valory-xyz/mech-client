@@ -13,6 +13,7 @@ temp/
 .tox/
 __pycache__
 .env.DS_Store
+.env
 .idea/
 .vscode/
 *.swp
