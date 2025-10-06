@@ -701,6 +701,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
+    post_only: bool = False,
     chain_config: Optional[str] = None,
 ) -> Any:
     """
@@ -729,6 +730,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     :type timeout: float
     :param sleep: Amount of sleep before retrying the transaction
     :type sleep: float
+    :param post_only: Whether to return immediately after sending request without waiting for delivery
+    :type post_only: bool
     :param chain_config: Id of the mech's chain configuration (stored configs/mechs.json)
     :type chain_config: str:
     :rtype: Any
@@ -913,6 +916,14 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             )
         print("")
 
+        if post_only:
+            return {
+                "transaction_hash": transaction_digest,
+                "transaction_url": transaction_url_formatted,
+                "request_ids": request_ids,
+                "request_id_ints": request_id_ints,
+            }
+
         data_urls = wait_for_marketplace_data_url(
             request_ids=request_ids,
             from_block=latest_block,
@@ -979,6 +990,12 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     # @note as we are directly querying data from done task list, we get the full data instead of the ipfs hash
     print("Waiting for Offchain Mech Marketplace deliver...")
+
+    if post_only:
+        return {
+            "responses": responses,
+            "request_ids": request_ids,
+        }
 
     for request_id in request_ids:
         data = wait_for_offchain_marketplace_data(
