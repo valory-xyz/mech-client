@@ -187,11 +187,6 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 private_key_path=key,
                 tools=tools,
                 extra_attributes=extra_attributes_dict,
-                confirmation_type=(
-                    ConfirmationType(confirm)
-                    if confirm is not None
-                    else ConfirmationType.WAIT_FOR_BOTH
-                ),
                 retries=retries,
                 timeout=timeout,
                 sleep=sleep,
