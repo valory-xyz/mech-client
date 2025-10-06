@@ -21,7 +21,6 @@
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -35,8 +34,8 @@ from operate.quickstart.run_service import (
     load_local_config,
     run_service,
 )
-from operate.services.manage import KeysManager
 from tabulate import tabulate  # type: ignore
+from web3 import Web3
 
 from mech_client import __version__
 from mech_client.interact import ConfirmationType
@@ -74,6 +73,8 @@ CURR_DIR = Path(__file__).resolve().parent
 BASE_DIR = CURR_DIR.parent
 GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
 OPERATE_FOLDER_NAME = ".operate_mech_client"
+OPERATE_CONFIG_PATH = "services/sc-*/config.json"
+OPERATE_KEYS_DIR = "services/sc-*/deployment/agent_keys"
 
 
 def my_configure_local_config(
@@ -105,31 +106,35 @@ def my_configure_local_config(
     return config
 
 
-def fetch_agent_mode_data() -> Tuple[str, str]:
-    operate = OperateApp()
-    keys_manager = KeysManager(
-        path=operate._keys,  # pylint: disable=protected-access
-        logger=operate.wallet_manager.logger,
-    )
-    service_manager = operate.service_manager()
-    service_config_id = service_manager.json[0]["service_config_id"]
-    service = operate.service_manager().load(service_config_id)
+def fetch_agent_mode_data(chain_config: str) -> Tuple[str, str]:
+    home = Path.home()
+    operate_path = home.joinpath(OPERATE_FOLDER_NAME)
 
-    agent_eoa_key = keys_manager.get(service.agent_addresses[0]).private_key
-    safe = service.chain_configs["gnosis"].chain_data.multisig
+    # fetch the config path and extract the config data
+    matching_paths = operate_path.glob(OPERATE_CONFIG_PATH)
+    data = {}
+    for file_path in matching_paths:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            data = json.loads(content)
 
-    # @todo temp hack
-    with tempfile.NamedTemporaryFile(
-        dir=BASE_DIR,
-        mode="w",
-        suffix=".txt",
-        delete=False,  # Handle cleanup manually
-    ) as temp_file:
-        temp_file.write(agent_eoa_key)
-        temp_file.flush()
-        temp_file.close()  # Close the file before reading
+    safe = data["chain_configs"][chain_config]["chain_data"]["multisig"]
+    agent_address = data["chain_configs"][chain_config]["chain_data"]["instances"][0]
 
-        key = temp_file.name
+    # fetch the keys directory and iterate all agent keys
+    # until we find the matching one based on config data
+    matching_paths = operate_path.glob(OPERATE_KEYS_DIR)
+    for file_path in matching_paths:
+        for subfolder in file_path.iterdir():
+            if subfolder.is_dir():
+                key_file = next(subfolder.glob("*.txt"), None)
+                if key_file:
+                    key_address = (
+                        Web3().eth.account.from_key(open(key_file).read()).address
+                    )
+                    if key_address == agent_address:
+                        key = key_file
+                        break
 
     return (safe, key)
 
@@ -281,7 +286,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 
             safe = ""
             if agent_mode:
-                safe, key = fetch_agent_mode_data()
+                safe, key = fetch_agent_mode_data(chain_config)
 
             marketplace_interact_(
                 prompts=prompts,
@@ -587,7 +592,7 @@ def deposit_native(
 
     safe = ""
     if agent_mode:
-        safe, key = fetch_agent_mode_data()
+        safe, key = fetch_agent_mode_data(chain_config)
 
     deposit_native_main(
         agent_mode=agent_mode,
@@ -624,7 +629,7 @@ def deposit_token(
 
     safe = ""
     if agent_mode:
-        safe, key = fetch_agent_mode_data()
+        safe, key = fetch_agent_mode_data(chain_config)
 
     deposit_token_main(
         agent_mode=agent_mode,
@@ -659,7 +664,7 @@ def nvm_subscribe(
 
     safe = ""
     if agent_mode:
-        safe, key = fetch_agent_mode_data()
+        safe, key = fetch_agent_mode_data(chain_config)
 
     nvm_subscribe_main(
         agent_mode=agent_mode,
