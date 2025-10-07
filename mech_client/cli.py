@@ -78,6 +78,12 @@ OPERATE_KEYS_DIR = "services/sc-*/deployment/agent_keys"
 DEFAULT_NETWORK = "gnosis"
 
 
+def get_operate_path() -> Path:
+    home = Path.home()
+    operate_path = home.joinpath(OPERATE_FOLDER_NAME)
+    return operate_path
+
+
 def my_configure_local_config(
     template: ServiceTemplate, operate: "OperateApp"
 ) -> QuickstartConfig:
@@ -109,8 +115,7 @@ def my_configure_local_config(
 
 def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
     """Fetches the agent mode data of safe address and the EOA private key path"""
-    home = Path.home()
-    operate_path = home.joinpath(OPERATE_FOLDER_NAME)
+    operate_path = get_operate_path()
     safe = ""
     key = ""
     chain_config = chain_config or DEFAULT_NETWORK
@@ -164,21 +169,35 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
 
     if not client_mode:
         click.echo("Agent mode enabled")
-        home = Path.home()
-        operate_path = home.joinpath(OPERATE_FOLDER_NAME)
-        operate = OperateApp(operate_path)
-        operate.setup()
+        operate_path = get_operate_path()
+        if not operate_path.exists():
+            raise ClickException(
+                f"""Operate path doesnot exists at: {operate_path}. Setup agent mode using mechx setup-agent-mode."""
+            )
 
-        sys.modules[
-            "operate.quickstart.run_service"
-        ].configure_local_config = my_configure_local_config  # type: ignore
 
-        run_service(
-            operate=operate,
-            config_path=GNOSIS_TEMPLATE_CONFIG_PATH,
-            build_only=True,
-            skip_dependency_check=False,
-        )
+@click.command()
+@click.option(
+    "--chain-config",
+    type=str,
+    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+)
+def setup_agent_mode() -> None:
+    """Sets up the agent mode for users"""
+    operate_path = get_operate_path()
+    operate = OperateApp(operate_path)
+    operate.setup()
+
+    sys.modules[
+        "operate.quickstart.run_service"
+    ].configure_local_config = my_configure_local_config  # type: ignore
+
+    run_service(
+        operate=operate,
+        config_path=GNOSIS_TEMPLATE_CONFIG_PATH,
+        build_only=True,
+        skip_dependency_check=False,
+    )
 
 
 @click.command()
@@ -742,6 +761,7 @@ def query_mm_mechs_info_cli(
         return None
 
 
+cli.add_command(setup_agent_mode)
 cli.add_command(interact)
 cli.add_command(prompt_to_ipfs)
 cli.add_command(push_to_ipfs)
