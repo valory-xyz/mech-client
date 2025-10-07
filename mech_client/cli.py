@@ -75,6 +75,7 @@ GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
 OPERATE_FOLDER_NAME = ".operate_mech_client"
 OPERATE_CONFIG_PATH = "services/sc-*/config.json"
 OPERATE_KEYS_DIR = "services/sc-*/deployment/agent_keys"
+DEFAULT_NETWORK = "gnosis"
 
 
 def my_configure_local_config(
@@ -106,10 +107,13 @@ def my_configure_local_config(
     return config
 
 
-def fetch_agent_mode_data(chain_config: str) -> Tuple[str, str]:
+def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
     """Fetches the agent mode data of safe address and the EOA private key path"""
     home = Path.home()
     operate_path = home.joinpath(OPERATE_FOLDER_NAME)
+    safe = ""
+    key = ""
+    chain_config = chain_config or DEFAULT_NETWORK
 
     # fetch the config path and extract the config data
     matching_paths = operate_path.glob(OPERATE_CONFIG_PATH)
@@ -134,10 +138,10 @@ def fetch_agent_mode_data(chain_config: str) -> Tuple[str, str]:
                         Web3().eth.account.from_key(open(key_file).read()).address
                     )
                     if key_address == agent_address:
-                        key = key_file
+                        key = str(key_file)
                         break
 
-    return (safe, key)
+    return str(safe), key
 
 
 @click.group(name="mechx")  # type: ignore
@@ -162,7 +166,7 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
 
         sys.modules[
             "operate.quickstart.run_service"
-        ].configure_local_config = my_configure_local_config
+        ].configure_local_config = my_configure_local_config  # type: ignore
 
         run_service(
             operate=operate,
@@ -285,9 +289,13 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                     f"The number of prompts ({len(prompts)}) must match the number of tools ({len(tools)})"
                 )
 
-            safe = ""
             if agent_mode:
                 safe, key = fetch_agent_mode_data(chain_config)
+
+            if not safe or key:
+                raise ClickException(
+                    f"Cannot fetch safe or key data for the agent mode."
+                )
 
             marketplace_interact_(
                 prompts=prompts,
@@ -591,9 +599,11 @@ def deposit_native(
     agent_mode = not client_mode
     click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
-    safe = ""
     if agent_mode:
         safe, key = fetch_agent_mode_data(chain_config)
+
+    if not safe or key:
+        raise ClickException(f"Cannot fetch safe or key data for the agent mode.")
 
     deposit_native_main(
         agent_mode=agent_mode,
@@ -628,9 +638,11 @@ def deposit_token(
     agent_mode = not client_mode
     click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
-    safe = ""
     if agent_mode:
         safe, key = fetch_agent_mode_data(chain_config)
+
+    if not safe or key:
+        raise ClickException(f"Cannot fetch safe or key data for the agent mode.")
 
     deposit_token_main(
         agent_mode=agent_mode,
@@ -663,9 +675,11 @@ def nvm_subscribe(
     agent_mode = not client_mode
     click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
-    safe = ""
     if agent_mode:
         safe, key = fetch_agent_mode_data(chain_config)
+
+    if not safe or key:
+        raise ClickException(f"Cannot fetch safe or key data for the agent mode.")
 
     nvm_subscribe_main(
         agent_mode=agent_mode,

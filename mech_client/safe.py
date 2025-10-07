@@ -20,6 +20,7 @@
 """Mech client Safe Module."""
 from typing import Optional
 
+from hexbytes import HexBytes
 from safe_eth.eth import EthereumClient  # pylint:disable=import-error
 from safe_eth.safe import Safe  # pylint:disable=import-error
 from web3.constants import ADDRESS_ZERO
@@ -32,7 +33,7 @@ def send_safe_tx(
     safe_address: str,
     signer_pkey: str,
     value: int = 0,
-) -> Optional[str]:
+) -> Optional[HexBytes]:
     """Send a Safe transaction"""
     # Get the safe
     safe = Safe(  # pylint:disable=abstract-class-instantiated
@@ -61,7 +62,7 @@ def send_safe_tx(
         return tx_hash
     except Exception as e:
         print(f"Exception while sending a safe transaction: {e}")
-        return False
+        return None
 
 
 def get_safe_nonce(ethereum_client: EthereumClient, safe_address: str) -> int:
