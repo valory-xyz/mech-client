@@ -5,7 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a009b40b-cb50-465e-afdb-e3f40ebd484d" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/mech_client/marketplace_interact.py" beforeDir="false" afterPath="$PROJECT_DIR$/mech_client/marketplace_interact.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tox.ini" beforeDir="false" afterPath="$PROJECT_DIR$/tox.ini" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
