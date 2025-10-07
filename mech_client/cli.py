@@ -641,7 +641,7 @@ def deposit_token(
     """Deposits Token balance for prepaid requests."""
     client_mode = ctx.obj.get("client_mode", False)
     agent_mode = not client_mode
-    click.echo(f"Running deposit native with agent_mode={agent_mode}")
+    click.echo(f"Running deposit token with agent_mode={agent_mode}")
 
     if agent_mode:
         safe, key = fetch_agent_mode_data(chain_config)
@@ -678,7 +678,7 @@ def nvm_subscribe(
     """Allows to purchase nvm subscription for nvm mech requests."""
     client_mode = ctx.obj.get("client_mode", False)
     agent_mode = not client_mode
-    click.echo(f"Running deposit native with agent_mode={agent_mode}")
+    click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
 
     if agent_mode:
         safe, key = fetch_agent_mode_data(chain_config)
