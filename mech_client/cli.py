@@ -131,15 +131,20 @@ def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
     matching_paths = operate_path.glob(OPERATE_KEYS_DIR)
     for file_path in matching_paths:
         for subfolder in file_path.iterdir():
-            if subfolder.is_dir():
-                key_file = next(subfolder.glob("*.txt"), None)
-                if key_file:
-                    key_address = (
-                        Web3().eth.account.from_key(open(key_file).read()).address
-                    )
-                    if key_address == agent_address:
-                        key = str(key_file)
-                        break
+            if not subfolder.is_dir():
+                continue
+
+            key_file = next(subfolder.glob("*.txt"), None)
+            if not key_file:
+                continue
+
+            with open(key_file, "r", encoding="utf-8") as file:
+                content = file.read()
+
+            key_address = Web3().eth.account.from_key(content).address
+            if key_address == agent_address:
+                key = str(key_file)
+                break
 
     return str(safe), key
 
@@ -294,7 +299,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 
             if not safe or key:
                 raise ClickException(
-                    f"Cannot fetch safe or key data for the agent mode."
+                    "Cannot fetch safe or key data for the agent mode."
                 )
 
             marketplace_interact_(
@@ -603,7 +608,7 @@ def deposit_native(
         safe, key = fetch_agent_mode_data(chain_config)
 
     if not safe or key:
-        raise ClickException(f"Cannot fetch safe or key data for the agent mode.")
+        raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     deposit_native_main(
         agent_mode=agent_mode,
@@ -642,7 +647,7 @@ def deposit_token(
         safe, key = fetch_agent_mode_data(chain_config)
 
     if not safe or key:
-        raise ClickException(f"Cannot fetch safe or key data for the agent mode.")
+        raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     deposit_token_main(
         agent_mode=agent_mode,
@@ -679,7 +684,7 @@ def nvm_subscribe(
         safe, key = fetch_agent_mode_data(chain_config)
 
     if not safe or key:
-        raise ClickException(f"Cannot fetch safe or key data for the agent mode.")
+        raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     nvm_subscribe_main(
         agent_mode=agent_mode,
@@ -754,4 +759,4 @@ cli.add_command(query_mm_mechs_info_cli)
 
 
 if __name__ == "__main__":
-    cli()
+    cli()  # pylint: disable=no-value-for-parameter

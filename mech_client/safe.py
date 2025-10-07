@@ -26,7 +26,7 @@ from safe_eth.safe import Safe  # pylint:disable=import-error
 from web3.constants import ADDRESS_ZERO
 
 
-def send_safe_tx(
+def send_safe_tx(  # pylint: disable=too-many-arguments
     ethereum_client: EthereumClient,
     tx_data: str,
     to_adress: str,
@@ -60,7 +60,7 @@ def send_safe_tx(
     try:
         tx_hash, _ = safe_tx.execute(signer_pkey)
         return tx_hash
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(f"Exception while sending a safe transaction: {e}")
         return None
 

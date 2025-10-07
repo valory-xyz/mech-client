@@ -190,7 +190,7 @@ def fetch_mech_info(
     )
 
 
-def approve_price_tokens(
+def approve_price_tokens(  # pylint: disable=too-many-arguments, too-many-locals
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
     ethereum_client: EthereumClient,
@@ -263,7 +263,7 @@ def approve_price_tokens(
     function = token_contract.functions[method_name](**method_args)
     transaction = function.build_transaction(
         {
-            "chainId": int(ledger_api._chain_id),
+            "chainId": int(ledger_api._chain_id),  # pylint: disable=protected-access
             "gas": 0,
             "nonce": get_safe_nonce(ethereum_client, safe_address),
         }
@@ -451,7 +451,9 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
             function = marketplace_contract.functions[method_name](**method_args)
             transaction = function.build_transaction(
                 {
-                    "chainId": int(ledger_api._chain_id),
+                    "chainId": int(
+                        ledger_api._chain_id  # pylint: disable=protected-access
+                    ),
                     "gas": 0,
                     "nonce": get_safe_nonce(ethereum_client, safe_address),
                 }
@@ -678,7 +680,7 @@ def wait_for_offchain_marketplace_data(mech_offchain_url: str, request_id: str) 
             time.sleep(WAIT_SLEEP)
 
 
-def check_prepaid_balances(
+def check_prepaid_balances(  # pylint: disable=too-many-arguments
     crypto: Crypto,
     ledger_api: EthereumApi,
     safe_address: str,
