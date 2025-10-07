@@ -107,6 +107,7 @@ def my_configure_local_config(
 
 
 def fetch_agent_mode_data(chain_config: str) -> Tuple[str, str]:
+    """Fetches the agent mode data of safe address and the EOA private key path"""
     home = Path.home()
     operate_path = home.joinpath(OPERATE_FOLDER_NAME)
 
