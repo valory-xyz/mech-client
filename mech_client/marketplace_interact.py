@@ -29,8 +29,8 @@ from dataclasses import asdict, make_dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from queue import Empty, Queue  # pylint: disable=unused-import
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from queue import Empty
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING, Tuple, cast
 
 import requests
 from aea.crypto.base import Crypto
@@ -55,6 +55,10 @@ from mech_client.interact import (
 from mech_client.mech_marketplace_tool_management import get_mech_tools
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
 from mech_client.wss import wait_for_receipt, watch_for_marketplace_request_ids
+
+
+if TYPE_CHECKING:
+    from queue import Queue  # type: ignore
 
 
 # false positives for [B105:hardcoded_password_string] Possible hardcoded password
