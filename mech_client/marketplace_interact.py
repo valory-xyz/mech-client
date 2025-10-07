@@ -1163,7 +1163,7 @@ def send_marketplace_request_nonblocking(  # pylint: disable=too-many-arguments,
 
 
 def delivery_consumer_loop_status_only(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
-    pending: "Queue",  # queue of (rid_hex, from_block, t0)
+    pending: Queue,  # queue of (rid_hex, from_block, t0)
     marketplace_contract: Web3Contract,
     priority_mech_address: str,
     on_delivered: Callable,
