@@ -115,10 +115,10 @@ async def watch_for_mech_data_url(  # pylint: disable=too-many-arguments, unused
     # either use the timeout supplied by user or the default timeout of 15mins
     timeout = timeout or DEFAULT_TIMEOUT
 
-    def get_logs(from_block: int) -> List:
+    def get_logs(from_block_: int) -> List:
         logs = ledger_api.api.eth.get_logs(
             {
-                "fromBlock": from_block,
+                "fromBlock": from_block_,
                 "toBlock": "latest",
                 "address": mech_contract_address,
                 "topics": ["0x" + mech_deliver_signature],
