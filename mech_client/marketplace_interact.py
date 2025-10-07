@@ -207,6 +207,12 @@ def approve_price_tokens(
     :type crypto: EthereumCrypto
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param ethereum_client: The Ethereum Client used for interacting with the safe.
+    :type ethereum_client: EthereumClient
+    :param agent_mode: Specifies whether agent mode is active or not.
+    :type agent_mode: bool
+    :param safe_address: Specifies the safe address related to the configured service, empty is client mode.
+    :type safe_address: str
     :param wrapped_token: The wrapped token contract address.
     :type wrapped_token: str
     :param mech_payment_balance_tracker: Requested mech's balance tracker contract address
@@ -349,6 +355,8 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :type crypto: EthereumCrypto
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param ethereum_client: The Ethereum Client used for interacting with the safe.
+    :type ethereum_client: EthereumClient
     :param marketplace_contract: The mech marketplace contract instance.
     :type marketplace_contract: Web3Contract
     :param gas_limit: Gas limit.
@@ -357,6 +365,10 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :type prompts: tuple
     :param tools: The requested tools.
     :type tools: tuple
+    :param agent_mode: Specifies whether agent mode is active or not.
+    :type agent_mode: bool
+    :param safe_address: Specifies the safe address related to the configured service, empty is client mode.
+    :type safe_address: str
     :param method_args_data: Method data to use to call the marketplace contract request
     :type method_args_data: MechMarketplaceRequestConfig
     :param extra_attributes: Extra attributes to be included in the request metadata.
@@ -681,6 +693,8 @@ def check_prepaid_balances(
     :type crypto: Crypto
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param safe_address: Specifies the safe address related to the configured service, empty is client mode.
+    :type safe_address: str
     :param mech_payment_balance_tracker: The mech's balance tracker contract address.
     :type mech_payment_balance_tracker: str
     :param payment_type: The payment type of the mech.
@@ -761,8 +775,12 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     :param prompts: The interaction prompts.
     :type prompts: tuple
-    :param priority_mech: Priority mech address to use (Optional)
+    :param priority_mech: Priority mech address to use
     :type priority_mech: str
+    :param agent_mode: Specifies whether agent mode is active or not.
+    :type agent_mode: bool
+    :param safe_address: Specifies the safe address related to the configured service, empty is client mode.
+    :type safe_address: str
     :param use_prepaid: Whether to use prepaid model or not.
     :type use_prepaid: bool
     :param use_offchain: Whether to use offchain model or not.
