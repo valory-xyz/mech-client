@@ -5,11 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a009b40b-cb50-465e-afdb-e3f40ebd484d" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/decode_raw.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/latency_test.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/metadata.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/mech_client/marketplace_interact.py" beforeDir="false" afterPath="$PROJECT_DIR$/mech_client/marketplace_interact.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/batch_stress_test.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/locustfile.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/locustfile.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/stress_test.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -39,11 +39,12 @@
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;feat/locust&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/Users/aristotelis/Documents/mech-client/tests&quot;
+    &quot;last_opened_file_path&quot;: &quot;/Users/aristotelis/Documents/mech-client/tests/helpers&quot;
   }
 }</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/tests/helpers" />
       <recent name="$PROJECT_DIR$/tests" />
     </key>
     <key name="MoveFile.RECENT_KEYS">

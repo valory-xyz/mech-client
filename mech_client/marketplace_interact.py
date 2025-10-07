@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
 #
-#   Copyright 2024 Valory AG
+#   Copyright 2025 Valory AG
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -29,7 +29,8 @@ from dataclasses import asdict, make_dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, cast, Callable
+from queue import Empty, Queue  # pylint: disable=unused-import
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 import requests
 from aea.crypto.base import Crypto
@@ -38,6 +39,7 @@ from eth_utils import to_checksum_address
 from web3._utils.events import event_abi_to_log_topic
 from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
+from web3.exceptions import ABIFunctionNotFound, TimeExhausted
 
 from mech_client.delivery import watch_for_marketplace_data, watch_for_mech_data_url
 from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
@@ -116,30 +118,35 @@ CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
     },
 }
 
-WAITING_STATUS   = 1
+WAITING_STATUS = 1
 TIMED_OUT_STATUS = 2
 DELIVERED_STATUS = 3
+
 
 def _pad32(hex_no_0x: str) -> bytes:
     """Left-pad hex (no 0x) to 32 bytes."""
     hx = hex_no_0x.lower().removeprefix("0x")
     return bytes.fromhex(hx.zfill(64))
 
-def get_request_status(marketplace_contract, rid_hex: str) -> int:
+
+def get_request_status(marketplace_contract: Web3Contract, rid_hex: str) -> int:
     """Call MechMarketplace.getRequestStatus(bytes32)."""
     return marketplace_contract.functions.getRequestStatus(_pad32(rid_hex)).call()
 
-def get_delivery_mech(marketplace_contract, rid_hex: str) -> Optional[str]:
+
+def get_delivery_mech(
+    marketplace_contract: Web3Contract, rid_hex: str
+) -> Optional[str]:
+    """Get the delivery mech of the request."""
     info = marketplace_contract.functions.mapRequestIdInfos(_pad32(rid_hex)).call()
-    # Temporary verbose debug to verify tuple shape
-    print("mapRequestIdInfos raw:", repr(info))
-    # Adjust index below to whatever your ABI returns.
-    # Many variants are: (status:uint8, deliveryMech:address, ...)
     delivery_mech = info[1] if len(info) > 1 else None
     if delivery_mech:
         # Always normalize for robust comparisons
-        return delivery_mech if delivery_mech.startswith("0x") else ("0x" + delivery_mech)
+        return (
+            delivery_mech if delivery_mech.startswith("0x") else ("0x" + delivery_mech)
+        )
     return None
+
 
 def fetch_mech_deliver_event_signature(
     ledger_api: EthereumApi,
@@ -1019,7 +1026,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             print(json.dumps(data, indent=2))
     return None
 
-def send_marketplace_request_nonblocking(  # NEW
+
+def send_marketplace_request_nonblocking(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
     marketplace_contract: Web3Contract,
@@ -1031,29 +1039,21 @@ def send_marketplace_request_nonblocking(  # NEW
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
-    tx_nonce: Optional[int] = None,                # <<< NEW
-    contract_nonce: Optional[int] = None,
-    max_priority_fee_wei: Optional[int] = None,    # <<< optional
-    max_fee_wei: Optional[int] = None,             # <<< optional
+    tx_nonce: Optional[int] = None,
+    contract_nonce: int = 0,
+    max_priority_fee_wei: Optional[int] = None,
+    max_fee_wei: Optional[int] = None,
 ) -> Tuple[str, List[str], int]:
-    """
-    Build/sign/send a request *without* waiting for receipt or delivery.
-    Returns (tx_hash, request_ids(hex), from_block).
-    """
-
+    """Build/sign/send a request *without* waiting for receipt or delivery."""
     # --- build request data(s) exactly like send_marketplace_request ---
     num_requests = len(prompts)
-
+    priority_mech_address = cast(str, method_args_data.priority_mech_address)
     (
         payment_type,
-        service_id,
+        _,
         max_delivery_rate,
-        mech_payment_balance_tracker,
-    ) = fetch_mech_info(
-        ledger_api,
-        marketplace_contract,
-        method_args_data.priority_mech_address,
-    )
+        _,
+    ) = fetch_mech_info(ledger_api, marketplace_contract, priority_mech_address)
     method_args_data.delivery_rate = max_delivery_rate
     method_args_data.payment_type = payment_type
 
@@ -1068,7 +1068,9 @@ def send_marketplace_request_nonblocking(  # NEW
 
     request_datas = []
     if num_requests == 1:
-        v1_hash_trunc, v1_hash = push_metadata_to_ipfs(prompts[0], tools[0], extra_attributes)
+        v1_hash_trunc, v1_hash = push_metadata_to_ipfs(
+            prompts[0], tools[0], extra_attributes
+        )
         print(f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_hash}")
         method_name = "request"
         method_args["requestData"] = v1_hash_trunc
@@ -1076,13 +1078,14 @@ def send_marketplace_request_nonblocking(  # NEW
     else:
         method_name = "requestBatch"
         for prompt, tool in zip(prompts, tools):
-            v1_hash_trunc, v1_hash = push_metadata_to_ipfs(prompt, tool, extra_attributes)
+            v1_hash_trunc, v1_hash = push_metadata_to_ipfs(
+                prompt, tool, extra_attributes
+            )
             print(f"  - Prompt uploaded: https://gateway.autonolas.tech/ipfs/{v1_hash}")
             request_datas.append(v1_hash_trunc)
         method_args["requestDatas"] = request_datas
 
     # --- precompute request_id(s) using current nonce (no receipt needed) ---
-    curr_nonce = marketplace_contract.functions.mapNonces(crypto.address).call()
     request_ids: List[str] = []
     for i, req_data in enumerate(request_datas):
         rid_bytes = marketplace_contract.functions.getRequestId(
@@ -1105,21 +1108,24 @@ def send_marketplace_request_nonblocking(  # NEW
 
     # --- EIP-1559 fees (suggest if not provided) ---
     pending_block = w3.eth.get_block("pending")
-    base_fee = pending_block.get("baseFeePerGas") or w3.eth.get_block("latest")["baseFeePerGas"]
-    priority = max_priority_fee_wei or int(w3.eth.max_priority_fee)  # or a constant like 2e9
+    base_fee = (
+        pending_block.get("baseFeePerGas")
+        or w3.eth.get_block("latest")["baseFeePerGas"]
+    )
+    priority = max_priority_fee_wei or int(w3.eth.max_priority_fee)
     max_fee = max_fee_wei or (base_fee * 2 + priority)
 
     tx_args = {
         "sender_address": crypto.address,
         "value": price,
         "gas": gas_limit,
-        "nonce": tx_nonce,  # <<< pin nonce
+        "nonce": tx_nonce,
         "maxFeePerGas": int(max_fee),
         "maxPriorityFeePerGas": int(priority),
     }
 
     def _bump(x: int) -> int:
-        return int(x * 1.125) + 1  # ~12.5% bump
+        return int(x * 1.125) + 1
 
     tries = 0
     retries = retries or MAX_RETRIES
@@ -1140,34 +1146,39 @@ def send_marketplace_request_nonblocking(  # NEW
             signed = crypto.sign_transaction(raw_tx)
             tx_hash = ledger_api.send_signed_transaction(signed, raise_on_try=True)
             return tx_hash, request_ids, from_block
-        except Exception as e:
+        except TimeExhausted as e:  # type: ignore
             # keep SAME nonce; bump fees for replacement
             tx_args["maxFeePerGas"] = _bump(tx_args["maxFeePerGas"])
             tx_args["maxPriorityFeePerGas"] = _bump(tx_args["maxPriorityFeePerGas"])
-            print(f"Error while sending tx (nonce {tx_nonce}): {e}; bumping fees and retrying in {sleep}s")
+            print(
+                f"Error while sending tx (nonce {tx_nonce}): {e}; bumping fees and retrying in {sleep}s"
+            )
             time.sleep(sleep)
 
     raise RuntimeError("Failed to send marketplace request after retries")
 
 
-def delivery_consumer_loop_status_only(
-    pending,                      # queue of (rid_hex, from_block, t0)
-    marketplace_contract,
+def delivery_consumer_loop_status_only(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
+    pending: "Queue",  # queue of (rid_hex, from_block, t0)
+    marketplace_contract: Web3Contract,
     priority_mech_address: str,
-    on_delivered, on_timeout, on_stepped_in,
+    on_delivered: Callable,
+    on_timeout: Callable,
+    on_stepped_in: Callable,
     poll_interval: float = 1.0,
     max_batch: int = 500,
     response_timeout_s: Optional[float] = None,
-):
-    import time
-    from queue import Empty
+) -> None:
+    """Check for the status of a delivery in the marketplace."""
 
-    backlog: dict[str, float] = {}   # rid_hex -> t0 (first-seen time)
-    seen: set[str] = set()           # rids we've emitted a *final* outcome for
-    timed_out: set[str] = set()      # rids that have hit TIMED_OUT at least once
+    backlog: dict[str, float] = {}  # rid_hex -> t0 (first-seen time)
+    seen: set[str] = set()  # rids we've emitted a *final* outcome for
+    timed_out: set[str] = set()  # rids that have hit TIMED_OUT at least once
 
     def _is_zero_addr(addr: str | None) -> bool:
-        return (not addr) or (addr.lower() == "0x0000000000000000000000000000000000000000")
+        return (not addr) or (
+            addr.lower() == "0x0000000000000000000000000000000000000000"
+        )
 
     while True:
         # Drain producer queue
@@ -1177,7 +1188,9 @@ def delivery_consumer_loop_status_only(
                 rid, _fb, t0 = pending.get_nowait()
                 if rid not in seen:
                     # keep earliest t0
-                    backlog[rid] = min(backlog.get(rid, t0), t0) if rid in backlog else t0
+                    backlog[rid] = (
+                        min(backlog.get(rid, t0), t0) if rid in backlog else t0
+                    )
                 drained += 1
             except Empty:
                 break
@@ -1194,7 +1207,7 @@ def delivery_consumer_loop_status_only(
 
             try:
                 st = get_request_status(marketplace_contract, rid)
-            except Exception:
+            except (TimeExhausted, ABIFunctionNotFound):  # type: ignore
                 # RPC hiccup; try again next tick
                 continue
             t0 = backlog.get(rid, now)
@@ -1222,12 +1235,11 @@ def delivery_consumer_loop_status_only(
                 elapsed_ms = int((time.monotonic() - t0) * 1000)
                 seen.add(rid)
 
-                try:
-                    mech = get_delivery_mech(marketplace_contract, rid)
-                except Exception:
-                    mech = None
+                mech = get_delivery_mech(marketplace_contract, rid)
 
-                if (not _is_zero_addr(mech)) and (mech.lower() != priority_mech_address.lower()):
+                if (not _is_zero_addr(mech)) and (
+                    mech.lower() != priority_mech_address.lower()  # type: ignore
+                ):
                     on_stepped_in(rid, elapsed_ms)
                 else:
                     on_delivered(rid, elapsed_ms)
@@ -1235,30 +1247,3 @@ def delivery_consumer_loop_status_only(
             # WAITING_STATUS (or other) -> keep in backlog
 
         time.sleep(poll_interval)
-
-
-def poll_deliveries_once(
-    pending_ids: List[str],
-    from_block: int,
-    marketplace_contract: Web3Contract,
-    deliver_signature: str,
-    ledger_api: EthereumApi,
-    timeout: float = 15.0,  # short poll
-) -> Dict[str, str]:
-    """
-    Poll once for any delivered data URLs among pending_ids.
-    Returns {request_id_hex: data_url}.
-    """
-    if not pending_ids:
-        return {}
-
-    # This reuses your coroutine helpers behind the scenes
-    data_urls = wait_for_marketplace_data_url(
-        request_ids=pending_ids,
-        from_block=from_block,
-        marketplace_contract=marketplace_contract,
-        deliver_signature=deliver_signature,
-        ledger_api=ledger_api,
-        timeout=timeout,
-    )
-    return data_urls or {}
