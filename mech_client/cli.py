@@ -76,6 +76,7 @@ OPERATE_FOLDER_NAME = ".operate"
 OPERATE_CONFIG_PATH = "services/sc-*/config.json"
 OPERATE_KEYS_DIR = "services/sc-*/deployment/agent_keys"
 DEFAULT_NETWORK = "gnosis"
+SETUP_MODE_COMMAND = "setup-agent-mode"
 
 
 def get_operate_path() -> Path:
@@ -168,12 +169,15 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
     ctx.ensure_object(dict)
     ctx.obj["client_mode"] = client_mode
 
-    if not client_mode:
+    cli_command = ctx.invoked_subcommand if ctx.invoked_subcommand else None
+    is_setup_called = cli_command == SETUP_MODE_COMMAND
+
+    if not is_setup_called and not client_mode:
         click.echo("Agent mode enabled")
         operate_path = get_operate_path()
         if not operate_path.exists():
             raise ClickException(
-                f"""Operate path doesnot exists at: {operate_path}. Setup agent mode using mechx --client-mode setup-agent-mode."""
+                f"""Operate path doesnot exists at: {operate_path}. Setup agent mode using mechx setup-agent-mode."""
             )
 
 
