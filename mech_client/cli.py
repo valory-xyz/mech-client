@@ -177,11 +177,6 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
 
 
 @click.command()
-@click.option(
-    "--chain-config",
-    type=str,
-    help="Id of the mech's chain configuration (stored configs/mechs.json)",
-)
 def setup_agent_mode() -> None:
     """Sets up the agent mode for users"""
     operate_path = get_operate_path()
@@ -316,7 +311,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
             if agent_mode:
                 safe, key = fetch_agent_mode_data(chain_config)
 
-            if not safe or key:
+            if not safe or not key:
                 raise ClickException(
                     "Cannot fetch safe or key data for the agent mode."
                 )

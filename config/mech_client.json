@@ -1,13 +1,13 @@
 {
     "name": "Mech Client (agent mode)",
-    "hash": "bafybeifciqowfd4no7vjkbjk7eqd2mipx4b5jovjql6gcrbil7tdknqut4",
+    "hash": "bafybeicrsrqajrzgweh7q4grfsbkkadovyqzfouqgb5lmxyqulqv7mjaye",
     "description": "The mech_client service to allow interacting with on-chain mechs",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
     "service_version": "v0.1.0",
     "home_chain": "gnosis",
     "configurations": {
         "gnosis": {
-            "agent_id": 37,
+            "agent_id": 77,
             "nft": "bafybeifgj3kackzfoq4fxjiuousm6epgwx7jbc3n2gjwzjgvtbbz7fc3su",
             "threshold": 1,
             "use_mech_marketplace": false,
