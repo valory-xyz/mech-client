@@ -275,6 +275,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     use_offchain: bool,
     key: Optional[str],
     tools: Optional[tuple],
+    safe: Optional[str] = None,
     extra_attribute: Optional[List[str]] = None,
     confirm: Optional[str] = None,
     retries: Optional[int] = None,
@@ -311,11 +312,10 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 
             if agent_mode:
                 safe, key = fetch_agent_mode_data(chain_config)
-
-            if not safe or not key:
-                raise ClickException(
-                    "Cannot fetch safe or key data for the agent mode."
-                )
+                if not safe or not key:
+                    raise ClickException(
+                        "Cannot fetch safe or key data for the agent mode."
+                    )
 
             marketplace_interact_(
                 prompts=prompts,
@@ -612,6 +612,7 @@ def deposit_native(
     ctx: click.Context,
     amount_to_deposit: str,
     key: Optional[str],
+    safe: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Native balance for prepaid requests."""
@@ -621,9 +622,8 @@ def deposit_native(
 
     if agent_mode:
         safe, key = fetch_agent_mode_data(chain_config)
-
-    if not safe or key:
-        raise ClickException("Cannot fetch safe or key data for the agent mode.")
+        if not safe or key:
+            raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     deposit_native_main(
         agent_mode=agent_mode,
@@ -651,6 +651,7 @@ def deposit_token(
     ctx: click.Context,
     amount_to_deposit: str,
     key: Optional[str],
+    safe: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Token balance for prepaid requests."""
@@ -660,9 +661,8 @@ def deposit_token(
 
     if agent_mode:
         safe, key = fetch_agent_mode_data(chain_config)
-
-    if not safe or key:
-        raise ClickException("Cannot fetch safe or key data for the agent mode.")
+        if not safe or key:
+            raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     deposit_token_main(
         agent_mode=agent_mode,
@@ -689,6 +689,7 @@ def nvm_subscribe(
     ctx: click.Context,
     key: str,
     chain_config: str,
+    safe: Optional[str] = None,
 ) -> None:
     """Allows to purchase nvm subscription for nvm mech requests."""
     client_mode = ctx.obj.get("client_mode", False)
@@ -697,9 +698,8 @@ def nvm_subscribe(
 
     if agent_mode:
         safe, key = fetch_agent_mode_data(chain_config)
-
-    if not safe or key:
-        raise ClickException("Cannot fetch safe or key data for the agent mode.")
+        if not safe or key:
+            raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     nvm_subscribe_main(
         agent_mode=agent_mode,
