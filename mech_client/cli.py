@@ -79,6 +79,7 @@ DEFAULT_NETWORK = "gnosis"
 
 
 def get_operate_path() -> Path:
+    """Fetches the operate path for the mech client service"""
     home = Path.home()
     operate_path = home.joinpath(OPERATE_FOLDER_NAME)
     return operate_path
