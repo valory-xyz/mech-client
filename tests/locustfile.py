@@ -35,8 +35,6 @@ from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from web3.contract import Contract as Web3Contract
 
 from mech_client.marketplace_interact import (
-    send_marketplace_request_nonblocking,
-    delivery_consumer_loop_status_only,
     fetch_mech_deliver_event_signature,
     get_contract,
     MechMarketplaceRequestConfig,
@@ -44,6 +42,7 @@ from mech_client.marketplace_interact import (
     ABI_DIR_PATH,
     CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG
 )
+from tests.helpers.marketplace_helpers import send_marketplace_request_nonblocking, delivery_consumer_loop_status_only
 from tests.helpers.nonce_manager import MapNonceAllocator, NonceAllocator
 from tests.helpers.query_generation import make_prompts
 
