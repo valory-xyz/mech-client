@@ -173,7 +173,7 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
         operate_path = get_operate_path()
         if not operate_path.exists():
             raise ClickException(
-                f"""Operate path doesnot exists at: {operate_path}. Setup agent mode using mechx setup-agent-mode."""
+                f"""Operate path doesnot exists at: {operate_path}. Setup agent mode using mechx --client-mode setup-agent-mode."""
             )
 
 
