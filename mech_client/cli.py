@@ -622,7 +622,7 @@ def deposit_native(
 
     if agent_mode:
         safe, key = fetch_agent_mode_data(chain_config)
-        if not safe or key:
+        if not safe or not key:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     deposit_native_main(
@@ -661,7 +661,7 @@ def deposit_token(
 
     if agent_mode:
         safe, key = fetch_agent_mode_data(chain_config)
-        if not safe or key:
+        if not safe or not key:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     deposit_token_main(
@@ -698,7 +698,7 @@ def nvm_subscribe(
 
     if agent_mode:
         safe, key = fetch_agent_mode_data(chain_config)
-        if not safe or key:
+        if not safe or not key:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     nvm_subscribe_main(
