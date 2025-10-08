@@ -7,7 +7,7 @@ import sys
 import requests
 
 import uuid
-from typing import Any, Dict, List, Literal, Union
+from typing import Any, Dict, List, Literal, Union, Optional
 from web3 import Web3
 from eth_account import Account
 from eth_typing import ChecksumAddress
@@ -51,7 +51,7 @@ class NVMSubscriptionManager:
     using a series of smart contracts.
     """
 
-    def __init__(self, network: str, sender: str, agent_mode: bool, safe_address: str):
+    def __init__(self, network: str, sender: str, agent_mode: bool, safe_address: Optional[str]):
         """
         Initialize the SubscriptionManager, including contract instances
         and Web3 connection.
@@ -59,7 +59,8 @@ class NVMSubscriptionManager:
         self.url = os.getenv("MECHX_RPC_URL", CONFIGS[network]["nvm"]['web3ProviderUri'])
         self.web3 = Web3(Web3.HTTPProvider(self.url))
         self.agent_mode = agent_mode
-        self.safe_address = safe_address
+        if self.agent_mode:
+            self.safe_address = str(safe_address)
         self.ethereum_client = EthereumClient(self.url)
 
         self.sender: ChecksumAddress = self.web3.to_checksum_address(sender)

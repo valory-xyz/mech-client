@@ -41,7 +41,7 @@ def deposit(
     crypto: EthereumCrypto,
     ethereum_client: EthereumClient,
     agent_mode: bool,
-    safe_address: str,
+    safe_address: Optional[str],
     to: str,
     amount: int,
 ) -> str:
@@ -82,7 +82,7 @@ def deposit(
             ethereum_client=ethereum_client,
             tx_data="0x",
             to_adress=to,
-            safe_address=safe_address,
+            safe_address=str(safe_address),
             signer_pkey=crypto.private_key,
             value=amount,
         )
@@ -95,8 +95,8 @@ def deposit(
 
 def main(
     agent_mode: bool,
-    safe_address: str,
     amount: str,
+    safe_address: Optional[str] = None,
     private_key_path: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:

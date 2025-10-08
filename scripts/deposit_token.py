@@ -59,7 +59,7 @@ def approve(
     ledger_api: EthereumApi,
     ethereum_client: EthereumClient,
     agent_mode: bool,
-    safe_address: str,
+    safe_address: Optional[str],
     token_contract: Web3Contract,
     token_balance_tracker_contract: Web3Contract,
     amount: int,
@@ -100,14 +100,14 @@ def approve(
             {
                 "chainId": int(ledger_api._chain_id),
                 "gas": 0,
-                "nonce": get_safe_nonce(ethereum_client, safe_address),
+                "nonce": get_safe_nonce(ethereum_client, str(safe_address)),
             }
         )
         transaction_digest = send_safe_tx(
             ethereum_client=ethereum_client,
             tx_data=transaction["data"],
             to_adress=token_contract.address,
-            safe_address=safe_address,
+            safe_address=str(safe_address),
             signer_pkey=crypto.private_key,
             value=0,
         )
@@ -123,7 +123,7 @@ def deposit(
     crypto: EthereumCrypto,
     ethereum_client: EthereumClient,
     agent_mode: bool,
-    safe_address: str,
+    safe_address: Optional[str],
     token_balance_tracker_contract: Web3Contract,
     amount: int,
 ) -> str:
@@ -157,14 +157,14 @@ def deposit(
             {
                 "chainId": int(ledger_api._chain_id),
                 "gas": 0,
-                "nonce": get_safe_nonce(ethereum_client, safe_address),
+                "nonce": get_safe_nonce(ethereum_client, str(safe_address)),
             }
         )
         transaction_digest = send_safe_tx(
             ethereum_client=ethereum_client,
             tx_data=transaction["data"],
             to_adress=token_balance_tracker_contract.address,
-            safe_address=safe_address,
+            safe_address=str(safe_address),
             signer_pkey=crypto.private_key,
             value=0,
         )
@@ -177,8 +177,8 @@ def deposit(
 
 def main(
     agent_mode: bool,
-    safe_address: str,
     amount: str,
+    safe_address: Optional[str] = None,
     private_key_path: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:

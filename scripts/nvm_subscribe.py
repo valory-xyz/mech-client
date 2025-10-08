@@ -17,9 +17,9 @@ CHAIN_TO_ENVS: Dict[str, Path] = {
 
 def main(
     agent_mode: bool,
-    safe_address: str,
     private_key_path: str,
     chain_config: str,
+    safe_address: Optional[str] = None,
 ) -> None:
 
     chain_env = CHAIN_TO_ENVS.get(chain_config)
