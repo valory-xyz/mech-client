@@ -72,7 +72,7 @@ from scripts.nvm_subscribe import main as nvm_subscribe_main
 CURR_DIR = Path(__file__).resolve().parent
 BASE_DIR = CURR_DIR.parent
 GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
-OPERATE_FOLDER_NAME = ".operate_mech_client"
+OPERATE_FOLDER_NAME = ".operate"
 OPERATE_CONFIG_PATH = "services/sc-*/config.json"
 OPERATE_KEYS_DIR = "services/sc-*/deployment/agent_keys"
 DEFAULT_NETWORK = "gnosis"
@@ -80,8 +80,8 @@ DEFAULT_NETWORK = "gnosis"
 
 def get_operate_path() -> Path:
     """Fetches the operate path for the mech client service"""
-    home = Path.home()
-    operate_path = home.joinpath(OPERATE_FOLDER_NAME)
+    cwd = Path.cwd()
+    operate_path = cwd.joinpath(OPERATE_FOLDER_NAME)
     return operate_path
 
 
