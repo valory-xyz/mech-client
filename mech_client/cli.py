@@ -75,7 +75,7 @@ CURR_DIR = Path(__file__).resolve().parent
 BASE_DIR = CURR_DIR.parent
 KEYS_DIR = BASE_DIR / "keys"
 GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
-OPERATE_FOLDER_NAME = ".operate"
+OPERATE_FOLDER_NAME = ".operate_mech_client"
 OPERATE_CONFIG_PATH = "services/sc-*/config.json"
 OPERATE_KEYS_DIR = "services/sc-*/deployment/agent_keys"
 SETUP_MODE_COMMAND = "setup-agent-mode"
@@ -83,8 +83,8 @@ SETUP_MODE_COMMAND = "setup-agent-mode"
 
 def get_operate_path() -> Path:
     """Fetches the operate path for the mech client service"""
-    cwd = Path.cwd()
-    operate_path = cwd.joinpath(OPERATE_FOLDER_NAME)
+    home = Path.home()
+    operate_path = home.joinpath(OPERATE_FOLDER_NAME)
     return operate_path
 
 
