@@ -86,7 +86,7 @@ def get_operate_path() -> Path:
     return operate_path
 
 
-def my_configure_local_config(
+def setup_configure_local_config(
     template: ServiceTemplate, operate: "OperateApp"
 ) -> QuickstartConfig:
     """Configure local quickstart configuration."""
@@ -186,7 +186,7 @@ def setup_agent_mode() -> None:
 
     sys.modules[
         "operate.quickstart.run_service"
-    ].configure_local_config = my_configure_local_config  # type: ignore
+    ].configure_local_config = setup_configure_local_config  # type: ignore
 
     run_service(
         operate=operate,
