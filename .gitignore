@@ -7,6 +7,7 @@ packages/valory/protocols
 packages/valory/skills
 packages/open_aea
 
+keys
 ethereum_private_key.txt
 acn_cert.txt
 

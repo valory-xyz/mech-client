@@ -21,12 +21,14 @@
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from click import ClickException
 from operate.cli import OperateApp
+from operate.services.manage import KeysManager
 from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.operate_types import ServiceTemplate
 from operate.quickstart.run_service import (
@@ -71,11 +73,11 @@ from scripts.nvm_subscribe import main as nvm_subscribe_main
 
 CURR_DIR = Path(__file__).resolve().parent
 BASE_DIR = CURR_DIR.parent
+KEYS_DIR = BASE_DIR / "keys"
 GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
 OPERATE_FOLDER_NAME = ".operate"
 OPERATE_CONFIG_PATH = "services/sc-*/config.json"
 OPERATE_KEYS_DIR = "services/sc-*/deployment/agent_keys"
-DEFAULT_NETWORK = "gnosis"
 SETUP_MODE_COMMAND = "setup-agent-mode"
 
 
@@ -115,45 +117,40 @@ def my_configure_local_config(
     return config
 
 
-def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
+def fetch_agent_mode_data() -> Tuple[str, str]:
     """Fetches the agent mode data of safe address and the EOA private key path"""
+
+    # This is acceptable way to as the main functionality
+    # of keys manager is to allow access to the required data.
     operate_path = get_operate_path()
-    safe = ""
-    key = ""
-    chain_config = chain_config or DEFAULT_NETWORK
+    operate = OperateApp(operate_path)
+    keys_manager = KeysManager(
+        path=operate._keys,  # pylint: disable=protected-access
+        logger=operate.wallet_manager.logger,
+    )
+    service_manager = operate.service_manager()
+    service_config_id = service_manager.json[0]["service_config_id"]
+    service = operate.service_manager().load(service_config_id)
 
-    # fetch the config path and extract the config data
-    matching_paths = operate_path.glob(OPERATE_CONFIG_PATH)
-    data = {}
-    for file_path in matching_paths:
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-            data = json.loads(content)
+    agent_eoa_key = keys_manager.get(service.agent_addresses[0]).private_key
+    safe = service.chain_configs["gnosis"].chain_data.multisig
 
-    safe = data["chain_configs"][chain_config]["chain_data"]["multisig"]
-    agent_address = data["chain_configs"][chain_config]["chain_data"]["instances"][0]
+    if not Path(KEYS_DIR).exists():
+        Path.mkdir(KEYS_DIR)
 
-    # fetch the keys directory and iterate all agent keys
-    # until we find the matching one based on config data
-    matching_paths = operate_path.glob(OPERATE_KEYS_DIR)
-    for file_path in matching_paths:
-        for subfolder in file_path.iterdir():
-            if not subfolder.is_dir():
-                continue
+    with tempfile.NamedTemporaryFile(
+        dir=KEYS_DIR,
+        mode="w",
+        suffix=".txt",
+        delete=False,  # Handle cleanup manually
+    ) as temp_file:
+        temp_file.write(agent_eoa_key)
+        temp_file.flush()
+        temp_file.close()  # Close the file before reading
 
-            key_file = next(subfolder.glob("*.txt"), None)
-            if not key_file:
-                continue
+        key = temp_file.name
 
-            with open(key_file, "r", encoding="utf-8") as file:
-                content = file.read()
-
-            key_address = Web3().eth.account.from_key(content).address
-            if key_address == agent_address:
-                key = str(key_file)
-                break
-
-    return str(safe), key
+    return safe, key
 
 
 @click.group(name="mechx")  # type: ignore
@@ -315,7 +312,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 )
 
             if agent_mode:
-                safe, key = fetch_agent_mode_data(chain_config)
+                safe, key = fetch_agent_mode_data()
                 if not safe or not key:
                     raise ClickException(
                         "Cannot fetch safe or key data for the agent mode."
@@ -625,7 +622,7 @@ def deposit_native(
     click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data(chain_config)
+        safe, key = fetch_agent_mode_data()
         if not safe or not key:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
@@ -664,7 +661,7 @@ def deposit_token(
     click.echo(f"Running deposit token with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data(chain_config)
+        safe, key = fetch_agent_mode_data()
         if not safe or not key:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
@@ -701,7 +698,7 @@ def nvm_subscribe(
     click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data(chain_config)
+        safe, key = fetch_agent_mode_data()
         if not safe or not key:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
