@@ -37,7 +37,6 @@ from operate.quickstart.run_service import (
 )
 from operate.services.manage import KeysManager
 from tabulate import tabulate  # type: ignore
-from web3 import Web3
 
 from mech_client import __version__
 from mech_client.interact import ConfirmationType
