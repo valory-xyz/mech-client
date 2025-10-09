@@ -23,9 +23,6 @@ from pathlib import Path
 from typing import Optional
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from dataclasses import asdict
-from web3.constants import ADDRESS_ZERO
-from safe_eth.eth import EthereumClient  # pylint:disable=import-error
-from safe_eth.safe import Safe  # pylint:disable=import-error
 
 from mech_client.interact import get_mech_config, PRIVATE_KEY_FILE_PATH
 from .utils import (
