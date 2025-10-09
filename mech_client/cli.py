@@ -292,7 +292,6 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
-
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running interact with agent_mode={agent_mode}")
 
