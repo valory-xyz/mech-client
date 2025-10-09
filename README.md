@@ -270,15 +270,15 @@ requests = query_mech_requests(chain_config="base", limit=10)
 
 # Query requests by requester address
 requests = query_mech_requests(
-    chain_config="base", 
-    requester_address="0xcaf63282FBC500A0c09a1eCC8876b0d0f2A509f8",
+    chain_config="base",
+    requester_address="0xYOUR_REQUESTER_ADDRESS",
     limit=20
 )
 
 # Query requests by mech address
 requests = query_mech_requests(
     chain_config="base",
-    mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+    mech_address="0xYOUR_MECH_ADDRESS",
     limit=50
 )
 
@@ -355,10 +355,10 @@ mechx deliver --request-id <request_id> --result-file <json_file> --target-mech 
 **Example:**
 ```bash
 mechx deliver \
-  --request-id 0x4f23d7dcf1fc02fd13bebace0327ed96f5d86f343d3a4a436c8f48e82c728d2d \
+  --request-id 0xYOUR_REQUEST_ID \
   --result-file result.json \
-  --target-mech 0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7 \
-  --multisig 0x0ca9F2a6b6b4d8459f887C04f2D7de5442662392 \
+  --target-mech 0xYOUR_MECH_ADDRESS \
+  --multisig 0xYOUR_SAFE_ADDRESS \
   --key ethereum_private_key.txt \
   --chain-config base
 ```
@@ -370,7 +370,7 @@ from mech_client.deliver import deliver_via_safe
 
 # Prepare your result content
 result_content = {
-    "requestId": "0x4f23d7dcf1fc02fd13bebace0327ed96f5d86f343d3a4a436c8f48e82c728d2d",
+    "requestId": "0xYOUR_REQUEST_ID",
     "result": "Your AI-generated result here",
     "metadata": {"model": "gpt-4", "tool": "text-generation"}
 }
@@ -378,10 +378,10 @@ result_content = {
 # Deliver via Safe
 delivery_result = deliver_via_safe(
     chain_config="base",
-    request_id="0x4f23d7dcf1fc02fd13bebace0327ed96f5d86f343d3a4a436c8f48e82c728d2d",
+    request_id="0xYOUR_REQUEST_ID",
     result_content=result_content,
-    target_mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
-    safe_address="0x0ca9F2a6b6b4d8459f887C04f2D7de5442662392",
+    target_mech_address="0xYOUR_MECH_ADDRESS",
+    safe_address="0xYOUR_SAFE_ADDRESS",
     private_key_path="ethereum_private_key.txt",
     wait=True
 )
@@ -740,7 +740,7 @@ from mech_client.marketplace_interact import marketplace_interact
 # 1. Send a post-only request (fire-and-forget)
 marketplace_interact(
     prompts=["What is the weather like today?"],
-    priority_mech="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+    priority_mech="0xYOUR_MECH_ADDRESS",
     tools=["weather-tool"],
     chain_config="base",
     post_only=True  # Don't wait for delivery
@@ -749,7 +749,7 @@ marketplace_interact(
 # 2. Query requests with IPFS data enrichment
 requests = query_mech_requests(
     chain_config="base",
-    mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+    mech_address="0xYOUR_MECH_ADDRESS",
     include_request_data=True,
     include_delivery_data=True,
     limit=10
@@ -760,14 +760,14 @@ for request in requests:
     if not request.get('delivery_data'):  # No delivery yet
         # Generate your AI result
         ai_result = generate_ai_response(request['request_data']['json'])
-        
+
         # Deliver the result
         delivery_result = deliver_via_safe(
             chain_config="base",
             request_id=request['requestId'],
             result_content=ai_result,
-            target_mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
-            safe_address="0x0ca9F2a6b6b4d8459f887C04f2D7de5442662392",
+            target_mech_address="0xYOUR_MECH_ADDRESS",
+            safe_address="0xYOUR_SAFE_ADDRESS",
             private_key_path="ethereum_private_key.txt",
             wait=True
         )
@@ -791,46 +791,46 @@ def complete_mech_workflow():
     print("Sending request...")
     marketplace_interact(
         prompts=["Write a haiku about blockchain"],
-        priority_mech="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+        priority_mech="0xYOUR_MECH_ADDRESS",
         tools=["text-generation"],
         chain_config="base",
         post_only=True
     )
-    
+
     # 2. Query for recent requests
     print("Querying recent requests...")
     requests = query_mech_requests(
         chain_config="base",
-        mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
+        mech_address="0xYOUR_MECH_ADDRESS",
         include_request_data=True,
         include_delivery_data=True,
         limit=5
     )
-    
+
     # 3. Process undelivered requests
     for request in requests:
         if not request.get('delivery_data'):
             print(f"Processing request {request['requestId']}")
-            
+
             # Simulate AI processing
             request_data = request['request_data']['json']
             prompt = request_data.get('prompt', '')
-            
+
             # Generate result (replace with your AI logic)
             result = {
                 "requestId": request['requestId'],
                 "result": f"AI-generated response for: {prompt}",
                 "metadata": {"model": "gpt-4", "tool": "text-generation"}
             }
-            
+
             # Deliver result
             try:
                 delivery_result = deliver_via_safe(
                     chain_config="base",
                     request_id=request['requestId'],
                     result_content=result,
-                    target_mech_address="0xaB15F8d064b59447Bd8E9e89DD3FA770aBF5EEb7",
-                    safe_address="0x0ca9F2a6b6b4d8459f887C04f2D7de5442662392",
+                    target_mech_address="0xYOUR_MECH_ADDRESS",
+                    safe_address="0xYOUR_SAFE_ADDRESS",
                     private_key_path="ethereum_private_key.txt",
                     wait=True
                 )

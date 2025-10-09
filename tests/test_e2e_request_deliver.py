@@ -36,8 +36,9 @@ def test_python_client_request_and_optional_deliver():
     assert eth_key.exists(), f"Missing {eth_key}"
     assert mech_key.exists(), f"Missing {mech_key}"
 
-    priority_mech = "0xab15f8d064b59447bd8e9e89dd3fa770abf5eeb7"
-    safe_address = "0x0ca9F2a6b6b4d8459f887C04f2D7de5442662392"
+    # Test configuration from environment variables
+    priority_mech = os.environ["TEST_PRIORITY_MECH"]
+    safe_address = os.environ["TEST_SAFE_ADDRESS"]
 
     # Request (post-only)
     req_cmd = [
