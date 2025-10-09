@@ -1,6 +1,6 @@
 # subscription/contracts/transfer_nft.py
 import logging
-from typing import Union
+from typing import Union, Dict, Any
 from web3 import Web3
 from eth_typing import ChecksumAddress
 from web3.types import ENS
@@ -34,7 +34,7 @@ class SubscriptionToken(BaseContract):
         nonce: int,
         gas: int = 60_000,
         chain_id: int = 100,
-    ) -> bytes:
+    ) -> Dict[str, Any]:
         """
         Compute the hash of parameters for the transfer condition.
 
