@@ -75,8 +75,6 @@ BASE_DIR = CURR_DIR.parent
 KEYS_DIR = BASE_DIR / "keys"
 GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
 OPERATE_FOLDER_NAME = ".operate_mech_client"
-OPERATE_CONFIG_PATH = "services/sc-*/config.json"
-OPERATE_KEYS_DIR = "services/sc-*/deployment/agent_keys"
 SETUP_MODE_COMMAND = "setup-agent-mode"
 DEFAULT_NETWORK = "gnosis"
 
