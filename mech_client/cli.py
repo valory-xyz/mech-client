@@ -86,6 +86,13 @@ def get_operate_path() -> Path:
     return operate_path
 
 
+def is_agent_mode(ctx: click.Context) -> bool:
+    """Fetches whether agent mode is on or not"""
+    client_mode = ctx.obj.get("client_mode", False)
+    agent_mode = not client_mode
+    return agent_mode
+
+
 def setup_configure_local_config(
     template: ServiceTemplate, operate: "OperateApp"
 ) -> QuickstartConfig:
@@ -285,8 +292,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
-        client_mode = ctx.obj.get("client_mode", False)
-        agent_mode = not client_mode
+
+        agent_mode = is_agent_mode(ctx)
         click.echo(f"Running interact with agent_mode={agent_mode}")
 
         extra_attributes_dict: Dict[str, Any] = {}
@@ -616,8 +623,7 @@ def deposit_native(
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Native balance for prepaid requests."""
-    client_mode = ctx.obj.get("client_mode", False)
-    agent_mode = not client_mode
+    agent_mode = is_agent_mode(ctx)
     click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
     if agent_mode:
@@ -655,8 +661,7 @@ def deposit_token(
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Token balance for prepaid requests."""
-    client_mode = ctx.obj.get("client_mode", False)
-    agent_mode = not client_mode
+    agent_mode = is_agent_mode(ctx)
     click.echo(f"Running deposit token with agent_mode={agent_mode}")
 
     if agent_mode:
@@ -692,8 +697,7 @@ def nvm_subscribe(
     safe: Optional[str] = None,
 ) -> None:
     """Allows to purchase nvm subscription for nvm mech requests."""
-    client_mode = ctx.obj.get("client_mode", False)
-    agent_mode = not client_mode
+    agent_mode = is_agent_mode(ctx)
     click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
 
     if agent_mode:
