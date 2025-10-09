@@ -79,6 +79,7 @@ OPERATE_FOLDER_NAME = ".operate_mech_client"
 OPERATE_CONFIG_PATH = "services/sc-*/config.json"
 OPERATE_KEYS_DIR = "services/sc-*/deployment/agent_keys"
 SETUP_MODE_COMMAND = "setup-agent-mode"
+DEFAULT_NETWORK = "gnosis"
 
 
 def get_operate_path() -> Path:
@@ -117,8 +118,9 @@ def my_configure_local_config(
     return config
 
 
-def fetch_agent_mode_data() -> Tuple[str, str]:
+def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
     """Fetches the agent mode data of safe address and the EOA private key path"""
+    chain_config = chain_config or DEFAULT_NETWORK
 
     # This is acceptable way to as the main functionality
     # of keys manager is to allow access to the required data.
@@ -133,7 +135,7 @@ def fetch_agent_mode_data() -> Tuple[str, str]:
     service = operate.service_manager().load(service_config_id)
 
     agent_eoa_key = keys_manager.get(service.agent_addresses[0]).private_key
-    safe = service.chain_configs["gnosis"].chain_data.multisig
+    safe = service.chain_configs[chain_config].chain_data.multisig
 
     if not Path(KEYS_DIR).exists():
         Path.mkdir(KEYS_DIR)
@@ -312,7 +314,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 )
 
             if agent_mode:
-                safe, key = fetch_agent_mode_data()
+                safe, key = fetch_agent_mode_data(chain_config)
                 if not safe or not key:
                     raise ClickException(
                         "Cannot fetch safe or key data for the agent mode."
@@ -622,7 +624,7 @@ def deposit_native(
     click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data()
+        safe, key = fetch_agent_mode_data(chain_config)
         if not safe or not key:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
@@ -661,7 +663,7 @@ def deposit_token(
     click.echo(f"Running deposit token with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data()
+        safe, key = fetch_agent_mode_data(chain_config)
         if not safe or not key:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
@@ -698,7 +700,7 @@ def nvm_subscribe(
     click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data()
+        safe, key = fetch_agent_mode_data(chain_config)
         if not safe or not key:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 

@@ -161,14 +161,32 @@ class NVMSubscriptionManager:
             # for base, usdc is used and so we don't send any value
             value_eth = 0
 
+            if not self.agent_mode:
+                nonce = self.web3.eth.get_transaction_count(self.sender)
+            else:
+                nonce = get_safe_nonce(self.ethereum_client, self.safe_address)
+
             approve_tx = self.subscription_token.build_approve_token_tx(
                 sender=self.sender,
                 to=self.lock_payment.address,
                 amount=10**6,
+                nonce=nonce,
                 chain_id=chain_id,
             )
-            signed_tx = self.web3.eth.account.sign_transaction(approve_tx, private_key=wallet_pvt_key)
-            tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+
+            if not self.agent_mode:
+                signed_tx = self.web3.eth.account.sign_transaction(approve_tx, private_key=wallet_pvt_key)
+                tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            else:
+                tx_hash = send_safe_tx(
+                    ethereum_client=self.ethereum_client,
+                    tx_data=approve_tx["data"],
+                    to_adress=self.subscription_token.address,
+                    safe_address=self.safe_address,
+                    signer_pkey=wallet_pvt_key,
+                    value=0,
+                )
+
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
 
             if receipt["status"] == 1:

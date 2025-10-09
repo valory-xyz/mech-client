@@ -31,6 +31,7 @@ class SubscriptionToken(BaseContract):
         sender: Union[ChecksumAddress, ENS],
         to: Union[ChecksumAddress, ENS],
         amount: int,
+        nonce: int,
         gas: int = 60_000,
         chain_id: int = 100,
     ) -> bytes:
@@ -50,7 +51,6 @@ class SubscriptionToken(BaseContract):
         logger.debug("Approving token...")
         sender_address: ChecksumAddress = self.w3.to_checksum_address(sender)
         to_address: ChecksumAddress = self.w3.to_checksum_address(to)
-        nonce = self.w3.eth.get_transaction_count(sender_address)
         logger.debug(f"Nonce for sender {sender_address}: {nonce}")
 
         latest_block = self.w3.eth.get_block("latest")
@@ -73,10 +73,8 @@ class SubscriptionToken(BaseContract):
                 }
             )
         )
-        gas = self.w3.eth.estimate_gas(tx)
         tx.update(
             {
-                "gas": gas,
                 "maxFeePerGas": base_fee + max_priority_fee,
                 "maxPriorityFeePerGas": max_priority_fee,
             }

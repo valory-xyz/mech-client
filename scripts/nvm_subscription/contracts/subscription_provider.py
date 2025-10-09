@@ -35,7 +35,7 @@ class SubscriptionProvider(BaseContract):
         sender: str,
         nonce: int,
         value_eth: float,
-        gas: int = 450_000,
+        gas: int = 500_000,
         chain_id: int = 100,
     ) -> Dict[str, Any]:
         """
