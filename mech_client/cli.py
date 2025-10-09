@@ -28,7 +28,6 @@ from typing import Any, Dict, List, Optional, Tuple
 import click
 from click import ClickException
 from operate.cli import OperateApp
-from operate.services.manage import KeysManager
 from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.operate_types import ServiceTemplate
 from operate.quickstart.run_service import (
@@ -36,6 +35,7 @@ from operate.quickstart.run_service import (
     load_local_config,
     run_service,
 )
+from operate.services.manage import KeysManager
 from tabulate import tabulate  # type: ignore
 from web3 import Web3
 
