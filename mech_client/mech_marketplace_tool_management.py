@@ -55,7 +55,24 @@ def fetch_tools(
         ledger_api=ledger_api,
     )
     metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
-    return requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
+    print(f"Fetching metadata from: {metadata_uri}")
+    
+    # Check for zero hash (no metadata set)
+    if "f017012200000000000000000000000000000000000000000000000000000000000000000" in metadata_uri:
+        print("Warning: Mech has no metadata set (zero hash)")
+        return {"tools": [], "toolMetadata": {}}
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    
+    try:
+        response = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT, headers=headers)
+        print(f"Response status: {response.status_code}")
+        return response.json()
+    except requests.exceptions.Timeout:
+        print("Timeout fetching metadata, returning empty tools")
+        return {"tools": [], "toolMetadata": {}}
 
 
 def get_mech_tools(
