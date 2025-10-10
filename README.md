@@ -115,7 +115,7 @@ export MECHX_API_KEY=<your api key>
 ```
 
 ### Set up agent mode for on-chain interactions (For Latest Marketplace Mechs only)
-There are two modes you can use the mechx for on-chain interactions
+There are two modes you can use the mechx for on-chain interactions. Currently `agent-mode` is only supported for gnosis network
  - *agent mode* (Recommended): This allows to register your on-chain interactions as agent on the olas protocol and allows for A2A activity to be reflected on the client
  - *client mode*: Simple on-chain interations using EOA
 
