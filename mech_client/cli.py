@@ -153,23 +153,8 @@ def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
     service_config_id = service_manager.json[0]["service_config_id"]
     service = operate.service_manager().load(service_config_id)
 
-    agent_eoa_key = keys_manager.get(service.agent_addresses[0]).private_key
+    key = keys_manager.get_private_key_file(service.agent_addresses[0])
     safe = service.chain_configs[chain_config].chain_data.multisig
-
-    if not Path(KEYS_DIR).exists():
-        Path.mkdir(KEYS_DIR)
-
-    with tempfile.NamedTemporaryFile(
-        dir=KEYS_DIR,
-        mode="w",
-        suffix=".txt",
-        delete=False,  # Handle cleanup manually
-    ) as temp_file:
-        temp_file.write(agent_eoa_key)
-        temp_file.flush()
-        temp_file.close()  # Close the file before reading
-
-        key = temp_file.name
 
     return safe, key
 
