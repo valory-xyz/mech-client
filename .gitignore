@@ -12,3 +12,6 @@ temp/
 .tox/
 __pycache__
 .env
+
+.idea/
+.idea/*
