@@ -114,6 +114,26 @@ Once you have your API key, you'll need to configure it in your environment. Use
 export MECHX_API_KEY=<your api key>
 ```
 
+### Set up agent mode for on-chain interactions (For Latest Marketplace Mechs only)
+There are two modes you can use the mechx for on-chain interactions
+ - *agent mode* (Recommended): This allows to register your on-chain interactions as agent on the olas protocol and allows for A2A activity to be reflected on the client
+ - *client mode*: Simple on-chain interations using EOA
+
+  ```bash
+  cp .example.env .env
+  ```
+:note: For better reliability, it is recommended to use a stable third-party RPC provider. 
+
+  ```bash
+  mechx setup-agent-mode
+  ```
+
+To use client-mode, simply supply `--client-mode` flag before the cli command. 
+
+  ```bash
+  mechx --client-mode <rest of the cli command>
+  ```
+ 
 ### Generate Mech requests
 
 #### Select the mech you are going to send requests to
