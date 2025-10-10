@@ -42,7 +42,7 @@ def deposit(
     to: str,
     amount: int,
 ) -> str:
-    sender = crypto.address
+    sender = safe_address or crypto.address
 
     try:
         print("Fetching user balance")
@@ -117,7 +117,8 @@ def main(
         )
     crypto = EthereumCrypto(private_key_path=private_key_path)
 
-    print(f"Sender address: {crypto.address}")
+    sender = safe_address or crypto.address
+    print(f"Sender address: {sender}")
 
     chain_id = mech_config.ledger_config.chain_id
     to = CHAIN_TO_NATIVE_BALANCE_TRACKER[chain_id]
