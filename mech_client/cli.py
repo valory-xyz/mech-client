@@ -28,8 +28,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import click
 from click import ClickException
 from operate.cli import OperateApp
-from operate.constants import NO_STAKING_PROGRAM_ID
-from operate.operate_types import ServiceTemplate
+from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
+from operate.ledger.profiles import DEFAULT_MASTER_EOA_FUNDS
+from operate.operate_types import Chain, ServiceTemplate
 from operate.quickstart.run_service import (
     QuickstartConfig,
     load_local_config,
@@ -79,6 +80,20 @@ SETUP_MODE_COMMAND = "setup-agent-mode"
 DEFAULT_NETWORK = "gnosis"
 
 
+DEFAULT_MASTER_EOA_FUNDS.update(
+    {
+        Chain.ARBITRUM_ONE: {ZERO_ADDRESS: 5_000_000_000_000_000},
+        Chain.BASE: {ZERO_ADDRESS: 5_000_000_000_000_000},
+        Chain.CELO: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
+        Chain.ETHEREUM: {ZERO_ADDRESS: 20_000_000_000_000_000},
+        Chain.GNOSIS: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
+        Chain.MODE: {ZERO_ADDRESS: 500_000_000_000_000},
+        Chain.OPTIMISM: {ZERO_ADDRESS: 5_000_000_000_000_000},
+        Chain.POLYGON: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
+    }
+)
+
+
 def get_operate_path() -> Path:
     """Fetches the operate path for the mech client service"""
     home = Path.home()
@@ -93,7 +108,7 @@ def is_agent_mode(ctx: click.Context) -> bool:
     return agent_mode
 
 
-def setup_configure_local_config(
+def mech_client_configure_local_config(
     template: ServiceTemplate, operate: "OperateApp"
 ) -> QuickstartConfig:
     """Configure local quickstart configuration."""
@@ -180,7 +195,7 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
         operate_path = get_operate_path()
         if not operate_path.exists():
             raise ClickException(
-                f"""Operate path doesnot exists at: {operate_path}. Setup agent mode using mechx setup-agent-mode."""
+                f"""Operate path does not exists at: {operate_path}. Setup agent mode using mechx setup-agent-mode."""
             )
 
 
@@ -193,7 +208,7 @@ def setup_agent_mode() -> None:
 
     sys.modules[
         "operate.quickstart.run_service"
-    ].configure_local_config = setup_configure_local_config  # type: ignore
+    ].configure_local_config = mech_client_configure_local_config  # type: ignore
 
     run_service(
         operate=operate,
