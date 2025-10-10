@@ -21,7 +21,6 @@
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -73,7 +72,6 @@ from scripts.nvm_subscribe import main as nvm_subscribe_main
 
 CURR_DIR = Path(__file__).resolve().parent
 BASE_DIR = CURR_DIR.parent
-KEYS_DIR = BASE_DIR / "keys"
 GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
 OPERATE_FOLDER_NAME = ".operate_mech_client"
 SETUP_MODE_COMMAND = "setup-agent-mode"
