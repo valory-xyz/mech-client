@@ -2611,8 +2611,8 @@ web3 = "6.20.4"
 [package.source]
 type = "git"
 url = "https://github.com/valory-xyz/olas-operate-middleware.git"
-reference = "4f4f07e7aff18b91e493bc908cfb45a7400df437"
-resolved_reference = "4f4f07e7aff18b91e493bc908cfb45a7400df437"
+reference = "417f5f9079127cb9e675b82890d84eddb119182f"
+resolved_reference = "417f5f9079127cb9e675b82890d84eddb119182f"
 
 [[package]]
 name = "open-aea"
@@ -4310,13 +4310,13 @@ files = [
 
 [[package]]
 name = "virtualenv"
-version = "20.34.0"
+version = "20.35.1"
 description = "Virtual Python Environment builder"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "virtualenv-20.34.0-py3-none-any.whl", hash = "sha256:341f5afa7eee943e4984a9207c025feedd768baff6753cd660c857ceb3e36026"},
-    {file = "virtualenv-20.34.0.tar.gz", hash = "sha256:44815b2c9dee7ed86e387b842a84f20b93f7f417f95886ca1996a72a4138eb1a"},
+    {file = "virtualenv-20.35.1-py3-none-any.whl", hash = "sha256:1d9d93cd01d35b785476e2fa7af711a98d40d227a078941695bbae394f8737e2"},
+    {file = "virtualenv-20.35.1.tar.gz", hash = "sha256:041dac43b6899858a91838b616599e80000e545dee01a21172a6a46746472cb2"},
 ]
 
 [package.dependencies]
@@ -4676,4 +4676,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10, <3.12"
-content-hash = "ea40809fc211a62cc7f557407973a9757a184b7d7e8ff338555fa2cb65fb7208"
+content-hash = "5c25a386c1a7d48f53d774bda7a5cf540bdc6cb5aacc087bf21adfe62e821a7c"
