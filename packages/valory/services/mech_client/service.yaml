@@ -1,0 +1,28 @@
+name: mech_client
+author: valory
+version: 0.1.0
+description: The mech_client service to allow interacting with on-chain mechs
+aea_version: '>=2.0.0, <3.0.0'
+license: Apache-2.0
+fingerprint:
+  README.md: bafybeibgcfkkosavrzc5oubkvrmq467dmpns2h54iwnlfaxlrbam5f6z5y
+fingerprint_ignore_patterns: []
+number_of_agents: 1
+agent: valory/mech_client:0.1.0:bafybeifxorv7uf5qzsr52bztkucaqa7ljflp6kotr4cwagb2rsn6en6dtm
+deployment: {}
+dependencies: {}
+---
+public_id: valory/ledger:0.19.0
+type: connection
+config:
+  ledger_apis:
+    base:
+      address: ${BASE_LEDGER_RPC_0:str:http://host.docker.internal:8545}
+      chain_id: ${BASE_LEDGER_CHAIN_ID:int:8453}
+      poa_chain: ${BASE_LEDGER_IS_POA_CHAIN:bool:false}
+      default_gas_price_strategy: ${BASE_LEDGER_PRICING:str:eip1559}
+    gnosis:
+      address: ${GNOSIS_LEDGER_RPC_0:str:http://host.docker.internal:8545}
+      chain_id: ${GNOSIS_LEDGER_CHAIN_ID:int:100}
+      poa_chain: ${GNOSIS_LEDGER_IS_POA_CHAIN:bool:false}
+      default_gas_price_strategy: ${GNOSIS_LEDGER_PRICING:str:eip1559}

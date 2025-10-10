@@ -36,6 +36,7 @@ from .utils import (
     get_token_balance_tracker_contract,
 )
 from mech_client.wss import wait_for_receipt
+from mech_client.safe import get_safe_nonce, send_safe_tx, EthereumClient
 
 
 def check_token_balance(token_contract: Web3Contract, sender: str, amount: int) -> None:
@@ -56,31 +57,62 @@ def check_token_balance(token_contract: Web3Contract, sender: str, amount: int) 
 def approve(
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
+    ethereum_client: EthereumClient,
+    agent_mode: bool,
+    safe_address: Optional[str],
     token_contract: Web3Contract,
     token_balance_tracker_contract: Web3Contract,
     amount: int,
 ) -> str:
-    sender = crypto.address
+    # Tokens will be on the safe and EOA pays for gas
+    # so for agent mode, sender has to be safe
+    sender = safe_address or crypto.address
 
     print("Sending approve tx")
     try:
         tx_args = {"sender_address": sender, "value": 0, "gas": 60000}
-        raw_transaction = ledger_api.build_transaction(
-            contract_instance=token_contract,
-            method_name="approve",
-            method_args={
-                "_to": token_balance_tracker_contract.address,
-                "_value": amount,
-            },
-            tx_args=tx_args,
-            raise_on_try=True,
+        method_name = "approve"
+        method_args = {
+            "_to": token_balance_tracker_contract.address,
+            "_value": amount,
+        }
+
+        if not agent_mode:
+            raw_transaction = ledger_api.build_transaction(
+                contract_instance=token_contract,
+                method_name="approve",
+                method_args={
+                    "_to": token_balance_tracker_contract.address,
+                    "_value": amount,
+                },
+                tx_args=tx_args,
+                raise_on_try=True,
+            )
+            signed_transaction = crypto.sign_transaction(raw_transaction)
+            transaction_digest = ledger_api.send_signed_transaction(
+                signed_transaction,
+                raise_on_try=True,
+            )
+            return transaction_digest
+
+        function = token_contract.functions[method_name](**method_args)
+        transaction = function.build_transaction(
+            {
+                "chainId": int(ledger_api._chain_id),
+                "gas": 0,
+                "nonce": get_safe_nonce(ethereum_client, str(safe_address)),
+            }
         )
-        signed_transaction = crypto.sign_transaction(raw_transaction)
-        transaction_digest = ledger_api.send_signed_transaction(
-            signed_transaction,
-            raise_on_try=True,
+        transaction_digest = send_safe_tx(
+            ethereum_client=ethereum_client,
+            tx_data=transaction["data"],
+            to_adress=token_contract.address,
+            safe_address=str(safe_address),
+            signer_pkey=crypto.private_key,
+            value=0,
         )
-        return transaction_digest
+        return transaction_digest.hex()
+
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
         return str(e)
@@ -89,34 +121,64 @@ def approve(
 def deposit(
     ledger_api: EthereumApi,
     crypto: EthereumCrypto,
+    ethereum_client: EthereumClient,
+    agent_mode: bool,
+    safe_address: Optional[str],
     token_balance_tracker_contract: Web3Contract,
     amount: int,
 ) -> str:
-    sender = crypto.address
+    # Tokens will be on the safe and EOA pays for gas
+    # so for agent mode, sender has to be safe
+    sender = safe_address or crypto.address
 
     print("Sending deposit tx")
     try:
         tx_args = {"sender_address": sender, "value": 0, "gas": 100000}
-        raw_transaction = ledger_api.build_transaction(
-            contract_instance=token_balance_tracker_contract,
-            method_name="deposit",
-            method_args={"amount": amount},
-            tx_args=tx_args,
-            raise_on_try=True,
+        method_name = "deposit"
+        method_args = {"amount": amount}
+
+        if not agent_mode:
+            raw_transaction = ledger_api.build_transaction(
+                contract_instance=token_balance_tracker_contract,
+                method_name=method_name,
+                method_args=method_args,
+                tx_args=tx_args,
+                raise_on_try=True,
+            )
+            signed_transaction = crypto.sign_transaction(raw_transaction)
+            transaction_digest = ledger_api.send_signed_transaction(
+                signed_transaction,
+                raise_on_try=True,
+            )
+            return transaction_digest
+
+        function = token_balance_tracker_contract.functions[method_name](**method_args)
+        transaction = function.build_transaction(
+            {
+                "chainId": int(ledger_api._chain_id),
+                "gas": 0,
+                "nonce": get_safe_nonce(ethereum_client, str(safe_address)),
+            }
         )
-        signed_transaction = crypto.sign_transaction(raw_transaction)
-        transaction_digest = ledger_api.send_signed_transaction(
-            signed_transaction,
-            raise_on_try=True,
+        transaction_digest = send_safe_tx(
+            ethereum_client=ethereum_client,
+            tx_data=transaction["data"],
+            to_adress=token_balance_tracker_contract.address,
+            safe_address=str(safe_address),
+            signer_pkey=crypto.private_key,
+            value=0,
         )
-        return transaction_digest
+        return transaction_digest.hex()
+
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
         return str(e)
 
 
 def main(
+    agent_mode: bool,
     amount: str,
+    safe_address: Optional[str] = None,
     private_key_path: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
@@ -129,6 +191,8 @@ def main(
     private_key_path = private_key_path or PRIVATE_KEY_FILE_PATH
 
     mech_config = get_mech_config(chain_config)
+    ledger_rpc = mech_config.ledger_config.address
+    ethereum_client = EthereumClient(ledger_rpc)
     ledger_config = mech_config.ledger_config
     ledger_api = EthereumApi(**asdict(ledger_config))
 
@@ -138,19 +202,25 @@ def main(
         )
     crypto = EthereumCrypto(private_key_path=private_key_path)
 
-    print(f"Sender address: {crypto.address}")
-
     chain_id = mech_config.ledger_config.chain_id
     token_balance_tracker_contract = get_token_balance_tracker_contract(
         ledger_api, chain_id
     )
     token_contract = get_token_contract(ledger_api, chain_id)
 
-    check_token_balance(token_contract, crypto.address, amount_to_deposit)
+    # Tokens will be on the safe and EOA pays for gas
+    # so for agent mode, sender has to be safe
+    sender = safe_address or crypto.address
+    print(f"Sender address: {sender}")
+
+    check_token_balance(token_contract, sender, amount_to_deposit)
 
     approve_tx = approve(
         crypto,
         ledger_api,
+        ethereum_client,
+        agent_mode,
+        safe_address,
         token_contract,
         token_balance_tracker_contract,
         amount_to_deposit,
@@ -169,6 +239,9 @@ def main(
     deposit_tx = deposit(
         ledger_api,
         crypto,
+        ethereum_client,
+        agent_mode,
+        safe_address,
         token_balance_tracker_contract,
         amount_to_deposit,
     )
