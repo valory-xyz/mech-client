@@ -5,3 +5,7 @@ payment_data # unused variable (mech_client/interact.py:111)
 AGENT_QUERY_TEMPLATE # unused variable (mech_client/subgraph.py:30)
 principal_chain # unused variable (mech_client/cli.py:92)
 configure_local_config # unused variable (mech_client/cli.py:162)
+
+# Existing entries...
+send_marketplace_request_nonblocking  # used in tests/locustfile.py
+delivery_consumer_loop_status_only    # used in tests/locustfile.py
