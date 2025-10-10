@@ -65,7 +65,7 @@ class PaymentType(Enum):
     NATIVE_NVM = (
         "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
     )
-    TOKEN_NVM = (
+    TOKEN_NVM_USDC = (
         "0d6fd99afa9c4c580fab5e341922c2a5c4b61d880da60506193d7bf88944dd14"  # nosec
     )
 
@@ -93,7 +93,7 @@ PAYMENT_TYPE_TO_ABI_PATH: Dict[str, Path] = {
     PaymentType.NATIVE.value: BALANCE_TRACKER_NATIVE_ABI_PATH,
     PaymentType.TOKEN.value: BALANCE_TRACKER_TOKEN_ABI_PATH,
     PaymentType.NATIVE_NVM.value: BALANCE_TRACKER_NVM_NATIVE_ABI_PATH,
-    PaymentType.TOKEN_NVM.value: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
+    PaymentType.TOKEN_NVM_USDC.value: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
 }
 
 CHAIN_TO_PRICE_TOKEN = {
@@ -922,7 +922,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     is_nvm_mech = payment_type in [
         PaymentType.NATIVE_NVM.value,
-        PaymentType.TOKEN_NVM.value,
+        PaymentType.TOKEN_NVM_USDC.value,
     ]
     if is_nvm_mech:
         nvm_mech_type = PaymentType(payment_type).name.lower()
