@@ -11,7 +11,7 @@ A basic client to interact with an AI Mech. [AI Mechs](https://github.com/valory
 
 ## Developing, running and deploying Mechs and Mech tools
 
-The easiest way to create, run, deploy and test your own Mech and Mech tools is to follow the Mech and Mech tool docs [here](https://open-autonomy.docs.autonolas.tech/mech-tools-dev/). The [Mech tools dev repo](https://github.com/valory-xyz/mech-tools-dev) used in those docs greatly simplifies the development flow and dev experience.
+The easiest way to create, run, deploy and test your own Mech and Mech tools is to follow the Mech and Mech tool docs [here](https://stack.olas.network/open-autonomy/mech-tools-dev/). The [Mech tools dev repo](https://github.com/valory-xyz/mech-tools-dev) used in those docs greatly simplifies the development flow and dev experience.
 
 Only continue reading this README if you know what you are doing and you are specifically interested in this repo.
 
@@ -129,7 +129,7 @@ The basic usage of the Mech Client is as follows:
 mechx interact --prompts <prompt> --tools <tool> --agent_id <agent_id>
 ```
 
-where agent with `<agent_id>` will process `<prompt>` with the `<tool>` and default options. Each chain has its own set of Mech agents. You can find the agent IDs for each chain on the [Mech Hub](https://aimechs.autonolas.network/registry) or on the [Mech repository](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
+where agent blueprint with `<agent_id>` will process `<prompt>` with the `<tool>` and default options. Each chain has its own set of Mech agents. You can find the agent blueprint IDs for each chain on the [Mech Hub](https://aimechs.autonolas.network/registry) or on the [Mech repository](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
 
 ⚠️ Batch requests and tools are not supported for legacy mechs
 
@@ -226,7 +226,7 @@ export MECHX_MECH_OFFCHAIN_URL="http://localhost:8000/"
 ```
 If you want to use a Valory mech for offchain requests, below is the list of mechs and their address and offchain urls.
 
-| Service ID | Priority Mech Address                       | Offchain URL                                             |
+| AI agent ID | Priority Mech Address                       | Offchain URL                                             |
 |    :---:   |                :---:                        |                        :---:                             |
 |       2182 | 0xB3C6319962484602b00d5587e965946890b82101  | https://d19715222af5b940.agent.propel.autonolas.tech/    |
 
@@ -251,7 +251,7 @@ mechx fetch-mm-mechs-info --chain-config gnosis
 ```
 ```bash
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-|   Service Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
+|   AI agent Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
 +==============+====================+============================================+====================+===============================================================================================================+
 |         2182 | Fixed Price Native | 0xc05e7412439bd7e91730a6880e18d5d5873f632c |              41246 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
@@ -268,7 +268,7 @@ mechx fetch-mm-mechs-info --chain-config gnosis
 ### List tools available for legacy mechs and marketplace mechs
 
 #### For legacy mechs
-To list the tools available for a specific agent or for all agents, use the `tools-for-agents` command. You can specify an agent ID to get tools for a specific agent, or omit it to list tools for all agents.
+To list the tools available for a specific agent or for all agents, use the `tools-for-agents` command. You can specify an agent blueprint ID to get tools for a specific agent, or omit it to list tools for all agents.
 
 ```bash
 mechx tools-for-agents
@@ -309,7 +309,7 @@ You will see an output like this:
 ```
 
 #### For marketplace mechs
-To list the tools available for a specific marketplace mech, use the `tools-for-marketplace-mech` command. You can specify a service ID to get tools for a specific mech.
+To list the tools available for a specific marketplace mech, use the `tools-for-marketplace-mech` command. You can specify an AI agent ID to get tools for a specific mech.
 
 ```bash
 mechx tools-for-marketplace-mech 1722 --chain-config gnosis
@@ -524,7 +524,7 @@ You can also use the Mech Client to programmatically fetch tools for agents in y
     from mech_client.mech_tool_management import get_tools_for_agents, get_tool_description, get_tool_io_schema
 
     # Fetching tools for a specific agent or all agents
-    agent_id = 6  # Specify the agent ID or set to None to fetch tools for all agents
+    agent_id = 6  # Specify the agent blueprint ID or set to None to fetch tools for all agents
     chain_config = "gnosis"  # Specify the chain configuration
     tools = get_tools_for_agents(agent_id=agent_id, chain_config=chain_config)
     print(f"Tools for agent {agent_id}:", tools)
@@ -590,9 +590,9 @@ No. AI Mechs are currently deployed only on mainnets.
 
 <details>
 
-<summary><b>Where can I find the agent ID?</b></summary>
+<summary><b>Where can I find the agent blueprint ID?</b></summary>
 
-You can find the agent IDs for each chain on the [Mech Hub](https://aimechs.autonolas.network/registry) or on the [Mech repository](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
+You can find the agent blueprint IDs for each chain on the [Mech Hub](https://aimechs.autonolas.network/registry) or on the [Mech repository](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
 
 </details>
 
