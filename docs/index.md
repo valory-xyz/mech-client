@@ -3,15 +3,15 @@
 This guide contains practical guidelines for interacting with Mechs.
 A requester - whether it is an agent or an application - can choose between two methods for sending service requests:
 
-- On-chain: The request is sent to the Mech contract. For Mechs registered on the [Mech Marketplace](../mech-tools-dev/index.md#appendix-what-is-the-mech-marketplace), it is relayed via the Mech Marketplace.
+- On-chain: The request is sent to the Mech contract. For Mechs registered on the [Mech Marketplace](https://stack.olas.network/mech-tools-dev/#the-mech-marketplace), it is relayed via the Mech Marketplace.
 
-- Off-chain: The request is sent directly to the Mech service. The Mech then sends the result (or delivery) to the Mech contract, which is subsequently relayed by the Mech Marketplace if the Mech is registered there.
+- Off-chain: The request is sent directly to the Mech AI agent. The Mech then sends the result (or delivery) to the Mech contract, which is subsequently relayed by the Mech Marketplace if the Mech is registered there.
 
 To send a request, follow these steps:
 
 **1.** Choose a Mech;
 
-**2.** Make an on-chain deposit according to the Mech’s [payment model](../mech-tools-dev/index.md#overview).
+**2.** Make an on-chain deposit according to the Mech’s [payment model](https://stack.olas.network/mech-tools-dev/#payment-models).
 
 **3.** Choose a method for sending the request (on-chain or off-chain).
 
@@ -61,7 +61,7 @@ Replace `<chain-config>` by the chosen network. Currently supported chains are g
 ```
 ```bash
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-|   Service Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
+|   AI Agent Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
 +==============+====================+============================================+====================+===============================================================================================================+
 |         2182 | Fixed Price Native | 0xc05e7412439bd7e91730a6880e18d5d5873f632c |              41246 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
@@ -100,7 +100,7 @@ Replace each placeholder as follows:
 
 ### 1. 2. 2. Deposits
 
-When you send a request, you may be prompted to add funds to your EOA account to cover on-chain deposits and Mech service fees. The required token (either native token or OLAS) depends on the Mech's payment model. The exact amount will be indicated at runtime.
+When you send a request, you may be prompted to add funds to your EOA account to cover on-chain deposits and Mech AI agent fees. The required token (either native token or OLAS) depends on the Mech's payment model. The exact amount will be indicated at runtime.
 
 **Finding the price per request**
 
@@ -173,7 +173,7 @@ Alternatively, if the connection is lost, you can retrieve the response manually
 printf "%x\n" <request_id>
 ```
 
-- Go to the [Mech list](https://mech.olas.network/mechs) and locate your Mech (by its service ID or address).
+- Go to the [Mech list](https://mech.olas.network/mechs) and locate your Mech (by its AI agent ID or address).
 
 - Click on the Mech’s address to see a list of requests it has received.
 
