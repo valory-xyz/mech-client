@@ -30,15 +30,19 @@ from .utils import (
     CHAIN_TO_NATIVE_BALANCE_TRACKER,
 )
 from mech_client.wss import wait_for_receipt
+from mech_client.safe import send_safe_tx, EthereumClient
 
 
 def deposit(
     ledger_api: EthereumApi,
     crypto: EthereumCrypto,
+    ethereum_client: EthereumClient,
+    agent_mode: bool,
+    safe_address: Optional[str],
     to: str,
     amount: int,
 ) -> str:
-    sender = crypto.address
+    sender = safe_address or crypto.address
 
     try:
         print("Fetching user balance")
@@ -56,26 +60,40 @@ def deposit(
 
     try:
         print("Sending deposit tx")
-        raw_transaction = ledger_api.get_transfer_transaction(
-            sender_address=sender,
-            destination_address=to,
-            amount=amount,
-            tx_fee=50000,
-            tx_nonce="0x",
+        if not agent_mode:
+            raw_transaction = ledger_api.get_transfer_transaction(
+                sender_address=sender,
+                destination_address=to,
+                amount=amount,
+                tx_fee=50000,
+                tx_nonce="0x",
+            )
+            signed_transaction = crypto.sign_transaction(raw_transaction)
+            transaction_digest = ledger_api.send_signed_transaction(
+                signed_transaction,
+                raise_on_try=True,
+            )
+            return transaction_digest
+
+        transaction_digest = send_safe_tx(
+            ethereum_client=ethereum_client,
+            tx_data="0x",
+            to_adress=to,
+            safe_address=str(safe_address),
+            signer_pkey=crypto.private_key,
+            value=amount,
         )
-        signed_transaction = crypto.sign_transaction(raw_transaction)
-        transaction_digest = ledger_api.send_signed_transaction(
-            signed_transaction,
-            raise_on_try=True,
-        )
-        return transaction_digest
+        return transaction_digest.hex()
+
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
         return str(e)
 
 
 def main(
+    agent_mode: bool,
     amount: str,
+    safe_address: Optional[str] = None,
     private_key_path: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
@@ -88,6 +106,8 @@ def main(
     private_key_path = private_key_path or PRIVATE_KEY_FILE_PATH
 
     mech_config = get_mech_config(chain_config)
+    ledger_rpc = mech_config.ledger_config.address
+    ethereum_client = EthereumClient(ledger_rpc)
     ledger_config = mech_config.ledger_config
     ledger_api = EthereumApi(**asdict(ledger_config))
 
@@ -97,12 +117,21 @@ def main(
         )
     crypto = EthereumCrypto(private_key_path=private_key_path)
 
-    print(f"Sender address: {crypto.address}")
+    sender = safe_address or crypto.address
+    print(f"Sender address: {sender}")
 
     chain_id = mech_config.ledger_config.chain_id
     to = CHAIN_TO_NATIVE_BALANCE_TRACKER[chain_id]
 
-    deposit_tx = deposit(ledger_api, crypto, to, amount_to_deposit)
+    deposit_tx = deposit(
+        ledger_api,
+        crypto,
+        ethereum_client,
+        agent_mode,
+        safe_address,
+        to,
+        amount_to_deposit,
+    )
     if not deposit_tx:
         print("Unable to deposit")
         sys.exit(1)
