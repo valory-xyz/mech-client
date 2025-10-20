@@ -4,12 +4,10 @@ import json
 import logging
 import os
 import sys
-import requests
 
 import uuid
-from typing import Any, Dict, List, Literal, Union, Optional
+from typing import Any, Dict, Optional, Tuple
 from web3 import Web3
-from eth_account import Account
 from eth_typing import ChecksumAddress
 
 from .contracts.did_registry import DIDRegistryContract
@@ -104,6 +102,12 @@ class NVMSubscriptionManager:
         Returns:
             Dict[str, Any]: A dictionary containing transaction status and receipt.
         """
+        print(f"Checking {self.sender} balance for purchasing subscription...")       
+        is_enough, message = self.check_sufficient_sender_balance()
+        if not is_enough:
+            print(message)
+            sys.exit(1)
+
         logger.info(f"Creating subscription for DID: {did}")
 
         did = did.replace("did:nv:", "0x")
@@ -321,3 +325,30 @@ class NVMSubscriptionManager:
         else:
             logger.error("Subscription purchase transaction failed")
             return {"status": "failed", "receipt": dict(receipt)}
+
+
+    def check_sufficient_sender_balance(self) -> Tuple[bool, str]:
+        w3 = self.web3
+        sender = self.sender
+        chain_id = w3.eth.chain_id
+
+        # For gnosis, native xdai is used for purchase 
+        if chain_id == 100:
+            required_balance = w3.from_wei(10**18, unit='ether')
+            native_balance = w3.from_wei(w3.eth.get_balance(sender), unit='ether')
+            return (
+                native_balance >= required_balance,
+                f"Not enough balance. Required: {required_balance} xdai, Found: {native_balance} xdai",
+            )
+        
+        # For base, usdc is used for purchase (decimal 6)
+        if chain_id == 8453:
+            required_balance = w3.from_wei(10**6, unit='mwei')
+            usdc_balance = w3.from_wei(self.subscription_token.get_balance(sender), unit='mwei')
+            usdc_address = self.subscription_token.address
+            return (
+                usdc_balance >= required_balance,
+                f"Not enough balance. Required: {required_balance} usdc (token {usdc_address}), Found: {usdc_balance} usdc",
+            )
+        
+        return False, f"Unsupported chain: {chain_id}"

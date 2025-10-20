@@ -26,6 +26,26 @@ class SubscriptionToken(BaseContract):
         super().__init__(w3, name="SubscriptionToken")
         logger.info("Token initialized")
 
+    def get_balance(
+        self, sender: Union[ChecksumAddress, ENS]
+    ) -> int:
+        """
+        Gets the user token balance.
+
+        Args:
+            sender (ChecksumAddress | ENS): User address.
+
+        Returns:
+            int: The user's token balance.
+        """
+        sender_address: ChecksumAddress = self.w3.to_checksum_address(sender)
+
+        balance = (
+            self.functions().balanceOf(sender_address).call()
+        )
+        logger.debug(f"Fetched Token Balance: {balance}")
+        return balance
+
     def build_approve_token_tx(
         self,
         sender: Union[ChecksumAddress, ENS],
