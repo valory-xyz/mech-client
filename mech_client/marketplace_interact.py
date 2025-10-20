@@ -882,7 +882,9 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     if not use_prepaid:
         price = max_delivery_rate * num_requests
         if payment_type == PaymentType.NATIVE.value:
-            print("Native Mech detected, fetching user native balance for price payment...")
+            print(
+                "Native Mech detected, fetching user native balance for price payment..."
+            )
             sender = safe_address or crypto.address
             balance = ledger_api.get_balance(sender)
             if balance < price:
