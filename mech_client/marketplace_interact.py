@@ -881,6 +881,16 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     if not use_prepaid:
         price = max_delivery_rate * num_requests
+        if payment_type == PaymentType.NATIVE.value:
+            print("Native Mech detected, fetching user native balance for price payment...")
+            sender = safe_address or crypto.address
+            balance = ledger_api.get_balance(sender)
+            if balance < price:
+                print(
+                    f"  - Sender Native balance low. Needed: {price}, Actual: {balance}"
+                )
+                print(f"  - Sender Address: {sender}")
+                sys.exit(1)
         if payment_type == PaymentType.TOKEN.value:
             print("Token Mech detected, approving wrapped token for price payment...")
             price_token = CHAIN_TO_PRICE_TOKEN[chain_id]
