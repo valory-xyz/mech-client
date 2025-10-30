@@ -32,6 +32,10 @@ class Network(Enum):
     GNOSIS = "GNOSIS"
     BASE = "BASE"
 
+class ChainId(Enum):
+    GNOSIS = 100
+    BASE = 8453
+
 
 def get_variable_value(variable: str) -> str:
     try:
@@ -161,7 +165,7 @@ class NVMSubscriptionManager:
 
         # we set value as xdai is used as subscription for gnosis
         value_eth = 1
-        if chain_id == 8453:
+        if chain_id == ChainId.BASE.value:
             # for base, usdc is used and so we don't send any value
             value_eth = 0
 
@@ -333,7 +337,7 @@ class NVMSubscriptionManager:
         chain_id = w3.eth.chain_id
 
         # For gnosis, native xdai is used for purchase 
-        if chain_id == 100:
+        if chain_id == ChainId.GNOSIS.value:
             required_balance = w3.from_wei(10**18, unit='ether')
             native_balance = w3.from_wei(w3.eth.get_balance(sender), unit='ether')
             return (
@@ -342,7 +346,7 @@ class NVMSubscriptionManager:
             )
         
         # For base, usdc is used for purchase (decimal 6)
-        if chain_id == 8453:
+        if chain_id == ChainId.BASE.value:
             required_balance = w3.from_wei(10**6, unit='mwei')
             usdc_balance = w3.from_wei(self.subscription_token.get_balance(sender), unit='mwei')
             usdc_address = self.subscription_token.address
