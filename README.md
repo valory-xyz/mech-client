@@ -74,7 +74,7 @@ Learn more about mech marketplace [here](https://olas.network/mech-marketplace)
 
 ### Set up agent mode for on-chain interactions
 
-There are two modes you can use the mechx for on-chain interactions. Currently `agent-mode` is only supported for gnosis network
+There are two modes you can use the mechx for on-chain interactions. Currently `agent-mode` is only supported for gnosis and base network.
 
 -   _agent mode_ (Recommended): This allows to register your on-chain interactions as agent on the olas protocol and allows for A2A activity to be reflected on the client
 -   _client mode_: Simple on-chain interations using EOA
@@ -86,8 +86,10 @@ cp .example.env .env
 📝 For better reliability, it is recommended to use a stable third-party RPC provider.
 
 ```bash
-mechx setup-agent-mode
+mechx setup-agent-mode --chain-config <chain_config>
 ```
+
+⚠️ Note: Run `setup-agent-mode` for each chain you interact with, and ensure your `.env` file has the correct RPC endpoint.
 
 ### Generate Mech requests
 
