@@ -72,11 +72,14 @@ from scripts.nvm_subscribe import main as nvm_subscribe_main
 
 CURR_DIR = Path(__file__).resolve().parent
 BASE_DIR = CURR_DIR.parent
-GNOSIS_TEMPLATE_CONFIG_PATH = BASE_DIR / "config" / "mech_client.json"
 OPERATE_FOLDER_NAME = ".operate_mech_client"
 SETUP_MODE_COMMAND = "setup-agent-mode"
 DEFAULT_NETWORK = "gnosis"
 
+CHAIN_TO_TEMPLATE = {
+    "gnosis": BASE_DIR / "config" / "mech_client_gnosis.json",
+    "base": BASE_DIR / "config" / "mech_client_base.json",
+}
 
 DEFAULT_MASTER_EOA_FUNDS.update(
     {
@@ -148,7 +151,17 @@ def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
         logger=operate.wallet_manager.logger,
     )
     service_manager = operate.service_manager()
-    service_config_id = service_manager.json[0]["service_config_id"]
+    service_config_id = None
+    for service in service_manager.json:
+        if service["home_chain"] == chain_config:
+            service_config_id = service["service_config_id"]
+            break
+
+    if not service_config_id:
+        raise ClickException(
+            f"""Cannot find deployed service id for chain {chain_config}. Setup agent mode for a chain using mechx setup-agent-mode cli command."""
+        )
+
     service = operate.service_manager().load(service_config_id)
 
     key = keys_manager.get_private_key_file(service.agent_addresses[0])
@@ -178,13 +191,27 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
         operate_path = get_operate_path()
         if not operate_path.exists():
             raise ClickException(
-                f"""Operate path does not exists at: {operate_path}. Setup agent mode using mechx setup-agent-mode cli command."""
+                f"""Operate path does not exists at: {operate_path}. Setup agent mode for a chain using mechx setup-agent-mode cli command."""
             )
 
 
 @click.command()
-def setup_agent_mode() -> None:
+@click.option(
+    "--chain-config",
+    type=str,
+    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+)
+def setup_agent_mode(
+    chain_config: str,
+) -> None:
     """Sets up the agent mode for users"""
+    template = CHAIN_TO_TEMPLATE.get(chain_config)
+    if template is None:
+        supported_chains = list(CHAIN_TO_TEMPLATE.keys())
+        raise ClickException(
+            f"""{chain_config} chain not supported for agent mode. Supported chains are: {supported_chains}"""
+        )
+
     operate_path = get_operate_path()
     operate = OperateApp(operate_path)
     operate.setup()
@@ -193,9 +220,10 @@ def setup_agent_mode() -> None:
         "operate.quickstart.run_service"
     ].configure_local_config = mech_client_configure_local_config  # type: ignore
 
+    print(f"Setting up agent mode using config at {template}...")
     run_service(
         operate=operate,
-        config_path=GNOSIS_TEMPLATE_CONFIG_PATH,
+        config_path=template,
         build_only=True,
         skip_dependency_check=False,
     )

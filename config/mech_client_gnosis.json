@@ -1,5 +1,5 @@
 {
-    "name": "Mech Client (agent mode)",
+    "name": "Mech Client (agent mode) on Gnosis",
     "hash": "bafybeicrsrqajrzgweh7q4grfsbkkadovyqzfouqgb5lmxyqulqv7mjaye",
     "description": "The mech_client service to allow interacting with on-chain mechs",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
