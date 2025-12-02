@@ -1,6 +1,6 @@
 # subscription/contracts/transfer_nft.py
 import logging
-from typing import Union
+from typing import Union, Dict, Any
 from web3 import Web3
 from eth_typing import ChecksumAddress
 from web3.types import ENS
@@ -26,14 +26,35 @@ class SubscriptionToken(BaseContract):
         super().__init__(w3, name="SubscriptionToken")
         logger.info("Token initialized")
 
+    def get_balance(
+        self, sender: Union[ChecksumAddress, ENS]
+    ) -> int:
+        """
+        Gets the user token balance.
+
+        Args:
+            sender (ChecksumAddress | ENS): User address.
+
+        Returns:
+            int: The user's token balance.
+        """
+        sender_address: ChecksumAddress = self.w3.to_checksum_address(sender)
+
+        balance = (
+            self.functions().balanceOf(sender_address).call()
+        )
+        logger.debug(f"Fetched Token Balance: {balance}")
+        return balance
+
     def build_approve_token_tx(
         self,
         sender: Union[ChecksumAddress, ENS],
         to: Union[ChecksumAddress, ENS],
         amount: int,
+        nonce: int,
         gas: int = 60_000,
         chain_id: int = 100,
-    ) -> bytes:
+    ) -> Dict[str, Any]:
         """
         Compute the hash of parameters for the transfer condition.
 
@@ -50,7 +71,6 @@ class SubscriptionToken(BaseContract):
         logger.debug("Approving token...")
         sender_address: ChecksumAddress = self.w3.to_checksum_address(sender)
         to_address: ChecksumAddress = self.w3.to_checksum_address(to)
-        nonce = self.w3.eth.get_transaction_count(sender_address)
         logger.debug(f"Nonce for sender {sender_address}: {nonce}")
 
         latest_block = self.w3.eth.get_block("latest")
@@ -73,10 +93,8 @@ class SubscriptionToken(BaseContract):
                 }
             )
         )
-        gas = self.w3.eth.estimate_gas(tx)
         tx.update(
             {
-                "gas": gas,
                 "maxFeePerGas": base_fee + max_priority_fee,
                 "maxPriorityFeePerGas": max_priority_fee,
             }

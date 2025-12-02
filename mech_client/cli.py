@@ -20,10 +20,22 @@
 """Mech client CLI module."""
 import json
 import os
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from click import ClickException
+from operate.cli import OperateApp
+from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
+from operate.ledger.profiles import DEFAULT_MASTER_EOA_FUNDS
+from operate.operate_types import Chain, ServiceTemplate
+from operate.quickstart.run_service import (
+    QuickstartConfig,
+    load_local_config,
+    run_service,
+)
+from operate.services.manage import KeysManager
 from tabulate import tabulate  # type: ignore
 
 from mech_client import __version__
@@ -58,10 +70,163 @@ from scripts.deposit_token import main as deposit_token_main
 from scripts.nvm_subscribe import main as nvm_subscribe_main
 
 
+CURR_DIR = Path(__file__).resolve().parent
+BASE_DIR = CURR_DIR.parent
+OPERATE_FOLDER_NAME = ".operate_mech_client"
+SETUP_MODE_COMMAND = "setup-agent-mode"
+DEFAULT_NETWORK = "gnosis"
+
+CHAIN_TO_TEMPLATE = {
+    "gnosis": BASE_DIR / "config" / "mech_client_gnosis.json",
+    "base": BASE_DIR / "config" / "mech_client_base.json",
+}
+
+DEFAULT_MASTER_EOA_FUNDS.update(
+    {
+        Chain.ARBITRUM_ONE: {ZERO_ADDRESS: 5_000_000_000_000_000},
+        Chain.BASE: {ZERO_ADDRESS: 5_000_000_000_000_000},
+        Chain.CELO: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
+        Chain.ETHEREUM: {ZERO_ADDRESS: 20_000_000_000_000_000},
+        Chain.GNOSIS: {ZERO_ADDRESS: 200_000_000_000_000_000},
+        Chain.MODE: {ZERO_ADDRESS: 500_000_000_000_000},
+        Chain.OPTIMISM: {ZERO_ADDRESS: 5_000_000_000_000_000},
+        Chain.POLYGON: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
+    }
+)
+
+
+def get_operate_path() -> Path:
+    """Fetches the operate path for the mech client service"""
+    home = Path.home()
+    operate_path = home.joinpath(OPERATE_FOLDER_NAME)
+    return operate_path
+
+
+def is_agent_mode(ctx: click.Context) -> bool:
+    """Fetches whether agent mode is on or not"""
+    client_mode = ctx.obj.get("client_mode", False)
+    agent_mode = not client_mode
+    return agent_mode
+
+
+def mech_client_configure_local_config(
+    template: ServiceTemplate, operate: "OperateApp"
+) -> QuickstartConfig:
+    """Configure local quickstart configuration."""
+    config = load_local_config(operate=operate, service_name=template["name"])
+
+    if config.rpc is None:
+        config.rpc = {}
+
+    for chain in template["configurations"]:
+        config.rpc[chain] = os.getenv("MECHX_RPC_URL")
+
+    config.principal_chain = template["home_chain"]
+
+    # set chain configs in the service template
+    for chain in template["configurations"]:
+        template["configurations"][chain] |= {
+            "staking_program_id": NO_STAKING_PROGRAM_ID,
+            "rpc": config.rpc[chain],
+            "cost_of_bond": 1,
+        }
+
+    if config.user_provided_args is None:
+        config.user_provided_args = {}
+
+    config.store()
+    return config
+
+
+def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
+    """Fetches the agent mode data of safe address and the EOA private key path"""
+    chain_config = chain_config or DEFAULT_NETWORK
+
+    # This is acceptable way to as the main functionality
+    # of keys manager is to allow access to the required data.
+    operate_path = get_operate_path()
+    operate = OperateApp(operate_path)
+    keys_manager = KeysManager(
+        path=operate._keys,  # pylint: disable=protected-access
+        logger=operate.wallet_manager.logger,
+    )
+    service_manager = operate.service_manager()
+    service_config_id = None
+    for service in service_manager.json:
+        if service["home_chain"] == chain_config:
+            service_config_id = service["service_config_id"]
+            break
+
+    if not service_config_id:
+        raise ClickException(
+            f"""Cannot find deployed service id for chain {chain_config}. Setup agent mode for a chain using mechx setup-agent-mode cli command."""
+        )
+
+    service = operate.service_manager().load(service_config_id)
+
+    key = keys_manager.get_private_key_file(service.agent_addresses[0])
+    safe = service.chain_configs[chain_config].chain_data.multisig
+
+    return safe, key
+
+
 @click.group(name="mechx")  # type: ignore
 @click.version_option(__version__, prog_name="mechx")
-def cli() -> None:
+@click.option(
+    "--client-mode",
+    is_flag=True,
+    help="Enables client mode",
+)
+@click.pass_context
+def cli(ctx: click.Context, client_mode: bool) -> None:
     """Command-line tool for interacting with mechs."""
+    ctx.ensure_object(dict)
+    ctx.obj["client_mode"] = client_mode
+
+    cli_command = ctx.invoked_subcommand if ctx.invoked_subcommand else None
+    is_setup_called = cli_command == SETUP_MODE_COMMAND
+
+    if not is_setup_called and not client_mode:
+        click.echo("Agent mode enabled")
+        operate_path = get_operate_path()
+        if not operate_path.exists():
+            raise ClickException(
+                f"""Operate path does not exists at: {operate_path}. Setup agent mode for a chain using mechx setup-agent-mode cli command."""
+            )
+
+
+@click.command()
+@click.option(
+    "--chain-config",
+    type=str,
+    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+)
+def setup_agent_mode(
+    chain_config: str,
+) -> None:
+    """Sets up the agent mode for users"""
+    template = CHAIN_TO_TEMPLATE.get(chain_config)
+    if template is None:
+        supported_chains = list(CHAIN_TO_TEMPLATE.keys())
+        raise ClickException(
+            f"""{chain_config} chain not supported for agent mode. Supported chains are: {supported_chains}"""
+        )
+
+    operate_path = get_operate_path()
+    operate = OperateApp(operate_path)
+    operate.setup()
+
+    sys.modules[
+        "operate.quickstart.run_service"
+    ].configure_local_config = mech_client_configure_local_config  # type: ignore
+
+    print(f"Setting up agent mode using config at {template}...")
+    run_service(
+        operate=operate,
+        config_path=template,
+        build_only=True,
+        skip_dependency_check=False,
+    )
 
 
 @click.command()
@@ -133,7 +298,9 @@ def cli() -> None:
     type=str,
     help="Id of the mech's chain configuration (stored configs/mechs.json)",
 )
+@click.pass_context
 def interact(  # pylint: disable=too-many-arguments,too-many-locals
+    ctx: click.Context,
     prompts: tuple,
     agent_id: int,
     priority_mech: str,
@@ -141,6 +308,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     use_offchain: bool,
     key: Optional[str],
     tools: Optional[tuple],
+    safe: Optional[str] = None,
     extra_attribute: Optional[List[str]] = None,
     confirm: Optional[str] = None,
     retries: Optional[int] = None,
@@ -150,6 +318,9 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
+        agent_mode = is_agent_mode(ctx)
+        click.echo(f"Running interact with agent_mode={agent_mode}")
+
         extra_attributes_dict: Dict[str, Any] = {}
         if extra_attribute:
             for pair in extra_attribute:
@@ -171,9 +342,18 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                     f"The number of prompts ({len(prompts)}) must match the number of tools ({len(tools)})"
                 )
 
+            if agent_mode:
+                safe, key = fetch_agent_mode_data(chain_config)
+                if not safe or not key:
+                    raise ClickException(
+                        "Cannot fetch safe or key data for the agent mode."
+                    )
+
             marketplace_interact_(
                 prompts=prompts,
                 priority_mech=priority_mech,
+                agent_mode=agent_mode,
+                safe_address=safe,
                 use_prepaid=use_prepaid,
                 use_offchain=use_offchain,
                 mech_offchain_url=mech_offchain_url,
@@ -459,14 +639,29 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="Path to private key to use for deposit",
 )
+@click.pass_context
 def deposit_native(
+    ctx: click.Context,
     amount_to_deposit: str,
     key: Optional[str],
+    safe: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Native balance for prepaid requests."""
+    agent_mode = is_agent_mode(ctx)
+    click.echo(f"Running deposit native with agent_mode={agent_mode}")
+
+    if agent_mode:
+        safe, key = fetch_agent_mode_data(chain_config)
+        if not safe or not key:
+            raise ClickException("Cannot fetch safe or key data for the agent mode.")
+
     deposit_native_main(
-        amount=amount_to_deposit, private_key_path=key, chain_config=chain_config
+        agent_mode=agent_mode,
+        safe_address=safe,
+        amount=amount_to_deposit,
+        private_key_path=key,
+        chain_config=chain_config,
     )
 
 
@@ -482,14 +677,29 @@ def deposit_native(
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="Path to private key to use for deposit",
 )
+@click.pass_context
 def deposit_token(
+    ctx: click.Context,
     amount_to_deposit: str,
     key: Optional[str],
+    safe: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Token balance for prepaid requests."""
+    agent_mode = is_agent_mode(ctx)
+    click.echo(f"Running deposit token with agent_mode={agent_mode}")
+
+    if agent_mode:
+        safe, key = fetch_agent_mode_data(chain_config)
+        if not safe or not key:
+            raise ClickException("Cannot fetch safe or key data for the agent mode.")
+
     deposit_token_main(
-        amount=amount_to_deposit, private_key_path=key, chain_config=chain_config
+        agent_mode=agent_mode,
+        safe_address=safe,
+        amount=amount_to_deposit,
+        private_key_path=key,
+        chain_config=chain_config,
     )
 
 
@@ -504,12 +714,28 @@ def deposit_token(
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="Path to private key to use for deposit",
 )
+@click.pass_context
 def nvm_subscribe(
+    ctx: click.Context,
     key: str,
     chain_config: str,
+    safe: Optional[str] = None,
 ) -> None:
     """Allows to purchase nvm subscription for nvm mech requests."""
-    nvm_subscribe_main(private_key_path=key, chain_config=chain_config)
+    agent_mode = is_agent_mode(ctx)
+    click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
+
+    if agent_mode:
+        safe, key = fetch_agent_mode_data(chain_config)
+        if not safe or not key:
+            raise ClickException("Cannot fetch safe or key data for the agent mode.")
+
+    nvm_subscribe_main(
+        agent_mode=agent_mode,
+        safe_address=safe,
+        private_key_path=key,
+        chain_config=chain_config,
+    )
 
 
 @click.command(name="fetch-mm-mechs-info")
@@ -560,6 +786,7 @@ def query_mm_mechs_info_cli(
         return None
 
 
+cli.add_command(setup_agent_mode)
 cli.add_command(interact)
 cli.add_command(prompt_to_ipfs)
 cli.add_command(push_to_ipfs)
@@ -577,4 +804,4 @@ cli.add_command(query_mm_mechs_info_cli)
 
 
 if __name__ == "__main__":
-    cli()
+    cli()  # pylint: disable=no-value-for-parameter

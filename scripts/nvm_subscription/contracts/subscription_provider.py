@@ -33,8 +33,9 @@ class SubscriptionProvider(BaseContract):
         fulfill_for_delegate_params: tuple,
         fulfill_params: tuple,
         sender: str,
+        nonce: int,
         value_eth: float,
-        gas: int = 450_000,
+        gas: int = 500_000,
         chain_id: int = 100,
     ) -> Dict[str, Any]:
         """
@@ -67,7 +68,6 @@ class SubscriptionProvider(BaseContract):
 
         # Convert sender to a checksum address to ensure type safety
         sender_address: ChecksumAddress = self.w3.to_checksum_address(sender)
-        nonce = self.w3.eth.get_transaction_count(sender_address)
         logger.debug(f"Nonce for sender {sender_address}: {nonce}")
 
         latest_block = self.w3.eth.get_block("latest")
@@ -93,10 +93,8 @@ class SubscriptionProvider(BaseContract):
                 }
             )
         )
-        gas = self.w3.eth.estimate_gas(tx)
         tx.update(
             {
-                "gas": gas,
                 "maxFeePerGas": base_fee + max_priority_fee,
                 "maxPriorityFeePerGas": max_priority_fee,
             }

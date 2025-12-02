@@ -52,6 +52,7 @@ from mech_client.interact import (
 )
 from mech_client.mech_marketplace_tool_management import get_mech_tools
 from mech_client.prompt_to_ipfs import push_metadata_to_ipfs
+from mech_client.safe import EthereumClient, get_safe_nonce, send_safe_tx
 from mech_client.wss import wait_for_receipt, watch_for_marketplace_request_ids
 
 
@@ -64,7 +65,7 @@ class PaymentType(Enum):
     NATIVE_NVM = (
         "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
     )
-    TOKEN_NVM = (
+    TOKEN_NVM_USDC = (
         "0d6fd99afa9c4c580fab5e341922c2a5c4b61d880da60506193d7bf88944dd14"  # nosec
     )
 
@@ -92,7 +93,7 @@ PAYMENT_TYPE_TO_ABI_PATH: Dict[str, Path] = {
     PaymentType.NATIVE.value: BALANCE_TRACKER_NATIVE_ABI_PATH,
     PaymentType.TOKEN.value: BALANCE_TRACKER_TOKEN_ABI_PATH,
     PaymentType.NATIVE_NVM.value: BALANCE_TRACKER_NVM_NATIVE_ABI_PATH,
-    PaymentType.TOKEN_NVM.value: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
+    PaymentType.TOKEN_NVM_USDC.value: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
 }
 
 CHAIN_TO_PRICE_TOKEN = {
@@ -101,7 +102,7 @@ CHAIN_TO_PRICE_TOKEN = {
     100: "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
     137: "0xFEF5d947472e72Efbb2E388c730B7428406F2F95",
     8453: "0x54330d28ca3357F294334BDC454a032e7f353416",
-    42220: "0xFEF5d947472e72Efbb2E388c730B7428406F2F95",
+    42220: "0x96ffa56a963EC33e5bC7057B9002722D1884fc01",
 }
 
 
@@ -189,9 +190,12 @@ def fetch_mech_info(
     )
 
 
-def approve_price_tokens(
+def approve_price_tokens(  # pylint: disable=too-many-arguments, too-many-locals
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
+    ethereum_client: EthereumClient,
+    agent_mode: bool,
+    safe_address: str,
     wrapped_token: str,
     mech_payment_balance_tracker: str,
     price: int,
@@ -203,6 +207,12 @@ def approve_price_tokens(
     :type crypto: EthereumCrypto
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param ethereum_client: The Ethereum Client used for interacting with the safe.
+    :type ethereum_client: EthereumClient
+    :param agent_mode: Specifies whether agent mode is active or not.
+    :type agent_mode: bool
+    :param safe_address: Specifies the safe address related to the configured service, empty is client mode.
+    :type safe_address: str
     :param wrapped_token: The wrapped token contract address.
     :type wrapped_token: str
     :param mech_payment_balance_tracker: Requested mech's balance tracker contract address
@@ -212,7 +222,9 @@ def approve_price_tokens(
     :return: The transaction digest.
     :rtype: str
     """
-    sender = crypto.address
+    # Tokens will be on the safe and EOA pays for gas
+    # so for agent mode, sender has to be safe
+    sender = safe_address or crypto.address
 
     with open(ITOKEN_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
@@ -230,19 +242,41 @@ def approve_price_tokens(
         sys.exit(1)
 
     tx_args = {"sender_address": sender, "value": 0, "gas": 60000}
-    raw_transaction = ledger_api.build_transaction(
-        contract_instance=token_contract,
-        method_name="approve",
-        method_args={"_to": mech_payment_balance_tracker, "_value": price},
-        tx_args=tx_args,
-        raise_on_try=True,
+    method_name = "approve"
+    method_args = {"_to": mech_payment_balance_tracker, "_value": price}
+
+    if not agent_mode:
+        raw_transaction = ledger_api.build_transaction(
+            contract_instance=token_contract,
+            method_name=method_name,
+            method_args=method_args,
+            tx_args=tx_args,
+            raise_on_try=True,
+        )
+        signed_transaction = crypto.sign_transaction(raw_transaction)
+        transaction_digest = ledger_api.send_signed_transaction(
+            signed_transaction,
+            raise_on_try=True,
+        )
+        return transaction_digest
+
+    function = token_contract.functions[method_name](**method_args)
+    transaction = function.build_transaction(
+        {
+            "chainId": int(ledger_api._chain_id),  # pylint: disable=protected-access
+            "gas": 0,
+            "nonce": get_safe_nonce(ethereum_client, safe_address),
+        }
     )
-    signed_transaction = crypto.sign_transaction(raw_transaction)
-    transaction_digest = ledger_api.send_signed_transaction(
-        signed_transaction,
-        raise_on_try=True,
+    transaction_digest = send_safe_tx(
+        ethereum_client=ethereum_client,
+        tx_data=transaction["data"],
+        to_adress=token_contract.address,
+        safe_address=safe_address,
+        signer_pkey=crypto.private_key,
+        value=0,
     )
-    return transaction_digest
+    return transaction_digest.hex()
 
 
 def fetch_requester_nvm_subscription_balance(
@@ -300,10 +334,13 @@ def fetch_requester_nvm_subscription_balance(
 def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
+    ethereum_client: EthereumClient,
     marketplace_contract: Web3Contract,
     gas_limit: int,
     prompts: tuple,
     tools: tuple,
+    agent_mode: bool,
+    safe_address: str,
     method_args_data: MechMarketplaceRequestConfig,
     extra_attributes: Optional[Dict[str, Any]] = None,
     price: int = 10_000_000_000_000_000,
@@ -318,6 +355,8 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :type crypto: EthereumCrypto
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param ethereum_client: The Ethereum Client used for interacting with the safe.
+    :type ethereum_client: EthereumClient
     :param marketplace_contract: The mech marketplace contract instance.
     :type marketplace_contract: Web3Contract
     :param gas_limit: Gas limit.
@@ -326,6 +365,10 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     :type prompts: tuple
     :param tools: The requested tools.
     :type tools: tuple
+    :param agent_mode: Specifies whether agent mode is active or not.
+    :type agent_mode: bool
+    :param safe_address: Specifies the safe address related to the configured service, empty is client mode.
+    :type safe_address: str
     :param method_args_data: Method data to use to call the marketplace contract request
     :type method_args_data: MechMarketplaceRequestConfig
     :param extra_attributes: Extra attributes to be included in the request metadata.
@@ -390,19 +433,40 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
     while tries < retries and datetime.now().timestamp() < deadline:
         tries += 1
         try:
-            raw_transaction = ledger_api.build_transaction(
-                contract_instance=marketplace_contract,
-                method_name=method_name,
-                method_args=method_args,
-                tx_args=tx_args,
-                raise_on_try=True,
+            if not agent_mode:
+                raw_transaction = ledger_api.build_transaction(
+                    contract_instance=marketplace_contract,
+                    method_name=method_name,
+                    method_args=method_args,
+                    tx_args=tx_args,
+                    raise_on_try=True,
+                )
+                signed_transaction = crypto.sign_transaction(raw_transaction)
+                transaction_digest = ledger_api.send_signed_transaction(
+                    signed_transaction,
+                    raise_on_try=True,
+                )
+                return transaction_digest
+
+            function = marketplace_contract.functions[method_name](**method_args)
+            transaction = function.build_transaction(
+                {
+                    "chainId": int(
+                        ledger_api._chain_id  # pylint: disable=protected-access
+                    ),
+                    "gas": 0,
+                    "nonce": get_safe_nonce(ethereum_client, safe_address),
+                }
             )
-            signed_transaction = crypto.sign_transaction(raw_transaction)
-            transaction_digest = ledger_api.send_signed_transaction(
-                signed_transaction,
-                raise_on_try=True,
+            transaction_digest = send_safe_tx(
+                ethereum_client=ethereum_client,
+                tx_data=transaction["data"],
+                to_adress=marketplace_contract.address,
+                safe_address=safe_address,
+                signer_pkey=crypto.private_key,
+                value=price,
             )
-            return transaction_digest
+            return transaction_digest.hex()
         except Exception as e:  # pylint: disable=broad-except
             print(
                 f"Error occured while sending the transaction: {e}; Retrying in {sleep}"
@@ -616,9 +680,10 @@ def wait_for_offchain_marketplace_data(mech_offchain_url: str, request_id: str) 
             time.sleep(WAIT_SLEEP)
 
 
-def check_prepaid_balances(
+def check_prepaid_balances(  # pylint: disable=too-many-arguments
     crypto: Crypto,
     ledger_api: EthereumApi,
+    safe_address: str,
     mech_payment_balance_tracker: str,
     payment_type: str,
     max_delivery_rate: int,
@@ -630,6 +695,8 @@ def check_prepaid_balances(
     :type crypto: Crypto
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param safe_address: Specifies the safe address related to the configured service, empty is client mode.
+    :type safe_address: str
     :param mech_payment_balance_tracker: The mech's balance tracker contract address.
     :type mech_payment_balance_tracker: str
     :param payment_type: The payment type of the mech.
@@ -637,7 +704,7 @@ def check_prepaid_balances(
     :param max_delivery_rate: The max_delivery_rate of the mech
     :type max_delivery_rate: int
     """
-    requester = crypto.address
+    requester = safe_address or crypto.address
 
     if payment_type in [PaymentType.NATIVE.value, PaymentType.TOKEN.value]:
         payment_type_name = PaymentType(payment_type).name.lower()
@@ -692,6 +759,8 @@ def verify_tools(tools: tuple, service_id: int, chain_config: Optional[str]) -> 
 def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals, too-many-statements, too-many-return-statements
     prompts: tuple,
     priority_mech: str,
+    agent_mode: bool,
+    safe_address: str,
     use_prepaid: bool = False,
     use_offchain: bool = False,
     mech_offchain_url: str = "",
@@ -708,8 +777,12 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     :param prompts: The interaction prompts.
     :type prompts: tuple
-    :param priority_mech: Priority mech address to use (Optional)
+    :param priority_mech: Priority mech address to use
     :type priority_mech: str
+    :param agent_mode: Specifies whether agent mode is active or not.
+    :type agent_mode: bool
+    :param safe_address: Specifies the safe address related to the configured service, empty is client mode.
+    :type safe_address: str
     :param use_prepaid: Whether to use prepaid model or not.
     :type use_prepaid: bool
     :param use_offchain: Whether to use offchain model or not.
@@ -735,6 +808,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     """
 
     mech_config = get_mech_config(chain_config)
+    ledger_rpc = mech_config.ledger_config.address
+    ethereum_client = EthereumClient(ledger_rpc)
     ledger_config = mech_config.ledger_config
     priority_mech_address = priority_mech
     mech_marketplace_contract = mech_config.mech_marketplace_contract
@@ -806,11 +881,30 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     if not use_prepaid:
         price = max_delivery_rate * num_requests
+        if payment_type == PaymentType.NATIVE.value:
+            print(
+                "Native Mech detected, fetching user native balance for price payment..."
+            )
+            sender = safe_address or crypto.address
+            balance = ledger_api.get_balance(sender)
+            if balance < price:
+                print(
+                    f"  - Sender Native balance low. Needed: {price}, Actual: {balance}"
+                )
+                print(f"  - Sender Address: {sender}")
+                sys.exit(1)
         if payment_type == PaymentType.TOKEN.value:
             print("Token Mech detected, approving wrapped token for price payment...")
             price_token = CHAIN_TO_PRICE_TOKEN[chain_id]
             approve_tx = approve_price_tokens(
-                crypto, ledger_api, price_token, mech_payment_balance_tracker, price
+                crypto,
+                ledger_api,
+                ethereum_client,
+                agent_mode,
+                safe_address,
+                price_token,
+                mech_payment_balance_tracker,
+                price,
             )
             if not approve_tx:
                 print("Unable to approve allowance")
@@ -832,6 +926,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         check_prepaid_balances(
             crypto,
             ledger_api,
+            safe_address,
             mech_payment_balance_tracker,
             payment_type,
             max_delivery_rate,
@@ -839,7 +934,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
     is_nvm_mech = payment_type in [
         PaymentType.NATIVE_NVM.value,
-        PaymentType.TOKEN_NVM.value,
+        PaymentType.TOKEN_NVM_USDC.value,
     ]
     if is_nvm_mech:
         nvm_mech_type = PaymentType(payment_type).name.lower()
@@ -874,11 +969,14 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         transaction_digest = send_marketplace_request(
             crypto=crypto,
             ledger_api=ledger_api,
+            ethereum_client=ethereum_client,
             marketplace_contract=mech_marketplace_contract,
             gas_limit=mech_config.gas_limit,
             price=price,
             prompts=prompts,
             tools=tools,
+            agent_mode=agent_mode,
+            safe_address=safe_address,
             method_args_data=mech_marketplace_request_config,
             extra_attributes=extra_attributes,
             retries=retries,

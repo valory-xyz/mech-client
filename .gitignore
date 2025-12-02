@@ -1,8 +1,13 @@
-packages/valory/
 mech_client/helpers/acn
 mech_client/helpers/acn_data_share
 mech_client/helpers/p2p_libp2p_client
 
+packages/valory/connections
+packages/valory/protocols
+packages/valory/skills
+packages/open_aea
+
+keys
 ethereum_private_key.txt
 acn_cert.txt
 
@@ -12,6 +17,8 @@ temp/
 .tox/
 __pycache__
 .env
+.operate*
+keys.json
 
 .idea/
 .idea/*

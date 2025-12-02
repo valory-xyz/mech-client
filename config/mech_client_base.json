@@ -1,0 +1,24 @@
+{
+    "name": "Mech Client (agent mode) on Base",
+    "hash": "bafybeicrsrqajrzgweh7q4grfsbkkadovyqzfouqgb5lmxyqulqv7mjaye",
+    "description": "The mech_client service to allow interacting with on-chain mechs",
+    "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
+    "service_version": "v0.1.0",
+    "home_chain": "base",
+    "configurations": {
+        "base": {
+            "agent_id": 77,
+            "nft": "bafybeifgj3kackzfoq4fxjiuousm6epgwx7jbc3n2gjwzjgvtbbz7fc3su",
+            "threshold": 1,
+            "use_mech_marketplace": false,
+            "cost_of_bond": 1,
+            "fund_requirements": {
+                "0x0000000000000000000000000000000000000000": {
+                    "agent": 100000000000000,
+                    "safe": 100000000000000
+                }
+            }
+        }
+    },
+    "env_variables": {}
+}
