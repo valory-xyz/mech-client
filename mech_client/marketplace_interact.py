@@ -182,7 +182,6 @@ def fetch_mech_info(
             payment_type_bytes
         ).call()
     )
-    import pdb; pdb.set_trace()
     if payment_type not in PaymentType._value2member_map_:  # pylint: disable=W0212
         print("  - Invalid mech type detected.")
         sys.exit(1)
