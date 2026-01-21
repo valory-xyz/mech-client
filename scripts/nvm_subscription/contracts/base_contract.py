@@ -27,7 +27,13 @@ class BaseContract:
         self.w3 = w3
         self.name = name
         self.chain_id = self.w3.eth.chain_id
-        self.chain_name = "gnosis" if self.chain_id == 100 else "base"
+        if self.chain_id == 100 :
+            self.chain_name = "gnosis"
+        elif self.chain_id == 137 :
+            self.chain_name = "polygon"
+        else:
+            self.chain_name = "base"
+
         logger.debug(f"Initializing contract wrapper for '{self.name}'")
         self.contract = self._load_contract()  # Load contract from artifact
 

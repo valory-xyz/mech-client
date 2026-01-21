@@ -62,6 +62,7 @@ class PaymentType(Enum):
 
     NATIVE = "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"  # nosec
     TOKEN = "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
+    USDC_TOKEN = "6406bb5f31a732f898e1ce9fdd988a80a808d36ab5d9a4a4805a8be8d197d5e3"
     NATIVE_NVM = (
         "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
     )
@@ -112,6 +113,10 @@ CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
         "payment_data": "0x",
     },
     8453: {
+        "response_timeout": 300,
+        "payment_data": "0x",
+    },
+    137: {
         "response_timeout": 300,
         "payment_data": "0x",
     },
@@ -177,7 +182,7 @@ def fetch_mech_info(
             payment_type_bytes
         ).call()
     )
-
+    import pdb; pdb.set_trace()
     if payment_type not in PaymentType._value2member_map_:  # pylint: disable=W0212
         print("  - Invalid mech type detected.")
         sys.exit(1)
@@ -747,7 +752,6 @@ def verify_tools(tools: tuple, service_id: int, chain_config: Optional[str]) -> 
     mech_tools_data = get_mech_tools(service_id=service_id, chain_config=chain_config)
     if not mech_tools_data:
         raise ValueError("Error while fetching mech tools data")
-
     mech_tools = mech_tools_data.get("tools", [])
     invalid_tools = [tool for tool in tools if tool not in mech_tools]
     if invalid_tools:
@@ -876,9 +880,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     mech_deliver_event_signature = fetch_mech_deliver_event_signature(
         ledger_api, priority_mech_address
     )
-
-    verify_tools(tools, service_id, chain_config)
-
+    # verify_tools(tools, service_id, chain_config)
     if not use_prepaid:
         price = max_delivery_rate * num_requests
         if payment_type == PaymentType.NATIVE.value:
