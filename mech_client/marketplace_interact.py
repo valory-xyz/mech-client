@@ -721,7 +721,7 @@ def check_prepaid_balances(  # pylint: disable=too-many-arguments
     """
     requester = safe_address or crypto.address
 
-    if payment_type in [PaymentType.NATIVE.value, PaymentType.TOKEN.value]:
+    if payment_type in PaymentType.get_prepaid_supported_types():
         payment_type_name = PaymentType(payment_type).name.lower()
         payment_type_abi_path = PAYMENT_TYPE_TO_ABI_PATH[payment_type]
 
@@ -905,9 +905,9 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
                 )
                 print(f"  - Sender Address: {sender}")
                 sys.exit(1)
-        if payment_type == PaymentType.TOKEN.value:
-            print("Token Mech detected, approving wrapped token for price payment...")
+        if payment_type in PaymentType.get_token_payment_types():
             price_token = CHAIN_TO_PRICE_TOKEN[chain_id]
+            print(f"Token Mech detected, approving token {price_token} for price payment...")
             approve_tx = approve_price_tokens(
                 crypto,
                 ledger_api,
