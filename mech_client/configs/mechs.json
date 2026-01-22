@@ -52,7 +52,7 @@
       "is_gas_estimation_enabled": false
     },
     "gas_limit": 3000000,
-    "price": 3000000,
+    "price": 10000,
     "transaction_url": "https://polygonscan.com/tx/{transaction_digest}",
     "subgraph_url": ""
   },
