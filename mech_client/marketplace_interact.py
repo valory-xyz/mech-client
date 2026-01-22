@@ -70,6 +70,16 @@ class PaymentType(Enum):
         "0d6fd99afa9c4c580fab5e341922c2a5c4b61d880da60506193d7bf88944dd14"  # nosec
     )
 
+    @classmethod
+    def get_token_payment_types(cls) -> List[str]:
+        """Get all token-based payment types that require ERC20 approval."""
+        return [cls.TOKEN.value, cls.USDC_TOKEN.value]
+
+    @classmethod
+    def get_prepaid_supported_types(cls) -> List[str]:
+        """Get payment types that support prepaid balances."""
+        return [cls.NATIVE.value, cls.TOKEN.value, cls.USDC_TOKEN.value]
+
 
 IPFS_URL_TEMPLATE = "https://gateway.autonolas.tech/ipfs/f01701220{}"
 MECH_OFFCHAIN_REQUEST_ENDPOINT = "send_signed_requests"
