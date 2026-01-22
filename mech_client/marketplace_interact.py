@@ -62,7 +62,9 @@ class PaymentType(Enum):
 
     NATIVE = "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"  # nosec
     TOKEN = "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
-    USDC_TOKEN = "6406bb5f31a732f898e1ce9fdd988a80a808d36ab5d9a4a4805a8be8d197d5e3"
+    USDC_TOKEN = (
+        "6406bb5f31a732f898e1ce9fdd988a80a808d36ab5d9a4a4805a8be8d197d5e3"  # nosec
+    )
     NATIVE_NVM = (
         "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
     )
@@ -876,7 +878,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     )
     (
         payment_type,
-        service_id,
+        _,  # service_id unused
         max_delivery_rate,
         mech_payment_balance_tracker,
     ) = fetch_mech_info(
@@ -890,7 +892,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     mech_deliver_event_signature = fetch_mech_deliver_event_signature(
         ledger_api, priority_mech_address
     )
-    # verify_tools(tools, service_id, chain_config)
+    # TODO: verify_tools(tools, service_id, chain_config)
     if not use_prepaid:
         price = max_delivery_rate * num_requests
         if payment_type == PaymentType.NATIVE.value:
@@ -907,7 +909,9 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
                 sys.exit(1)
         if payment_type in PaymentType.get_token_payment_types():
             price_token = CHAIN_TO_PRICE_TOKEN[chain_id]
-            print(f"Token Mech detected, approving token {price_token} for price payment...")
+            print(
+                f"Token Mech detected, approving token {price_token} for price payment..."
+            )
             approve_tx = approve_price_tokens(
                 crypto,
                 ledger_api,
