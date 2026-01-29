@@ -6,7 +6,7 @@ import os
 import sys
 
 import uuid
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from eth_typing import ChecksumAddress
@@ -137,13 +137,14 @@ class NVMSubscriptionManager:
         # because NVM doesn't support polygon/gnosis infra anymore
         reward_address = self.escrow_payment.address
         fee_receiver = self.get_marketplace_fee_receiver()
-        receivers = [
+        if fee_receiver is None:
+            logger.error("Marketplace fee receiver not found")
+            return {"status": "error", "message": "Fee receiver missing"}
+
+        receivers: List[str] = [
             fee_receiver,
             get_variable_value("OLAS_MARKETPLACE_ADDRESS"),
         ]
-        receivers = [r for r in receivers if r]
-        if len(receivers) == 0:
-            logger.error("Receiver addresses not found")
 
         agreement_id_seed = self._generate_agreement_id_seed()
         agreement_id = self.agreement_storage_manager.agreement_id(agreement_id_seed, self.sender)
