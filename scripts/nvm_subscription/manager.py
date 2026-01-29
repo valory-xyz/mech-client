@@ -75,8 +75,8 @@ class NVMSubscriptionManager:
         self.subscription_nft = SubscriptionNFT(self.web3)
         self.subscription_provider = SubscriptionProvider(self.web3)
 
-        # load the subscription token to be used for base
-        if network == 'BASE':
+        # load the subscription token to be used for base/polygon
+        if network in ['BASE','POLYGON']:
             self.subscription_token = SubscriptionToken(self.web3)
 
         self.agreement_storage_manager = AgreementStorageManagerContract(self.web3)
@@ -165,8 +165,9 @@ class NVMSubscriptionManager:
 
         # we set value as xdai is used as subscription for gnosis
         value_eth = 1
-        if chain_id == ChainId.BASE.value:
-            # for base, usdc is used and so we don't send any value
+        if chain_id in [ChainId.BASE.value, ChainId.POLYGON.value]:
+            # for base/polygon, usdc is used and so we don't send any value
+
             value_eth = 0
 
             if not self.agent_mode:
@@ -347,6 +348,16 @@ class NVMSubscriptionManager:
         
         # For base, usdc is used for purchase (decimal 6)
         if chain_id == ChainId.BASE.value:
+            required_balance = w3.from_wei(10**6, unit='mwei')
+            usdc_balance = w3.from_wei(self.subscription_token.get_balance(sender), unit='mwei')
+            usdc_address = self.subscription_token.address
+            return (
+                usdc_balance >= required_balance,
+                f"Not enough balance. Required: {required_balance} usdc (token {usdc_address}), Found: {usdc_balance} usdc",
+            )
+        
+         # For polygon, usdc is used for purchase (decimal 6)
+        if chain_id == ChainId.POLYGON.value:
             required_balance = w3.from_wei(10**6, unit='mwei')
             usdc_balance = w3.from_wei(self.subscription_token.get_balance(sender), unit='mwei')
             usdc_address = self.subscription_token.address
