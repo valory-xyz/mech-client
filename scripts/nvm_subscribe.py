@@ -12,6 +12,7 @@ BASE_ENV_PATH = Path(__file__).parent / "nvm_subscription" / "envs"
 CHAIN_TO_ENVS: Dict[str, Path] = {
     "gnosis": BASE_ENV_PATH / "gnosis.env",
     "base": BASE_ENV_PATH / "base.env",
+    "polygon": BASE_ENV_PATH / "polygon.env",
 }
 
 
