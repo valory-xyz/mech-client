@@ -8,6 +8,7 @@ import sys
 import uuid
 from typing import Any, Dict, Optional, Tuple
 from web3 import Web3
+from web3.middleware import geth_poa_middleware
 from eth_typing import ChecksumAddress
 
 from .contracts.did_registry import DIDRegistryContract
@@ -19,6 +20,7 @@ from .contracts.agreement_manager import AgreementStorageManagerContract
 from .contracts.token import SubscriptionToken
 from .contracts.nft import SubscriptionNFT
 from .contracts.subscription_provider import SubscriptionProvider
+from .contracts.nevermined_config import NeverminedConfigContract
 
 from mech_client.safe import EthereumClient, get_safe_nonce, send_safe_tx
 
@@ -35,6 +37,7 @@ class Network(Enum):
 class ChainId(Enum):
     GNOSIS = 100
     BASE = 8453
+    POLYGON = 137
 
 
 def get_variable_value(variable: str) -> str:
@@ -60,10 +63,12 @@ class NVMSubscriptionManager:
         """
         self.url = os.getenv("MECHX_RPC_URL", CONFIGS[network]["nvm"]['web3ProviderUri'])
         self.web3 = Web3(Web3.HTTPProvider(self.url))
+        self.web3.middleware_onion.inject(geth_poa_middleware, layer=0)
         self.agent_mode = agent_mode
         if self.agent_mode:
             self.safe_address = str(safe_address)
         self.ethereum_client = EthereumClient(self.url)
+        self.chain_id = self.web3.eth.chain_id
 
         self.sender: ChecksumAddress = self.web3.to_checksum_address(sender)
 
@@ -74,6 +79,7 @@ class NVMSubscriptionManager:
         self.escrow_payment = EscrowPaymentConditionContract(self.web3)
         self.subscription_nft = SubscriptionNFT(self.web3)
         self.subscription_provider = SubscriptionProvider(self.web3)
+        self.nvm_config = NeverminedConfigContract(self.web3)
 
         # load the subscription token to be used for base/polygon
         if network in ['BASE','POLYGON']:
@@ -88,6 +94,15 @@ class NVMSubscriptionManager:
         self.subscription_id = CONFIGS[network]["nvm"]["subscription_id"]
 
         logger.info("SubscriptionManager initialized")
+
+    def get_marketplace_fee_receiver(self) -> Optional[str]:
+        """Fetch the marketplace fee receiver from the on-chain NeverminedConfig contract."""
+        try:
+            receiver = self.nvm_config.get_fee_receiver()
+            return self.web3.to_checksum_address(receiver)
+        except Exception as e:
+            logger.error(f"Could not fetch fee receiver on-chain: {e}")
+            return None
 
     def _generate_agreement_id_seed(self, length: int = 64) -> str:
         """Generate a random hex string prefixed with 0x."""
