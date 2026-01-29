@@ -52,5 +52,32 @@
     "gasMultiplier": 1.1,
     "gasPriceMultiplier": 0,
     "externalNetwork": true
+  },
+  "POLYGON": {
+    "envDescription": "The Polygon production environment where users can interact with Nevermined protocol.",
+    "envUrl": "https://gnosis.nevermined.app/",
+    "envName": "Polygon",
+    "isProduction": true,
+    "nvm": {
+      "chainId": 137,
+      "appUrl": "https://matic.nevermined.app",
+      "web3ProviderUri": "https://rpc-gate.autonolas.tech/polygon-rpc/",
+      "marketplaceUri": "https://marketplace-api.matic.nevermined.app",
+      "graphHttpUri": "https://api.thegraph.com/subgraphs/name/nevermined-io/public",
+      "neverminedNodeUri": "https://node.matic.nevermined.app",
+      "neverminedNodeAddress": "0x824dbcE5E9C96C5b8ce2A35a25a5ab87eD1D00b1",
+      "neverminedBackendUri": "https://one-backend.matic.nevermined.app",
+      "subscription_id": "100197251769871789047402262882108684984330244548280464709842645397592720791202",
+      "verbose": true
+    },
+    "nativeToken": "POL",
+    "networkName": "polygon",
+    "contractsVersion": "3.5.7",
+    "tagName": "public",
+    "etherscanUrl": "https://polygonscan.com/",
+    "erc20TokenAddress": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+    "gasMultiplier": 1.1,
+    "gasPriceMultiplier": 0,
+    "externalNetwork": true
   }
 }
