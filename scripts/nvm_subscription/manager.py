@@ -132,16 +132,18 @@ class NVMSubscriptionManager:
         did = did.replace("did:nv:", "0x")
 
         ddo = self.did_registry.get_ddo(did)
-        service = next((s for s in ddo.get("service", []) if s.get("type") == "nft-sales"), None)
-        if not service:
-            logger.error("No nft-sales service found in DDO")
-            return {"status": "error", "message": "No nft-sales service in DDO"}
 
-        self.publisher = service["templateId"]
-
-        conditions = service["attributes"]["serviceAgreementTemplate"]["conditions"]
+        # derive receivers and publisher from env/config instead of DDO
+        # because NVM doesn't support polygon/gnosis infra anymore
         reward_address = self.escrow_payment.address
-        receivers = conditions[0]["parameters"][-1]["value"]
+        fee_receiver = self.get_marketplace_fee_receiver()
+        receivers = [
+            fee_receiver,
+            get_variable_value("OLAS_MARKETPLACE_ADDRESS"),
+        ]
+        receivers = [r for r in receivers if r]
+        if len(receivers) == 0:
+            logger.error("Receiver addresses not found")
 
         agreement_id_seed = self._generate_agreement_id_seed()
         agreement_id = self.agreement_storage_manager.agreement_id(agreement_id_seed, self.sender)
