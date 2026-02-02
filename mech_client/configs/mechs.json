@@ -41,7 +41,7 @@
     "agent_registry_contract": "0x984cf72FDe8B5aA910e9e508aC5e007ae5BDcC9C",
     "service_registry_contract": "0xE3607b00E75f6405248323A9417ff6b39B244b50",
     "mech_marketplace_contract": "0x343F2B005cF6D70bA610CD9F1F1927049414B582",
-    "complementary_metadata_hash_address": "0x0000000000000000000000000000000000000000",
+    "complementary_metadata_hash_address": "0xDC175E77d11246c79B23D7088750eb59160DD6b7",
     "rpc_url": "https://polygon-bor-rpc.publicnode.com",
     "wss_endpoint": "wss://polygon.gateway.tenderly.co",
     "ledger_config": {

@@ -878,7 +878,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     )
     (
         payment_type,
-        _,  # service_id unused
+        service_id,
         max_delivery_rate,
         mech_payment_balance_tracker,
     ) = fetch_mech_info(
@@ -892,7 +892,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     mech_deliver_event_signature = fetch_mech_deliver_event_signature(
         ledger_api, priority_mech_address
     )
-    # TODO: verify_tools(tools, service_id, chain_config)
+    verify_tools(tools, service_id, chain_config)
     if not use_prepaid:
         price = max_delivery_rate * num_requests
         if payment_type == PaymentType.NATIVE.value:
