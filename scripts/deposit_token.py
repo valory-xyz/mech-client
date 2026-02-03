@@ -180,6 +180,7 @@ def main(
     amount: str,
     safe_address: Optional[str] = None,
     private_key_path: Optional[str] = None,
+    private_key_password: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
     """Runs the deposit functionality for the token mech type"""
@@ -200,7 +201,9 @@ def main(
         raise FileNotFoundError(
             f"Private key file `{private_key_path}` does not exist!"
         )
-    crypto = EthereumCrypto(private_key_path=private_key_path)
+    crypto = EthereumCrypto(
+        private_key_path=private_key_path, password=private_key_password
+    )
 
     chain_id = mech_config.ledger_config.chain_id
     token_balance_tracker_contract = get_token_balance_tracker_contract(

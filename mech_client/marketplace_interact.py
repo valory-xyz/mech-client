@@ -783,6 +783,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     tools: tuple = (),
     extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
+    private_key_password: Optional[str] = None,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
@@ -811,6 +812,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     :type extra_attributes: Optional[Dict[str, Any]]
     :param private_key_path: The path to the private key file (optional).
     :type private_key_path: Optional[str]
+    :param private_key_password: Password to decrypt the keystore (if encrypted).
+    :type private_key_password: Optional[str]
     :return: The data received from on-chain/off-chain.
     :param retries: Number of retries for sending a transaction
     :type retries: int
@@ -861,8 +864,9 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         raise FileNotFoundError(
             f"Private key file `{private_key_path}` does not exist!"
         )
-
-    crypto = EthereumCrypto(private_key_path=private_key_path)
+    crypto = EthereumCrypto(
+        private_key_path=private_key_path, password=private_key_password
+    )
     ledger_api = EthereumApi(**asdict(ledger_config))
 
     with open(MARKETPLACE_ABI_PATH, encoding="utf-8") as f:
