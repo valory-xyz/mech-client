@@ -1,5 +1,5 @@
 {
-    "name": "Mech Client (agent mode) on Gnosis",
+    "name": "Mech Client (agent mode) on Polygon",
     "hash": "bafybeicrsrqajrzgweh7q4grfsbkkadovyqzfouqgb5lmxyqulqv7mjaye",
     "description": "The mech_client service to allow interacting with on-chain mechs",
     "image": "https://gateway.autonolas.tech/ipfs/bafybeidzpenez565d7vp7jexfrwisa2wijzx6vwcffli57buznyyqkrceq",
@@ -14,11 +14,20 @@
             "cost_of_bond": 1,
             "fund_requirements": {
                 "0x0000000000000000000000000000000000000000": {
-                    "agent": 100000000000000000,
-                    "safe": 100000000000000000
-                }
+                    "agent": 1000000000000000000,
+                    "safe": 0
+                },
+                "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359": { "agent": 0, "safe": 1000000 }
             }
         }
     },
-    "env_variables": {}
+    "env_variables": {},
+    "agent_release": {
+        "is_aea": true,
+        "repository": {
+            "owner": "valory-xyz",
+            "name": "mech",
+            "version": "v0.1.0"
+        }
+    }
 }
