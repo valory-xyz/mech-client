@@ -311,6 +311,9 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     try:
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running interact with agent_mode={agent_mode}")
+        safe: str = ""
+        key_path: Optional[str] = None
+        key_password: Optional[str] = None
 
         extra_attributes_dict: Dict[str, Any] = {}
         if extra_attribute:
@@ -334,8 +337,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 )
 
             if agent_mode:
-                safe, key = fetch_agent_mode_data(chain_config)
-                if not safe or not key:
+                safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+                if not safe or not key_path:
                     raise ClickException(
                         "Cannot fetch safe or key data for the agent mode."
                     )
@@ -348,7 +351,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 use_prepaid=use_prepaid,
                 use_offchain=use_offchain,
                 mech_offchain_url=mech_offchain_url,
-                private_key_path=key,
+                private_key_path=key_path,
+                private_key_password=key_password,
                 tools=tools,
                 extra_attributes=extra_attributes_dict,
                 retries=retries,
@@ -376,7 +380,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
             interact_(
                 prompt=prompts[0],
                 agent_id=agent_id,
-                private_key_path=key,
+                private_key_path=key_path,
+                private_key_password=key_password,
                 tool=tools[0] if tools else None,
                 extra_attributes=extra_attributes_dict,
                 confirmation_type=(
@@ -643,15 +648,16 @@ def deposit_native(
     click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data(chain_config)
-        if not safe or not key:
+        safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+        if not safe or not key_path:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     deposit_native_main(
         agent_mode=agent_mode,
         safe_address=safe,
         amount=amount_to_deposit,
-        private_key_path=key,
+        private_key_path=key_path,
+        private_key_password=key_password,
         chain_config=chain_config,
     )
 
@@ -681,15 +687,16 @@ def deposit_token(
     click.echo(f"Running deposit token with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data(chain_config)
-        if not safe or not key:
+        safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+        if not safe or not key_path:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     deposit_token_main(
         agent_mode=agent_mode,
         safe_address=safe,
         amount=amount_to_deposit,
-        private_key_path=key,
+        private_key_path=key_path,
+        private_key_password=key_password,
         chain_config=chain_config,
     )
 
@@ -717,14 +724,15 @@ def nvm_subscribe(
     click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data(chain_config)
-        if not safe or not key:
+        safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+        if not safe or not key_path:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     nvm_subscribe_main(
         agent_mode=agent_mode,
         safe_address=safe,
-        private_key_path=key,
+        private_key_path=key_path,
+        private_key_password=key_password,
         chain_config=chain_config,
     )
 
