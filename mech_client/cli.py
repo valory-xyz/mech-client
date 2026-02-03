@@ -126,17 +126,20 @@ def mech_client_configure_local_config(
     return config
 
 
-def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
-    """Fetches the agent mode data of safe address and the EOA private key path"""
+def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str, Optional[str]]:
+    """Fetches the agent mode data of safe address and the keystore path plus password"""
     chain_config = chain_config or DEFAULT_NETWORK
 
     # This is acceptable way to as the main functionality
     # of keys manager is to allow access to the required data.
     operate_path = get_operate_path()
     operate = OperateApp(operate_path)
+    # Ensure the password is loaded so keys can be decrypted.
+    ask_password_if_needed(operate)
     keys_manager = KeysManager(
         path=operate._keys,  # pylint: disable=protected-access
-        logger=operate.wallet_manager.logger,
+        logger=operate_logger,
+        password=operate.password,
     )
     service_manager = operate.service_manager()
     service_config_id = None
@@ -152,10 +155,10 @@ def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
 
     service = operate.service_manager().load(service_config_id)
 
-    key = keys_manager.get_private_key_file(service.agent_addresses[0])
+    key_path = keys_manager.get_private_key_file(service.agent_addresses[0])
     safe = service.chain_configs[chain_config].chain_data.multisig
 
-    return safe, key
+    return safe, str(key_path), operate.password
 
 
 @click.group(name="mechx")  # type: ignore
