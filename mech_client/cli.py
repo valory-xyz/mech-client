@@ -79,6 +79,7 @@ DEFAULT_NETWORK = "gnosis"
 CHAIN_TO_TEMPLATE = {
     "gnosis": BASE_DIR / "config" / "mech_client_gnosis.json",
     "base": BASE_DIR / "config" / "mech_client_base.json",
+    "polygon": BASE_DIR / "config" / "mech_client_polygon.json",
 }
 
 DEFAULT_MASTER_EOA_FUNDS.update(
