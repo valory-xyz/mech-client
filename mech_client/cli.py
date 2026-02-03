@@ -26,10 +26,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from click import ClickException
-from operate.cli import OperateApp
+from operate.cli import OperateApp, logger as operate_logger
+from operate.quickstart.run_service import ask_password_if_needed
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
-from operate.ledger.profiles import DEFAULT_MASTER_EOA_FUNDS
-from operate.operate_types import Chain, ServiceTemplate
+from operate.operate_types import ServiceTemplate
 from operate.quickstart.run_service import (
     QuickstartConfig,
     load_local_config,
@@ -81,19 +81,6 @@ CHAIN_TO_TEMPLATE = {
     "base": BASE_DIR / "config" / "mech_client_base.json",
     "polygon": BASE_DIR / "config" / "mech_client_polygon.json",
 }
-
-DEFAULT_MASTER_EOA_FUNDS.update(
-    {
-        Chain.ARBITRUM_ONE: {ZERO_ADDRESS: 5_000_000_000_000_000},
-        Chain.BASE: {ZERO_ADDRESS: 5_000_000_000_000_000},
-        Chain.CELO: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
-        Chain.ETHEREUM: {ZERO_ADDRESS: 20_000_000_000_000_000},
-        Chain.GNOSIS: {ZERO_ADDRESS: 200_000_000_000_000_000},
-        Chain.MODE: {ZERO_ADDRESS: 500_000_000_000_000},
-        Chain.OPTIMISM: {ZERO_ADDRESS: 5_000_000_000_000_000},
-        Chain.POLYGON: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
-    }
-)
 
 
 def get_operate_path() -> Path:
