@@ -26,12 +26,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from click import ClickException
-from operate.cli import OperateApp, logger as operate_logger
-from operate.quickstart.run_service import ask_password_if_needed
-from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
+from operate.cli import OperateApp
+from operate.cli import logger as operate_logger
+from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.operate_types import ServiceTemplate
 from operate.quickstart.run_service import (
     QuickstartConfig,
+    ask_password_if_needed,
     load_local_config,
     run_service,
 )
@@ -126,7 +127,9 @@ def mech_client_configure_local_config(
     return config
 
 
-def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str, Optional[str]]:
+def fetch_agent_mode_data(
+    chain_config: Optional[str],
+) -> Tuple[str, str, Optional[str]]:
     """Fetches the agent mode data of safe address and the keystore path plus password"""
     chain_config = chain_config or DEFAULT_NETWORK
 
