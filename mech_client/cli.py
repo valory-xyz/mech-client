@@ -79,9 +79,9 @@ SETUP_MODE_COMMAND = "setup-agent-mode"
 DEFAULT_NETWORK = "gnosis"
 
 CHAIN_TO_TEMPLATE = {
-    "gnosis": BASE_DIR / "config" / "mech_client_gnosis.json",
-    "base": BASE_DIR / "config" / "mech_client_base.json",
-    "polygon": BASE_DIR / "config" / "mech_client_polygon.json",
+    "gnosis": CURR_DIR / "config" / "mech_client_gnosis.json",
+    "base": CURR_DIR / "config" / "mech_client_base.json",
+    "polygon": CURR_DIR / "config" / "mech_client_polygon.json",
 }
 
 ENV_PATH = BASE_DIR / ".env"
