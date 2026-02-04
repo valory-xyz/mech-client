@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
+import requests
 from click import ClickException
 from dotenv import load_dotenv, set_key
 from operate.cli import OperateApp
@@ -243,12 +244,33 @@ def setup_agent_mode(
     ].configure_local_config = mech_client_configure_local_config  # type: ignore
 
     print(f"Setting up agent mode using config at {template}...")
-    run_service(
-        operate=operate,
-        config_path=template,
-        build_only=True,
-        skip_dependency_check=False,
-    )
+    try:
+        run_service(
+            operate=operate,
+            config_path=template,
+            build_only=True,
+            skip_dependency_check=False,
+        )
+    except requests.exceptions.HTTPError as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"RPC endpoint error: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the RPC endpoint is available and accessible\n"
+            f"  2. Set a different RPC endpoint: export MECHX_CHAIN_RPC='https://your-rpc-url'\n"
+            f"  3. Check your network connection"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"Network error connecting to RPC endpoint: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC URL is correct\n"
+            f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
 
 
 @click.command()
@@ -423,6 +445,26 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 sleep=sleep,
                 chain_config=chain_config,
             )
+    except requests.exceptions.HTTPError as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"RPC endpoint error: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the RPC endpoint is available and accessible\n"
+            f"  2. Set a different RPC endpoint: export MECHX_CHAIN_RPC='https://your-rpc-url'\n"
+            f"  3. Check your network connection"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"Network error connecting to RPC endpoint: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC URL is correct\n"
+            f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
     except (ValueError, FileNotFoundError, Exception) as e:
         raise ClickException(str(e)) from e
 
@@ -672,22 +714,42 @@ def deposit_native(
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Native balance for prepaid requests."""
-    agent_mode = is_agent_mode(ctx)
-    click.echo(f"Running deposit native with agent_mode={agent_mode}")
+    try:
+        agent_mode = is_agent_mode(ctx)
+        click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
-    if agent_mode:
-        safe, key_path, key_password = fetch_agent_mode_data(chain_config)
-        if not safe or not key_path:
-            raise ClickException("Cannot fetch safe or key data for the agent mode.")
+        if agent_mode:
+            safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+            if not safe or not key_path:
+                raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
-    deposit_native_main(
-        agent_mode=agent_mode,
-        safe_address=safe,
-        amount=amount_to_deposit,
-        private_key_path=key_path,
-        private_key_password=key_password,
-        chain_config=chain_config,
-    )
+        deposit_native_main(
+            agent_mode=agent_mode,
+            safe_address=safe,
+            amount=amount_to_deposit,
+            private_key_path=key_path,
+            private_key_password=key_password,
+            chain_config=chain_config,
+        )
+    except requests.exceptions.HTTPError as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"RPC endpoint error: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the RPC endpoint is available and accessible\n"
+            f"  2. Set a different RPC endpoint: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"Network error connecting to RPC endpoint: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC URL is correct\n"
+            f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
 
 
 @click.command(name="deposit-token")
@@ -710,22 +772,42 @@ def deposit_token(
     chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Token balance for prepaid requests."""
-    agent_mode = is_agent_mode(ctx)
-    click.echo(f"Running deposit token with agent_mode={agent_mode}")
+    try:
+        agent_mode = is_agent_mode(ctx)
+        click.echo(f"Running deposit token with agent_mode={agent_mode}")
 
-    if agent_mode:
-        safe, key_path, key_password = fetch_agent_mode_data(chain_config)
-        if not safe or not key_path:
-            raise ClickException("Cannot fetch safe or key data for the agent mode.")
+        if agent_mode:
+            safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+            if not safe or not key_path:
+                raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
-    deposit_token_main(
-        agent_mode=agent_mode,
-        safe_address=safe,
-        amount=amount_to_deposit,
-        private_key_path=key_path,
-        private_key_password=key_password,
-        chain_config=chain_config,
-    )
+        deposit_token_main(
+            agent_mode=agent_mode,
+            safe_address=safe,
+            amount=amount_to_deposit,
+            private_key_path=key_path,
+            private_key_password=key_password,
+            chain_config=chain_config,
+        )
+    except requests.exceptions.HTTPError as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"RPC endpoint error: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the RPC endpoint is available and accessible\n"
+            f"  2. Set a different RPC endpoint: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"Network error connecting to RPC endpoint: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC URL is correct\n"
+            f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
 
 
 @click.command(name="purchase-nvm-subscription")
@@ -746,21 +828,41 @@ def nvm_subscribe(
     safe: Optional[str] = None,
 ) -> None:
     """Allows to purchase nvm subscription for nvm mech requests."""
-    agent_mode = is_agent_mode(ctx)
-    click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
+    try:
+        agent_mode = is_agent_mode(ctx)
+        click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
 
-    if agent_mode:
-        safe, key_path, key_password = fetch_agent_mode_data(chain_config)
-        if not safe or not key_path:
-            raise ClickException("Cannot fetch safe or key data for the agent mode.")
+        if agent_mode:
+            safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+            if not safe or not key_path:
+                raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
-    nvm_subscribe_main(
-        agent_mode=agent_mode,
-        safe_address=safe,
-        private_key_path=key_path,
-        private_key_password=key_password,
-        chain_config=chain_config,
-    )
+        nvm_subscribe_main(
+            agent_mode=agent_mode,
+            safe_address=safe,
+            private_key_path=key_path,
+            private_key_password=key_password,
+            chain_config=chain_config,
+        )
+    except requests.exceptions.HTTPError as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"RPC endpoint error: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the RPC endpoint is available and accessible\n"
+            f"  2. Set a different RPC endpoint: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"Network error connecting to RPC endpoint: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC URL is correct\n"
+            f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
 
 
 @click.command(name="fetch-mm-mechs-info")
