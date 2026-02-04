@@ -97,8 +97,8 @@
   "optimism": {
     "agent_registry_contract": "0x75D529FAe220bC8db714F0202193726b46881B76",
     "service_registry_contract": "0x3d77596beb0f130a4415df3D2D8232B3d3D31e44",
-    "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
-    "complementary_metadata_hash_address": "0x0000000000000000000000000000000000000000",
+    "mech_marketplace_contract": "0x46C0D07F55d4F9B5Eed2Fc9680B5953e5fd7b461",
+    "complementary_metadata_hash_address": "0x11949cBC85d8793B360029E26b18ae759708e28b",
     "rpc_url": "https://mainnet.optimism.io",
     "wss_endpoint": "wss://optimism.gateway.tenderly.co",
     "ledger_config": {
