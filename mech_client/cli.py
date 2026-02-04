@@ -542,6 +542,26 @@ def tools_for_agents(agent_id: Optional[int], chain_config: str) -> None:
             ]
 
         click.echo(tabulate(data, headers=headers, tablefmt="grid"))
+    except requests.exceptions.HTTPError as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"RPC endpoint error: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the RPC endpoint is available and accessible\n"
+            f"  2. Set a different RPC endpoint: export MECHX_CHAIN_RPC='https://your-rpc-url'\n"
+            f"  3. Check your network connection"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"Network error connecting to RPC endpoint: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC URL is correct\n"
+            f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
     except (KeyError, TypeError) as e:
         click.echo(f"Error processing tool data: {str(e)}")
     except json.JSONDecodeError as e:
@@ -558,6 +578,26 @@ def tool_description(tool_id: str, chain_config: str) -> None:
     try:
         description = get_tool_description(tool_id, chain_config)
         click.echo(f"Description for tool {tool_id}: {description}")
+    except requests.exceptions.HTTPError as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"RPC endpoint error: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the RPC endpoint is available and accessible\n"
+            f"  2. Set a different RPC endpoint: export MECHX_CHAIN_RPC='https://your-rpc-url'\n"
+            f"  3. Check your network connection"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"Network error connecting to RPC endpoint: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC URL is correct\n"
+            f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
     except KeyError as e:
         click.echo(f"Tool not found or missing description: {str(e)}")
     except json.JSONDecodeError as e:
@@ -608,6 +648,26 @@ def tool_io_schema(tool_id: str, chain_config: str) -> None:
                 output_schema, headers=["Field", "Type", "Description"], tablefmt="grid"
             )
         )
+    except requests.exceptions.HTTPError as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"RPC endpoint error: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the RPC endpoint is available and accessible\n"
+            f"  2. Set a different RPC endpoint: export MECHX_CHAIN_RPC='https://your-rpc-url'\n"
+            f"  3. Check your network connection"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"Network error connecting to RPC endpoint: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC URL is correct\n"
+            f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
     except KeyError as e:
         click.echo(f"Error accessing schema data: {str(e)}")
     except json.JSONDecodeError as e:
@@ -638,6 +698,26 @@ def tools_for_marketplace_mech(service_id: int, chain_config: str) -> None:
 
         click.echo(tabulate(data, headers=headers, tablefmt="grid"))
 
+    except requests.exceptions.HTTPError as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"RPC endpoint error: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the RPC endpoint is available and accessible\n"
+            f"  2. Set a different RPC endpoint: export MECHX_CHAIN_RPC='https://your-rpc-url'\n"
+            f"  3. Check your network connection"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"Network error connecting to RPC endpoint: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC URL is correct\n"
+            f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
     except (KeyError, TypeError) as e:
         click.echo(f"Error processing tool data: {str(e)}")
     except IOError as e:
@@ -652,6 +732,26 @@ def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> No
     try:
         description = get_tool_description_for_marketplace_mech(tool_id, chain_config)
         click.echo(f"Description for tool {tool_id}: {description}")
+    except requests.exceptions.HTTPError as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"RPC endpoint error: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the RPC endpoint is available and accessible\n"
+            f"  2. Set a different RPC endpoint: export MECHX_CHAIN_RPC='https://your-rpc-url'\n"
+            f"  3. Check your network connection"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"Network error connecting to RPC endpoint: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC URL is correct\n"
+            f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
     except KeyError as e:
         click.echo(f"Tool not found or missing description: {str(e)}")
     except IOError as e:
@@ -688,6 +788,26 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
                 output_schema, headers=["Field", "Type", "Description"], tablefmt="grid"
             )
         )
+    except requests.exceptions.HTTPError as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"RPC endpoint error: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the RPC endpoint is available and accessible\n"
+            f"  2. Set a different RPC endpoint: export MECHX_CHAIN_RPC='https://your-rpc-url'\n"
+            f"  3. Check your network connection"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+        raise ClickException(
+            f"Network error connecting to RPC endpoint: {e}\n\n"
+            f"Current RPC: {rpc_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC URL is correct\n"
+            f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
     except KeyError as e:
         click.echo(f"Error accessing schema data: {str(e)}")
     except IOError as e:
@@ -908,6 +1028,26 @@ def query_mm_mechs_info_cli(
 
         click.echo(tabulate(data, headers=headers, tablefmt="grid"))
         return None
+    except requests.exceptions.HTTPError as e:
+        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL", "default")
+        raise ClickException(
+            f"Subgraph endpoint error: {e}\n\n"
+            f"Current subgraph URL: {subgraph_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the subgraph endpoint is available and accessible\n"
+            f"  2. Set a different subgraph URL: export MECHX_SUBGRAPH_URL='https://your-subgraph-url'\n"
+            f"  3. Check your network connection"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL", "default")
+        raise ClickException(
+            f"Network error connecting to subgraph endpoint: {e}\n\n"
+            f"Current subgraph URL: {subgraph_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the subgraph URL is correct\n"
+            f"  3. Try a different subgraph provider: export MECHX_SUBGRAPH_URL='https://your-subgraph-url'"
+        ) from e
     except Exception as e:  # pylint: disable=broad-except
         click.echo(f"Error: {str(e)}")
         return None
