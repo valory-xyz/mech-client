@@ -54,17 +54,26 @@ Usage: mechx [OPTIONS] COMMAND [ARGS]...
   Command-line tool for interacting with mechs.
 
 Options:
-  --version  Show the version and exit.
-  --help     Show this message and exit.
+  --version      Show the version and exit.
+  --client-mode  Enables client mode
+  --help         Show this message and exit.
 
 Commands:
-  interact         Interact with a mech specifying a prompt and tool.
-  prompt-to-ipfs   Upload a prompt and tool to IPFS as metadata.
-  push-to-ipfs     Upload a file to IPFS.
-  to-png           Convert a stability AI API's diffusion model output.
-  tools-for-agents List tools available for all agents or a specific agent.
-  tool-description Get the description of a specific tool.
-  tool_io_schema   Get the input/output schema of a specific tool.
+  deposit-native                           Deposits Native balance for prepaid marketplace requests
+  deposit-token                            Deposits Token balance for prepaid marketplace requests
+  fetch-mm-mechs-info                      Fetches info of marketplace mechs
+  interact                                 Interact with a mech specifying a prompt and tool
+  prompt-to-ipfs                           Upload a prompt and tool to IPFS as metadata
+  purchase-nvm-subscription                Allows to purchase Nevermined subscription
+  push-to-ipfs                             Upload a file to IPFS
+  setup-agent-mode                         Sets up the agent mode for users
+  to-png                                   Convert a stability AI API's diffusion model output
+  tool-description                         Get the description of a specific tool (legacy mechs)
+  tool-description-for-marketplace-mech    Get the description of a specific tool (marketplace mechs)
+  tool-io-schema                           Get the input/output schema of a specific tool (legacy mechs)
+  tool-io-schema-for-marketplace-mech      Get the input/output schema of a specific tool (marketplace mechs)
+  tools-for-agents                         List tools available for all agents or a specific agent (legacy mechs)
+  tools-for-marketplace-mech               List tools available for marketplace mechs
 
 ```
 
@@ -453,7 +462,7 @@ Description for tool 6-claude-prediction-offline: Makes a prediction using Claud
 
 ### Get Tool Input/Output Schema
 
-To get the input/output schema of a specific tool, use the `tool_io_schema` command. You need to specify the unique identifier of the tool.
+To get the input/output schema of a specific tool, use the `tool-io-schema` command. You need to specify the unique identifier of the tool.
 
 ```bash
 mechx tool-io-schema <unique_identifier> --chain-config <chain_config>
