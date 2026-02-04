@@ -925,7 +925,10 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
                 print(f"  - Sender Address: {sender}")
                 sys.exit(1)
         if payment_type in PaymentType.get_token_payment_types():
-            price_token = CHAIN_TO_PRICE_TOKEN[chain_id]
+            if payment_type == PaymentType.USDC_TOKEN.value:
+                price_token = CHAIN_TO_PRICE_TOKEN_USDC[chain_id]
+            else:
+                price_token = CHAIN_TO_PRICE_TOKEN_OLAS[chain_id]
             print(
                 f"Token Mech detected, approving token {price_token} for price payment..."
             )
