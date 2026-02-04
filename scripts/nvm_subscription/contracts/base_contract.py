@@ -27,7 +27,15 @@ class BaseContract:
         self.w3 = w3
         self.name = name
         self.chain_id = self.w3.eth.chain_id
-        self.chain_name = "gnosis" if self.chain_id == 100 else "base"
+        chain_name_by_id = {
+            100: "gnosis",
+            8453: "base",
+            137: "polygon",
+        }
+        self.chain_name = chain_name_by_id.get(self.chain_id)
+        if not self.chain_name:
+            raise ValueError(f"Unsupported chain id {self.chain_id}; no matching contract artifacts found")
+
         logger.debug(f"Initializing contract wrapper for '{self.name}'")
         self.contract = self._load_contract()  # Load contract from artifact
 

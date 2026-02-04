@@ -514,6 +514,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     tool: Optional[str] = None,
     extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
+    private_key_password: Optional[str] = None,
     confirmation_type: ConfirmationType = ConfirmationType.WAIT_FOR_BOTH,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
@@ -533,6 +534,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     :type extra_attributes: Optional[Dict[str, Any]]
     :param private_key_path: The path to the private key file (optional).
     :type private_key_path: Optional[str]
+    :param private_key_password: Password to decrypt the keystore (if encrypted).
+    :type private_key_password: Optional[str]
     :param confirmation_type: The confirmation type for the interaction (default: ConfirmationType.WAIT_FOR_BOTH).
     :type confirmation_type: ConfirmationType
     :return: The data received from on-chain/off-chain.
@@ -562,7 +565,9 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         )
 
     wss = websocket.create_connection(mech_config.wss_endpoint)
-    crypto = EthereumCrypto(private_key_path=private_key_path)
+    crypto = EthereumCrypto(
+        private_key_path=private_key_path, password=private_key_password
+    )
     ledger_api = EthereumApi(**asdict(ledger_config))
 
     tool = verify_or_retrieve_tool(

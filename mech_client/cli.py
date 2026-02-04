@@ -26,12 +26,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import click
 from click import ClickException
+from dotenv import load_dotenv, set_key
 from operate.cli import OperateApp
-from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
-from operate.ledger.profiles import DEFAULT_MASTER_EOA_FUNDS
-from operate.operate_types import Chain, ServiceTemplate
+from operate.cli import logger as operate_logger
+from operate.constants import NO_STAKING_PROGRAM_ID
+from operate.operate_types import ServiceTemplate
 from operate.quickstart.run_service import (
     QuickstartConfig,
+    ask_password_if_needed,
     load_local_config,
     run_service,
 )
@@ -79,20 +81,10 @@ DEFAULT_NETWORK = "gnosis"
 CHAIN_TO_TEMPLATE = {
     "gnosis": BASE_DIR / "config" / "mech_client_gnosis.json",
     "base": BASE_DIR / "config" / "mech_client_base.json",
+    "polygon": BASE_DIR / "config" / "mech_client_polygon.json",
 }
 
-DEFAULT_MASTER_EOA_FUNDS.update(
-    {
-        Chain.ARBITRUM_ONE: {ZERO_ADDRESS: 5_000_000_000_000_000},
-        Chain.BASE: {ZERO_ADDRESS: 5_000_000_000_000_000},
-        Chain.CELO: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
-        Chain.ETHEREUM: {ZERO_ADDRESS: 20_000_000_000_000_000},
-        Chain.GNOSIS: {ZERO_ADDRESS: 200_000_000_000_000_000},
-        Chain.MODE: {ZERO_ADDRESS: 500_000_000_000_000},
-        Chain.OPTIMISM: {ZERO_ADDRESS: 5_000_000_000_000_000},
-        Chain.POLYGON: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
-    }
-)
+ENV_PATH = BASE_DIR / ".env"
 
 
 def get_operate_path() -> Path:
@@ -107,6 +99,24 @@ def is_agent_mode(ctx: click.Context) -> bool:
     client_mode = ctx.obj.get("client_mode", False)
     agent_mode = not client_mode
     return agent_mode
+
+
+def get_password(operate: OperateApp) -> str:
+    """Load password from env/.env if present, otherwise prompt once and persist."""
+    load_dotenv(dotenv_path=ENV_PATH, override=False)
+    env_password = os.getenv("OPERATE_PASSWORD")
+    if env_password:
+        os.environ["OPERATE_PASSWORD"] = env_password
+        os.environ["ATTENDED"] = "false"
+        return os.environ["OPERATE_PASSWORD"]
+
+    ask_password_if_needed(operate)
+    if not operate.password:
+        raise ClickException("Password could not be set for Operate.")
+
+    set_key(str(ENV_PATH), "OPERATE_PASSWORD", os.environ["OPERATE_PASSWORD"])
+    os.environ["ATTENDED"] = "false"
+    return os.environ["OPERATE_PASSWORD"]
 
 
 def mech_client_configure_local_config(
@@ -138,17 +148,22 @@ def mech_client_configure_local_config(
     return config
 
 
-def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
-    """Fetches the agent mode data of safe address and the EOA private key path"""
+def fetch_agent_mode_data(
+    chain_config: Optional[str],
+) -> Tuple[str, str, Optional[str]]:
+    """Fetches the agent mode data of safe address and the keystore path plus password"""
     chain_config = chain_config or DEFAULT_NETWORK
 
     # This is acceptable way to as the main functionality
     # of keys manager is to allow access to the required data.
     operate_path = get_operate_path()
     operate = OperateApp(operate_path)
+    # Ensure the password is loaded so keys can be decrypted.
+    get_password(operate)
     keys_manager = KeysManager(
         path=operate._keys,  # pylint: disable=protected-access
-        logger=operate.wallet_manager.logger,
+        logger=operate_logger,
+        password=operate.password,
     )
     service_manager = operate.service_manager()
     service_config_id = None
@@ -164,10 +179,10 @@ def fetch_agent_mode_data(chain_config: Optional[str]) -> Tuple[str, str]:
 
     service = operate.service_manager().load(service_config_id)
 
-    key = keys_manager.get_private_key_file(service.agent_addresses[0])
+    key_path = keys_manager.get_private_key_file(service.agent_addresses[0])
     safe = service.chain_configs[chain_config].chain_data.multisig
 
-    return safe, key
+    return safe, str(key_path), os.getenv("OPERATE_PASSWORD")
 
 
 @click.group(name="mechx")  # type: ignore
@@ -215,6 +230,7 @@ def setup_agent_mode(
     operate_path = get_operate_path()
     operate = OperateApp(operate_path)
     operate.setup()
+    get_password(operate)
 
     sys.modules[
         "operate.quickstart.run_service"
@@ -306,7 +322,6 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     priority_mech: str,
     use_prepaid: bool,
     use_offchain: bool,
-    key: Optional[str],
     tools: Optional[tuple],
     safe: Optional[str] = None,
     extra_attribute: Optional[List[str]] = None,
@@ -320,6 +335,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     try:
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running interact with agent_mode={agent_mode}")
+        key_path: Optional[str] = None
+        key_password: Optional[str] = None
 
         extra_attributes_dict: Dict[str, Any] = {}
         if extra_attribute:
@@ -343,8 +360,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 )
 
             if agent_mode:
-                safe, key = fetch_agent_mode_data(chain_config)
-                if not safe or not key:
+                safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+                if not safe or not key_path:
                     raise ClickException(
                         "Cannot fetch safe or key data for the agent mode."
                     )
@@ -357,7 +374,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                 use_prepaid=use_prepaid,
                 use_offchain=use_offchain,
                 mech_offchain_url=mech_offchain_url,
-                private_key_path=key,
+                private_key_path=key_path,
+                private_key_password=key_password,
                 tools=tools,
                 extra_attributes=extra_attributes_dict,
                 retries=retries,
@@ -385,7 +403,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
             interact_(
                 prompt=prompts[0],
                 agent_id=agent_id,
-                private_key_path=key,
+                private_key_path=key_path,
+                private_key_password=key_password,
                 tool=tools[0] if tools else None,
                 extra_attributes=extra_attributes_dict,
                 confirmation_type=(
@@ -643,7 +662,6 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
 def deposit_native(
     ctx: click.Context,
     amount_to_deposit: str,
-    key: Optional[str],
     safe: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
@@ -652,15 +670,16 @@ def deposit_native(
     click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data(chain_config)
-        if not safe or not key:
+        safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+        if not safe or not key_path:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     deposit_native_main(
         agent_mode=agent_mode,
         safe_address=safe,
         amount=amount_to_deposit,
-        private_key_path=key,
+        private_key_path=key_path,
+        private_key_password=key_password,
         chain_config=chain_config,
     )
 
@@ -681,7 +700,6 @@ def deposit_native(
 def deposit_token(
     ctx: click.Context,
     amount_to_deposit: str,
-    key: Optional[str],
     safe: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
@@ -690,15 +708,16 @@ def deposit_token(
     click.echo(f"Running deposit token with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data(chain_config)
-        if not safe or not key:
+        safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+        if not safe or not key_path:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     deposit_token_main(
         agent_mode=agent_mode,
         safe_address=safe,
         amount=amount_to_deposit,
-        private_key_path=key,
+        private_key_path=key_path,
+        private_key_password=key_password,
         chain_config=chain_config,
     )
 
@@ -717,7 +736,6 @@ def deposit_token(
 @click.pass_context
 def nvm_subscribe(
     ctx: click.Context,
-    key: str,
     chain_config: str,
     safe: Optional[str] = None,
 ) -> None:
@@ -726,14 +744,15 @@ def nvm_subscribe(
     click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
 
     if agent_mode:
-        safe, key = fetch_agent_mode_data(chain_config)
-        if not safe or not key:
+        safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+        if not safe or not key_path:
             raise ClickException("Cannot fetch safe or key data for the agent mode.")
 
     nvm_subscribe_main(
         agent_mode=agent_mode,
         safe_address=safe,
-        private_key_path=key,
+        private_key_path=key_path,
+        private_key_password=key_password,
         chain_config=chain_config,
     )
 

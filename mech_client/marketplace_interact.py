@@ -62,12 +62,25 @@ class PaymentType(Enum):
 
     NATIVE = "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"  # nosec
     TOKEN = "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
+    USDC_TOKEN = (
+        "6406bb5f31a732f898e1ce9fdd988a80a808d36ab5d9a4a4805a8be8d197d5e3"  # nosec
+    )
     NATIVE_NVM = (
         "803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316"  # nosec
     )
     TOKEN_NVM_USDC = (
         "0d6fd99afa9c4c580fab5e341922c2a5c4b61d880da60506193d7bf88944dd14"  # nosec
     )
+
+    @classmethod
+    def get_token_payment_types(cls) -> List[str]:
+        """Get all token-based payment types that require ERC20 approval."""
+        return [cls.TOKEN.value, cls.USDC_TOKEN.value]
+
+    @classmethod
+    def get_prepaid_supported_types(cls) -> List[str]:
+        """Get payment types that support prepaid balances."""
+        return [cls.NATIVE.value, cls.TOKEN.value, cls.USDC_TOKEN.value]
 
 
 IPFS_URL_TEMPLATE = "https://gateway.autonolas.tech/ipfs/f01701220{}"
@@ -92,6 +105,7 @@ BALANCE_TRACKER_NVM_TOKEN_ABI_PATH = (
 PAYMENT_TYPE_TO_ABI_PATH: Dict[str, Path] = {
     PaymentType.NATIVE.value: BALANCE_TRACKER_NATIVE_ABI_PATH,
     PaymentType.TOKEN.value: BALANCE_TRACKER_TOKEN_ABI_PATH,
+    PaymentType.USDC_TOKEN.value: BALANCE_TRACKER_TOKEN_ABI_PATH,
     PaymentType.NATIVE_NVM.value: BALANCE_TRACKER_NVM_NATIVE_ABI_PATH,
     PaymentType.TOKEN_NVM_USDC.value: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
 }
@@ -100,7 +114,7 @@ CHAIN_TO_PRICE_TOKEN = {
     1: "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
     10: "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",
     100: "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-    137: "0xFEF5d947472e72Efbb2E388c730B7428406F2F95",
+    137: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
     8453: "0x54330d28ca3357F294334BDC454a032e7f353416",
     42220: "0x96ffa56a963EC33e5bC7057B9002722D1884fc01",
 }
@@ -112,6 +126,10 @@ CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
         "payment_data": "0x",
     },
     8453: {
+        "response_timeout": 300,
+        "payment_data": "0x",
+    },
+    137: {
         "response_timeout": 300,
         "payment_data": "0x",
     },
@@ -177,7 +195,6 @@ def fetch_mech_info(
             payment_type_bytes
         ).call()
     )
-
     if payment_type not in PaymentType._value2member_map_:  # pylint: disable=W0212
         print("  - Invalid mech type detected.")
         sys.exit(1)
@@ -706,7 +723,7 @@ def check_prepaid_balances(  # pylint: disable=too-many-arguments
     """
     requester = safe_address or crypto.address
 
-    if payment_type in [PaymentType.NATIVE.value, PaymentType.TOKEN.value]:
+    if payment_type in PaymentType.get_prepaid_supported_types():
         payment_type_name = PaymentType(payment_type).name.lower()
         payment_type_abi_path = PAYMENT_TYPE_TO_ABI_PATH[payment_type]
 
@@ -747,7 +764,6 @@ def verify_tools(tools: tuple, service_id: int, chain_config: Optional[str]) -> 
     mech_tools_data = get_mech_tools(service_id=service_id, chain_config=chain_config)
     if not mech_tools_data:
         raise ValueError("Error while fetching mech tools data")
-
     mech_tools = mech_tools_data.get("tools", [])
     invalid_tools = [tool for tool in tools if tool not in mech_tools]
     if invalid_tools:
@@ -767,6 +783,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     tools: tuple = (),
     extra_attributes: Optional[Dict[str, Any]] = None,
     private_key_path: Optional[str] = None,
+    private_key_password: Optional[str] = None,
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
@@ -795,6 +812,8 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     :type extra_attributes: Optional[Dict[str, Any]]
     :param private_key_path: The path to the private key file (optional).
     :type private_key_path: Optional[str]
+    :param private_key_password: Password to decrypt the keystore (if encrypted).
+    :type private_key_password: Optional[str]
     :return: The data received from on-chain/off-chain.
     :param retries: Number of retries for sending a transaction
     :type retries: int
@@ -845,8 +864,9 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
         raise FileNotFoundError(
             f"Private key file `{private_key_path}` does not exist!"
         )
-
-    crypto = EthereumCrypto(private_key_path=private_key_path)
+    crypto = EthereumCrypto(
+        private_key_path=private_key_path, password=private_key_password
+    )
     ledger_api = EthereumApi(**asdict(ledger_config))
 
     with open(MARKETPLACE_ABI_PATH, encoding="utf-8") as f:
@@ -876,9 +896,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     mech_deliver_event_signature = fetch_mech_deliver_event_signature(
         ledger_api, priority_mech_address
     )
-
     verify_tools(tools, service_id, chain_config)
-
     if not use_prepaid:
         price = max_delivery_rate * num_requests
         if payment_type == PaymentType.NATIVE.value:
@@ -893,9 +911,11 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
                 )
                 print(f"  - Sender Address: {sender}")
                 sys.exit(1)
-        if payment_type == PaymentType.TOKEN.value:
-            print("Token Mech detected, approving wrapped token for price payment...")
+        if payment_type in PaymentType.get_token_payment_types():
             price_token = CHAIN_TO_PRICE_TOKEN[chain_id]
+            print(
+                f"Token Mech detected, approving token {price_token} for price payment..."
+            )
             approve_tx = approve_price_tokens(
                 crypto,
                 ledger_api,

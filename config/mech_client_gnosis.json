@@ -20,5 +20,13 @@
             }
         }
     },
-    "env_variables": {}
+    "env_variables": {},
+    "agent_release": {
+        "is_aea": true,
+        "repository": {
+            "owner": "valory-xyz",
+            "name": "mech-client",
+            "version": "v0.1.0"
+        }
+    }
 }

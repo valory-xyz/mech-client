@@ -3,6 +3,7 @@ import sys
 from dotenv import load_dotenv
 from typing import Optional, Dict
 from pathlib import Path
+from aea_ledger_ethereum import EthereumCrypto
 from mech_client.interact import PRIVATE_KEY_FILE_PATH
 from web3 import Web3
 from scripts.nvm_subscription.manager import NVMSubscriptionManager
@@ -18,6 +19,7 @@ CHAIN_TO_ENVS: Dict[str, Path] = {
 def main(
     agent_mode: bool,
     private_key_path: str,
+    private_key_password: Optional[str],
     chain_config: str,
     safe_address: Optional[str] = None,
 ) -> None:
@@ -35,10 +37,11 @@ def main(
             f"Private key file `{private_key_path}` does not exist!"
         )
 
-    with open(private_key_path, "r") as file:
-        content = file.read()
-
-    WALLET_PVT_KEY = content
+    crypto = EthereumCrypto(
+        private_key_path=private_key_path,
+        password=private_key_password,
+    )
+    WALLET_PVT_KEY = crypto.private_key
     PLAN_DID = os.environ["PLAN_DID"]
     NETWORK = os.environ["NETWORK_NAME"]
     CHAIN_ID = int(os.environ["CHAIN_ID"])
