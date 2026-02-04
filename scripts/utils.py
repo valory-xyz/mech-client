@@ -6,6 +6,7 @@ from mech_client.marketplace_interact import (
     get_contract,
     CHAIN_TO_PRICE_TOKEN_OLAS,
     CHAIN_TO_PRICE_TOKEN_USDC,
+    PaymentType,
 )
 
 
@@ -105,7 +106,7 @@ def get_native_balance_tracker_contract(
 
 
 def get_token_balance_tracker_contract(
-    ledger_api: EthereumApi, chain_id: int, token_type: str = "olas"
+    ledger_api: EthereumApi, chain_id: int, payment_type: PaymentType = PaymentType.TOKEN
 ) -> Web3Contract:
     with open(
         Path(__file__).parent.parent
@@ -116,7 +117,7 @@ def get_token_balance_tracker_contract(
     ) as f:
         abi = json.load(f)
 
-    if token_type == "usdc":
+    if payment_type == PaymentType.USDC_TOKEN:
         balance_tracker_address = CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC[chain_id]
     else:
         balance_tracker_address = CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS[chain_id]
@@ -130,7 +131,7 @@ def get_token_balance_tracker_contract(
 
 
 def get_token_contract(
-    ledger_api: EthereumApi, chain_id: int, token_type: str = "olas"
+    ledger_api: EthereumApi, chain_id: int, payment_type: PaymentType = PaymentType.TOKEN
 ) -> Web3Contract:
     with open(
         Path(__file__).parent.parent / "mech_client" / "abis" / "IToken.json",
@@ -138,7 +139,7 @@ def get_token_contract(
     ) as f:
         abi = json.load(f)
 
-    if token_type == "usdc":
+    if payment_type == PaymentType.USDC_TOKEN:
         token_address = CHAIN_TO_PRICE_TOKEN_USDC[chain_id]
     else:
         token_address = CHAIN_TO_PRICE_TOKEN_OLAS[chain_id]
