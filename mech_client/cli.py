@@ -974,6 +974,11 @@ def nvm_subscribe(
                     "Cannot fetch safe or key data for the agent mode."
                 )
 
+        if not key_path:
+            raise ClickException(
+                "Private key path is required. Use --key option or set up agent mode."
+            )
+
         nvm_subscribe_main(
             agent_mode=agent_mode,
             safe_address=safe,
