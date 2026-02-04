@@ -249,6 +249,7 @@ def setup_agent_mode(
             operate=operate,
             config_path=template,
             build_only=True,
+            use_binary=True,
             skip_dependency_check=False,
         )
     except requests.exceptions.HTTPError as e:
