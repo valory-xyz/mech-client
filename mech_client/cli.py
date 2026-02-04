@@ -131,7 +131,7 @@ def mech_client_configure_local_config(
 
     for chain in template["configurations"]:
         # Use environment variable if set, otherwise fall back to default from mechs.json
-        env_rpc = os.getenv("MECHX_RPC_URL")
+        env_rpc = os.getenv("MECHX_CHAIN_RPC")
         if env_rpc is None:
             mech_config = get_mech_config(chain)
             env_rpc = mech_config.rpc_url
