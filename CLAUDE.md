@@ -84,8 +84,8 @@ For releases, manually:
 1. Bump version in `pyproject.toml`, `mech_client/__init__.py`, and `SECURITY.md`
 2. Run `poetry lock`
 3. Run `rm -rf dist`
-4. Run `autonomy packages sync --update-packages`
-5. Run `make eject-packages`
+4. Run `poetry run autonomy packages sync --update-packages`
+5. Run `make eject-packages` (currently a no-op; packages pre-ejected in repo)
 6. Create release PR and tag
 
 ### CLI Tool
@@ -240,7 +240,15 @@ All contract ABIs are in `mech_client/abis/`:
 
 3. **IPFS URLs**: Use `IPFS_URL_TEMPLATE` format with CIDv1 (f01701220 prefix + hash)
 
-4. **Error handling**: Retry logic with `MAX_RETRIES` and `WAIT_SLEEP` constants for network operations
+4. **Error handling**:
+   - **RPC/Network errors in CLI commands**: Catch `requests.exceptions.HTTPError`, `requests.exceptions.ConnectionError`, and `requests.exceptions.Timeout` at the CLI command level. Raise `ClickException` with helpful error messages that include:
+     - The current RPC URL (from `MECHX_CHAIN_RPC` env var)
+     - Clear description of the error
+     - Actionable solutions (check endpoint availability, set different RPC, check network)
+     - Use `from e` to preserve the exception chain
+   - **Subgraph errors**: Same pattern as RPC errors but reference `MECHX_SUBGRAPH_URL` instead
+   - **Retry logic**: Use `MAX_RETRIES = 3` and `WAIT_SLEEP = 3.0` constants for network polling operations (delivery watching, event monitoring)
+   - **User-facing errors**: Never show raw Python tracebacks for network failures; always provide context and solutions
 
 5. **Async delivery**: Use `asyncio` for concurrent waiting on multiple delivery channels
 
@@ -252,6 +260,11 @@ All contract ABIs are in `mech_client/abis/`:
    - Ignore `mech_client/helpers/*` (ejected packages)
    - Ignore `*_pb2.py` (generated protobuf files)
    - Line length: 88 characters (Black style)
+
+9. **User experience**:
+   - Error messages should reference environment variables (e.g., `MECHX_CHAIN_RPC`) rather than internal config files
+   - Never suggest users "see mechs.json" or other internal package files that aren't accessible after installation
+   - Provide actionable solutions that end users can actually execute
 
 ## Important Notes
 
