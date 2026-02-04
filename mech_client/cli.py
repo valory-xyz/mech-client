@@ -23,6 +23,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from dotenv import load_dotenv, set_key
 
 import click
 from click import ClickException
@@ -83,6 +84,8 @@ CHAIN_TO_TEMPLATE = {
     "polygon": BASE_DIR / "config" / "mech_client_polygon.json",
 }
 
+ENV_PATH = BASE_DIR / ".env"
+
 
 def get_operate_path() -> Path:
     """Fetches the operate path for the mech client service"""
@@ -96,6 +99,23 @@ def is_agent_mode(ctx: click.Context) -> bool:
     client_mode = ctx.obj.get("client_mode", False)
     agent_mode = not client_mode
     return agent_mode
+
+
+def get_password(operate: OperateApp) -> str:
+    """Load password from env/.env if present, otherwise prompt once and persist."""
+    load_dotenv(dotenv_path=ENV_PATH, override=False)
+    env_password = os.getenv("OPERATE_PASSWORD")
+    if env_password:
+        operate.password = env_password
+        return env_password
+
+    ask_password_if_needed(operate)
+    if not operate.password:
+        raise ClickException("Password could not be set for Operate.")
+
+    os.environ["OPERATE_PASSWORD"] = operate.password
+    set_key(str(ENV_PATH), "OPERATE_PASSWORD", operate.password)
+    return operate.password
 
 
 def mech_client_configure_local_config(
@@ -138,7 +158,7 @@ def fetch_agent_mode_data(
     operate_path = get_operate_path()
     operate = OperateApp(operate_path)
     # Ensure the password is loaded so keys can be decrypted.
-    ask_password_if_needed(operate)
+    get_password(operate)
     keys_manager = KeysManager(
         path=operate._keys,  # pylint: disable=protected-access
         logger=operate_logger,
@@ -209,6 +229,7 @@ def setup_agent_mode(
     operate_path = get_operate_path()
     operate = OperateApp(operate_path)
     operate.setup()
+    get_password(operate)
 
     sys.modules[
         "operate.quickstart.run_service"
