@@ -23,10 +23,10 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from dotenv import load_dotenv, set_key
 
 import click
 from click import ClickException
+from dotenv import load_dotenv, set_key
 from operate.cli import OperateApp
 from operate.cli import logger as operate_logger
 from operate.constants import NO_STAKING_PROGRAM_ID
