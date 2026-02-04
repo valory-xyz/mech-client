@@ -31,6 +31,7 @@ class BaseContract:
             100: "gnosis",
             8453: "base",
             137: "polygon",
+            10: "optimism"
         }
         self.chain_name = chain_name_by_id.get(self.chain_id)
         if not self.chain_name:

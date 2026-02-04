@@ -121,6 +121,10 @@ CHAIN_TO_PRICE_TOKEN = {
 
 
 CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
+    10: {
+        "response_timeout": 300,
+        "payment_data": "0x",
+    },
     100: {
         "response_timeout": 300,
         "payment_data": "0x",
