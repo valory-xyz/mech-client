@@ -249,6 +249,7 @@ def setup_agent_mode(
             operate=operate,
             config_path=template,
             build_only=True,
+            use_binary=True,
             skip_dependency_check=False,
         )
     except requests.exceptions.HTTPError as e:
@@ -350,6 +351,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     priority_mech: str,
     use_prepaid: bool,
     use_offchain: bool,
+    key: Optional[str],
     tools: Optional[tuple],
     safe: Optional[str] = None,
     extra_attribute: Optional[List[str]] = None,
@@ -363,7 +365,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     try:
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running interact with agent_mode={agent_mode}")
-        key_path: Optional[str] = None
+        key_path: Optional[str] = key
         key_password: Optional[str] = None
 
         extra_attributes_dict: Dict[str, Any] = {}
@@ -830,6 +832,7 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
 def deposit_native(
     ctx: click.Context,
     amount_to_deposit: str,
+    key: Optional[str] = None,
     safe: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
@@ -838,6 +841,8 @@ def deposit_native(
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
+        key_path: Optional[str] = key
+        key_password: Optional[str] = None
         if agent_mode:
             safe, key_path, key_password = fetch_agent_mode_data(chain_config)
             if not safe or not key_path:
@@ -890,6 +895,7 @@ def deposit_native(
 def deposit_token(
     ctx: click.Context,
     amount_to_deposit: str,
+    key: Optional[str] = None,
     safe: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
@@ -898,6 +904,8 @@ def deposit_token(
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running deposit token with agent_mode={agent_mode}")
 
+        key_path: Optional[str] = key
+        key_password: Optional[str] = None
         if agent_mode:
             safe, key_path, key_password = fetch_agent_mode_data(chain_config)
             if not safe or not key_path:
@@ -950,18 +958,26 @@ def nvm_subscribe(
     ctx: click.Context,
     chain_config: str,
     safe: Optional[str] = None,
+    key: Optional[str] = None,
 ) -> None:
     """Allows to purchase nvm subscription for nvm mech requests."""
     try:
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
 
+        key_path: Optional[str] = key
+        key_password: Optional[str] = None
         if agent_mode:
             safe, key_path, key_password = fetch_agent_mode_data(chain_config)
             if not safe or not key_path:
                 raise ClickException(
                     "Cannot fetch safe or key data for the agent mode."
                 )
+
+        if not key_path:
+            raise ClickException(
+                "Private key path is required. Use --key option or set up agent mode."
+            )
 
         nvm_subscribe_main(
             agent_mode=agent_mode,
