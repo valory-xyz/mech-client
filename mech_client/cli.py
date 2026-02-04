@@ -114,6 +114,7 @@ def get_password(operate: OperateApp) -> str:
     if not operate.password:
         raise ClickException("Password could not be set for Operate.")
 
+    os.environ["OPERATE_PASSWORD"] = operate.password
     set_key(str(ENV_PATH), "OPERATE_PASSWORD", os.environ["OPERATE_PASSWORD"])
     os.environ["ATTENDED"] = "false"
     return os.environ["OPERATE_PASSWORD"]
