@@ -336,7 +336,6 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     try:
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running interact with agent_mode={agent_mode}")
-        safe: str = ""
         key_path: Optional[str] = None
         key_password: Optional[str] = None
 
