@@ -25,7 +25,7 @@
         "is_aea": true,
         "repository": {
             "owner": "valory-xyz",
-            "name": "mech",
+            "name": "mech-client",
             "version": "v0.1.0"
         }
     }
