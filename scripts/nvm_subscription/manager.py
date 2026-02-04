@@ -58,7 +58,7 @@ class NVMSubscriptionManager:
         Initialize the SubscriptionManager, including contract instances
         and Web3 connection.
         """
-        self.url = os.getenv("MECHX_RPC_URL", CONFIGS[network]["nvm"]['web3ProviderUri'])
+        self.url = os.getenv("MECHX_CHAIN_RPC", CONFIGS[network]["nvm"]['web3ProviderUri'])
         self.web3 = Web3(Web3.HTTPProvider(self.url))
         self.agent_mode = agent_mode
         if self.agent_mode:

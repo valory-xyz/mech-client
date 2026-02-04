@@ -125,7 +125,7 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 **Legacy Mechs (`interact.py`)**
 - Direct interaction with individual mech agents via agent registry
 - Uses `ConfirmationType` enum (off-chain, on-chain, wait-for-both) for delivery method selection
-- Configuration via `MechConfig` dataclass loaded from `configs/mechs.json`
+- Configuration via `MechConfig` dataclass loaded from `mech_client/configs/mechs.json`
 - Single request/response model per agent
 
 **Mech Marketplace (`marketplace_interact.py`)**
@@ -183,22 +183,35 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 
 ### Configuration
 
-**Chain configs (`configs/mechs.json`)**
+**Chain configs (`mech_client/configs/mechs.json`)**
 - Per-chain configuration for gnosis, arbitrum, polygon, base, celo, optimism
 - Contains: RPC URLs, contract addresses, gas limits, ledger config
 - Overridable via environment variables (`MECHX_*`)
 
-**Service templates (`config/mech_client_*.json`)**
+**Service templates (`mech_client/config/mech_client_*.json`)**
 - Open Autonomy service configurations for agent mode
 - Defines service components, dependencies, and deployment settings
+- Located within the package for proper distribution
 
 **Environment variables**
+All configuration values can be overridden via `MECHX_*` environment variables. The pattern is:
+1. Load defaults from `mech_client/configs/mechs.json`
+2. Override in `MechConfig.__post_init__()` if environment variable is set
+
 Key variables:
-- `MECHX_CHAIN_RPC`: Override RPC endpoint
+- `MECHX_CHAIN_RPC`: Override RPC endpoint (standardized name, used throughout)
 - `MECHX_WSS_ENDPOINT`: Override WebSocket endpoint
 - `MECHX_GAS_LIMIT`: Override gas limit
-- `MECHX_MECH_OFFCHAIN_URL`: Offchain mech endpoint for offchain requests
-- `MECHX_LEDGER_*`: Ledger configuration overrides
+- `MECHX_AGENT_REGISTRY_CONTRACT`: Override agent registry contract address
+- `MECHX_SERVICE_REGISTRY_CONTRACT`: Override service registry contract address
+- `MECHX_TRANSACTION_URL`: Override transaction URL template
+- `MECHX_SUBGRAPH_URL`: Override subgraph URL
+- `MECHX_MECH_OFFCHAIN_URL`: Offchain mech HTTP endpoint (required for `--use-offchain`, no default)
+- `MECHX_LEDGER_ADDRESS`: Override ledger RPC address
+- `MECHX_LEDGER_CHAIN_ID`: Override chain ID
+- `MECHX_LEDGER_POA_CHAIN`: Override POA chain flag
+- `MECHX_LEDGER_DEFAULT_GAS_PRICE_STRATEGY`: Override gas price strategy
+- `MECHX_LEDGER_IS_GAS_ESTIMATION_ENABLED`: Override gas estimation setting
 
 ### Open Autonomy Integration
 

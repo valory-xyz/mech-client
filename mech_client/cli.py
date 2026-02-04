@@ -41,7 +41,7 @@ from operate.services.manage import KeysManager
 from tabulate import tabulate  # type: ignore
 
 from mech_client import __version__
-from mech_client.interact import ConfirmationType
+from mech_client.interact import ConfirmationType, get_mech_config
 from mech_client.interact import interact as interact_
 from mech_client.marketplace_interact import IPFS_URL_TEMPLATE
 from mech_client.marketplace_interact import (
@@ -130,7 +130,12 @@ def mech_client_configure_local_config(
         config.rpc = {}
 
     for chain in template["configurations"]:
-        config.rpc[chain] = os.getenv("MECHX_RPC_URL")
+        # Use environment variable if set, otherwise fall back to default from mechs.json
+        env_rpc = os.getenv("MECHX_CHAIN_RPC")
+        if env_rpc is None:
+            mech_config = get_mech_config(chain)
+            env_rpc = mech_config.rpc_url
+        config.rpc[chain] = env_rpc
 
     config.principal_chain = template["home_chain"]
 
