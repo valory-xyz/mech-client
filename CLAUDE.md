@@ -199,7 +199,7 @@ All configuration values can be overridden via `MECHX_*` environment variables. 
 2. Override in `MechConfig.__post_init__()` if environment variable is set
 
 Key variables:
-- `MECHX_CHAIN_RPC`: Override RPC endpoint (standardized name, used throughout)
+- `MECHX_CHAIN_RPC`: Override RPC endpoint (standardized name, used throughout for both agent mode and blockchain interactions)
 - `MECHX_WSS_ENDPOINT`: Override WebSocket endpoint
 - `MECHX_GAS_LIMIT`: Override gas limit
 - `MECHX_AGENT_REGISTRY_CONTRACT`: Override agent registry contract address
@@ -207,7 +207,6 @@ Key variables:
 - `MECHX_TRANSACTION_URL`: Override transaction URL template
 - `MECHX_SUBGRAPH_URL`: Override subgraph URL
 - `MECHX_MECH_OFFCHAIN_URL`: Offchain mech HTTP endpoint (required for `--use-offchain`, no default)
-- `MECHX_LEDGER_ADDRESS`: Override ledger RPC address
 - `MECHX_LEDGER_CHAIN_ID`: Override chain ID
 - `MECHX_LEDGER_POA_CHAIN`: Override POA chain flag
 - `MECHX_LEDGER_DEFAULT_GAS_PRICE_STRATEGY`: Override gas price strategy

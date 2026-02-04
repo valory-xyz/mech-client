@@ -79,7 +79,7 @@ class LedgerConfig:
 
     def __post_init__(self) -> None:
         """Post initialization to override with environment variables."""
-        address = os.getenv("MECHX_LEDGER_ADDRESS")
+        address = os.getenv("MECHX_CHAIN_RPC")
         if address:
             self.address = address
 
