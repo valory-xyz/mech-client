@@ -365,7 +365,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     try:
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running interact with agent_mode={agent_mode}")
-        key_path: Optional[str] = None
+        key_path: Optional[str] = key
         key_password: Optional[str] = None
 
         extra_attributes_dict: Dict[str, Any] = {}
@@ -841,6 +841,8 @@ def deposit_native(
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
+        key_path: Optional[str] = key
+        key_password: Optional[str] = None
         if agent_mode:
             safe, key_path, key_password = fetch_agent_mode_data(chain_config)
             if not safe or not key_path:
@@ -902,6 +904,8 @@ def deposit_token(
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running deposit token with agent_mode={agent_mode}")
 
+        key_path: Optional[str] = key
+        key_password: Optional[str] = None
         if agent_mode:
             safe, key_path, key_password = fetch_agent_mode_data(chain_config)
             if not safe or not key_path:
@@ -961,6 +965,8 @@ def nvm_subscribe(
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
 
+        key_path: Optional[str] = key
+        key_password: Optional[str] = None
         if agent_mode:
             safe, key_path, key_password = fetch_agent_mode_data(chain_config)
             if not safe or not key_path:
