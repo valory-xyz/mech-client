@@ -32,7 +32,7 @@ jobs:
           echo Building distribution
           make dist
 
-      - name: Publish open-autonomy Framework to PyPI
+      - name: Publish mech-client to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
