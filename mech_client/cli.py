@@ -106,16 +106,17 @@ def get_password(operate: OperateApp) -> str:
     load_dotenv(dotenv_path=ENV_PATH, override=False)
     env_password = os.getenv("OPERATE_PASSWORD")
     if env_password:
-        operate.password = env_password
-        return env_password
+        os.environ["OPERATE_PASSWORD"] = env_password
+        os.environ["ATTENDED"] = "false"
+        return os.environ["OPERATE_PASSWORD"]
 
     ask_password_if_needed(operate)
     if not operate.password:
         raise ClickException("Password could not be set for Operate.")
 
-    os.environ["OPERATE_PASSWORD"] = operate.password
-    set_key(str(ENV_PATH), "OPERATE_PASSWORD", operate.password)
-    return operate.password
+    set_key(str(ENV_PATH), "OPERATE_PASSWORD", os.environ["OPERATE_PASSWORD"])
+    os.environ["ATTENDED"] = "false"
+    return os.environ["OPERATE_PASSWORD"]
 
 
 def mech_client_configure_local_config(
@@ -181,7 +182,7 @@ def fetch_agent_mode_data(
     key_path = keys_manager.get_private_key_file(service.agent_addresses[0])
     safe = service.chain_configs[chain_config].chain_data.multisig
 
-    return safe, str(key_path), operate.password
+    return safe, str(key_path), os.getenv("OPERATE_PASSWORD")
 
 
 @click.group(name="mechx")  # type: ignore
