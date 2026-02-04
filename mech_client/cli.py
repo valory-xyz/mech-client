@@ -322,7 +322,6 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
     priority_mech: str,
     use_prepaid: bool,
     use_offchain: bool,
-    key: Optional[str],
     tools: Optional[tuple],
     safe: Optional[str] = None,
     extra_attribute: Optional[List[str]] = None,
@@ -663,7 +662,6 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
 def deposit_native(
     ctx: click.Context,
     amount_to_deposit: str,
-    key: Optional[str],
     safe: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
@@ -702,7 +700,6 @@ def deposit_native(
 def deposit_token(
     ctx: click.Context,
     amount_to_deposit: str,
-    key: Optional[str],
     safe: Optional[str] = None,
     chain_config: Optional[str] = None,
 ) -> None:
@@ -739,7 +736,6 @@ def deposit_token(
 @click.pass_context
 def nvm_subscribe(
     ctx: click.Context,
-    key: str,
     chain_config: str,
     safe: Optional[str] = None,
 ) -> None:
