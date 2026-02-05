@@ -1,5 +1,10 @@
 # Release history - `Mech Client`
 
+> **Note**: This changelog is no longer actively maintained. For recent releases (v0.3.0+), please see [GitHub Releases](https://github.com/valory-xyz/mech-client/releases).
+
+---
+
+## Historical Releases (v0.1.0 - v0.2.0)
 
 ## 0.2.0 (24-06-2023)
 
