@@ -139,7 +139,7 @@ mechx fetch-mm-mechs-info --chain-config gnosis
 
 ```bash
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-|   AI agent Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
+|   Service Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
 +==============+====================+============================================+====================+===============================================================================================================+
 |         2182 | Fixed Price Native | 0xc05e7412439bd7e91730a6880e18d5d5873f632c |              41246 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
@@ -217,13 +217,13 @@ export MECHX_MECH_OFFCHAIN_URL="http://localhost:8000/"
 
 If you want to use a Valory mech for offchain requests, below is the list of mechs and their address and offchain urls.
 
-| AI agent ID |           Priority Mech Address            |                     Offchain URL                      |
+| Service ID |           Priority Mech Address            |                     Offchain URL                      |
 | :---------: | :----------------------------------------: | :---------------------------------------------------: |
 |    2182     | 0xB3C6319962484602b00d5587e965946890b82101 | https://d19715222af5b940.agent.propel.autonolas.tech/ |
 
 ### List tools available for a mech
 
-To list the tools available for a specific marketplace mech, use the `tools-for-marketplace-mech` command. You can specify an AI agent ID to get tools for a specific mech.
+To list the tools available for a specific marketplace mech, use the `tools-for-marketplace-mech` command. You can specify a service ID to get tools for a specific mech.
 
 ```bash
 mechx tools-for-marketplace-mech 1722 --chain-config gnosis
