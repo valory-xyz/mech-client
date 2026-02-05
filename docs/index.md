@@ -43,20 +43,22 @@ pip install mech-client
 
 The Mech Client supports multiple blockchain networks with different feature availability:
 
-| Chain | Legacy Mechs | Marketplace | Agent Mode | OLAS Payments | USDC Payments |
-|-------|-------------|-------------|------------|---------------|---------------|
-| Gnosis | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Base | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Polygon | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Optimism | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Arbitrum | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Celo | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Chain | Legacy Mechs | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Payments | USDC Payments |
+|-------|-------------|-------------|------------|----------------|-------------------|---------------|---------------|
+| Gnosis | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Base | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Polygon | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Optimism | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Arbitrum | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Celo | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 **Key:**
-- **Marketplace**: Chains with marketplace contracts. Required for marketplace mech interactions and deposit commands.
+- **Marketplace**: Chains with marketplace contracts. Required for marketplace mech interactions.
 - **Agent Mode**: Chains supporting on-chain agent registration (all marketplace chains: Gnosis, Base, Polygon, Optimism).
+- **Native Payment**: Chains supporting `deposit-native` command for prepaid native token deposits (Gnosis, Base, Polygon, Optimism).
+- **NVM Subscriptions**: Chains supporting `purchase-nvm-subscription` command for Nevermined subscription-based payments (Gnosis, Base).
+- **OLAS/USDC Payments**: Chains supporting `deposit-token` command with OLAS or USDC tokens.
 - **Legacy Mechs**: All chains support direct interaction with legacy mech agents.
-- **OLAS/USDC Payments**: Token payment support varies by chain deployment.
 
 **Important Notes:**
 - The `fetch-mm-mechs-info` command works on all marketplace chains (Gnosis, Base, Polygon, Optimism) but requires setting the `MECHX_SUBGRAPH_URL` environment variable.

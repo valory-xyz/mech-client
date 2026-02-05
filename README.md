@@ -81,18 +81,21 @@ Learn more about mech marketplace [here](https://olas.network/mech-marketplace)
 
 The Mech Client supports multiple chains with different feature availability:
 
-| Chain | Legacy Mechs | Marketplace | Agent Mode | OLAS Payments | USDC Payments |
-|-------|-------------|-------------|------------|---------------|---------------|
-| Gnosis | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Base | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Polygon | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Optimism | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Arbitrum | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Celo | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Chain | Legacy Mechs | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Payments | USDC Payments |
+|-------|-------------|-------------|------------|----------------|-------------------|---------------|---------------|
+| Gnosis | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Base | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Polygon | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Optimism | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Arbitrum | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Celo | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 **Notes:**
-- **Marketplace**: Chains with marketplace contracts deployed. Required for `interact` with marketplace mechs, `deposit-*`, and `fetch-mm-mechs-info` commands.
+- **Marketplace**: Chains with marketplace contracts deployed. Required for `interact` with marketplace mechs and `fetch-mm-mechs-info` commands.
 - **Agent Mode**: Chains that support on-chain agent registration via `setup-agent-mode`.
+- **Native Payment**: Chains that support `deposit-native` command for prepaid native token deposits (Gnosis, Base, Polygon, Optimism).
+- **NVM Subscriptions**: Chains that support `purchase-nvm-subscription` command for Nevermined subscription-based payments (Gnosis, Base).
+- **OLAS/USDC Payments**: Chains that support `deposit-token` command with OLAS or USDC tokens.
 - **Legacy Mechs**: All chains support direct interaction with legacy mech agents via `interact --agent_id`.
 - **Subgraph**: The `fetch-mm-mechs-info` command requires setting `MECHX_SUBGRAPH_URL` environment variable for any chain.
 
