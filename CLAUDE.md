@@ -293,7 +293,7 @@ All contract ABIs are in `mech_client/abis/`:
 
 ## Important Notes
 
-- Python version: >=3.10, <3.12
+- Python version: >=3.10, <3.12 (supports Python 3.10, 3.11)
 - Main dependencies: `olas-operate-middleware`, `safe-eth-py`, `gql`, `click`
 - Agent mode supports all marketplace chains (Gnosis, Base, Polygon, Optimism)
 - Batch requests only supported for marketplace mechs, not legacy mechs
