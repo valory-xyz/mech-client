@@ -294,7 +294,7 @@ def approve_price_tokens(  # pylint: disable=too-many-arguments, too-many-locals
         signer_pkey=crypto.private_key,
         value=0,
     )
-    return transaction_digest.hex()
+    return transaction_digest.to_0x_hex()
 
 
 def fetch_requester_nvm_subscription_balance(
@@ -484,7 +484,7 @@ def send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-loc
                 signer_pkey=crypto.private_key,
                 value=price,
             )
-            return transaction_digest.hex()
+            return transaction_digest.to_0x_hex()
         except Exception as e:  # pylint: disable=broad-except
             print(
                 f"Error occured while sending the transaction: {e}; Retrying in {sleep}"

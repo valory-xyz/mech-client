@@ -123,7 +123,7 @@ def deposit_native(  # pylint: disable=too-many-arguments
             signer_pkey=crypto.private_key,
             value=amount,
         )
-        return transaction_digest.hex()
+        return transaction_digest.to_0x_hex()
 
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
@@ -236,7 +236,7 @@ def approve_token(  # pylint: disable=too-many-arguments,too-many-locals
             signer_pkey=crypto.private_key,
             value=0,
         )
-        return transaction_digest.hex()
+        return transaction_digest.to_0x_hex()
 
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")
@@ -315,7 +315,7 @@ def deposit_token(  # pylint: disable=too-many-arguments,too-many-locals
             signer_pkey=crypto.private_key,
             value=0,
         )
-        return transaction_digest.hex()
+        return transaction_digest.to_0x_hex()
 
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while sending the transaction: {e}")

@@ -223,7 +223,7 @@ class NVMSubscriptionManager:
 
             if receipt["status"] == 1:
                 logger.info("Approve transaction validated successfully")
-                logger.info({"status": "success", "tx_hash": tx_hash.hex()})
+                logger.info({"status": "success", "tx_hash": tx_hash.to_0x_hex()})
             else:
                 logger.error("Approve transaction failed")
                 return {"status": "failed", "receipt": dict(receipt)}
@@ -271,7 +271,7 @@ class NVMSubscriptionManager:
 
         if receipt["status"] == 1:
             logger.info("Subscription transaction validated successfully")
-            logger.info({"status": "success", "tx_hash": tx_hash.hex()})
+            logger.info({"status": "success", "tx_hash": tx_hash.to_0x_hex()})
         else:
             logger.error("Subscription transaction failed")
             return {"status": "failed", "receipt": dict(receipt)}
@@ -350,7 +350,7 @@ class NVMSubscriptionManager:
 
         if receipt["status"] == 1:
             logger.info("Subscription purchased transaction successfully")
-            return {"status": "success", "tx_hash": tx_hash.hex()}
+            return {"status": "success", "tx_hash": tx_hash.to_0x_hex()}
         else:
             logger.error("Subscription purchase transaction failed")
             return {"status": "failed", "receipt": dict(receipt)}
