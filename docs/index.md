@@ -201,7 +201,7 @@ Alternatively, if the connection is lost, you can retrieve the response manually
 printf "%x\n" <request_id>
 ```
 
-- Go to the [Mech list](https://mech.olas.network/mechs) and locate your Mech (by its AI Agent ID or address).
+- Go to the [Mech list](https://marketplace.olas.network/gnosis/ai-agents) and locate your Mech (by its AI Agent ID or address).
 
 - Click on the Mech’s address to see a list of requests it has received.
 
@@ -266,10 +266,10 @@ The variable **result** contains the response of the mech.
 
 ### 1. 4. Sending requests through the web interface
 
-**1.** Create a wallet (e.g., using [MetaMask](https://metamask.io/)) and connect it to the [web interface](https://mech.olas.network/gnosis/mechs) by clicking the **“Connect wallet”** button at the top of the page.
+**1.** Create a wallet (e.g., using [MetaMask](https://metamask.io/)) and connect it to the [web interface](https://marketplace.olas.network/gnosis/ai-agents) by clicking the **“Connect wallet”** button at the top of the page.
 The wallet must have some xDAI to pay for requests.
 
-**2.** On the [web interface](https://mech.olas.network/gnosis/mechs), click on the address of the Mech you want to interact with.
+**2.** On the [web interface](https://marketplace.olas.network/gnosis/ai-agents), click on the address of the Mech you want to interact with.
 
 **3.** Click on **"New Request"**. A pop-up window will appear:
 
@@ -304,7 +304,7 @@ After that, there are three ways to send a request to a legacy Mech: via the [te
 
   ![List of Mechs](./imgs/list_of_mechs.png)
 
-- For the Gnosis network, additional legacy Mechs are listed on [this webpage](https://mech.olas.network/). Click the **"Legacy"** tab, as shown below:
+- For the Gnosis network, additional legacy Mechs are listed on [this webpage](https://marketplace.olas.network/gnosis/ai-agents). Click the **"Legacy"** tab, as shown below:
 
   ![Mech Marketplace vs Legacy](./imgs/legacy_tab.png)
 
@@ -397,7 +397,7 @@ The variables **PROMPT_TEXT**, **AGENT_ID** and **TOOL_NAME** can be changed. Th
 
 **1.** Create a wallet (for instance with [Metamask](https://metamask.io/)) and connect it to the web interface by clicking on the button “Connect wallet” on the webpage. This wallet must be provided with xDAI in order to pay the Mechs for the requests.
 
-**2.** Go to the webpage [here](https://mech.olas.network/gnosis/mechs?legacy=true). Click on the address of the Mech you want to send a request to.
+**2.** Go to the webpage [here](https://marketplace.olas.network/gnosis/ai-agents?legacy=true). Click on the address of the Mech you want to send a request to.
 
 **4.** Click on "New Request". The following pop-up will appear:
 ![screenshot](./imgs/screenshot.png)
