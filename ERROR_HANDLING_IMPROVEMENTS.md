@@ -38,96 +38,58 @@ This document tracks error handling improvements made to the mech-client CLI.
 - Added `web3.constants.ADDRESS_ZERO` for zero address checks
 - Added `web3.exceptions.ContractLogicError, ValidationError` for Web3 errors
 
+### 7. Tool Management Commands Error Handling
+**All 6 commands fixed:**
+- `tools-for-agents`
+- `tool-description`
+- `tool-io-schema`
+- `tools-for-marketplace-mech`
+- `tool-description-for-marketplace-mech`
+- `tool-io-schema-for-marketplace-mech`
+
+**Changes made:**
+- **Added**: Chain config validation using `validate_chain_config()`
+- **Added**: Agent ID / Service ID validation (non-negative integer check)
+- **Added**: Tool ID format validation (must contain "-")
+- **Fixed**: Replaced all `click.echo(f"Error: {e}")` with `raise ClickException()` with detailed messages
+- **Added**: HTTP RPC error handling with context (HTTPError, ConnectionError, Timeout)
+- **Added**: KeyError and IOError handlers with actionable error messages
+- **Result**: All tool commands now fail fast with clear messages, proper exception chaining, and suggestions
+
+### 8. Deposit Commands Error Handling
+**Both commands fixed:**
+- `deposit-native`
+- `deposit-token`
+
+**Changes made:**
+- **Added**: Chain config validation using `validate_chain_config()`
+- **Added**: Amount validation (must be positive integer in wei/smallest unit)
+- **Added**: Marketplace support validation (checks if chain has marketplace contract deployed)
+- **Added**: Web3 exception handling (ContractLogicError, ValidationError)
+- **Added**: Detailed error messages for contract failures (insufficient balance, missing allowance, etc.)
+- **Result**: Deposit commands now validate inputs early and provide clear guidance on contract errors
+
+### 9. NVM Subscription Command Error Handling
+**Command fixed:**
+- `purchase-nvm-subscription`
+
+**Changes made:**
+- **Added**: Chain config validation using `validate_chain_config()`
+- **Added**: Chain NVM support validation (checks if chain is in CHAIN_TO_ENVS)
+- **Added**: Web3 exception handling (ContractLogicError, ValidationError)
+- **Added**: KeyError handler for missing environment variables (PLAN_DID, NETWORK_NAME, CHAIN_ID)
+- **Added**: Detailed error messages for subscription-specific issues
+- **Result**: NVM subscription command validates chain support early and provides clear guidance on environment variable requirements
+
 ## Remaining Work 🔧
 
 ### HIGH PRIORITY
 
-#### 1. Tool Management Commands (Inconsistent Error Patterns)
-**Commands affected:**
-- `tools-for-agents` (lines 599-604)
-- `tool-description` (lines 637-640)
-- `tool-io-schema` (lines 681-682)
-- `tools-for-marketplace-mech` (lines 755-758)
-- `tool-description-for-marketplace-mech` (lines 791-792)
-- `tool-io-schema-for-marketplace-mech` (lines 847-848)
-
-**Issues:**
-- Using `click.echo(f"Error: {e}")` instead of raising `ClickException`
-- Missing validation of agent_id/service_id parameters
-- No validation that contract addresses are not ADDRESS_ZERO
-- Missing web3 exception handling
-
-**Fix needed:**
-```python
-# Instead of:
-except KeyError as e:
-    click.echo(f"Error: Key error - {e}")
-
-# Do:
-except KeyError as e:
-    raise ClickException(
-        f"Error fetching tool metadata: {e}\n"
-        f"The agent/service may not exist or metadata may be unavailable."
-    ) from e
-```
-
-#### 2. Deposit Commands (Missing Validations)
-**Commands affected:**
-- `deposit-native` (lines 851-912)
-- `deposit-token` (lines 914-975)
-
-**Issues:**
-- No amount parameter validation (could be negative, zero, or non-numeric)
-- No validation that balance tracker address is not ADDRESS_ZERO
-- No validation that chain supports marketplace
-- No Web3 exception handling
-- Missing context in error messages about which operation failed
-
-**Fix needed:**
-```python
-# Validate amount
-try:
-    amount_wei = int(amount)
-    if amount_wei <= 0:
-        raise ValueError
-except (ValueError, TypeError):
-    raise ClickException(
-        f"Invalid amount: {amount!r}\n"
-        f"Amount must be a positive integer in wei."
-    )
-
-# Validate chain supports deposits
-mech_config = get_mech_config(chain_config)
-if mech_config.mech_marketplace_contract == ADDRESS_ZERO:
-    raise ClickException(
-        f"Chain {chain_config} does not support marketplace deposits.\n"
-        f"Marketplace contract is not deployed on this chain."
-    )
-```
-
-#### 3. Purchase NVM Subscription (Missing Validations)
-**Command:** `purchase-nvm-subscription` (lines 977-1040)
-
-**Issues:**
-- No validation that chain environment file exists in `CHAIN_TO_ENVS`
-- No validation of `PLAN_DID`, `NETWORK_NAME`, `CHAIN_ID` env vars from .env files
-- No Web3 exception handling
-- Generic error handling doesn't explain NVM-specific issues
-
-**Fix needed:**
-```python
-# Validate chain has NVM config
-if chain_config not in CHAIN_TO_ENVS:
-    available = ", ".join(CHAIN_TO_ENVS.keys())
-    raise ClickException(
-        f"NVM subscriptions not available for chain: {chain_config}\n"
-        f"Available chains: {available}"
-    )
-```
+**All HIGH priority items completed!** 🎉
 
 ### MEDIUM PRIORITY
 
-#### 4. Setup Agent Mode (Missing Validations)
+#### 1. Setup Agent Mode (Missing Validations)
 **Command:** `setup-agent-mode` (lines 221-276)
 
 **Issues:**
@@ -153,7 +115,7 @@ if not template_path.exists():
     )
 ```
 
-#### 5. Configuration File Error Handling
+#### 2. Configuration File Error Handling
 **Location:** `mech_client/interact.py` `get_mech_config()`
 
 **Issues:**
@@ -164,7 +126,7 @@ if not template_path.exists():
 **Fix needed:**
 Add wrapper in CLI or improve `get_mech_config()` to raise helpful errors.
 
-#### 6. Private Key File Handling
+#### 3. Private Key File Handling
 **Multiple locations:** All commands using `--key` parameter
 
 **Issues:**
@@ -178,7 +140,7 @@ Wrap private key loading in try-except with specific error messages.
 
 ### LOW PRIORITY
 
-#### 7. Agent ID/Service ID Range Validation
+#### 1. Agent ID/Service ID Range Validation
 **Commands:** `tools-for-agents`, tool description/schema commands
 
 **Issues:**
@@ -186,7 +148,7 @@ Wrap private key loading in try-except with specific error messages.
 - No bounds checking (could query ID 999999999)
 - No handling for non-existent IDs
 
-#### 8. IPFS Error Handling
+#### 2. IPFS Error Handling
 **All commands using IPFS**
 
 **Issues:**
@@ -194,7 +156,7 @@ Wrap private key loading in try-except with specific error messages.
 - No timeout handling at CLI level
 - No validation of IPFS hash format
 
-#### 9. Tool ID Format Validation
+#### 3. Tool ID Format Validation
 **Commands:** `tool-description`, `tool-io-schema`
 
 **Issues:**
@@ -274,14 +236,14 @@ except ContractLogicError as e:
 ## Summary
 
 **Total Issues Identified:** ~50+
-**Fixed in This Session:** 10 critical issues
-**Remaining HIGH priority:** 3 command groups (16 issues)
+**Fixed in This Session:** 19 critical issues (10 base + 6 tool commands + 2 deposit commands + 1 NVM subscription)
+**Remaining HIGH priority:** 0 (ALL COMPLETED!) 🎉
 **Remaining MEDIUM priority:** 3 areas (8 issues)
 **Remaining LOW priority:** 3 areas (10+ issues)
 
 **Next Steps:**
-1. Fix tool management command error patterns (HIGH)
-2. Add deposit command validations (HIGH)
-3. Add NVM subscription validations (HIGH)
+1. ✅ ~~Fix tool management command error patterns (HIGH)~~ - COMPLETED
+2. ✅ ~~Add deposit command validations (HIGH)~~ - COMPLETED
+3. ✅ ~~Add NVM subscription validations (HIGH)~~ - COMPLETED
 4. Improve setup-agent-mode validations (MEDIUM)
 5. Add configuration file error handling (MEDIUM)

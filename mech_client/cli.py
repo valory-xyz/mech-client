@@ -634,7 +634,17 @@ def to_png(ipfs_hash: str, path: str, request_id: str) -> None:
 def tools_for_agents(agent_id: Optional[int], chain_config: str) -> None:
     """Fetch and display tools for agents."""
     try:
-        result = get_tools_for_agents(agent_id, chain_config)
+        # Validate chain config
+        validated_chain = validate_chain_config(chain_config)
+
+        # Validate agent ID if provided
+        if agent_id is not None and agent_id < 0:
+            raise ClickException(
+                f"Invalid agent ID: {agent_id}\n"
+                f"Agent ID must be a non-negative integer."
+            )
+
+        result = get_tools_for_agents(agent_id, validated_chain)
 
         if agent_id is not None:
             headers = ["Tool Name", "Unique Identifier", "Mech Marketplace Support"]
@@ -694,11 +704,40 @@ def tools_for_agents(agent_id: Optional[int], chain_config: str) -> None:
             f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
         ) from e
     except (KeyError, TypeError) as e:
-        click.echo(f"Error processing tool data: {str(e)}")
+        raise ClickException(
+            f"Error processing tool data: {e}\n\n"
+            f"Possible causes:\n"
+            f"  • Agent ID does not exist in the registry\n"
+            f"  • Metadata structure is invalid or incomplete\n"
+            f"  • Agent registry contract may not be accessible\n\n"
+            f"Please verify the agent ID and try again."
+        ) from e
     except json.JSONDecodeError as e:
-        click.echo(f"Error decoding JSON response: {str(e)}")
+        raise ClickException(
+            f"Error parsing tool metadata: {e}\n\n"
+            f"The metadata returned from the agent registry is malformed.\n"
+            f"This may indicate:\n"
+            f"  • Invalid JSON in agent metadata\n"
+            f"  • Unexpected metadata structure\n"
+            f"  • Corrupted IPFS data"
+        ) from e
     except IOError as e:
-        click.echo(f"Network or I/O error: {str(e)}")
+        raise ClickException(
+            f"I/O error accessing tool metadata: {e}\n\n"
+            f"This may indicate:\n"
+            f"  • IPFS gateway is unavailable (https://gateway.autonolas.tech)\n"
+            f"  • Network connectivity issues\n"
+            f"  • Metadata URL is unreachable"
+        ) from e
+    except (ContractLogicError, ValidationError) as e:
+        raise ClickException(
+            f"Smart contract error: {e}\n\n"
+            f"This may indicate:\n"
+            f"  • Agent registry contract address is invalid\n"
+            f"  • Contract ABI mismatch\n"
+            f"  • Agent ID out of range\n\n"
+            f"Please verify your chain configuration and agent ID."
+        ) from e
 
 
 @click.command(name="tool-description")
@@ -707,7 +746,30 @@ def tools_for_agents(agent_id: Optional[int], chain_config: str) -> None:
 def tool_description(tool_id: str, chain_config: str) -> None:
     """Fetch and display the description of a specific tool."""
     try:
-        description = get_tool_description(tool_id, chain_config)
+        # Validate chain config
+        validated_chain = validate_chain_config(chain_config)
+
+        # Validate tool_id format (should be "agent_id-tool_name")
+        if "-" not in tool_id:
+            raise ClickException(
+                f"Invalid tool ID format: {tool_id!r}\n\n"
+                f"Expected format: agent_id-tool_name\n"
+                f"Example: 1-openai-gpt-3.5-turbo"
+            )
+
+        try:
+            agent_id_str = tool_id.split("-", 1)[0]
+            agent_id_int = int(agent_id_str)
+            if agent_id_int < 0:
+                raise ValueError
+        except ValueError as e:
+            raise ClickException(
+                f"Invalid agent ID in tool ID: {tool_id!r}\n\n"
+                f"The agent ID portion must be a non-negative integer.\n"
+                f"Format: agent_id-tool_name"
+            ) from e
+
+        description = get_tool_description(tool_id, validated_chain)
         click.echo(f"Description for tool {tool_id}: {description}")
     except requests.exceptions.HTTPError as e:
         rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
@@ -730,11 +792,32 @@ def tool_description(tool_id: str, chain_config: str) -> None:
             f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
         ) from e
     except KeyError as e:
-        click.echo(f"Tool not found or missing description: {str(e)}")
+        raise ClickException(
+            f"Tool not found or missing description: {e}\n\n"
+            f"The tool {tool_id!r} does not exist or has no description.\n"
+            f"Possible causes:\n"
+            f"  • Tool ID is incorrect\n"
+            f"  • Agent does not have this tool\n"
+            f"  • Tool metadata is incomplete\n\n"
+            f"Use 'mechx tools-for-agents --agent-id <id>' to see available tools."
+        ) from e
     except json.JSONDecodeError as e:
-        click.echo(f"Error decoding JSON response: {str(e)}")
+        raise ClickException(
+            f"Error parsing tool metadata: {e}\n\n"
+            f"The tool metadata is malformed or corrupted."
+        ) from e
     except IOError as e:
-        click.echo(f"Network or I/O error: {str(e)}")
+        raise ClickException(
+            f"I/O error accessing tool metadata: {e}\n\n"
+            f"This may indicate:\n"
+            f"  • IPFS gateway is unavailable\n"
+            f"  • Network connectivity issues"
+        ) from e
+    except (ContractLogicError, ValidationError) as e:
+        raise ClickException(
+            f"Smart contract error: {e}\n\n"
+            f"Please verify your chain configuration and tool ID."
+        ) from e
 
 
 @click.command(name="tool-io-schema")
@@ -743,7 +826,30 @@ def tool_description(tool_id: str, chain_config: str) -> None:
 def tool_io_schema(tool_id: str, chain_config: str) -> None:
     """Fetch and display the tool's name and description along with the input/output schema for a specific tool."""
     try:
-        result = get_tool_io_schema(tool_id, chain_config)
+        # Validate chain config
+        validated_chain = validate_chain_config(chain_config)
+
+        # Validate tool_id format (should be "agent_id-tool_name")
+        if "-" not in tool_id:
+            raise ClickException(
+                f"Invalid tool ID format: {tool_id!r}\n\n"
+                f"Expected format: agent_id-tool_name\n"
+                f"Example: 1-openai-gpt-3.5-turbo"
+            )
+
+        try:
+            agent_id_str = tool_id.split("-", 1)[0]
+            agent_id_int = int(agent_id_str)
+            if agent_id_int < 0:
+                raise ValueError
+        except ValueError as e:
+            raise ClickException(
+                f"Invalid agent ID in tool ID: {tool_id!r}\n\n"
+                f"The agent ID portion must be a non-negative integer.\n"
+                f"Format: agent_id-tool_name"
+            ) from e
+
+        result = get_tool_io_schema(tool_id, validated_chain)
 
         name = result["name"]
         description = result["description"]
@@ -800,11 +906,32 @@ def tool_io_schema(tool_id: str, chain_config: str) -> None:
             f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
         ) from e
     except KeyError as e:
-        click.echo(f"Error accessing schema data: {str(e)}")
+        raise ClickException(
+            f"Error accessing schema data: {e}\n\n"
+            f"The tool {tool_id!r} metadata is incomplete or malformed.\n"
+            f"Possible causes:\n"
+            f"  • Tool ID is incorrect\n"
+            f"  • Tool metadata structure is invalid\n"
+            f"  • Required schema fields are missing\n\n"
+            f"Use 'mechx tools-for-agents --agent-id <id>' to see available tools."
+        ) from e
     except json.JSONDecodeError as e:
-        click.echo(f"Error decoding JSON response: {str(e)}")
+        raise ClickException(
+            f"Error parsing tool metadata: {e}\n\n"
+            f"The tool metadata is malformed or corrupted."
+        ) from e
     except IOError as e:
-        click.echo(f"Network or I/O error: {str(e)}")
+        raise ClickException(
+            f"I/O error accessing tool metadata: {e}\n\n"
+            f"This may indicate:\n"
+            f"  • IPFS gateway is unavailable\n"
+            f"  • Network connectivity issues"
+        ) from e
+    except (ContractLogicError, ValidationError) as e:
+        raise ClickException(
+            f"Smart contract error: {e}\n\n"
+            f"Please verify your chain configuration and tool ID."
+        ) from e
 
 
 @click.command(name="tools-for-marketplace-mech")
@@ -816,7 +943,17 @@ def tool_io_schema(tool_id: str, chain_config: str) -> None:
 def tools_for_marketplace_mech(agent_id: int, chain_config: str) -> None:
     """Fetch and display tools for marketplace mechs."""
     try:
-        result = get_tools_for_marketplace_mech(agent_id, chain_config)
+        # Validate chain config
+        validated_chain = validate_chain_config(chain_config)
+
+        # Validate agent ID (service ID)
+        if agent_id < 0:
+            raise ClickException(
+                f"Invalid service ID: {agent_id}\n"
+                f"Service ID must be a non-negative integer."
+            )
+
+        result = get_tools_for_marketplace_mech(agent_id, validated_chain)
 
         headers = ["Tool Name", "Unique Identifier"]
         data: List[Tuple[str, ...]] = [
@@ -850,9 +987,30 @@ def tools_for_marketplace_mech(agent_id: int, chain_config: str) -> None:
             f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
         ) from e
     except (KeyError, TypeError) as e:
-        click.echo(f"Error processing tool data: {str(e)}")
+        raise ClickException(
+            f"Error processing tool data: {e}\n\n"
+            f"Possible causes:\n"
+            f"  • Service ID {agent_id} does not exist\n"
+            f"  • Metadata structure is invalid or incomplete\n"
+            f"  • Complementary metadata hash contract may not be accessible\n\n"
+            f"Please verify the service ID."
+        ) from e
     except IOError as e:
-        click.echo(f"Network or I/O error: {str(e)}")
+        raise ClickException(
+            f"I/O error accessing tool metadata: {e}\n\n"
+            f"This may indicate:\n"
+            f"  • IPFS gateway is unavailable\n"
+            f"  • Network connectivity issues"
+        ) from e
+    except (ContractLogicError, ValidationError) as e:
+        raise ClickException(
+            f"Smart contract error: {e}\n\n"
+            f"This may indicate:\n"
+            f"  • Complementary metadata hash contract address is invalid\n"
+            f"  • Contract ABI mismatch\n"
+            f"  • Service ID out of range\n\n"
+            f"Please verify your chain configuration."
+        ) from e
 
 
 @click.command(name="tool-description-for-marketplace-mech")
@@ -861,7 +1019,18 @@ def tools_for_marketplace_mech(agent_id: int, chain_config: str) -> None:
 def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> None:
     """Fetch and display the description of a specific tool for marketplace mechs."""
     try:
-        description = get_tool_description_for_marketplace_mech(tool_id, chain_config)
+        # Validate chain config
+        validated_chain = validate_chain_config(chain_config)
+
+        # Validate tool_id format
+        if "-" not in tool_id:
+            raise ClickException(
+                f"Invalid tool ID format: {tool_id!r}\n\n"
+                f"Expected format: service_id-tool_name\n"
+                f"Example: 1-openai-gpt-3.5-turbo"
+            )
+
+        description = get_tool_description_for_marketplace_mech(tool_id, validated_chain)
         click.echo(f"Description for tool {tool_id}: {description}")
     except requests.exceptions.HTTPError as e:
         rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
@@ -884,9 +1053,24 @@ def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> No
             f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
         ) from e
     except KeyError as e:
-        click.echo(f"Tool not found or missing description: {str(e)}")
+        raise ClickException(
+            f"Tool not found or missing description: {e}\n\n"
+            f"The tool {tool_id!r} may not exist or its metadata may be incomplete.\n\n"
+            f"Possible causes:\n"
+            f"  • Tool ID is incorrect\n"
+            f"  • Service does not have this tool\n"
+            f"  • Tool metadata is missing description field\n\n"
+            f"Use 'mechx tools-for-marketplace-mech --agent-id <service_id>' to see available tools."
+        ) from e
     except IOError as e:
-        click.echo(f"Network or I/O error: {str(e)}")
+        raise ClickException(
+            f"Network or I/O error: {e}\n\n"
+            f"Failed to fetch tool data from IPFS or contract.\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC endpoint is accessible\n"
+            f"  3. Try again in a few moments"
+        ) from e
 
 
 @click.command(name="tool-io-schema-for-marketplace-mech")
@@ -895,7 +1079,18 @@ def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> No
 def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None:
     """Fetch and display the tool's name and description along with the input/output schema for a specific tool for marketplace mechs."""
     try:
-        result = get_tool_io_schema_for_marketplace_mech(tool_id, chain_config)
+        # Validate chain config
+        validated_chain = validate_chain_config(chain_config)
+
+        # Validate tool_id format
+        if "-" not in tool_id:
+            raise ClickException(
+                f"Invalid tool ID format: {tool_id!r}\n\n"
+                f"Expected format: service_id-tool_name\n"
+                f"Example: 1-openai-gpt-3.5-turbo"
+            )
+
+        result = get_tool_io_schema_for_marketplace_mech(tool_id, validated_chain)
 
         name = result["name"]
         description = result["description"]
@@ -940,9 +1135,24 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
             f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
         ) from e
     except KeyError as e:
-        click.echo(f"Error accessing schema data: {str(e)}")
+        raise ClickException(
+            f"Error accessing schema data: {e}\n\n"
+            f"The tool {tool_id!r} may not exist or its schema may be incomplete.\n\n"
+            f"Possible causes:\n"
+            f"  • Tool ID is incorrect\n"
+            f"  • Service does not have this tool\n"
+            f"  • Tool metadata is missing input/output schema fields\n\n"
+            f"Use 'mechx tools-for-marketplace-mech --agent-id <service_id>' to see available tools."
+        ) from e
     except IOError as e:
-        click.echo(f"Network or I/O error: {str(e)}")
+        raise ClickException(
+            f"Network or I/O error: {e}\n\n"
+            f"Failed to fetch tool data from IPFS or contract.\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the RPC endpoint is accessible\n"
+            f"  3. Try again in a few moments"
+        ) from e
 
 
 @click.command(name="deposit-native")
@@ -967,13 +1177,39 @@ def deposit_native(
 ) -> None:
     """Deposits Native balance for prepaid requests."""
     try:
+        # Validate chain config
+        validated_chain = validate_chain_config(chain_config)
+
+        # Validate amount
+        try:
+            amount_wei = int(amount_to_deposit)
+            if amount_wei <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise ClickException(
+                f"Invalid amount: {amount_to_deposit!r}\n\n"
+                f"Amount must be a positive integer in wei.\n\n"
+                f"Example: 1000000000000000000 (1 token with 18 decimals)"
+            )
+
+        # Validate chain supports marketplace deposits
+        from mech_client.interact import get_mech_config
+
+        mech_config = get_mech_config(validated_chain)
+        if mech_config.mech_marketplace_contract == ADDRESS_ZERO:
+            raise ClickException(
+                f"Chain {validated_chain!r} does not support marketplace deposits.\n\n"
+                f"Marketplace contract is not deployed on this chain.\n\n"
+                f"Supported chains: gnosis, base, polygon, optimism"
+            )
+
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running deposit native with agent_mode={agent_mode}")
 
         key_path: Optional[str] = key
         key_password: Optional[str] = None
         if agent_mode:
-            safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+            safe, key_path, key_password = fetch_agent_mode_data(validated_chain)
             if not safe or not key_path:
                 raise ClickException(
                     "Cannot fetch safe or key data for the agent mode."
@@ -985,8 +1221,27 @@ def deposit_native(
             amount=amount_to_deposit,
             private_key_path=key_path,
             private_key_password=key_password,
-            chain_config=chain_config,
+            chain_config=validated_chain,
         )
+    except ContractLogicError as e:
+        raise ClickException(
+            f"Smart contract error during deposit: {e}\n\n"
+            f"Possible causes:\n"
+            f"  • Insufficient balance in your account\n"
+            f"  • Transaction parameters are invalid\n"
+            f"  • Contract may be paused or unavailable\n\n"
+            f"Please check your balance and transaction parameters."
+        ) from e
+    except ValidationError as e:
+        raise ClickException(
+            f"Transaction validation error: {e}\n\n"
+            f"The transaction failed validation before being sent.\n\n"
+            f"Possible causes:\n"
+            f"  • Invalid amount or address format\n"
+            f"  • Gas estimation failed\n"
+            f"  • Nonce issues\n\n"
+            f"Please verify your inputs and try again."
+        ) from e
     except requests.exceptions.HTTPError as e:
         rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
         raise ClickException(
@@ -1030,13 +1285,39 @@ def deposit_token(
 ) -> None:
     """Deposits Token balance for prepaid requests."""
     try:
+        # Validate chain config
+        validated_chain = validate_chain_config(chain_config)
+
+        # Validate amount
+        try:
+            amount_wei = int(amount_to_deposit)
+            if amount_wei <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise ClickException(
+                f"Invalid amount: {amount_to_deposit!r}\n\n"
+                f"Amount must be a positive integer in token's smallest unit.\n\n"
+                f"Example: 1000000 (1 USDC with 6 decimals)"
+            )
+
+        # Validate chain supports marketplace deposits
+        from mech_client.interact import get_mech_config
+
+        mech_config = get_mech_config(validated_chain)
+        if mech_config.mech_marketplace_contract == ADDRESS_ZERO:
+            raise ClickException(
+                f"Chain {validated_chain!r} does not support marketplace deposits.\n\n"
+                f"Marketplace contract is not deployed on this chain.\n\n"
+                f"Supported chains: gnosis, base, polygon, optimism"
+            )
+
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running deposit token with agent_mode={agent_mode}")
 
         key_path: Optional[str] = key
         key_password: Optional[str] = None
         if agent_mode:
-            safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+            safe, key_path, key_password = fetch_agent_mode_data(validated_chain)
             if not safe or not key_path:
                 raise ClickException(
                     "Cannot fetch safe or key data for the agent mode."
@@ -1048,8 +1329,28 @@ def deposit_token(
             amount=amount_to_deposit,
             private_key_path=key_path,
             private_key_password=key_password,
-            chain_config=chain_config,
+            chain_config=validated_chain,
         )
+    except ContractLogicError as e:
+        raise ClickException(
+            f"Smart contract error during token deposit: {e}\n\n"
+            f"Possible causes:\n"
+            f"  • Insufficient token balance in your account\n"
+            f"  • Token allowance not approved\n"
+            f"  • Transaction parameters are invalid\n"
+            f"  • Contract may be paused or unavailable\n\n"
+            f"Please check your token balance, approve allowance, and verify parameters."
+        ) from e
+    except ValidationError as e:
+        raise ClickException(
+            f"Transaction validation error: {e}\n\n"
+            f"The transaction failed validation before being sent.\n\n"
+            f"Possible causes:\n"
+            f"  • Invalid amount or address format\n"
+            f"  • Gas estimation failed\n"
+            f"  • Nonce issues\n\n"
+            f"Please verify your inputs and try again."
+        ) from e
     except requests.exceptions.HTTPError as e:
         rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
         raise ClickException(
@@ -1091,13 +1392,28 @@ def nvm_subscribe(
 ) -> None:
     """Allows to purchase nvm subscription for nvm mech requests."""
     try:
+        # Validate chain config
+        validated_chain = validate_chain_config(chain_config)
+
+        # Validate chain supports NVM subscriptions
+        # Import here to avoid circular import and get the actual dict
+        from scripts.nvm_subscribe import CHAIN_TO_ENVS
+
+        if validated_chain not in CHAIN_TO_ENVS:
+            available_chains = ", ".join(CHAIN_TO_ENVS.keys())
+            raise ClickException(
+                f"NVM subscriptions not available for chain: {validated_chain!r}\n\n"
+                f"Available chains: {available_chains}\n\n"
+                f"NVM (Nevermined) subscriptions are only supported on select chains."
+            )
+
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running purchase nvm subscription with agent_mode={agent_mode}")
 
         key_path: Optional[str] = key
         key_password: Optional[str] = None
         if agent_mode:
-            safe, key_path, key_password = fetch_agent_mode_data(chain_config)
+            safe, key_path, key_password = fetch_agent_mode_data(validated_chain)
             if not safe or not key_path:
                 raise ClickException(
                     "Cannot fetch safe or key data for the agent mode."
@@ -1113,8 +1429,34 @@ def nvm_subscribe(
             safe_address=safe,
             private_key_path=key_path,
             private_key_password=key_password,
-            chain_config=chain_config,
+            chain_config=validated_chain,
         )
+    except ContractLogicError as e:
+        raise ClickException(
+            f"Smart contract error during NVM subscription: {e}\n\n"
+            f"Possible causes:\n"
+            f"  • Insufficient balance for subscription fee\n"
+            f"  • Invalid subscription plan DID\n"
+            f"  • Subscription contract may be unavailable\n\n"
+            f"Please check your balance and subscription plan configuration."
+        ) from e
+    except ValidationError as e:
+        raise ClickException(
+            f"Transaction validation error: {e}\n\n"
+            f"The subscription transaction failed validation.\n\n"
+            f"Possible causes:\n"
+            f"  • Invalid subscription parameters\n"
+            f"  • Gas estimation failed\n"
+            f"  • Nonce issues\n\n"
+            f"Please verify your inputs and try again."
+        ) from e
+    except KeyError as e:
+        raise ClickException(
+            f"Missing required environment variable: {e}\n\n"
+            f"NVM subscription requires environment variables from chain-specific .env file.\n\n"
+            f"Required variables: PLAN_DID, NETWORK_NAME, CHAIN_ID\n\n"
+            f"Please ensure the .env file for {validated_chain} exists and contains all required variables."
+        ) from e
     except requests.exceptions.HTTPError as e:
         rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
         raise ClickException(
