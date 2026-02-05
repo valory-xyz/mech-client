@@ -1045,7 +1045,9 @@ def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> No
                 f"Example: 1-openai-gpt-3.5-turbo"
             )
 
-        description = get_tool_description_for_marketplace_mech(tool_id, validated_chain)
+        description = get_tool_description_for_marketplace_mech(
+            tool_id, validated_chain
+        )
         click.echo(f"Description for tool {tool_id}: {description}")
     except requests.exceptions.HTTPError as e:
         rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
