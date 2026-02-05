@@ -28,6 +28,7 @@ import click
 import requests
 from click import ClickException
 from dotenv import load_dotenv, set_key
+from eth_utils import is_address
 from operate.cli import OperateApp
 from operate.cli import logger as operate_logger
 from operate.constants import NO_STAKING_PROGRAM_ID
@@ -40,6 +41,8 @@ from operate.quickstart.run_service import (
 )
 from operate.services.manage import KeysManager
 from tabulate import tabulate  # type: ignore
+from web3.constants import ADDRESS_ZERO
+from web3.exceptions import ContractLogicError, ValidationError
 
 from mech_client import __version__
 from mech_client.interact import ConfirmationType, get_mech_config
@@ -87,6 +90,63 @@ CHAIN_TO_TEMPLATE = {
 }
 
 ENV_PATH = BASE_DIR / ".env"
+MECHX_CHAIN_CONFIGS = Path(__file__).parent / "configs" / "mechs.json"
+
+
+def validate_chain_config(chain_config: Optional[str]) -> str:
+    """
+    Validate that the chain config exists in mechs.json.
+
+    :param chain_config: Chain configuration name
+    :return: Validated chain config name
+    :raises ClickException: If chain config is invalid or not found
+    """
+    if not chain_config:
+        raise ClickException(
+            "Chain configuration is required.\n"
+            "Use --chain-config flag with one of: gnosis, base, polygon, optimism, arbitrum, celo"
+        )
+
+    try:
+        with open(MECHX_CHAIN_CONFIGS, encoding="utf-8") as f:
+            configs = json.load(f)
+        if chain_config not in configs:
+            available_chains = ", ".join(configs.keys())
+            raise ClickException(
+                f"Invalid chain configuration: {chain_config!r}\n\n"
+                f"Available chains: {available_chains}\n\n"
+                f"Example: --chain-config gnosis"
+            )
+        return chain_config
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        raise ClickException(
+            f"Error loading chain configurations from {MECHX_CHAIN_CONFIGS}: {e}\n"
+            "The mechs.json configuration file may be missing or corrupted."
+        ) from e
+
+
+def validate_ethereum_address(address: str, name: str = "Address") -> str:
+    """
+    Validate an Ethereum address format.
+
+    :param address: Address to validate
+    :param name: Name of the address for error messages
+    :return: Validated address
+    :raises ClickException: If address is invalid
+    """
+    if not address or address == ADDRESS_ZERO:
+        raise ClickException(
+            f"{name} is not set or is zero address.\n"
+            f"Please provide a valid Ethereum address."
+        )
+
+    if not is_address(address):
+        raise ClickException(
+            f"Invalid {name}: {address!r}\n"
+            f"Please provide a valid Ethereum address (0x...)"
+        )
+
+    return address
 
 
 def get_operate_path() -> Path:
@@ -369,10 +429,20 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         key_path: Optional[str] = key
         key_password: Optional[str] = None
 
+        # Validate chain config
+        if chain_config:
+            chain_config = validate_chain_config(chain_config)
+
         extra_attributes_dict: Dict[str, Any] = {}
         if extra_attribute:
             for pair in extra_attribute:
-                k, v = pair.split("=")
+                # Validate format before splitting
+                if "=" not in pair:
+                    raise ClickException(
+                        f"Invalid extra attribute format: {pair!r}\n"
+                        f"Expected format: key=value"
+                    )
+                k, v = pair.split("=", 1)  # Split only on first =
                 extra_attributes_dict[k] = v
 
         use_offchain = use_offchain or False
@@ -380,15 +450,22 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 
         mech_offchain_url = os.getenv("MECHX_MECH_OFFCHAIN_URL")
         if use_offchain and not mech_offchain_url:
-            raise Exception(
-                "To use offchain requests, please set MECHX_MECH_OFFCHAIN_URL"
+            raise ClickException(
+                "Environment variable MECHX_MECH_OFFCHAIN_URL is required when using --use-offchain.\n"
+                "Please set it to your offchain mech HTTP endpoint:\n"
+                "  export MECHX_MECH_OFFCHAIN_URL='https://your-offchain-mech-url'"
             )
 
         if agent_id is None:
+            # Marketplace path - validate inputs
             if len(prompts) != len(tools):
                 raise ClickException(
                     f"The number of prompts ({len(prompts)}) must match the number of tools ({len(tools)})"
                 )
+
+            # Validate priority_mech address
+            if priority_mech:
+                validate_ethereum_address(priority_mech, "Priority mech address")
 
             if agent_mode:
                 safe, key_path, key_password = fetch_agent_mode_data(chain_config)
@@ -396,6 +473,8 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
                     raise ClickException(
                         "Cannot fetch safe or key data for the agent mode."
                     )
+                # Validate safe address
+                validate_ethereum_address(safe, "Safe address")
 
             marketplace_interact_(
                 prompts=prompts,
@@ -417,13 +496,15 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 
         else:
             if use_prepaid:
-                raise Exception(
-                    "Prepaid model can only be used for marketplace requests"
+                raise ClickException(
+                    "Error: --use-prepaid flag can only be used with marketplace mechs.\n"
+                    "Use --priority-mech instead of --agent-id for marketplace requests."
                 )
 
             if use_offchain:
-                raise Exception(
-                    "Offchain model can only be used for marketplace requests"
+                raise ClickException(
+                    "Error: --use-offchain flag can only be used with marketplace mechs.\n"
+                    "Use --priority-mech instead of --agent-id for marketplace requests."
                 )
 
             if len(prompts) > 1:
@@ -499,8 +580,24 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         )
 
         raise ClickException(msg) from e
-    except (ValueError, FileNotFoundError, Exception) as e:
+    except (ContractLogicError, ValidationError) as e:
+        raise ClickException(
+            f"Smart contract error: {e}\n\n"
+            f"This may indicate:\n"
+            f"  • Invalid contract address or ABI mismatch\n"
+            f"  • Insufficient balance or missing approvals\n"
+            f"  • Invalid parameters passed to contract function\n"
+            f"  • Contract requirements not met (e.g., mech not registered)\n\n"
+            f"Please verify your addresses and balances."
+        ) from e
+    except (ValueError, FileNotFoundError) as e:
         raise ClickException(str(e)) from e
+    except Exception as e:
+        # Catch-all for unexpected errors - still show full context
+        raise ClickException(
+            f"Unexpected error: {e}\n\n"
+            f"If this persists, please report it as an issue."
+        ) from e
 
 
 @click.command()
@@ -1050,7 +1147,22 @@ def query_mm_mechs_info_cli(
 ) -> None:
     """Fetches info of mm mechs"""
     try:
-        mech_list = query_mm_mechs_info(chain_config=chain_config)
+        # Validate chain config
+        validated_chain = validate_chain_config(chain_config)
+
+        # Validate MECHX_SUBGRAPH_URL is set before calling query function
+        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
+        if not subgraph_url:
+            raise ClickException(
+                "Environment variable MECHX_SUBGRAPH_URL is required for this command.\n\n"
+                f"This command queries blockchain data via a subgraph API.\n"
+                f"Current chain: {validated_chain}\n\n"
+                f"Please set the subgraph URL:\n"
+                f"  export MECHX_SUBGRAPH_URL='https://your-subgraph-url'\n\n"
+                f"Note: The subgraph URL must match your --chain-config."
+            )
+
+        mech_list = query_mm_mechs_info(chain_config=validated_chain)
         if mech_list is None:
             print("No mechs found")
             return None
@@ -1103,8 +1215,10 @@ def query_mm_mechs_info_cli(
             f"  3. Try a different subgraph provider: export MECHX_SUBGRAPH_URL='https://your-subgraph-url'"
         ) from e
     except Exception as e:  # pylint: disable=broad-except
-        click.echo(f"Error: {str(e)}")
-        return None
+        raise ClickException(
+            f"Error querying subgraph: {e}\n\n"
+            f"Please check your MECHX_SUBGRAPH_URL and network connection."
+        ) from e
 
 
 cli.add_command(setup_agent_mode)
