@@ -1,11 +1,13 @@
 # subscription/contracts/transfer_nft.py
 import logging
-from typing import Union, Dict, Any
-from web3 import Web3
+from typing import Any, Dict, Union
+
 from eth_typing import ChecksumAddress
+from web3 import Web3
 from web3.types import ENS
 
 from .base_contract import BaseContract
+
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +28,7 @@ class SubscriptionToken(BaseContract):
         super().__init__(w3, name="SubscriptionToken")
         logger.info("Token initialized")
 
-    def get_balance(
-        self, sender: Union[ChecksumAddress, ENS]
-    ) -> int:
+    def get_balance(self, sender: Union[ChecksumAddress, ENS]) -> int:
         """
         Gets the user token balance.
 
@@ -40,9 +40,7 @@ class SubscriptionToken(BaseContract):
         """
         sender_address: ChecksumAddress = self.w3.to_checksum_address(sender)
 
-        balance = (
-            self.functions().balanceOf(sender_address).call()
-        )
+        balance = self.functions().balanceOf(sender_address).call()
         logger.debug(f"Fetched Token Balance: {balance}")
         return balance
 

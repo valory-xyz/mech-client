@@ -1,11 +1,13 @@
 # subscription/contracts/escrow_payment.py
 import logging
 from typing import List, Union
-from web3 import Web3
+
 from eth_typing import ChecksumAddress
+from web3 import Web3
 from web3.types import ENS
 
 from .base_contract import BaseContract
+
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +38,7 @@ class EscrowPaymentConditionContract(BaseContract):
         receiver: Union[ChecksumAddress, ENS],
         token_address: Union[ChecksumAddress, ENS],
         lock_condition_id: bytes,
-        release_condition_id: bytes
+        release_condition_id: bytes,
     ) -> bytes:
         """
         Compute the hash of parameters for escrow condition.
@@ -55,16 +57,20 @@ class EscrowPaymentConditionContract(BaseContract):
             bytes: Hashed values.
         """
         logger.debug("Computing hash for escrow payment condition")
-        hash_ = self.functions().hashValues(
-            did,
-            amounts,
-            receivers,
-            sender,
-            receiver,
-            token_address,
-            lock_condition_id,
-            release_condition_id
-        ).call()
+        hash_ = (
+            self.functions()
+            .hashValues(
+                did,
+                amounts,
+                receivers,
+                sender,
+                receiver,
+                token_address,
+                lock_condition_id,
+                release_condition_id,
+            )
+            .call()
+        )
         logger.debug(f"Escrow payment hash: {hash_.hex()}")
         return hash_
 

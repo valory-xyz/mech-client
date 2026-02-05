@@ -45,6 +45,7 @@ from web3.constants import ADDRESS_ZERO
 from web3.exceptions import ContractLogicError, Web3ValidationError
 
 from mech_client import __version__
+from mech_client.deposits import deposit_native_main, deposit_token_main
 from mech_client.interact import ConfirmationType, get_mech_config
 from mech_client.interact import interact as interact_
 from mech_client.marketplace_interact import IPFS_URL_TEMPLATE
@@ -68,7 +69,6 @@ from mech_client.mech_tool_management import (
     get_tool_io_schema,
     get_tools_for_agents,
 )
-from mech_client.deposits import deposit_native_main, deposit_token_main
 from mech_client.nvm_subscription import nvm_subscribe_main
 from mech_client.prompt_to_ipfs import main as prompt_to_ipfs_main
 from mech_client.push_to_ipfs import main as push_to_ipfs_main

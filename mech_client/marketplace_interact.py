@@ -40,8 +40,11 @@ from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
 
 from mech_client.contract_addresses import (
+    CHAIN_TO_NATIVE_BALANCE_TRACKER,
     CHAIN_TO_PRICE_TOKEN_OLAS,
     CHAIN_TO_PRICE_TOKEN_USDC,
+    CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS,
+    CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
 )
 from mech_client.delivery import watch_for_marketplace_data, watch_for_mech_data_url
 from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
@@ -1156,8 +1159,6 @@ def get_native_balance_tracker_contract(
     :return: The native balance tracker contract instance.
     :rtype: Web3Contract
     """
-    from mech_client.contract_addresses import CHAIN_TO_NATIVE_BALANCE_TRACKER
-
     with open(BALANCE_TRACKER_NATIVE_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
@@ -1170,7 +1171,9 @@ def get_native_balance_tracker_contract(
 
 
 def get_token_balance_tracker_contract(
-    ledger_api: EthereumApi, chain_id: int, payment_type: PaymentType = PaymentType.TOKEN
+    ledger_api: EthereumApi,
+    chain_id: int,
+    payment_type: PaymentType = PaymentType.TOKEN,
 ) -> Web3Contract:
     """
     Get the token balance tracker contract instance for a given chain and payment type.
@@ -1184,11 +1187,6 @@ def get_token_balance_tracker_contract(
     :return: The token balance tracker contract instance.
     :rtype: Web3Contract
     """
-    from mech_client.contract_addresses import (
-        CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS,
-        CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
-    )
-
     with open(BALANCE_TRACKER_TOKEN_ABI_PATH, encoding="utf-8") as f:
         abi = json.load(f)
 
@@ -1206,7 +1204,9 @@ def get_token_balance_tracker_contract(
 
 
 def get_token_contract(
-    ledger_api: EthereumApi, chain_id: int, payment_type: PaymentType = PaymentType.TOKEN
+    ledger_api: EthereumApi,
+    chain_id: int,
+    payment_type: PaymentType = PaymentType.TOKEN,
 ) -> Web3Contract:
     """
     Get the token (OLAS or USDC) contract instance for a given chain and payment type.

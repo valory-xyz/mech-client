@@ -1,11 +1,13 @@
 # subscription/contracts/nft_sales.py
 import logging
-from typing import List, Any, Dict, Union
-from web3 import Web3
+from typing import Any, Dict, List, Union
+
 from eth_typing import ChecksumAddress
+from web3 import Web3
 from web3.types import ENS
 
 from .base_contract import BaseContract
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,7 @@ class NFTSalesTemplateContract(BaseContract):
         nonce: int,
         value_eth: float,
         gas: int = 600_000,
-        chain_id: int = 100
+        chain_id: int = 100,
     ) -> Dict[str, Any]:
         """
         Build a transaction dictionary to create an agreement and pay escrow.
@@ -75,7 +77,9 @@ class NFTSalesTemplateContract(BaseContract):
         logger.debug(f"condition_seeds: {condition_seeds}")
         logger.debug(f"timelocks: {timelocks}, timeouts: {timeouts}")
         logger.debug(f"publisher: {publisher}, service_index: {service_index}")
-        logger.debug(f"reward_address: {reward_address}, token_address: {token_address}")
+        logger.debug(
+            f"reward_address: {reward_address}, token_address: {token_address}"
+        )
         logger.debug(f"amounts: {amounts}, receivers: {receivers}")
         logger.debug(f"sender: {sender}, value_eth: {value_eth}")
 
@@ -88,30 +92,40 @@ class NFTSalesTemplateContract(BaseContract):
         max_priority_fee = self.w3.eth.max_priority_fee
 
         # Build the transaction using the contract method
-        tx = self.functions().createAgreementAndPayEscrow(
-            agreement_id_seed,
-            did,
-            condition_seeds,
-            timelocks,
-            timeouts,
-            self.w3.to_checksum_address(publisher),
-            service_index,
-            self.w3.to_checksum_address(reward_address),
-            self.w3.to_checksum_address(token_address),
-            amounts,
-            [self.w3.to_checksum_address(r) for r in receivers]
-        ).build_transaction({
-            "from": sender_address,
-            "value": self.w3.to_wei(value_eth, "ether"),
-            "chainId": chain_id,
-            "gas": gas,
-            "nonce": nonce,
-        })
-        tx.update({
-            "maxFeePerGas": base_fee + max_priority_fee,
-            "maxPriorityFeePerGas": max_priority_fee,
-        })
+        tx = (
+            self.functions()
+            .createAgreementAndPayEscrow(
+                agreement_id_seed,
+                did,
+                condition_seeds,
+                timelocks,
+                timeouts,
+                self.w3.to_checksum_address(publisher),
+                service_index,
+                self.w3.to_checksum_address(reward_address),
+                self.w3.to_checksum_address(token_address),
+                amounts,
+                [self.w3.to_checksum_address(r) for r in receivers],
+            )
+            .build_transaction(
+                {
+                    "from": sender_address,
+                    "value": self.w3.to_wei(value_eth, "ether"),
+                    "chainId": chain_id,
+                    "gas": gas,
+                    "nonce": nonce,
+                }
+            )
+        )
+        tx.update(
+            {
+                "maxFeePerGas": base_fee + max_priority_fee,
+                "maxPriorityFeePerGas": max_priority_fee,
+            }
+        )
 
-        logger.info(f"Transaction built successfully for agreement ID: {agreement_id_seed}")
+        logger.info(
+            f"Transaction built successfully for agreement ID: {agreement_id_seed}"
+        )
         logger.debug(f"Transaction details: {tx}")
         return tx

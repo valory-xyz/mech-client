@@ -1,11 +1,13 @@
 # subscription/contracts/transfer_nft.py
 import logging
 from typing import Union
-from web3 import Web3
+
 from eth_typing import ChecksumAddress
+from web3 import Web3
 from web3.types import ENS
 
 from .base_contract import BaseContract
+
 
 logger = logging.getLogger(__name__)
 

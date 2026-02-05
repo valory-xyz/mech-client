@@ -1,11 +1,13 @@
 # subscription/contracts/lock_payment.py
 import logging
 from typing import List, Union
-from web3 import Web3
+
 from eth_typing import ChecksumAddress
+from web3 import Web3
 from web3.types import ENS
 
 from .base_contract import BaseContract
+
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,7 @@ class LockPaymentConditionContract(BaseContract):
         reward_address: Union[ChecksumAddress, ENS],
         token_address: Union[ChecksumAddress, ENS],
         amounts: List[int],
-        receivers: List[Union[ChecksumAddress, ENS]]
+        receivers: List[Union[ChecksumAddress, ENS]],
     ) -> bytes:
         """
         Compute the hash of the condition parameters.
@@ -49,13 +51,11 @@ class LockPaymentConditionContract(BaseContract):
             bytes: The keccak256 hash of the encoded values.
         """
         logger.debug("Computing hash for lock payment condition")
-        hash_ = self.functions().hashValues(
-            did,
-            reward_address,
-            token_address,
-            amounts,
-            receivers
-        ).call()
+        hash_ = (
+            self.functions()
+            .hashValues(did, reward_address, token_address, amounts, receivers)
+            .call()
+        )
         logger.debug(f"Computed hash: {hash_.hex()}")
         return hash_
 

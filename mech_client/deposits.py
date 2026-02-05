@@ -30,8 +30,6 @@ from web3.contract import Contract as Web3Contract
 from mech_client.contract_addresses import CHAIN_TO_NATIVE_BALANCE_TRACKER
 from mech_client.interact import PRIVATE_KEY_FILE_PATH, get_mech_config
 from mech_client.marketplace_interact import (
-    PaymentType,
-    get_native_balance_tracker_contract,
     get_token_balance_tracker_contract,
     get_token_contract,
 )
@@ -55,7 +53,7 @@ def print_title(text: str) -> None:
     print()
 
 
-def deposit_native(
+def deposit_native(  # pylint: disable=too-many-arguments
     ledger_api: EthereumApi,
     crypto: EthereumCrypto,
     ethereum_client: EthereumClient,
@@ -96,7 +94,7 @@ def deposit_native(
             print(f"Balance: {formatted_user_balance}")
             print(f"Want to Deposit: {formatted_amount}")
             sys.exit(1)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while fetching user balance: {e}")
         return str(e)
 
@@ -132,9 +130,7 @@ def deposit_native(
         return str(e)
 
 
-def check_token_balance(
-    token_contract: Web3Contract, sender: str, amount: int
-) -> None:
+def check_token_balance(token_contract: Web3Contract, sender: str, amount: int) -> None:
     """
     Check if the sender has sufficient token balance for deposit.
 
@@ -155,11 +151,11 @@ def check_token_balance(
             print(f"Balance: {formatted_user_balance}")
             print(f"Want to Deposit: {formatted_amount}")
             sys.exit(1)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(f"Error occured while fetching user balance: {e}")
 
 
-def approve_token(  # pylint: disable=too-many-arguments
+def approve_token(  # pylint: disable=too-many-arguments,too-many-locals
     crypto: EthereumCrypto,
     ledger_api: EthereumApi,
     ethereum_client: EthereumClient,
@@ -225,7 +221,9 @@ def approve_token(  # pylint: disable=too-many-arguments
         function = token_contract.functions[method_name](**method_args)
         transaction = function.build_transaction(
             {
-                "chainId": int(ledger_api._chain_id),  # pylint: disable=protected-access
+                "chainId": int(
+                    ledger_api._chain_id  # pylint: disable=protected-access
+                ),
                 "gas": 0,
                 "nonce": get_safe_nonce(ethereum_client, str(safe_address)),
             }
@@ -245,7 +243,7 @@ def approve_token(  # pylint: disable=too-many-arguments
         return str(e)
 
 
-def deposit_token(  # pylint: disable=too-many-arguments
+def deposit_token(  # pylint: disable=too-many-arguments,too-many-locals
     ledger_api: EthereumApi,
     crypto: EthereumCrypto,
     ethereum_client: EthereumClient,
@@ -302,7 +300,9 @@ def deposit_token(  # pylint: disable=too-many-arguments
         function = token_balance_tracker_contract.functions[method_name](**method_args)
         transaction = function.build_transaction(
             {
-                "chainId": int(ledger_api._chain_id),  # pylint: disable=protected-access
+                "chainId": int(
+                    ledger_api._chain_id  # pylint: disable=protected-access
+                ),
                 "gas": 0,
                 "nonce": get_safe_nonce(ethereum_client, str(safe_address)),
             }
@@ -322,7 +322,7 @@ def deposit_token(  # pylint: disable=too-many-arguments
         return str(e)
 
 
-def deposit_native_main(  # pylint: disable=too-many-arguments
+def deposit_native_main(  # pylint: disable=too-many-arguments,too-many-locals
     agent_mode: bool,
     amount: str,
     safe_address: Optional[str] = None,
@@ -347,9 +347,7 @@ def deposit_native_main(  # pylint: disable=too-many-arguments
     :type chain_config: Optional[str]
     """
     print_title("Native Deposit")
-    print(
-        "This script will assist you in depositing native balance for mech requests."
-    )
+    print("This script will assist you in depositing native balance for mech requests.")
     print()
 
     amount_to_deposit = int(float(amount) * 10**18)
@@ -399,7 +397,7 @@ def deposit_native_main(  # pylint: disable=too-many-arguments
     print("Deposit Successful")
 
 
-def deposit_token_main(  # pylint: disable=too-many-arguments,too-many-locals
+def deposit_token_main(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
     agent_mode: bool,
     amount: str,
     safe_address: Optional[str] = None,
@@ -424,9 +422,7 @@ def deposit_token_main(  # pylint: disable=too-many-arguments,too-many-locals
     :type chain_config: Optional[str]
     """
     print_title("Token Deposit")
-    print(
-        "This script will assist you in depositing token balance for mech requests."
-    )
+    print("This script will assist you in depositing token balance for mech requests.")
     print()
 
     amount_to_deposit = int(float(amount) * 10**18)

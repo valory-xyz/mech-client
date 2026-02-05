@@ -24,8 +24,8 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
-from dotenv import load_dotenv
 from aea_ledger_ethereum import EthereumCrypto
+from dotenv import load_dotenv
 from web3 import Web3
 
 from mech_client.interact import PRIVATE_KEY_FILE_PATH

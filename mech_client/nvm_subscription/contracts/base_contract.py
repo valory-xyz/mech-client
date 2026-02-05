@@ -1,10 +1,12 @@
 # subscription/contracts/base_contract.py
-import os
 import json
 import logging
+import os
 from typing import Any, Dict
+
 from web3 import Web3
 from web3.contract import Contract
+
 
 # Configure module-level logger
 logger = logging.getLogger(__name__)
@@ -27,15 +29,12 @@ class BaseContract:
         self.w3 = w3
         self.name = name
         self.chain_id = self.w3.eth.chain_id
-        chain_name_by_id = {
-            100: "gnosis",
-            8453: "base",
-            137: "polygon",
-            10: "optimism"
-        }
+        chain_name_by_id = {100: "gnosis", 8453: "base", 137: "polygon", 10: "optimism"}
         self.chain_name = chain_name_by_id.get(self.chain_id)
         if not self.chain_name:
-            raise ValueError(f"Unsupported chain id {self.chain_id}; no matching contract artifacts found")
+            raise ValueError(
+                f"Unsupported chain id {self.chain_id}; no matching contract artifacts found"
+            )
 
         logger.debug(f"Initializing contract wrapper for '{self.name}'")
         self.contract = self._load_contract()  # Load contract from artifact
@@ -51,10 +50,12 @@ class BaseContract:
             dict: A dictionary containing the contract address and ABI.
         """
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-        path = os.path.join(root_dir, 'mech_client', 'abis', f'{self.name}.{self.chain_name}.json')
+        root_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+        path = os.path.join(
+            root_dir, "mech_client", "abis", f"{self.name}.{self.chain_name}.json"
+        )
         logger.debug(f"Loading contract info from: {path}")
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, "r", encoding="utf-8") as f:
             info = json.load(f)  # Parse JSON containing ABI and address
         logger.debug(f"Loaded contract address: {info.get('address')}")
         return info
@@ -67,9 +68,11 @@ class BaseContract:
             Contract: A Web3 contract instance bound to the deployed address.
         """
         info = self._load_contract_info()
-        address = self.w3.to_checksum_address(info['address'])  # Ensure correct checksum
+        address = self.w3.to_checksum_address(
+            info["address"]
+        )  # Ensure correct checksum
         logger.debug(f"Creating contract instance at address: {address}")
-        contract = self.w3.eth.contract(address=address, abi=info['abi'])
+        contract = self.w3.eth.contract(address=address, abi=info["abi"])
         logger.info("Contract instance created successfully")
         return contract
 
