@@ -1,36 +1,39 @@
 # subscription/manager.py
-from enum import Enum
 import json
 import logging
 import os
 import sys
-
 import uuid
+from enum import Enum
 from typing import Any, Dict, Optional, Tuple
-from web3 import Web3
-from eth_typing import ChecksumAddress
 
-from .contracts.did_registry import DIDRegistryContract
-from .contracts.nft_sales import NFTSalesTemplateContract
-from .contracts.lock_payment import LockPaymentConditionContract
-from .contracts.transfer_nft import TransferNFTConditionContract
-from .contracts.escrow_payment import EscrowPaymentConditionContract
-from .contracts.agreement_manager import AgreementStorageManagerContract
-from .contracts.token import SubscriptionToken
-from .contracts.nft import SubscriptionNFT
-from .contracts.subscription_provider import SubscriptionProvider
+from eth_typing import ChecksumAddress
+from web3 import Web3
 
 from mech_client.safe import EthereumClient, get_safe_nonce, send_safe_tx
+
+from .contracts.agreement_manager import AgreementStorageManagerContract
+from .contracts.did_registry import DIDRegistryContract
+from .contracts.escrow_payment import EscrowPaymentConditionContract
+from .contracts.lock_payment import LockPaymentConditionContract
+from .contracts.nft import SubscriptionNFT
+from .contracts.nft_sales import NFTSalesTemplateContract
+from .contracts.subscription_provider import SubscriptionProvider
+from .contracts.token import SubscriptionToken
+from .contracts.transfer_nft import TransferNFTConditionContract
+
 
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-config_path = os.path.join(BASE_DIR, 'resources', 'networks.json')
-CONFIGS = json.load(open(config_path, 'r'))
+config_path = os.path.join(BASE_DIR, "resources", "networks.json")
+CONFIGS = json.load(open(config_path, "r"))
+
 
 class Network(Enum):
     GNOSIS = "GNOSIS"
     BASE = "BASE"
+
 
 class ChainId(Enum):
     GNOSIS = 100
@@ -53,12 +56,16 @@ class NVMSubscriptionManager:
     using a series of smart contracts.
     """
 
-    def __init__(self, network: str, sender: str, agent_mode: bool, safe_address: Optional[str]):
+    def __init__(
+        self, network: str, sender: str, agent_mode: bool, safe_address: Optional[str]
+    ):
         """
         Initialize the SubscriptionManager, including contract instances
         and Web3 connection.
         """
-        self.url = os.getenv("MECHX_CHAIN_RPC", CONFIGS[network]["nvm"]['web3ProviderUri'])
+        self.url = os.getenv(
+            "MECHX_CHAIN_RPC", CONFIGS[network]["nvm"]["web3ProviderUri"]
+        )
         self.web3 = Web3(Web3.HTTPProvider(self.url))
         self.agent_mode = agent_mode
         if self.agent_mode:
@@ -76,27 +83,36 @@ class NVMSubscriptionManager:
         self.subscription_provider = SubscriptionProvider(self.web3)
 
         # load the subscription token to be used for base
-        if network == 'BASE':
+        if network == "BASE":
             self.subscription_token = SubscriptionToken(self.web3)
 
         self.agreement_storage_manager = AgreementStorageManagerContract(self.web3)
 
-        self.token_address = self.web3.to_checksum_address(get_variable_value("TOKEN_ADDRESS"))
-        self.subscription_nft_address = self.web3.to_checksum_address(get_variable_value("SUBSCRIPTION_NFT_ADDRESS"))
+        self.token_address = self.web3.to_checksum_address(
+            get_variable_value("TOKEN_ADDRESS")
+        )
+        self.subscription_nft_address = self.web3.to_checksum_address(
+            get_variable_value("SUBSCRIPTION_NFT_ADDRESS")
+        )
         self.subscription_credits = int(os.getenv("SUBSCRIPTION_CREDITS", "1"))
-        self.amounts = [int(os.getenv("PLAN_FEE_NVM", "0")), int(os.getenv("PLAN_PRICE_MECHS", "0"))]
+        self.amounts = [
+            int(os.getenv("PLAN_FEE_NVM", "0")),
+            int(os.getenv("PLAN_PRICE_MECHS", "0")),
+        ]
         self.subscription_id = CONFIGS[network]["nvm"]["subscription_id"]
 
         logger.info("SubscriptionManager initialized")
 
     def _generate_agreement_id_seed(self, length: int = 64) -> str:
         """Generate a random hex string prefixed with 0x."""
-        seed = ''
+        seed = ""
         while len(seed) < length:
             seed += uuid.uuid4().hex
-        return '0x' + seed[:length]
+        return "0x" + seed[:length]
 
-    def create_subscription(self, did: str, wallet_pvt_key: str, chain_id: int) -> Dict[str, Any]:
+    def create_subscription(
+        self, did: str, wallet_pvt_key: str, chain_id: int
+    ) -> Dict[str, Any]:
         """
         Execute the workflow to create a subscription for the given DID.
 
@@ -106,7 +122,7 @@ class NVMSubscriptionManager:
         Returns:
             Dict[str, Any]: A dictionary containing transaction status and receipt.
         """
-        print(f"Checking {self.sender} balance for purchasing subscription...")       
+        print(f"Checking {self.sender} balance for purchasing subscription...")
         is_enough, message = self.check_sufficient_sender_balance()
         if not is_enough:
             print(message)
@@ -117,7 +133,9 @@ class NVMSubscriptionManager:
         did = did.replace("did:nv:", "0x")
 
         ddo = self.did_registry.get_ddo(did)
-        service = next((s for s in ddo.get("service", []) if s.get("type") == "nft-sales"), None)
+        service = next(
+            (s for s in ddo.get("service", []) if s.get("type") == "nft-sales"), None
+        )
         if not service:
             logger.error("No nft-sales service found in DDO")
             return {"status": "error", "message": "No nft-sales service in DDO"}
@@ -129,10 +147,14 @@ class NVMSubscriptionManager:
         receivers = conditions[0]["parameters"][-1]["value"]
 
         agreement_id_seed = self._generate_agreement_id_seed()
-        agreement_id = self.agreement_storage_manager.agreement_id(agreement_id_seed, self.sender)
+        agreement_id = self.agreement_storage_manager.agreement_id(
+            agreement_id_seed, self.sender
+        )
 
         # Condition hashes
-        lock_hash = self.lock_payment.hash_values(did, reward_address, self.token_address, self.amounts, receivers)
+        lock_hash = self.lock_payment.hash_values(
+            did, reward_address, self.token_address, self.amounts, receivers
+        )
         lock_id = self.lock_payment.generate_id(agreement_id, lock_hash)
 
         transfer_hash = self.transfer_nft.hash_values(
@@ -142,7 +164,7 @@ class NVMSubscriptionManager:
             self.subscription_credits,
             lock_id,
             self.subscription_nft_address,
-            False
+            False,
         )
         transfer_id = self.transfer_nft.generate_id(agreement_id, transfer_hash)
 
@@ -154,7 +176,7 @@ class NVMSubscriptionManager:
             reward_address,
             self.token_address,
             lock_id,
-            transfer_id
+            transfer_id,
         )
         escrow_id = self.escrow_payment.generate_id(agreement_id, escrow_hash)
 
@@ -183,7 +205,9 @@ class NVMSubscriptionManager:
             )
 
             if not self.agent_mode:
-                signed_tx = self.web3.eth.account.sign_transaction(approve_tx, private_key=wallet_pvt_key)
+                signed_tx = self.web3.eth.account.sign_transaction(
+                    approve_tx, private_key=wallet_pvt_key
+                )
                 tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
             else:
                 tx_hash = send_safe_tx(
@@ -203,7 +227,6 @@ class NVMSubscriptionManager:
             else:
                 logger.error("Approve transaction failed")
                 return {"status": "failed", "receipt": dict(receipt)}
-
 
         if not self.agent_mode:
             nonce = self.web3.eth.get_transaction_count(self.sender)
@@ -226,11 +249,13 @@ class NVMSubscriptionManager:
             sender=self.sender,
             nonce=nonce,
             value_eth=value_eth,
-            chain_id=chain_id
+            chain_id=chain_id,
         )
 
         if not self.agent_mode:
-            signed_tx = self.web3.eth.account.sign_transaction(tx, private_key=wallet_pvt_key)
+            signed_tx = self.web3.eth.account.sign_transaction(
+                tx, private_key=wallet_pvt_key
+            )
             tx_hash = self.web3.eth.send_raw_transaction(signed_tx.rawTransaction)
         else:
             tx_hash = send_safe_tx(
@@ -330,29 +355,30 @@ class NVMSubscriptionManager:
             logger.error("Subscription purchase transaction failed")
             return {"status": "failed", "receipt": dict(receipt)}
 
-
     def check_sufficient_sender_balance(self) -> Tuple[bool, str]:
         w3 = self.web3
         sender = self.sender
         chain_id = w3.eth.chain_id
 
-        # For gnosis, native xdai is used for purchase 
+        # For gnosis, native xdai is used for purchase
         if chain_id == ChainId.GNOSIS.value:
-            required_balance = w3.from_wei(10**18, unit='ether')
-            native_balance = w3.from_wei(w3.eth.get_balance(sender), unit='ether')
+            required_balance = w3.from_wei(10**18, unit="ether")
+            native_balance = w3.from_wei(w3.eth.get_balance(sender), unit="ether")
             return (
                 native_balance >= required_balance,
                 f"Not enough balance. Required: {required_balance} xdai, Found: {native_balance} xdai",
             )
-        
+
         # For base, usdc is used for purchase (decimal 6)
         if chain_id == ChainId.BASE.value:
-            required_balance = w3.from_wei(10**6, unit='mwei')
-            usdc_balance = w3.from_wei(self.subscription_token.get_balance(sender), unit='mwei')
+            required_balance = w3.from_wei(10**6, unit="mwei")
+            usdc_balance = w3.from_wei(
+                self.subscription_token.get_balance(sender), unit="mwei"
+            )
             usdc_address = self.subscription_token.address
             return (
                 usdc_balance >= required_balance,
                 f"Not enough balance. Required: {required_balance} usdc (token {usdc_address}), Found: {usdc_balance} usdc",
             )
-        
+
         return False, f"Unsupported chain: {chain_id}"

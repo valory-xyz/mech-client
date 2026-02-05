@@ -1,45 +1,55 @@
-# subscription/contracts/subscription_provider.py
+# subscription/contracts/nft_sales.py
 import logging
-from typing import Union, List, Dict, Any
-from web3 import Web3
+from typing import Any, Dict, List, Union
+
 from eth_typing import ChecksumAddress
+from web3 import Web3
 from web3.types import ENS
 
 from .base_contract import BaseContract
 
+
 logger = logging.getLogger(__name__)
 
 
-class SubscriptionProvider(BaseContract):
+class NFTSalesTemplateContract(BaseContract):
     """
-    Wrapper for the Token smart contract. Supports token balance
+    Wrapper class for the NFTSalesTemplate smart contract. Provides a method
+    to build a transaction for creating an agreement and paying escrow.
     """
 
     def __init__(self, w3: Web3):
         """
-        Initialize the Subscription provider instance.
+        Initialize the NFTSalesTemplateContract.
 
         Args:
-            w3 (Web3): A connected Web3 instance.
+            w3 (Web3): An instance of Web3 connected to an Ethereum network.
         """
-        logger.debug("Initializing Subscription provider")
-        super().__init__(w3, name="SubscriptionProvider")
-        logger.info("Subscription provider initialized")
+        logger.debug("Initializing NFTSalesTemplateContract")
+        super().__init__(w3, name="NFTSalesTemplate")
+        logger.info("NFTSalesTemplateContract initialized")
 
-    def build_create_fulfill_tx(
+    def build_create_agreement_tx(
         self,
         agreement_id_seed: str,
         did: str,
-        fulfill_for_delegate_params: tuple,
-        fulfill_params: tuple,
+        condition_seeds: List[bytes],
+        timelocks: List[int],
+        timeouts: List[int],
+        publisher: str,
+        service_index: int,
+        reward_address: str,
+        token_address: str,
+        amounts: List[int],
+        receivers: List[str],
         sender: str,
         nonce: int,
         value_eth: float,
-        gas: int = 500_000,
+        gas: int = 600_000,
         chain_id: int = 100,
     ) -> Dict[str, Any]:
         """
-        Build a transaction dictionary to create a fulfill tx.
+        Build a transaction dictionary to create an agreement and pay escrow.
 
         Args:
             agreement_id_seed (str): Unique identifier seed for the agreement.
@@ -55,15 +65,22 @@ class SubscriptionProvider(BaseContract):
             receivers (List[str]): List of payment receiver addresses.
             sender (str): Ethereum address initiating the transaction.
             value_eth (float): ETH value to include in the transaction.
-            gas (int, optional): Gas limit. Defaults to 450,000.
+            gas (int, optional): Gas limit. Defaults to 600,000.
             chain_id (int, optional): Ethereum network chain ID. Defaults to 100.
 
         Returns:
             Dict[str, Any]: Unsigned transaction dictionary.
         """
-        logger.debug("Building transaction for fulfill")
+        logger.debug("Building transaction for createAgreementAndPayEscrow")
         logger.debug(f"agreement_id_seed: {agreement_id_seed}")
         logger.debug(f"did: {did}")
+        logger.debug(f"condition_seeds: {condition_seeds}")
+        logger.debug(f"timelocks: {timelocks}, timeouts: {timeouts}")
+        logger.debug(f"publisher: {publisher}, service_index: {service_index}")
+        logger.debug(
+            f"reward_address: {reward_address}, token_address: {token_address}"
+        )
+        logger.debug(f"amounts: {amounts}, receivers: {receivers}")
         logger.debug(f"sender: {sender}, value_eth: {value_eth}")
 
         # Convert sender to a checksum address to ensure type safety
@@ -74,14 +91,21 @@ class SubscriptionProvider(BaseContract):
         base_fee = latest_block["baseFeePerGas"]
         max_priority_fee = self.w3.eth.max_priority_fee
 
-        logger.debug(f"fulfill_for_delegate_params: {fulfill_for_delegate_params}")
-        logger.debug(f"fulfill_params: {fulfill_params}")
-
         # Build the transaction using the contract method
         tx = (
             self.functions()
-            .fulfill(
-                agreement_id_seed, did, fulfill_for_delegate_params, fulfill_params
+            .createAgreementAndPayEscrow(
+                agreement_id_seed,
+                did,
+                condition_seeds,
+                timelocks,
+                timeouts,
+                self.w3.to_checksum_address(publisher),
+                service_index,
+                self.w3.to_checksum_address(reward_address),
+                self.w3.to_checksum_address(token_address),
+                amounts,
+                [self.w3.to_checksum_address(r) for r in receivers],
             )
             .build_transaction(
                 {
@@ -100,6 +124,8 @@ class SubscriptionProvider(BaseContract):
             }
         )
 
-        logger.info(f"Transaction built successfully for fulfill: {agreement_id_seed}")
+        logger.info(
+            f"Transaction built successfully for agreement ID: {agreement_id_seed}"
+        )
         logger.debug(f"Transaction details: {tx}")
         return tx

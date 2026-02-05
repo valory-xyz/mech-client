@@ -1,11 +1,13 @@
 # subscription/contracts/transfer_nft.py
 import logging
 from typing import Union
-from web3 import Web3
+
 from eth_typing import ChecksumAddress
+from web3 import Web3
 from web3.types import ENS
 
 from .base_contract import BaseContract
+
 
 logger = logging.getLogger(__name__)
 
@@ -52,15 +54,19 @@ class TransferNFTConditionContract(BaseContract):
             bytes: Hashed value.
         """
         logger.debug("Computing transfer NFT hash value")
-        hash_ = self.functions().hashValues(
-            did,
-            from_address,
-            to_address,
-            amount,
-            lock_condition_id,
-            nft_contract_address,
-            _is_transfer
-        ).call()
+        hash_ = (
+            self.functions()
+            .hashValues(
+                did,
+                from_address,
+                to_address,
+                amount,
+                lock_condition_id,
+                nft_contract_address,
+                _is_transfer,
+            )
+            .call()
+        )
         logger.debug(f"Transfer NFT hash: {hash_.hex()}")
         return hash_
 

@@ -42,9 +42,10 @@ from operate.quickstart.run_service import (
 from operate.services.manage import KeysManager
 from tabulate import tabulate  # type: ignore
 from web3.constants import ADDRESS_ZERO
-from web3.exceptions import ContractLogicError, ValidationError
+from web3.exceptions import ContractLogicError, Web3ValidationError
 
 from mech_client import __version__
+from mech_client.deposits import deposit_native_main, deposit_token_main
 from mech_client.interact import ConfirmationType, get_mech_config
 from mech_client.interact import interact as interact_
 from mech_client.marketplace_interact import IPFS_URL_TEMPLATE
@@ -68,12 +69,10 @@ from mech_client.mech_tool_management import (
     get_tool_io_schema,
     get_tools_for_agents,
 )
+from mech_client.nvm_subscription import nvm_subscribe_main
 from mech_client.prompt_to_ipfs import main as prompt_to_ipfs_main
 from mech_client.push_to_ipfs import main as push_to_ipfs_main
 from mech_client.to_png import main as to_png_main
-from scripts.deposit_native import main as deposit_native_main
-from scripts.deposit_token import main as deposit_token_main
-from scripts.nvm_subscribe import main as nvm_subscribe_main
 
 
 CURR_DIR = Path(__file__).resolve().parent
@@ -595,7 +594,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals,too-many-sta
         )
 
         raise ClickException(msg) from e
-    except (ContractLogicError, ValidationError) as e:
+    except (ContractLogicError, Web3ValidationError) as e:
         raise ClickException(
             f"Smart contract error: {e}\n\n"
             f"This may indicate:\n"
@@ -744,7 +743,7 @@ def tools_for_agents(agent_id: Optional[int], chain_config: str) -> None:
             f"  • Network connectivity issues\n"
             f"  • Metadata URL is unreachable"
         ) from e
-    except (ContractLogicError, ValidationError) as e:
+    except (ContractLogicError, Web3ValidationError) as e:
         raise ClickException(
             f"Smart contract error: {e}\n\n"
             f"This may indicate:\n"
@@ -828,7 +827,7 @@ def tool_description(tool_id: str, chain_config: str) -> None:
             f"  • IPFS gateway is unavailable\n"
             f"  • Network connectivity issues"
         ) from e
-    except (ContractLogicError, ValidationError) as e:
+    except (ContractLogicError, Web3ValidationError) as e:
         raise ClickException(
             f"Smart contract error: {e}\n\n"
             f"Please verify your chain configuration and tool ID."
@@ -942,7 +941,7 @@ def tool_io_schema(tool_id: str, chain_config: str) -> None:
             f"  • IPFS gateway is unavailable\n"
             f"  • Network connectivity issues"
         ) from e
-    except (ContractLogicError, ValidationError) as e:
+    except (ContractLogicError, Web3ValidationError) as e:
         raise ClickException(
             f"Smart contract error: {e}\n\n"
             f"Please verify your chain configuration and tool ID."
@@ -1017,7 +1016,7 @@ def tools_for_marketplace_mech(agent_id: int, chain_config: str) -> None:
             f"  • IPFS gateway is unavailable\n"
             f"  • Network connectivity issues"
         ) from e
-    except (ContractLogicError, ValidationError) as e:
+    except (ContractLogicError, Web3ValidationError) as e:
         raise ClickException(
             f"Smart contract error: {e}\n\n"
             f"This may indicate:\n"
@@ -1247,7 +1246,7 @@ def deposit_native(
             f"  • Contract may be paused or unavailable\n\n"
             f"Please check your balance and transaction parameters."
         ) from e
-    except ValidationError as e:
+    except Web3ValidationError as e:
         raise ClickException(
             f"Transaction validation error: {e}\n\n"
             f"The transaction failed validation before being sent.\n\n"
@@ -1354,7 +1353,7 @@ def deposit_token(
             f"  • Contract may be paused or unavailable\n\n"
             f"Please check your token balance, approve allowance, and verify parameters."
         ) from e
-    except ValidationError as e:
+    except Web3ValidationError as e:
         raise ClickException(
             f"Transaction validation error: {e}\n\n"
             f"The transaction failed validation before being sent.\n\n"
@@ -1410,7 +1409,7 @@ def nvm_subscribe(
 
         # Validate chain supports NVM subscriptions
         # Import here to avoid circular import and get the actual dict
-        from scripts.nvm_subscribe import (  # pylint: disable=import-outside-toplevel
+        from mech_client.nvm_subscription import (  # pylint: disable=import-outside-toplevel
             CHAIN_TO_ENVS,
         )
 
@@ -1455,7 +1454,7 @@ def nvm_subscribe(
             f"  • Subscription contract may be unavailable\n\n"
             f"Please check your balance and subscription plan configuration."
         ) from e
-    except ValidationError as e:
+    except Web3ValidationError as e:
         raise ClickException(
             f"Transaction validation error: {e}\n\n"
             f"The subscription transaction failed validation.\n\n"

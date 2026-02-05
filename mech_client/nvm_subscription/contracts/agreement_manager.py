@@ -1,11 +1,13 @@
 # subscription/contracts/lock_payment.py
 import logging
 from typing import List, Union
-from web3 import Web3
+
 from eth_typing import ChecksumAddress
+from web3 import Web3
 from web3.types import ENS
 
 from .base_contract import BaseContract
+
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,8 @@ class AgreementStorageManagerContract(BaseContract):
             bytes: The condition ID.
         """
         logger.debug("Generating condition ID from agreement ID and hash")
-        agreement_id = self.functions().agreementId(agreement_id_seed, subscriber).call()
+        agreement_id = (
+            self.functions().agreementId(agreement_id_seed, subscriber).call()
+        )
         logger.info(f"Generated condition ID: {agreement_id.hex()}")
         return agreement_id

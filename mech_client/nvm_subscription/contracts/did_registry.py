@@ -1,10 +1,12 @@
 # subscription/contracts/did_registry.py
 import logging
-from typing import Dict, Any
+from typing import Any, Dict
+
 from web3 import Web3
 from web3.constants import ADDRESS_ZERO
 
 from .base_contract import BaseContract
+
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +53,11 @@ class DIDRegistryContract(BaseContract):
             "immutableUrl": registered_values[7],
             "nftInitialized": registered_values[8],
             "service": response.get("service", []),
-            "proof": response.get("proof", [])
+            "proof": response.get("proof", []),
         }
 
         non_zero_providers = [
-            addr
-            for addr in ddo["providers"]
-            if addr.lower() != ADDRESS_ZERO
+            addr for addr in ddo["providers"] if addr.lower() != ADDRESS_ZERO
         ]
         print("================ SUBSCRIBGING TO NVM OLAS PLAN =======================")
         print(f"PLAN : {ddo['did']}")
