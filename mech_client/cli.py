@@ -357,7 +357,7 @@ def setup_agent_mode(
     required=True,
     help="One or more prompts to send as a request. Can be repeated.",
 )
-@click.option("--agent_id", type=int, help="Id of the agent to be used")
+@click.option("--agent_id", type=int, help="Id of the agent to be used (service id for marketplace, agent id for legacy mechs)")
 @click.option(
     "--priority-mech",
     type=str,
@@ -647,6 +647,7 @@ def to_png(ipfs_hash: str, path: str, request_id: str) -> None:
 @click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
 def tools_for_agents(agent_id: Optional[int], chain_config: str) -> None:
     """Fetch and display tools for agents."""
+    # agent id on legacy agent registry.
     try:
         # Validate chain config
         validated_chain = validate_chain_config(chain_config)

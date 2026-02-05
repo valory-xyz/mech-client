@@ -17,7 +17,11 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Subgraph client for mech."""
+"""
+Subgraph client for legacy mech.
+
+Agent ID in this file refers to agents from the legacy AgentRegistry specific to Mechs.
+"""
 
 from string import Template
 from typing import Optional

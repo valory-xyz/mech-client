@@ -23,6 +23,8 @@ This script allows sending a Request to an on-chain mech and waiting for the Del
 Usage:
 
 python client.py <prompt> <tool>
+
+# legacy
 """
 
 import asyncio
@@ -293,7 +295,7 @@ def verify_or_retrieve_tool(
     """
     Checks if the tool is valid and for what agent.
 
-    :param agent_id: The ID of the agent.
+    :param agent_id: The ID of the agent (from the legacy AgentRegistry specific to Mechs).
     :type agent_id: int
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
@@ -332,7 +334,21 @@ def fetch_tools(
     contract_abi_path: Path,
     include_metadata: bool = False,
 ) -> Union[List[str], Tuple[List[str], Dict[str, Any]]]:
-    """Fetch tools for specified agent ID, optionally include metadata."""
+    """
+    Fetch tools for specified agent ID, optionally include metadata.
+
+    :param agent_id: The ID of the agent (from the legacy AgentRegistry specific to Mechs).
+    :type agent_id: int
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param agent_registry_contract: Agent registry contract address.
+    :type agent_registry_contract: str
+    :param contract_abi_path: Path to agent registry abi.
+    :type contract_abi_path: Path
+    :param include_metadata: The metadata flag.
+    :type include_metadata: bool
+    :return: The result.
+    """
     mech_registry = get_contract(
         contract_address=agent_registry_contract,
         abi=get_abi(contract_abi_path),
@@ -526,7 +542,7 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
 
     :param prompt: The interaction prompt.
     :type prompt: str
-    :param agent_id: The ID of the agent.
+    :param agent_id: The ID of the agent (from the legacy AgentRegistry specific to Mechs).
     :type agent_id: int
     :param tool: The tool to interact with (optional).
     :type tool: Optional[str]

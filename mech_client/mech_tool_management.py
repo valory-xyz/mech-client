@@ -46,7 +46,7 @@ def get_agent_tools(
     """
     Fetch tools for a given agent ID.
 
-    :param agent_id: The ID of the agent.
+    :param agent_id: The ID of the agent (from the legacy AgentRegistry specific to Mechs).
     :param chain_config: The chain configuration to use (default is "gnosis").
     :param include_metadata: To include tools metadata or not (default is False)
     :return: A list of tools if successful, or a tuple of (list of tools, metadata) if metadata is included, or None if an error occurs.
@@ -78,7 +78,7 @@ def get_tools_for_agents(
     """
     Retrieve tools for specified agents or all agents if no specific agent is provided.
 
-    :param agent_id: Optional; specific agent ID to fetch tools for.
+    :param agent_id: Optional; specific agent ID (from the legacy AgentRegistry specific to Mechs) to fetch tools for.
     :param chain_config: The chain configuration to use.
     :return: Dictionary of tools with identifiers or a mapping of agent IDs to tools.
     """
