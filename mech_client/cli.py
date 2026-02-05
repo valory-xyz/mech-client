@@ -357,7 +357,11 @@ def setup_agent_mode(
     required=True,
     help="One or more prompts to send as a request. Can be repeated.",
 )
-@click.option("--agent_id", type=int, help="Id of the agent to be used (service id for marketplace, agent id for legacy mechs)")
+@click.option(
+    "--agent_id",
+    type=int,
+    help="Id of the agent to be used (service id for marketplace, agent id for legacy mechs)",
+)
 @click.option(
     "--priority-mech",
     type=str,
