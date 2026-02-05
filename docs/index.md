@@ -47,14 +47,14 @@ The Mech Client supports multiple blockchain networks with different feature ava
 |-------|-------------|-------------|------------|---------------|---------------|
 | Gnosis | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Base | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Polygon | ✅ | ✅ | ❌ | ✅ | ✅ |
-| Optimism | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Polygon | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Optimism | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Arbitrum | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Celo | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 **Key:**
 - **Marketplace**: Chains with marketplace contracts. Required for marketplace mech interactions and deposit commands.
-- **Agent Mode**: Chains supporting on-chain agent registration (Gnosis and Base only).
+- **Agent Mode**: Chains supporting on-chain agent registration (all marketplace chains: Gnosis, Base, Polygon, Optimism).
 - **Legacy Mechs**: All chains support direct interaction with legacy mech agents.
 - **OLAS/USDC Payments**: Token payment support varies by chain deployment.
 

@@ -89,8 +89,8 @@ The Mech Client supports multiple chains with different feature availability:
 |-------|-------------|-------------|------------|---------------|---------------|
 | Gnosis | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Base | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Polygon | ✅ | ✅ | ❌ | ✅ | ✅ |
-| Optimism | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Polygon | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Optimism | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Arbitrum | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Celo | ✅ | ❌ | ❌ | ❌ | ❌ |
 
@@ -102,7 +102,7 @@ The Mech Client supports multiple chains with different feature availability:
 
 ### Set up agent mode for on-chain interactions
 
-There are two modes you can use the mechx for on-chain interactions. Currently `agent-mode` is only supported for Gnosis and Base networks.
+There are two modes you can use the mechx for on-chain interactions. Currently `agent-mode` is supported for all marketplace chains (Gnosis, Base, Polygon, and Optimism).
 
 -   _agent mode_ (Recommended): This allows to register your on-chain interactions as agent on the olas protocol and allows for A2A activity to be reflected on the client
 -   _client mode_: Simple on-chain interations using EOA
