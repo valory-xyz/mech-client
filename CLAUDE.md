@@ -583,20 +583,24 @@ tox -e liccheck
 
 ### Testing
 
+**Note:** This project currently has no unit tests. The `stress_tests/` folder contains only load/performance testing.
+
+#### Stress Testing
+
 The project uses Locust for stress testing the mech marketplace:
 
 ```bash
 # Run Locust with web UI
-locust -f tests/locustfile.py
+locust -f stress_tests/locustfile.py
 
 # Run Locust headless (CLI mode)
-locust -f tests/locustfile.py --headless -u 1 -r 1 -t 25m
+locust -f stress_tests/locustfile.py --headless -u 1 -r 1 -t 25m
 
 # Run with CSV export for results
-locust -f tests/locustfile.py --headless --only-summary --csv results
+locust -f stress_tests/locustfile.py --headless --only-summary --csv results
 ```
 
-Note: A `ethereum_private_key.txt` file is required in `tests/` for stress testing.
+Note: A `ethereum_private_key.txt` file is required in `stress_tests/` for stress testing.
 
 ### Build and Release
 
@@ -671,7 +675,7 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 - Prepaid and per-request payment models
 - Offchain mech support via HTTP endpoints
 - Configuration via `MechMarketplaceRequestConfig`
-- Contract helper functions: `get_native_balance_tracker_contract()`, `get_token_balance_tracker_contract()`, `get_token_contract()`
+- Contract helper functions: `get_token_balance_tracker_contract()`, `get_token_contract()`
 
 **Deposits (`deposits.py`)**
 - Prepaid balance deposit functionality for marketplace mechs

@@ -42,9 +42,9 @@ from mech_client.marketplace_interact import (
     ABI_DIR_PATH,
     CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG
 )
-from tests.helpers.marketplace_helpers import send_marketplace_request_nonblocking, delivery_consumer_loop_status_only
-from tests.helpers.nonce_manager import MapNonceAllocator, NonceAllocator
-from tests.helpers.query_generation import make_prompts
+from stress_tests.helpers.marketplace_helpers import send_marketplace_request_nonblocking, delivery_consumer_loop_status_only
+from stress_tests.helpers.nonce_manager import MapNonceAllocator, NonceAllocator
+from stress_tests.helpers.query_generation import make_prompts
 
 # -------------------- TEST PARAMS --------------------
 PRIORITY_MECH_ADDRESS = os.environ.get("PRIORITY_MECH", "0x601024E27f1C67B28209E24272CED8A31fc8151F")

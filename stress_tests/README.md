@@ -4,13 +4,13 @@ This test simulates load on the mech marketplace using [Locust](https://locust.i
 
 ## Setup
 
-1. Create a file named `ethereum_private_key.txt` under the `tests/` folder.  
+1. Create a file named `ethereum_private_key.txt` under the `stress_tests/` folder.  
    This file should contain your private key used for signing requests.
 
 2. Run Locust with the following command:
 
 ```bash
-locust -f tests/locustfile.py
+locust -f stress_tests/locustfile.py
 ````
 
 You should see output similar to:
@@ -28,12 +28,12 @@ Then open your browser and start the test via the Locust web UI.
 To run Locust entirely from the terminal, use:
 
 ```bash
-locust -f tests/locustfile.py --headless -u 1 -r 1 -t 25m
+locust -f stress_tests/locustfile.py --headless -u 1 -r 1 -t 25m
 ```
 
 **Flags explained:**
 
-* `-f tests/locustfile.py` → Path to the Locust file.
+* `-f stress_tests/locustfile.py` → Path to the Locust file.
 * `--headless` → Disables the web UI and runs in CLI mode.
 * `-u 1` → Number of users (clients).
 * `-r 1` → Spawn rate (users per second).
@@ -55,7 +55,7 @@ locust -f tests/locustfile.py --headless -u 1 -r 1 -t 25m
 For CI pipelines or remote servers, use:
 
 ```bash
-locust -f tests/locustfile.py --headless --only-summary
+locust -f stress_tests/locustfile.py --headless --only-summary
 ```
 
 This keeps logs clean and prevents the process from waiting for UI interaction.
