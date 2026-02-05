@@ -1202,16 +1202,14 @@ def deposit_native(
             amount_wei = int(amount_to_deposit)
             if amount_wei <= 0:
                 raise ValueError
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
             raise ClickException(
                 f"Invalid amount: {amount_to_deposit!r}\n\n"
                 f"Amount must be a positive integer in wei.\n\n"
                 f"Example: 1000000000000000000 (1 token with 18 decimals)"
-            )
+            ) from e
 
         # Validate chain supports marketplace deposits
-        from mech_client.interact import get_mech_config
-
         mech_config = get_mech_config(validated_chain)
         if mech_config.mech_marketplace_contract == ADDRESS_ZERO:
             raise ClickException(
@@ -1310,16 +1308,14 @@ def deposit_token(
             amount_wei = int(amount_to_deposit)
             if amount_wei <= 0:
                 raise ValueError
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
             raise ClickException(
                 f"Invalid amount: {amount_to_deposit!r}\n\n"
                 f"Amount must be a positive integer in token's smallest unit.\n\n"
                 f"Example: 1000000 (1 USDC with 6 decimals)"
-            )
+            ) from e
 
         # Validate chain supports marketplace deposits
-        from mech_client.interact import get_mech_config
-
         mech_config = get_mech_config(validated_chain)
         if mech_config.mech_marketplace_contract == ADDRESS_ZERO:
             raise ClickException(

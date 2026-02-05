@@ -894,12 +894,11 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
                 f"  • Invalid keyfile format\n\n"
                 f"Please verify your private key file and password."
             ) from e
-        else:
-            raise ValueError(
-                f"Invalid private key file: {e}\n\n"
-                f"The private key file format is invalid or corrupted.\n"
-                f"Please ensure you have a valid Ethereum private key file."
-            ) from e
+        raise ValueError(
+            f"Invalid private key file: {e}\n\n"
+            f"The private key file format is invalid or corrupted.\n"
+            f"Please ensure you have a valid Ethereum private key file."
+        ) from e
 
     ledger_api = EthereumApi(**asdict(ledger_config))
 
