@@ -468,6 +468,37 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
             f"  2. Verify the RPC URL is correct\n"
             f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
         ) from e
+    except TimeoutError as e:
+        rpc_url_env = os.getenv("MECHX_CHAIN_RPC")
+        error_details = str(e)
+
+        msg = (
+            "Timeout while waiting for transaction receipt via HTTP RPC endpoint.\n\n"
+            f"Error details: {error_details}\n\n"
+        )
+
+        if rpc_url_env:
+            msg += f"Current MECHX_CHAIN_RPC: {rpc_url_env}\n\n"
+        else:
+            msg += (
+                "Using default RPC endpoint from config (MECHX_CHAIN_RPC not set)\n\n"
+            )
+
+        msg += (
+            "Possible causes:\n"
+            "  • RPC endpoint is slow, rate-limiting, or unavailable\n"
+            "  • Network connectivity issues\n"
+            "  • RPC endpoint doesn't support the required methods\n\n"
+            "Recommended actions:\n"
+            "  1. Check if your transaction succeeded on a block explorer\n"
+            "  2. Try a reliable RPC provider (e.g., Alchemy, Infura, Ankr, or public RPCs)\n"
+            "  3. Set a different HTTP RPC endpoint:\n"
+            "     export MECHX_CHAIN_RPC='https://your-http-rpc-url'\n\n"
+            "Note: MECHX_CHAIN_RPC is for HTTP RPC endpoints (https://...).\n"
+            "      WSS endpoints are configured separately via MECHX_WSS_ENDPOINT (wss://...)."
+        )
+
+        raise ClickException(msg) from e
     except (ValueError, FileNotFoundError, Exception) as e:
         raise ClickException(str(e)) from e
 

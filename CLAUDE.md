@@ -6,6 +6,330 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Mech Client is a Python CLI tool and library for interacting with AI Mechs (on-chain AI agents) via the Olas protocol. It supports both legacy mechs and the newer Mech Marketplace, enabling users to send AI task requests on-chain and receive results through various delivery methods (ACN, WebSocket, on-chain).
 
+## Command Dependency Diagrams
+
+This section provides visual diagrams showing external resource dependencies and environment variables for each CLI command. Use these during development to understand what each command needs to function.
+
+### Legend
+
+```
+[Command] → External Resource (Environment Variable if configurable)
+├─ Resource Type: description
+└─ Contract: contract name
+```
+
+### 1. setup-agent-mode
+
+```
+mechx setup-agent-mode
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Blockchain queries for Safe setup
+├─ Olas Operate Middleware
+│  └─ Service configuration and deployment
+└─ Local Files
+   ├─ ~/.operate_mech_client/ (service configs)
+   └─ .env (OPERATE_PASSWORD)
+
+ENV VARS:
+  MECHX_CHAIN_RPC (optional, uses default from mechs.json)
+  OPERATE_PASSWORD (loaded from .env or prompted)
+```
+
+### 2. interact --priority-mech (Marketplace Path)
+
+```
+mechx interact --priority-mech 0x... --tools tool1 --prompts "..."
+├─ HTTP RPC (MECHX_CHAIN_RPC) ← PRIMARY DEPENDENCY
+│  ├─ Send transaction (approve, request)
+│  ├─ Wait for transaction receipt ← TIMES OUT HERE IF RPC SLOW
+│  └─ Poll for Deliver events
+├─ IPFS Gateway (https://gateway.autonolas.tech/ipfs/)
+│  ├─ Upload: prompt + tool metadata
+│  └─ Download: mech response data
+├─ Smart Contracts (on-chain)
+│  ├─ MechMarketplace: request(), requestBatch()
+│  ├─ IMech: paymentType(), serviceId(), maxDeliveryRate()
+│  ├─ BalanceTracker: mapRequesterBalances() (if prepaid)
+│  ├─ ERC20 Token: approve(), balanceOf() (if token payment)
+│  └─ ERC1155: balanceOf() (if NVM subscription)
+└─ [If Agent Mode]
+   ├─ Safe Multisig (via safe-eth-py)
+   └─ Olas Operate Middleware (fetch safe address)
+
+OPTIONAL:
+├─ Offchain Mech HTTP (MECHX_MECH_OFFCHAIN_URL)
+│  └─ If --use-offchain flag set
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required for reliable operation) ← SET THIS
+  MECHX_MECH_OFFCHAIN_URL (required if --use-offchain)
+
+NOTES:
+  - NO WebSocket (WSS) used for marketplace mechs
+  - Delivery watched via HTTP RPC polling only
+  - If HTTP RPC is slow/unavailable, command times out at "Waiting for transaction receipt..."
+```
+
+### 3. interact --agent-id (Legacy Mech Path)
+
+```
+mechx interact --agent-id 123 --tool tool1 --prompts "..."
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  ├─ Send transaction
+│  └─ Get transaction receipt
+├─ WebSocket (MECHX_WSS_ENDPOINT) ← USED FOR EVENTS
+│  ├─ Subscribe to Request events
+│  └─ Subscribe to Deliver events
+├─ Agent Communication Network (ACN/libp2p)
+│  └─ Off-chain delivery mechanism
+├─ IPFS Gateway
+│  ├─ Upload: prompt + tool metadata
+│  └─ Download: mech response
+└─ Smart Contracts
+   ├─ AgentRegistry: tokenURI(agent_id)
+   └─ AgentMech: request(), deliver()
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+  MECHX_WSS_ENDPOINT (required for event monitoring)
+
+DELIVERY MODES (--confirm):
+  - off-chain: ACN only
+  - on-chain: WSS events only
+  - wait-for-both: Race ACN vs WSS (default)
+```
+
+### 4. deposit-native
+
+```
+mechx deposit-native --chain-config gnosis --mech-type native --amount 0.01
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  ├─ Check native balance
+│  ├─ Send transfer transaction
+│  └─ Wait for receipt
+└─ Smart Contracts
+   ├─ BalanceTrackerFixedPriceNative: deposit()
+   └─ [If Agent Mode] Safe: execTransaction()
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+NOTES:
+  - Prepaid balance for marketplace requests
+  - Supports both agent mode (Safe) and client mode (EOA)
+```
+
+### 5. deposit-token
+
+```
+mechx deposit-token --chain-config gnosis --token-type olas --amount 1000000000000000000
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  ├─ Check ERC20 balance
+│  ├─ Send approve() transaction
+│  ├─ Send deposit() transaction
+│  └─ Wait for receipts
+└─ Smart Contracts
+   ├─ ERC20 Token: approve(), balanceOf()
+   ├─ BalanceTrackerFixedPriceToken: deposit()
+   └─ [If Agent Mode] Safe: execTransaction()
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+SUPPORTED TOKENS:
+  - olas: OLAS token (chain-specific address)
+  - usdc: USDC token (not available on gnosis)
+```
+
+### 6. purchase-nvm-subscription
+
+```
+mechx purchase-nvm-subscription --chain-config gnosis --mech-type native_nvm
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Send NVM subscription transaction
+├─ Nevermined Network
+│  └─ Subscription plan management
+└─ Smart Contracts
+   ├─ NVM Subscription contracts
+   └─ [If Agent Mode] Safe: execTransaction()
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+  PLAN_DID (from scripts/nvm_subscription/envs/{chain}.env)
+  NETWORK_NAME (from envs)
+  CHAIN_ID (from envs)
+```
+
+### 7. fetch-mm-mechs-info
+
+```
+mechx fetch-mm-mechs-info --chain-config gnosis
+├─ Subgraph GraphQL API (MECHX_SUBGRAPH_URL) ← REQUIRED, NO DEFAULT
+│  └─ Query: MechsOrderedByServiceDeliveries
+│     ├─ Returns: service IDs, addresses, delivery counts
+│     └─ Filters: totalDeliveries > 0
+└─ [Output references]
+   └─ IPFS Gateway links (metadata URLs)
+
+ENV VARS:
+  MECHX_SUBGRAPH_URL (REQUIRED - must be set manually)
+
+NOTES:
+  - Read-only command, no transactions
+  - Does NOT use HTTP RPC
+  - Subgraph URL must match chain-config
+  - Currently all chains have empty subgraph_url in mechs.json
+```
+
+### 8. tools-for-agents
+
+```
+mechx tools-for-agents --agent-ids 1 2 3 --chain-config gnosis
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Query smart contract: AgentRegistry
+├─ Smart Contracts
+│  └─ AgentRegistry: tokenURI(agent_id), totalSupply()
+└─ External HTTP
+   └─ Fetch metadata from tokenURI URL
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+NOTES:
+  - Read-only, no transactions
+  - For legacy mechs only
+```
+
+### 9. tool-description & tool-io-schema (Legacy)
+
+```
+mechx tool-description --agent-id 1 --tool tool1 --chain-config gnosis
+mechx tool-io-schema --agent-id 1 --tool tool1 --chain-config gnosis
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Query: AgentRegistry.tokenURI(agent_id)
+└─ External HTTP
+   └─ Fetch and parse tool metadata
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+```
+
+### 10. tools-for-marketplace-mech
+
+```
+mechx tools-for-marketplace-mech --service-id 123 --chain-config gnosis
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Query: ComplementaryMetadataHash contract
+└─ External HTTP
+   └─ Fetch metadata from tokenURI(service_id)
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+NOTES:
+  - For marketplace mechs only
+  - Uses service_id instead of agent_id
+```
+
+### 11. tool-description-for-marketplace-mech & tool-io-schema-for-marketplace-mech
+
+```
+mechx tool-description-for-marketplace-mech --service-id 123 --tool tool1
+mechx tool-io-schema-for-marketplace-mech --service-id 123 --tool tool1
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Query: ComplementaryMetadataHash.tokenURI(service_id)
+└─ External HTTP
+   └─ Fetch and parse tool metadata
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+```
+
+### 12. prompt-to-ipfs & push-to-ipfs
+
+```
+mechx prompt-to-ipfs "prompt" "tool"
+mechx push-to-ipfs /path/to/file
+└─ IPFS Gateway (https://gateway.autonolas.tech/ipfs/)
+   └─ Upload file/metadata
+
+ENV VARS:
+  None (uses hardcoded IPFS gateway)
+
+NOTES:
+  - Utility commands, no blockchain interaction
+  - No RPC or WSS needed
+```
+
+## Quick Reference: Environment Variables by Command
+
+| Command | MECHX_CHAIN_RPC | MECHX_WSS_ENDPOINT | MECHX_SUBGRAPH_URL | MECHX_MECH_OFFCHAIN_URL | OPERATE_PASSWORD |
+|---------|----------------|--------------------|--------------------|------------------------|------------------|
+| setup-agent-mode | ○ | | | | ✓ |
+| interact (marketplace) | ✓ | | | ○ | |
+| interact (legacy) | ✓ | ✓ | | | |
+| deposit-native | ✓ | | | | |
+| deposit-token | ✓ | | | | |
+| purchase-nvm-subscription | ✓ | | | | |
+| fetch-mm-mechs-info | | | ✓ | | |
+| tools-for-agents | ✓ | | | | |
+| tools-for-marketplace-mech | ✓ | | | | |
+| tool-description* | ✓ | | | | |
+| prompt-to-ipfs | | | | | |
+
+**Legend:**
+- ✓ = Required for command to work
+- ○ = Optional (uses default from mechs.json if not set)
+- Empty = Not used
+
+## Common Issues & Solutions
+
+### Issue: "Timeout while waiting for transaction receipt"
+
+**Affected Commands:** interact, deposit-native, deposit-token, purchase-nvm-subscription
+
+**Cause:** HTTP RPC endpoint is slow, rate-limiting, or unavailable
+
+**Solution:**
+```bash
+# Set a reliable RPC provider
+export MECHX_CHAIN_RPC='https://your-reliable-rpc-provider'
+
+# Examples:
+export MECHX_CHAIN_RPC='https://gnosis-mainnet.public.blastapi.io'  # Gnosis
+export MECHX_CHAIN_RPC='https://polygon-rpc.com'  # Polygon
+export MECHX_CHAIN_RPC='https://mainnet.base.org'  # Base
+```
+
+**Why this happens:**
+- The `wait_for_receipt()` function polls HTTP RPC to get transaction receipt
+- If RPC is slow/down, it times out after 5 minutes (300 seconds)
+- This is NOT a WebSocket issue for marketplace mechs
+
+### Issue: WebSocket connection closed (legacy mechs only)
+
+**Affected Commands:** interact (with --agent-id)
+
+**Cause:** WSS endpoint closed connection during long wait
+
+**Solution:**
+```bash
+# Set a reliable WebSocket provider
+export MECHX_WSS_ENDPOINT='wss://your-wss-provider'
+
+# Examples:
+export MECHX_WSS_ENDPOINT='wss://rpc.gnosischain.com/wss'
+```
+
+### Issue: "Subgraph URL not set" (fetch-mm-mechs-info)
+
+**Cause:** MECHX_SUBGRAPH_URL environment variable not set (no default in config)
+
+**Solution:**
+```bash
+export MECHX_SUBGRAPH_URL='https://your-subgraph-url'
+```
+
 ## Development Commands
 
 ### Installation and Setup
