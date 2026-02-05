@@ -89,7 +89,7 @@ export MECHX_SUBGRAPH_URL=<your-subgraph-url>
 ```
 ```bash
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-|   Service Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
+| AI Agent Id  | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
 +==============+====================+============================================+====================+===============================================================================================================+
 |         2182 | Fixed Price Native | 0xc05e7412439bd7e91730a6880e18d5d5873f632c |              41246 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
@@ -201,7 +201,7 @@ Alternatively, if the connection is lost, you can retrieve the response manually
 printf "%x\n" <request_id>
 ```
 
-- Go to the [Mech list](https://mech.olas.network/mechs) and locate your Mech (by its service ID or address).
+- Go to the [Mech list](https://mech.olas.network/mechs) and locate your Mech (by its AI Agent ID or address).
 
 - Click on the Mech’s address to see a list of requests it has received.
 
