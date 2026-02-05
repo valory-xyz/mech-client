@@ -32,6 +32,7 @@ from web3.contract import Contract as Web3Contract
 
 
 IPFS_URL_TEMPLATE = "https://gateway.autonolas.tech/ipfs/f01701220{}"
+TRANSACTION_RECEIPT_TIMEOUT = 300.0  # 5 minutes
 
 
 def register_event_handlers(  # pylint: disable=too-many-arguments
@@ -99,23 +100,49 @@ def register_event_handlers(  # pylint: disable=too-many-arguments
     _ = wss.recv()
 
 
-def wait_for_receipt(tx_hash: str, ledger_api: EthereumApi) -> Dict:
+def wait_for_receipt(
+    tx_hash: str, ledger_api: EthereumApi, timeout: float = TRANSACTION_RECEIPT_TIMEOUT
+) -> Dict:
     """
-    Wait for receipt.
+    Wait for receipt via HTTP RPC endpoint.
 
     :param tx_hash: The transaction hash.
     :type tx_hash: str
     :param ledger_api: The Ethereum API used for interacting with the ledger.
     :type ledger_api: EthereumApi
+    :param timeout: Maximum time to wait for receipt in seconds (default: 300).
+    :type timeout: float
     :return: The receipt of the transaction.
     :rtype: Dict
+    :raises TimeoutError: If timeout is exceeded while waiting for receipt.
     """
+    start_time = time.time()
+    last_exception = None
+    retry_count = 0
+
     while True:
         try:
             return ledger_api._api.eth.get_transaction_receipt(  # pylint: disable=protected-access
                 tx_hash
             )
-        except Exception:  # pylint: disable=broad-except
+        except Exception as e:  # pylint: disable=broad-except
+            last_exception = e
+            retry_count += 1
+            elapsed = time.time() - start_time
+            if elapsed >= timeout:
+                # Get the RPC endpoint for error message
+                rpc_endpoint = getattr(
+                    ledger_api._api.provider,  # pylint: disable=protected-access
+                    "endpoint_uri",
+                    "unknown",
+                )
+                raise TimeoutError(
+                    f"Timeout ({timeout}s) exceeded while waiting for transaction receipt via HTTP RPC. "
+                    f"Transaction hash: {tx_hash}. "
+                    f"RPC endpoint: {rpc_endpoint}. "
+                    f"Retries attempted: {retry_count}. "
+                    f"Last error: {repr(last_exception)}"
+                ) from last_exception
             time.sleep(1)
 
 

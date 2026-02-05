@@ -6,6 +6,529 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Mech Client is a Python CLI tool and library for interacting with AI Mechs (on-chain AI agents) via the Olas protocol. It supports both legacy mechs and the newer Mech Marketplace, enabling users to send AI task requests on-chain and receive results through various delivery methods (ACN, WebSocket, on-chain).
 
+## Command Dependency Diagrams
+
+This section provides visual diagrams showing external resource dependencies and environment variables for each CLI command. Use these during development to understand what each command needs to function.
+
+**Total commands: 15** (14 with detailed diagrams - utility commands have minimal dependencies)
+
+### Legend
+
+```
+[Command] → External Resource (Environment Variable if configurable)
+├─ Resource Type: description
+└─ Contract: contract name
+```
+
+### 1. setup-agent-mode
+
+```
+mechx setup-agent-mode
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Blockchain queries for Safe setup
+├─ Olas Operate Middleware
+│  └─ Service configuration and deployment
+└─ Local Files
+   ├─ ~/.operate_mech_client/ (service configs)
+   └─ .env (OPERATE_PASSWORD)
+
+ENV VARS:
+  MECHX_CHAIN_RPC (optional, uses default from mechs.json)
+  OPERATE_PASSWORD (loaded from .env or prompted)
+```
+
+### 2. interact --priority-mech (Marketplace Path)
+
+```
+mechx interact --priority-mech 0x... --tools tool1 --prompts "..."
+├─ HTTP RPC (MECHX_CHAIN_RPC) ← PRIMARY DEPENDENCY
+│  ├─ Send transaction (approve, request)
+│  ├─ Wait for transaction receipt ← TIMES OUT HERE IF RPC SLOW
+│  └─ Poll for Deliver events
+├─ IPFS Gateway (https://gateway.autonolas.tech/ipfs/)
+│  ├─ Upload: prompt + tool metadata
+│  └─ Download: mech response data
+├─ Smart Contracts (on-chain)
+│  ├─ MechMarketplace: request(), requestBatch()
+│  ├─ IMech: paymentType(), serviceId(), maxDeliveryRate()
+│  ├─ BalanceTracker: mapRequesterBalances() (if prepaid)
+│  ├─ ERC20 Token: approve(), balanceOf() (if token payment)
+│  └─ ERC1155: balanceOf() (if NVM subscription)
+└─ [If Agent Mode]
+   ├─ Safe Multisig (via safe-eth-py)
+   └─ Olas Operate Middleware (fetch safe address)
+
+OPTIONAL:
+├─ Offchain Mech HTTP (MECHX_MECH_OFFCHAIN_URL)
+│  └─ If --use-offchain flag set
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required for reliable operation) ← SET THIS
+  MECHX_MECH_OFFCHAIN_URL (required if --use-offchain)
+
+NOTES:
+  - NO WebSocket (WSS) used for marketplace mechs
+  - Delivery watched via HTTP RPC polling only
+  - If HTTP RPC is slow/unavailable, command times out at "Waiting for transaction receipt..."
+```
+
+### 3. interact --agent-id (Legacy Mech Path)
+
+```
+mechx interact --agent-id 123 --tool tool1 --prompts "..."
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  ├─ Send transaction
+│  └─ Get transaction receipt
+├─ WebSocket (MECHX_WSS_ENDPOINT) ← USED FOR EVENTS
+│  ├─ Subscribe to Request events
+│  └─ Subscribe to Deliver events
+├─ Agent Communication Network (ACN/libp2p)
+│  └─ Off-chain delivery mechanism
+├─ IPFS Gateway
+│  ├─ Upload: prompt + tool metadata
+│  └─ Download: mech response
+└─ Smart Contracts
+   ├─ AgentRegistry: tokenURI(agent_id)
+   └─ AgentMech: request(), deliver()
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+  MECHX_WSS_ENDPOINT (required for event monitoring)
+
+DELIVERY MODES (--confirm):
+  - off-chain: ACN only
+  - on-chain: WSS events only
+  - wait-for-both: Race ACN vs WSS (default)
+```
+
+### 4. deposit-native
+
+```
+mechx deposit-native --chain-config gnosis --mech-type native --amount 0.01
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  ├─ Check native balance
+│  ├─ Send transfer transaction
+│  └─ Wait for receipt
+└─ Smart Contracts
+   ├─ BalanceTrackerFixedPriceNative: deposit()
+   └─ [If Agent Mode] Safe: execTransaction()
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+NOTES:
+  - Prepaid balance for marketplace requests
+  - Supports both agent mode (Safe) and client mode (EOA)
+```
+
+### 5. deposit-token
+
+```
+mechx deposit-token --chain-config gnosis --token-type olas --amount 1000000000000000000
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  ├─ Check ERC20 balance
+│  ├─ Send approve() transaction
+│  ├─ Send deposit() transaction
+│  └─ Wait for receipts
+└─ Smart Contracts
+   ├─ ERC20 Token: approve(), balanceOf()
+   ├─ BalanceTrackerFixedPriceToken: deposit()
+   └─ [If Agent Mode] Safe: execTransaction()
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+SUPPORTED TOKENS:
+  - olas: OLAS token (chain-specific address)
+  - usdc: USDC token (not available on gnosis)
+```
+
+### 6. purchase-nvm-subscription
+
+```
+mechx purchase-nvm-subscription --chain-config gnosis --mech-type native_nvm
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Send NVM subscription transaction
+├─ Nevermined Network
+│  └─ Subscription plan management
+└─ Smart Contracts
+   ├─ NVM Subscription contracts
+   └─ [If Agent Mode] Safe: execTransaction()
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+  PLAN_DID (from scripts/nvm_subscription/envs/{chain}.env)
+  NETWORK_NAME (from envs)
+  CHAIN_ID (from envs)
+```
+
+### 7. fetch-mm-mechs-info
+
+```
+mechx fetch-mm-mechs-info --chain-config gnosis
+├─ Subgraph GraphQL API (MECHX_SUBGRAPH_URL) ← REQUIRED, NO DEFAULT
+│  └─ Query: MechsOrderedByServiceDeliveries
+│     ├─ Returns: service IDs, addresses, delivery counts
+│     └─ Filters: totalDeliveries > 0
+└─ [Output references]
+   └─ IPFS Gateway links (metadata URLs)
+
+ENV VARS:
+  MECHX_SUBGRAPH_URL (REQUIRED - must be set manually)
+
+NOTES:
+  - Read-only command, no transactions
+  - Does NOT use HTTP RPC
+  - Subgraph URL must match chain-config
+  - Currently all chains have empty subgraph_url in mechs.json
+```
+
+### 8. tools-for-agents
+
+```
+mechx tools-for-agents --agent-ids 1 2 3 --chain-config gnosis
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Query smart contract: AgentRegistry
+├─ Smart Contracts
+│  └─ AgentRegistry: tokenURI(agent_id), totalSupply()
+└─ External HTTP
+   └─ Fetch metadata from tokenURI URL
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+NOTES:
+  - Read-only, no transactions
+  - For legacy mechs only
+```
+
+### 9. tool-description (Legacy)
+
+```
+mechx tool-description <tool_id> --chain-config gnosis
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Query: AgentRegistry.tokenURI(agent_id)
+└─ External HTTP
+   └─ Fetch and parse tool metadata
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+NOTES:
+  - tool_id format: "agent_id-tool_name"
+  - Example: "1-openai-gpt-3.5-turbo"
+```
+
+### 10. tool-io-schema (Legacy)
+
+```
+mechx tool-io-schema <tool_id> --chain-config gnosis
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Query: AgentRegistry.tokenURI(agent_id)
+└─ External HTTP
+   └─ Fetch and parse tool metadata
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+NOTES:
+  - tool_id format: "agent_id-tool_name"
+  - Returns input/output schema for the tool
+```
+
+### 11. tools-for-marketplace-mech
+
+```
+mechx tools-for-marketplace-mech --agent-id <service_id> --chain-config gnosis
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Query: ComplementaryMetadataHash contract
+└─ External HTTP
+   └─ Fetch metadata from tokenURI(service_id)
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+NOTES:
+  - For marketplace mechs only
+  - Uses service_id (passed as --agent-id parameter)
+```
+
+### 12. tool-description-for-marketplace-mech
+
+```
+mechx tool-description-for-marketplace-mech <tool_id> --chain-config gnosis
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Query: ComplementaryMetadataHash.tokenURI(service_id)
+└─ External HTTP
+   └─ Fetch and parse tool metadata
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+NOTES:
+  - tool_id format: "service_id-tool_name"
+  - Example: "1-openai-gpt-3.5-turbo"
+```
+
+### 13. tool-io-schema-for-marketplace-mech
+
+```
+mechx tool-io-schema-for-marketplace-mech <tool_id> --chain-config gnosis
+├─ HTTP RPC (MECHX_CHAIN_RPC)
+│  └─ Query: ComplementaryMetadataHash.tokenURI(service_id)
+└─ External HTTP
+   └─ Fetch and parse tool metadata
+
+ENV VARS:
+  MECHX_CHAIN_RPC (required)
+
+NOTES:
+  - tool_id format: "service_id-tool_name"
+  - Returns input/output schema for the tool
+```
+
+### 14. prompt-to-ipfs & push-to-ipfs
+
+```
+mechx prompt-to-ipfs "prompt" "tool"
+mechx push-to-ipfs /path/to/file
+└─ IPFS Gateway (https://gateway.autonolas.tech/ipfs/)
+   └─ Upload file/metadata
+
+ENV VARS:
+  None (uses hardcoded IPFS gateway)
+
+NOTES:
+  - Utility commands, no blockchain interaction
+  - No RPC or WSS needed
+```
+
+### 15. to-png
+
+```
+mechx to-png <ipfs_hash> <path> <request_id>
+└─ IPFS Gateway (https://gateway.autonolas.tech/ipfs/)
+   └─ Download diffusion model output and convert to PNG
+
+ENV VARS:
+  None (uses hardcoded IPFS gateway)
+
+NOTES:
+  - Utility command for Stability AI diffusion model outputs
+  - Converts IPFS-hosted data to PNG image file
+  - No blockchain interaction
+  - No RPC or WSS needed
+```
+
+## Quick Reference: Environment Variables by Command
+
+| Command | MECHX_CHAIN_RPC | MECHX_WSS_ENDPOINT | MECHX_SUBGRAPH_URL | MECHX_MECH_OFFCHAIN_URL | OPERATE_PASSWORD |
+|---------|----------------|--------------------|--------------------|------------------------|------------------|
+| setup-agent-mode | ○ | | | | ✓ |
+| interact (marketplace) | ✓ | | | ○ | |
+| interact (legacy) | ✓ | ✓ | | | |
+| deposit-native | ✓ | | | | |
+| deposit-token | ✓ | | | | |
+| purchase-nvm-subscription | ✓ | | | | |
+| fetch-mm-mechs-info | | | ✓ | | |
+| tools-for-agents | ✓ | | | | |
+| tool-description (legacy) | ✓ | | | | |
+| tool-io-schema (legacy) | ✓ | | | | |
+| tools-for-marketplace-mech | ✓ | | | | |
+| tool-description-for-marketplace-mech | ✓ | | | | |
+| tool-io-schema-for-marketplace-mech | ✓ | | | | |
+| prompt-to-ipfs | | | | | |
+| push-to-ipfs | | | | | |
+| to-png | | | | | |
+
+**Legend:**
+- ✓ = Required for command to work
+- ○ = Optional (uses default from mechs.json if not set)
+- Empty = Not used
+
+## Common Issues & Solutions
+
+### Issue: "Timeout while waiting for transaction receipt"
+
+**Affected Commands:** interact, deposit-native, deposit-token, purchase-nvm-subscription
+
+**Cause:** HTTP RPC endpoint is slow, rate-limiting, or unavailable
+
+**Solution:**
+```bash
+# Set a reliable RPC provider
+export MECHX_CHAIN_RPC='https://your-reliable-rpc-provider'
+
+# Examples:
+export MECHX_CHAIN_RPC='https://gnosis-mainnet.public.blastapi.io'  # Gnosis
+export MECHX_CHAIN_RPC='https://polygon-rpc.com'  # Polygon
+export MECHX_CHAIN_RPC='https://mainnet.base.org'  # Base
+```
+
+**Why this happens:**
+- The `wait_for_receipt()` function polls HTTP RPC to get transaction receipt
+- If RPC is slow/down, it times out after 5 minutes (300 seconds)
+- This is NOT a WebSocket issue for marketplace mechs
+
+### Issue: WebSocket connection closed (legacy mechs only)
+
+**Affected Commands:** interact (with --agent-id)
+
+**Cause:** WSS endpoint closed connection during long wait
+
+**Solution:**
+```bash
+# Set a reliable WebSocket provider
+export MECHX_WSS_ENDPOINT='wss://your-wss-provider'
+
+# Examples:
+export MECHX_WSS_ENDPOINT='wss://rpc.gnosischain.com/wss'
+```
+
+### Issue: "Subgraph URL not set" (fetch-mm-mechs-info)
+
+**Cause:** MECHX_SUBGRAPH_URL environment variable not set (no default in config)
+
+**Solution:**
+```bash
+export MECHX_SUBGRAPH_URL='https://your-subgraph-url'
+```
+
+### Issue: "Invalid chain configuration" or "Chain not found"
+
+**Affected Commands:** All commands with --chain-config option
+
+**Cause:** Typo in chain name or unsupported chain
+
+**Solution:**
+```bash
+# Available chains: gnosis, base, polygon, optimism, arbitrum, celo
+# Use exact names:
+mechx interact --chain-config gnosis ...
+```
+
+### Issue: "Permission denied" when reading private key
+
+**Affected Commands:** interact, deposit-native, deposit-token, purchase-nvm-subscription
+
+**Cause:** Private key file has incorrect permissions or is in a protected directory
+
+**Solution:**
+```bash
+# Fix file permissions
+chmod 600 ethereum_private_key.txt
+
+# Or specify different key file
+mechx interact --key /path/to/key ...
+```
+
+### Issue: "Failed to decrypt private key" or "Incorrect password"
+
+**Affected Commands:** interact, deposit-native, deposit-token, purchase-nvm-subscription (agent mode)
+
+**Cause:** Wrong password for encrypted keyfile, corrupted keyfile, or invalid keyfile format
+
+**Solution:**
+- Verify your OPERATE_PASSWORD in .env file
+- Ensure keyfile format is valid (JSON keystore format)
+- Try re-creating the agent mode setup if keyfile is corrupted:
+```bash
+# Re-run setup
+mechx setup-agent-mode --chain-config gnosis
+```
+
+### Issue: "Invalid tool ID format"
+
+**Affected Commands:** tool-description, tool-io-schema, tool-description-for-marketplace-mech, tool-io-schema-for-marketplace-mech
+
+**Cause:** Incorrect tool ID format provided
+
+**Solution:**
+```bash
+# Legacy mechs: Use format "agent_id-tool_name"
+mechx tool-description 1-openai-gpt-3.5-turbo --chain-config gnosis
+
+# Marketplace mechs: Use format "service_id-tool_name"
+mechx tool-description-for-marketplace-mech 1-openai-gpt-3.5-turbo --chain-config gnosis
+```
+
+### Issue: "Chain does not support marketplace deposits" or "NVM subscriptions not available"
+
+**Affected Commands:** deposit-native, deposit-token, purchase-nvm-subscription
+
+**Cause:** Chain doesn't have marketplace contract or NVM support deployed
+
+**Solution:**
+```bash
+# Marketplace deposits supported on: gnosis, base, polygon, optimism
+# NVM subscriptions supported on: gnosis, base
+# Use a supported chain or legacy mechs instead:
+mechx interact --agent-id 1 --tool tool1 --prompts "..." --chain-config gnosis
+```
+
+### Issue: "Smart contract error" or "Insufficient balance"
+
+**Affected Commands:** interact, deposit-native, deposit-token, purchase-nvm-subscription
+
+**Cause:** ContractLogicError - typically insufficient balance, failed approval, invalid parameters, or contract paused
+
+**Solution:**
+```bash
+# Check your balance
+cast balance <YOUR_ADDRESS> --rpc-url $MECHX_CHAIN_RPC
+
+# For token deposits, ensure you have enough tokens
+# Verify you have enough native tokens for gas
+# Check if you need to approve tokens first (done automatically but may fail)
+
+# For interact command, ensure you have deposited balance or per-request payment
+mechx deposit-native 1000000000000000000 --chain-config gnosis
+```
+
+### Issue: "Transaction validation error" (ValidationError)
+
+**Affected Commands:** interact, deposit-native, deposit-token, purchase-nvm-subscription
+
+**Cause:** Transaction failed validation before being sent - gas estimation failure, nonce issues, or invalid parameters
+
+**Solution:**
+```bash
+# Check amount/address format is correct
+# Ensure sufficient balance for amount + gas
+# Try increasing gas limit
+export MECHX_GAS_LIMIT=500000
+
+# Check for nonce issues (pending transactions)
+# Clear any stuck transactions in your wallet
+```
+
+### Issue: "Tool not found" or "Missing description/schema"
+
+**Affected Commands:** tool-description*, tool-io-schema*
+
+**Cause:** Tool doesn't exist, tool ID is wrong, or metadata is incomplete
+
+**Solution:**
+```bash
+# List available tools first
+mechx tools-for-agents --agent-id 1 --chain-config gnosis
+
+# Or for marketplace mechs:
+mechx tools-for-marketplace-mech --agent-id 1 --chain-config gnosis
+
+# Then use exact tool ID from the list
+mechx tool-description <tool_id_from_list> --chain-config gnosis
+```
+
+### Issue: "Missing required environment variable" (NVM subscription)
+
+**Affected Commands:** purchase-nvm-subscription
+
+**Cause:** Chain-specific .env file missing or incomplete (PLAN_DID, NETWORK_NAME, CHAIN_ID)
+
+**Solution:**
+Ensure the chain-specific .env file exists in `scripts/nvm_subscription/envs/<chain>.env` and contains all required variables: PLAN_DID, NETWORK_NAME, CHAIN_ID. Contact the development team if these files are missing.
+
 ## Development Commands
 
 ### Installation and Setup
@@ -55,6 +578,8 @@ tox -e safety
 # License compliance check
 tox -e liccheck
 ```
+
+**Note:** All linters must pass in CI. See "Key Patterns and Conventions" section #8 for linting approach, including when pylint disable comments are acceptable (must be 10.00/10 for CI).
 
 ### Testing
 
@@ -119,6 +644,17 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 - Agent mode vs client mode switching
 - Environment setup and configuration loading
 - Integration with `olas-operate-middleware` for agent operations
+
+**Validation helpers:**
+- `validate_chain_config()`: Validates chain exists in mechs.json config (used in ALL commands)
+- `validate_ethereum_address()`: Validates address format and non-zero check
+
+**Error handling pattern:** All CLI commands include:
+- HTTP RPC error handling (HTTPError, ConnectionError, Timeout) with `MECHX_CHAIN_RPC` context
+- Web3 contract errors (ContractLogicError, ValidationError) with actionable solutions
+- Private key errors (PermissionError, ValueError for decryption) with helpful guidance
+- Metadata errors (KeyError, JSONDecodeError, IOError) with data source context
+- Chain/marketplace/NVM support validation before execution
 
 #### Interaction Layers
 
@@ -247,6 +783,20 @@ All contract ABIs are in `mech_client/abis/`:
      - Actionable solutions (check endpoint availability, set different RPC, check network)
      - Use `from e` to preserve the exception chain
    - **Subgraph errors**: Same pattern as RPC errors but reference `MECHX_SUBGRAPH_URL` instead
+   - **Web3/Contract errors**: Catch `ContractLogicError` and `ValidationError` from `web3.exceptions`. Provide context about:
+     - Contract state and requirements (balance, allowances)
+     - Parameter validation
+     - Possible causes (insufficient funds, invalid parameters, contract paused)
+   - **Private key errors**:
+     - `PermissionError`: File permission issues - suggest `chmod 600`
+     - `FileNotFoundError`: Missing private key file - suggest valid path
+     - `ValueError` with "password"/"decrypt"/"mac" keywords: Decryption failures (wrong password, corrupted keyfile, invalid format)
+   - **Metadata/Tool errors**:
+     - `KeyError`: Missing tool, schema fields, or environment variables - suggest checking tool lists or env vars
+     - `json.JSONDecodeError`: Malformed metadata from IPFS/contracts - indicate data source
+     - `IOError`: IPFS gateway or network issues when fetching metadata
+   - **Validation helpers**: Use `validate_chain_config()` and `validate_ethereum_address()` helper functions in all commands
+   - **Transaction timeout**: `wait_for_receipt()` uses `TRANSACTION_RECEIPT_TIMEOUT = 300.0` seconds (5 minutes)
    - **Retry logic**: Use `MAX_RETRIES = 3` and `WAIT_SLEEP = 3.0` constants for network polling operations (delivery watching, event monitoring)
    - **User-facing errors**: Never show raw Python tracebacks for network failures; always provide context and solutions
 
@@ -256,15 +806,90 @@ All contract ABIs are in `mech_client/abis/`:
 
 7. **Type hints**: All functions should have type hints; mypy runs with `--disallow-untyped-defs`
 
-8. **Linting exceptions**:
-   - Ignore `mech_client/helpers/*` (ejected packages)
-   - Ignore `*_pb2.py` (generated protobuf files)
-   - Line length: 88 characters (Black style)
+8. **Linting and code quality**:
+   - **Target**: All linters must pass in CI (black-check, flake8, mypy, pylint)
+   - **Pylint score**: Must be 10.00/10 for CI to pass
+   - **Ignore paths**:
+     - `mech_client/helpers/*` (ejected Open AEA packages)
+     - `*_pb2.py` (generated protobuf files)
+     - `packages/valory/*` (Open Autonomy packages)
+   - **Line length**: 88 characters (Black style)
+   - **Pylint disable comments**: Acceptable for specific cases with justification:
+     - `too-many-statements`: For complex functions that cannot be easily split (e.g., `interact` function with 65 statements)
+     - `import-outside-toplevel`: When avoiding circular imports or conditional dependencies (e.g., `CHAIN_TO_ENVS` in `nvm_subscribe`)
+     - `protected-access`: When accessing internal APIs for diagnostics (e.g., `ledger_api._api.provider` for error messages)
+     - Always add inline comment explaining why the disable is necessary
+   - **Globally disabled pylint checks** (in tox.ini):
+     - `C0103`: Invalid name (allows single-char variables)
+     - `R0801`: Similar lines (common in CLI commands)
+     - `R0912`: Too many branches (CLI command complexity)
+     - `C0301`: Line too long (handled by Black)
+     - `W1203`: Lazy string formatting in logging
+     - `C0302`: Too many lines in module
+     - `R1735/R1729`: Use of dict/list instead of comprehension
+     - `W0511`: TODOs/FIXMEs allowed
+     - `E0611/E1101`: Import and attribute errors (false positives with dynamic imports)
+   - **Safety check ignored vulnerabilities** (in tox.ini):
+     - Build tool vulnerabilities (pip/setuptools in tox environment, not runtime dependencies):
+       - `76752`: setuptools Path Traversal (CVE-2025-47273) - affects PackageIndex.download() in setuptools <78.1.1
+       - `75180`: pip malicious wheel files (PVE-2025-75180) - affects pip <25.0, requires malicious wheel installation
+       - `79883`: pip Arbitrary File Overwrite (CVE-2025-8869) - affects pip <25.2, symlink validation issue
+     - These vulnerabilities affect package installation scenarios, not the CLI tool's runtime operation
+     - Safe to ignore as they require malicious packages/wheels which the project doesn't interact with
 
 9. **User experience**:
    - Error messages should reference environment variables (e.g., `MECHX_CHAIN_RPC`) rather than internal config files
    - Never suggest users "see mechs.json" or other internal package files that aren't accessible after installation
    - Provide actionable solutions that end users can actually execute
+
+10. **Command validation patterns**:
+    - **Chain config**: ALL commands validate chain with `validate_chain_config()` before execution
+    - **Addresses**: Commands accepting addresses use `validate_ethereum_address(address, name)` to check format and non-zero
+    - **Tool ID format**: Legacy tools require "agent_id-tool_name", marketplace tools require "service_id-tool_name"
+    - **Amount validation**: Deposit commands validate amount is positive integer (wei/smallest unit)
+    - **Marketplace support**: Deposit commands check `mech_marketplace_contract != ADDRESS_ZERO`
+    - **NVM support**: purchase-nvm-subscription checks chain exists in `CHAIN_TO_ENVS`
+    - **Service/Agent ID validation**: Tool commands validate ID is non-negative integer
+
+## Validation Helpers
+
+The CLI module (`cli.py`) includes centralized validation functions used across all commands:
+
+### validate_chain_config(chain_config: Optional[str]) -> str
+
+Validates that the chain configuration exists in `mechs.json`.
+
+**Usage:**
+```python
+validated_chain = validate_chain_config(chain_config)
+```
+
+**Raises:**
+- `ClickException` if chain_config is None
+- `ClickException` if chain_config not found in mechs.json
+- `ClickException` if mechs.json is missing or corrupted
+
+**Location:** `mech_client/cli.py:96`
+
+**Pattern:** All commands use this validator to ensure valid chain before proceeding.
+
+### validate_ethereum_address(address: str, name: str = "Address") -> str
+
+Validates Ethereum address format using `eth_utils.is_address()` and checks for zero address.
+
+**Usage:**
+```python
+validated_address = validate_ethereum_address(priority_mech, "Priority mech address")
+validated_safe = validate_ethereum_address(safe, "Safe address")
+```
+
+**Raises:**
+- `ClickException` if address is None, empty, or zero address (`ADDRESS_ZERO`)
+- `ClickException` if address format is invalid (not checksummed 0x... format)
+
+**Location:** `mech_client/cli.py:128`
+
+**Pattern:** All commands that accept addresses (interact, deposit commands) use this validator.
 
 ## Chain Support Matrix
 
@@ -299,3 +924,7 @@ All contract ABIs are in `mech_client/abis/`:
 - Batch requests only supported for marketplace mechs, not legacy mechs
 - Always use custom RPC providers for reliability (public RPCs may be rate-limited)
 - All chains currently have empty `subgraph_url` in config; set `MECHX_SUBGRAPH_URL` manually for subgraph-dependent commands
+- **All CLI commands include comprehensive error handling** with actionable solutions referencing environment variables
+- **Validation helpers** (`validate_chain_config`, `validate_ethereum_address`) used consistently across all commands
+- **Private key handling** includes permission checks, decryption error handling, and clear error messages
+- **Transaction timeout** is 5 minutes (300 seconds) for `wait_for_receipt()` - set reliable `MECHX_CHAIN_RPC` to avoid timeouts
