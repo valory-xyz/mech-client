@@ -288,11 +288,15 @@ def setup_agent_mode(
     chain_config: str,
 ) -> None:
     """Sets up the agent mode for users"""
-    template = CHAIN_TO_TEMPLATE.get(chain_config)
+    # Validate chain config
+    validated_chain = validate_chain_config(chain_config)
+
+    template = CHAIN_TO_TEMPLATE.get(validated_chain)
     if template is None:
-        supported_chains = list(CHAIN_TO_TEMPLATE.keys())
+        supported_chains = ", ".join(CHAIN_TO_TEMPLATE.keys())
         raise ClickException(
-            f"""{chain_config} chain not supported for agent mode. Supported chains are: {supported_chains}"""
+            f"Agent mode not supported for chain: {validated_chain!r}\n\n"
+            f"Supported chains: {supported_chains}"
         )
 
     operate_path = get_operate_path()
@@ -332,6 +336,17 @@ def setup_agent_mode(
             f"  1. Check your internet connection\n"
             f"  2. Verify the RPC URL is correct\n"
             f"  3. Try a different RPC provider: export MECHX_CHAIN_RPC='https://your-rpc-url'"
+        ) from e
+    except Exception as e:
+        raise ClickException(
+            f"Failed to setup agent mode: {e}\n\n"
+            f"The service setup process encountered an error.\n\n"
+            f"Possible causes:\n"
+            f"  • Missing dependencies (Docker, Poetry)\n"
+            f"  • Invalid service configuration\n"
+            f"  • Permission issues\n"
+            f"  • Corrupted operate directory\n\n"
+            f"Please check the error message above for details."
         ) from e
 
 

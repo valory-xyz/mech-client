@@ -565,9 +565,34 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals
         )
 
     wss = websocket.create_connection(mech_config.wss_endpoint)
-    crypto = EthereumCrypto(
-        private_key_path=private_key_path, password=private_key_password
-    )
+
+    try:
+        crypto = EthereumCrypto(
+            private_key_path=private_key_path, password=private_key_password
+        )
+    except PermissionError as e:
+        raise PermissionError(
+            f"Cannot read private key file: {private_key_path}\n"
+            f"Permission denied. Please check file permissions."
+        ) from e
+    except (ValueError, Exception) as e:
+        error_msg = str(e).lower()
+        if "password" in error_msg or "decrypt" in error_msg or "mac" in error_msg:
+            raise ValueError(
+                f"Failed to decrypt private key: {e}\n\n"
+                f"Possible causes:\n"
+                f"  • Incorrect password\n"
+                f"  • Corrupted keyfile\n"
+                f"  • Invalid keyfile format\n\n"
+                f"Please verify your private key file and password."
+            ) from e
+        else:
+            raise ValueError(
+                f"Invalid private key file: {e}\n\n"
+                f"The private key file format is invalid or corrupted.\n"
+                f"Please ensure you have a valid Ethereum private key file."
+            ) from e
+
     ledger_api = EthereumApi(**asdict(ledger_config))
 
     tool = verify_or_retrieve_tool(
