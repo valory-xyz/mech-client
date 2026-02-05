@@ -671,7 +671,7 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 - Prepaid and per-request payment models
 - Offchain mech support via HTTP endpoints
 - Configuration via `MechMarketplaceRequestConfig`
-- Contract helper functions: `get_native_balance_tracker_contract()`, `get_token_balance_tracker_contract()`, `get_token_contract()`
+- Contract helper functions: `get_token_balance_tracker_contract()`, `get_token_contract()`
 
 **Deposits (`deposits.py`)**
 - Prepaid balance deposit functionality for marketplace mechs
