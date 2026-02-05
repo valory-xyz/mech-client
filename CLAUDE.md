@@ -605,17 +605,20 @@ Note: A `ethereum_private_key.txt` file is required in `stress_tests/` for stres
 ### Build and Release
 
 ```bash
-# Build distribution packages (includes ejecting packages)
+# Build distribution packages
 make dist
 ```
 
+The `make dist` target runs:
+1. `eject-packages` (currently a no-op; packages pre-ejected in repo)
+2. `poetry build` (builds sdist and wheel)
+
 For releases, manually:
 1. Bump version in `pyproject.toml`, `mech_client/__init__.py`, and `SECURITY.md`
-2. Run `poetry lock`
-3. Run `rm -rf dist`
-4. Run `poetry run autonomy packages sync --update-packages`
-5. Run `make eject-packages` (currently a no-op; packages pre-ejected in repo)
-6. Create release PR and tag
+2. Run `poetry lock` (updates lock file if dependencies changed)
+3. Run `poetry run autonomy packages sync --update-packages` (syncs Open Autonomy packages)
+4. Run `make dist` (builds distribution packages)
+5. Create release PR and tag
 
 ### CLI Tool
 

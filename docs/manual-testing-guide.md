@@ -46,14 +46,20 @@ This guide provides step-by-step instructions for manually testing all CLI comma
 Use this checklist to track your testing progress:
 
 - [ ] setup-agent-mode
-- [ ] interact (marketplace - native payment)
-- [ ] interact (marketplace - token payment)
-- [ ] interact (marketplace - prepaid)
+- [ ] interact (marketplace - native payment - client mode)
+- [ ] interact (marketplace - native payment - agent mode)
+- [ ] interact (marketplace - token payment - client mode)
+- [ ] interact (marketplace - token payment - agent mode)
+- [ ] interact (marketplace - prepaid - client mode)
+- [ ] interact (marketplace - prepaid - agent mode)
 - [ ] interact (marketplace - offchain)
 - [ ] interact (legacy mech)
-- [ ] deposit-native
-- [ ] deposit-token
-- [ ] purchase-nvm-subscription
+- [ ] deposit-native (client mode)
+- [ ] deposit-native (agent mode)
+- [ ] deposit-token (client mode)
+- [ ] deposit-token (agent mode)
+- [ ] purchase-nvm-subscription (client mode)
+- [ ] purchase-nvm-subscription (agent mode)
 - [ ] fetch-mm-mechs-info
 - [ ] tools-for-agents
 - [ ] tool-description (legacy)
@@ -298,9 +304,9 @@ Legacy mech interaction mode
 
 ---
 
-### 7. Deposit Native
+### 7. Deposit Native (Client Mode)
 
-**Purpose**: Deposit native tokens for prepaid marketplace requests
+**Purpose**: Deposit native tokens for prepaid marketplace requests using client mode (EOA)
 
 **Prerequisites**:
 - Funded wallet with native tokens
@@ -309,7 +315,7 @@ Legacy mech interaction mode
 ```bash
 # Deposit 0.01 xDAI (18 decimals = 10000000000000000 wei)
 mechx --client-mode deposit-native \
-  1000000000000000000 \
+  10000000000000000 \
   --chain-config gnosis \
   --key ethereum_private_key.txt
 ```
@@ -335,9 +341,44 @@ Check your prepaid balance on the blockchain explorer for the BalanceTrackerFixe
 
 ---
 
-### 8. Deposit Token
+### 7b. Deposit Native (Agent Mode)
 
-**Purpose**: Deposit OLAS tokens for prepaid marketplace requests
+**Purpose**: Deposit native tokens via Safe multisig in agent mode
+
+**Prerequisites**:
+- Agent mode setup completed (run `setup-agent-mode`)
+- Safe address funded with native tokens
+
+**Command**:
+```bash
+# No --client-mode flag = uses agent mode
+mechx deposit-native \
+  10000000000000000 \
+  --chain-config gnosis
+```
+
+**Expected Output**:
+```
+Agent mode enabled
+Running deposit native with agent_mode=True
+Depositing native balance via Safe...
+  - Safe transaction sent: https://gnosisscan.io/tx/0x...
+  - Waiting for transaction receipt...
+Deposit successful!
+```
+
+**Success Criteria**:
+- ✅ Transaction sent from Safe address (not EOA)
+- ✅ Transaction succeeds with "0x" prefix in URL
+- ✅ Balance updated for Safe address in BalanceTracker contract
+
+**Supported Chains**: gnosis, base, polygon, optimism
+
+---
+
+### 8. Deposit Token (Client Mode)
+
+**Purpose**: Deposit OLAS tokens for prepaid marketplace requests using client mode (EOA)
 
 **Prerequisites**:
 - Wallet funded with OLAS tokens
@@ -373,9 +414,49 @@ Deposit successful!
 
 ---
 
-### 9. Purchase NVM Subscription
+### 8b. Deposit Token (Agent Mode)
 
-**Purpose**: Purchase Nevermined subscription for subscription-based payments
+**Purpose**: Deposit OLAS tokens via Safe multisig in agent mode
+
+**Prerequisites**:
+- Agent mode setup completed (run `setup-agent-mode`)
+- Safe address funded with OLAS tokens
+
+**Command**:
+```bash
+# No --client-mode flag = uses agent mode
+mechx deposit-token \
+  1000000000000000000 \
+  --chain-config gnosis
+```
+
+**Expected Output**:
+```
+Agent mode enabled
+Running deposit token with agent_mode=True
+Approving token for deposit via Safe...
+  - Safe transaction sent: https://gnosisscan.io/tx/0x...
+  - Waiting for transaction receipt...
+Depositing token balance via Safe...
+  - Safe transaction sent: https://gnosisscan.io/tx/0x...
+  - Waiting for transaction receipt...
+Deposit successful!
+```
+
+**Success Criteria**:
+- ✅ Both transactions sent from Safe address (not EOA)
+- ✅ Approval transaction succeeds
+- ✅ Deposit transaction succeeds
+- ✅ Both transaction URLs have "0x" prefix
+- ✅ Balance updated for Safe address in BalanceTracker contract
+
+**Supported Chains**: gnosis, base, polygon, optimism
+
+---
+
+### 9. Purchase NVM Subscription (Client Mode)
+
+**Purpose**: Purchase Nevermined subscription for subscription-based payments using client mode (EOA)
 
 **Prerequisites**:
 - Chain supports NVM (gnosis or base only)
@@ -399,6 +480,41 @@ Subscription purchased successfully!
 **Success Criteria**:
 - ✅ Transaction succeeds
 - ✅ Subscription ID returned
+- ✅ Can use subscription for NVM-based mech requests
+
+**Supported Chains**: gnosis, base (ONLY)
+
+---
+
+### 9b. Purchase NVM Subscription (Agent Mode)
+
+**Purpose**: Purchase Nevermined subscription via Safe multisig in agent mode
+
+**Prerequisites**:
+- Agent mode setup completed (run `setup-agent-mode`)
+- Chain supports NVM (gnosis or base only)
+- Safe address funded
+
+**Command**:
+```bash
+# No --client-mode flag = uses agent mode
+mechx purchase-nvm-subscription \
+  --chain-config gnosis
+```
+
+**Expected Output**:
+```
+Agent mode enabled
+Running purchase nvm subscription with agent_mode=True
+Purchasing NVM subscription via Safe...
+  - Safe transaction sent: https://gnosisscan.io/tx/0x...
+Subscription purchased successfully!
+```
+
+**Success Criteria**:
+- ✅ Transaction sent from Safe address (not EOA)
+- ✅ Transaction succeeds
+- ✅ Subscription ID returned for Safe address
 - ✅ Can use subscription for NVM-based mech requests
 
 **Supported Chains**: gnosis, base (ONLY)
@@ -713,34 +829,112 @@ mechx --client-mode interact \
 
 ### Scenario 2: Agent Mode with Prepaid Balance
 
-**Goal**: Test agent mode setup and prepaid workflow
+**Goal**: Test agent mode setup and prepaid workflow using Safe multisig
 
 **Steps**:
-1. Run `setup-agent-mode`
-2. Deposit native tokens to prepaid balance
-3. Send prepaid marketplace request
-4. Verify balance deducted
+1. Run `setup-agent-mode` to configure Safe
+2. Fund Safe address with native tokens
+3. Deposit native tokens to prepaid balance (via Safe)
+4. Send prepaid marketplace request (via Safe)
+5. Verify balance deducted from Safe's prepaid account
 
 **Commands**:
 ```bash
-# Setup
+# 1. Setup agent mode (creates Safe)
 mechx setup-agent-mode --chain-config gnosis
+# Note the Safe address from the output
 
-# Deposit
+# 2. Fund the Safe address with native tokens (manual step using your wallet)
+
+# 3. Deposit via Safe (NO --client-mode flag = agent mode)
 mechx deposit-native 10000000000000000 --chain-config gnosis
 
-# Request
+# 4. Send prepaid request via Safe (NO --client-mode flag = agent mode)
 mechx interact \
   --prompts "Test prepaid request" \
   --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
   --tools openai-gpt-4o-2024-05-13 \
   --use-prepaid true \
   --chain-config gnosis
+
+# 5. Verify on block explorer that transactions came from Safe address
+```
+
+**Important**: All commands without `--client-mode` flag will use agent mode (Safe) after setup-agent-mode is run.
+
+---
+
+### Scenario 3: Comprehensive Agent Mode Testing
+
+**Goal**: Test all transaction commands in agent mode (Safe multisig)
+
+**Prerequisites**:
+- Agent mode setup completed
+- Safe address funded with native tokens and OLAS tokens
+
+**Test Coverage**:
+- [ ] Native payment marketplace request via Safe
+- [ ] Token payment marketplace request via Safe
+- [ ] Prepaid marketplace request via Safe
+- [ ] Native deposit via Safe
+- [ ] Token deposit via Safe
+- [ ] NVM subscription purchase via Safe (gnosis/base only)
+
+**Commands**:
+```bash
+# Verify agent mode is enabled
+mechx --version  # Should show agent mode config
+
+# Test 1: Native payment request (agent mode)
+mechx interact \
+  --prompts "Agent mode native payment test" \
+  --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
+  --tools openai-gpt-4o-2024-05-13 \
+  --chain-config gnosis
+
+# Test 2: Native deposit (agent mode)
+mechx deposit-native 10000000000000000 --chain-config gnosis
+
+# Test 3: Token deposit (agent mode)
+mechx deposit-token 1000000000000000000 --chain-config gnosis
+
+# Test 4: Prepaid request (agent mode)
+mechx interact \
+  --prompts "Agent mode prepaid test" \
+  --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
+  --tools openai-gpt-4o-2024-05-13 \
+  --use-prepaid true \
+  --chain-config gnosis
+
+# Test 5: Token payment request (agent mode)
+mechx interact \
+  --prompts "Agent mode token payment test" \
+  --priority-mech 0x4554fE75c1f8D614Fc8614Fef4c99D1E44e39fAE \
+  --tools openai-gpt-4o-2024-05-13 \
+  --chain-config gnosis
+
+# Test 6: NVM subscription (agent mode - gnosis/base only)
+mechx purchase-nvm-subscription --chain-config gnosis
+```
+
+**Success Criteria**:
+- ✅ All transactions sent from Safe address (verify on block explorer)
+- ✅ All transaction URLs include "0x" prefix
+- ✅ Safe nonce increments correctly for each transaction
+- ✅ All operations succeed without errors
+- ✅ Balances tracked correctly for Safe address
+
+**Verification**:
+```bash
+# On block explorer, verify:
+# - All transactions show Safe address as sender
+# - Safe nonce sequence is correct
+# - Prepaid balances attributed to Safe address
 ```
 
 ---
 
-### Scenario 3: Multi-Chain Testing
+### Scenario 4: Multi-Chain Testing
 
 **Goal**: Verify functionality across different chains
 
@@ -877,16 +1071,25 @@ Use this template to document your testing:
 
 ### Tests Completed
 
-| Command | Status | Notes |
-|---------|--------|-------|
-| setup-agent-mode | ✅ / ❌ | |
-| interact (marketplace) | ✅ / ❌ | |
-| interact (legacy) | ✅ / ❌ | |
-| deposit-native | ✅ / ❌ | |
-| deposit-token | ✅ / ❌ | |
-| fetch-mm-mechs-info | ✅ / ❌ | |
-| tools-for-agents | ✅ / ❌ | |
-| prompt-to-ipfs | ✅ / ❌ | |
+| Command | Mode | Status | Notes |
+|---------|------|--------|-------|
+| setup-agent-mode | N/A | ✅ / ❌ | |
+| interact (marketplace - native) | client | ✅ / ❌ | |
+| interact (marketplace - native) | agent | ✅ / ❌ | |
+| interact (marketplace - token) | client | ✅ / ❌ | |
+| interact (marketplace - token) | agent | ✅ / ❌ | |
+| interact (marketplace - prepaid) | client | ✅ / ❌ | |
+| interact (marketplace - prepaid) | agent | ✅ / ❌ | |
+| interact (legacy) | client | ✅ / ❌ | |
+| deposit-native | client | ✅ / ❌ | |
+| deposit-native | agent | ✅ / ❌ | |
+| deposit-token | client | ✅ / ❌ | |
+| deposit-token | agent | ✅ / ❌ | |
+| purchase-nvm-subscription | client | ✅ / ❌ | |
+| purchase-nvm-subscription | agent | ✅ / ❌ | |
+| fetch-mm-mechs-info | N/A | ✅ / ❌ | |
+| tools-for-agents | N/A | ✅ / ❌ | |
+| prompt-to-ipfs | N/A | ✅ / ❌ | |
 
 ### Issues Found
 
