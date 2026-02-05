@@ -579,6 +579,8 @@ tox -e safety
 tox -e liccheck
 ```
 
+**Note:** All linters must pass in CI. See "Key Patterns and Conventions" section #8 for linting approach, including when pylint disable comments are acceptable (must be 10.00/10 for CI).
+
 ### Testing
 
 The project uses Locust for stress testing the mech marketplace:
@@ -804,10 +806,29 @@ All contract ABIs are in `mech_client/abis/`:
 
 7. **Type hints**: All functions should have type hints; mypy runs with `--disallow-untyped-defs`
 
-8. **Linting exceptions**:
-   - Ignore `mech_client/helpers/*` (ejected packages)
-   - Ignore `*_pb2.py` (generated protobuf files)
-   - Line length: 88 characters (Black style)
+8. **Linting and code quality**:
+   - **Target**: All linters must pass in CI (black-check, flake8, mypy, pylint)
+   - **Pylint score**: Must be 10.00/10 for CI to pass
+   - **Ignore paths**:
+     - `mech_client/helpers/*` (ejected Open AEA packages)
+     - `*_pb2.py` (generated protobuf files)
+     - `packages/valory/*` (Open Autonomy packages)
+   - **Line length**: 88 characters (Black style)
+   - **Pylint disable comments**: Acceptable for specific cases with justification:
+     - `too-many-statements`: For complex functions that cannot be easily split (e.g., `interact` function with 65 statements)
+     - `import-outside-toplevel`: When avoiding circular imports or conditional dependencies (e.g., `CHAIN_TO_ENVS` in `nvm_subscribe`)
+     - `protected-access`: When accessing internal APIs for diagnostics (e.g., `ledger_api._api.provider` for error messages)
+     - Always add inline comment explaining why the disable is necessary
+   - **Globally disabled pylint checks** (in tox.ini):
+     - `C0103`: Invalid name (allows single-char variables)
+     - `R0801`: Similar lines (common in CLI commands)
+     - `R0912`: Too many branches (CLI command complexity)
+     - `C0301`: Line too long (handled by Black)
+     - `W1203`: Lazy string formatting in logging
+     - `C0302`: Too many lines in module
+     - `R1735/R1729`: Use of dict/list instead of comprehension
+     - `W0511`: TODOs/FIXMEs allowed
+     - `E0611/E1101`: Import and attribute errors (false positives with dynamic imports)
 
 9. **User experience**:
    - Error messages should reference environment variables (e.g., `MECHX_CHAIN_RPC`) rather than internal config files
