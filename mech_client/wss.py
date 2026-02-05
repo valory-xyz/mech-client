@@ -132,9 +132,9 @@ def wait_for_receipt(
             if elapsed >= timeout:
                 # Get the RPC endpoint for error message
                 rpc_endpoint = getattr(
-                    ledger_api._api.provider,
+                    ledger_api._api.provider,  # pylint: disable=protected-access
                     "endpoint_uri",
-                    "unknown",  # pylint: disable=protected-access
+                    "unknown",
                 )
                 raise TimeoutError(
                     f"Timeout ({timeout}s) exceeded while waiting for transaction receipt via HTTP RPC. "

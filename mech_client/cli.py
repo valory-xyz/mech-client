@@ -420,7 +420,7 @@ def setup_agent_mode(
     help="Id of the mech's chain configuration (stored configs/mechs.json)",
 )
 @click.pass_context
-def interact(  # pylint: disable=too-many-arguments,too-many-locals
+def interact(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
     ctx: click.Context,
     prompts: tuple,
     agent_id: int,
@@ -1410,7 +1410,7 @@ def nvm_subscribe(
 
         # Validate chain supports NVM subscriptions
         # Import here to avoid circular import and get the actual dict
-        from scripts.nvm_subscribe import CHAIN_TO_ENVS
+        from scripts.nvm_subscribe import CHAIN_TO_ENVS  # pylint: disable=import-outside-toplevel
 
         if validated_chain not in CHAIN_TO_ENVS:
             available_chains = ", ".join(CHAIN_TO_ENVS.keys())
