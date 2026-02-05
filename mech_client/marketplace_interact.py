@@ -39,6 +39,10 @@ from web3._utils.events import event_abi_to_log_topic
 from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
 
+from mech_client.contract_addresses import (
+    CHAIN_TO_PRICE_TOKEN_OLAS,
+    CHAIN_TO_PRICE_TOKEN_USDC,
+)
 from mech_client.delivery import watch_for_marketplace_data, watch_for_mech_data_url
 from mech_client.fetch_ipfs_hash import fetch_ipfs_hash
 from mech_client.interact import (
@@ -108,20 +112,6 @@ PAYMENT_TYPE_TO_ABI_PATH: Dict[str, Path] = {
     PaymentType.USDC_TOKEN.value: BALANCE_TRACKER_TOKEN_ABI_PATH,
     PaymentType.NATIVE_NVM.value: BALANCE_TRACKER_NVM_NATIVE_ABI_PATH,
     PaymentType.TOKEN_NVM_USDC.value: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
-}
-
-CHAIN_TO_PRICE_TOKEN_OLAS = {
-    10: "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",
-    100: "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-    137: "0xFEF5d947472e72Efbb2E388c730B7428406F2F95",
-    8453: "0x54330d28ca3357F294334BDC454a032e7f353416",
-}
-
-# USDC not available for 100
-CHAIN_TO_PRICE_TOKEN_USDC = {
-    10: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-    137: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-    8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
 }
 
 
@@ -1148,3 +1138,100 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
             print("  - Data from agent:")
             print(json.dumps(data, indent=2))
     return None
+
+
+# Contract helper functions for deposits
+
+
+def get_native_balance_tracker_contract(
+    ledger_api: EthereumApi, chain_id: int
+) -> Web3Contract:
+    """
+    Get the native balance tracker contract instance for a given chain.
+
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param chain_id: The chain ID.
+    :type chain_id: int
+    :return: The native balance tracker contract instance.
+    :rtype: Web3Contract
+    """
+    from mech_client.contract_addresses import CHAIN_TO_NATIVE_BALANCE_TRACKER
+
+    with open(BALANCE_TRACKER_NATIVE_ABI_PATH, encoding="utf-8") as f:
+        abi = json.load(f)
+
+    native_balance_tracker_contract = get_contract(
+        contract_address=CHAIN_TO_NATIVE_BALANCE_TRACKER[chain_id],
+        abi=abi,
+        ledger_api=ledger_api,
+    )
+    return native_balance_tracker_contract
+
+
+def get_token_balance_tracker_contract(
+    ledger_api: EthereumApi, chain_id: int, payment_type: PaymentType = PaymentType.TOKEN
+) -> Web3Contract:
+    """
+    Get the token balance tracker contract instance for a given chain and payment type.
+
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param chain_id: The chain ID.
+    :type chain_id: int
+    :param payment_type: The payment type (TOKEN for OLAS, USDC_TOKEN for USDC).
+    :type payment_type: PaymentType
+    :return: The token balance tracker contract instance.
+    :rtype: Web3Contract
+    """
+    from mech_client.contract_addresses import (
+        CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS,
+        CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
+    )
+
+    with open(BALANCE_TRACKER_TOKEN_ABI_PATH, encoding="utf-8") as f:
+        abi = json.load(f)
+
+    if payment_type == PaymentType.USDC_TOKEN:
+        balance_tracker_address = CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC[chain_id]
+    else:
+        balance_tracker_address = CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS[chain_id]
+
+    token_balance_tracker_contract = get_contract(
+        contract_address=balance_tracker_address,
+        abi=abi,
+        ledger_api=ledger_api,
+    )
+    return token_balance_tracker_contract
+
+
+def get_token_contract(
+    ledger_api: EthereumApi, chain_id: int, payment_type: PaymentType = PaymentType.TOKEN
+) -> Web3Contract:
+    """
+    Get the token (OLAS or USDC) contract instance for a given chain and payment type.
+
+    :param ledger_api: The Ethereum API used for interacting with the ledger.
+    :type ledger_api: EthereumApi
+    :param chain_id: The chain ID.
+    :type chain_id: int
+    :param payment_type: The payment type (TOKEN for OLAS, USDC_TOKEN for USDC).
+    :type payment_type: PaymentType
+    :return: The token contract instance.
+    :rtype: Web3Contract
+    """
+    with open(ITOKEN_ABI_PATH, encoding="utf-8") as f:
+        abi = json.load(f)
+
+    if payment_type == PaymentType.USDC_TOKEN:
+        token_address = CHAIN_TO_PRICE_TOKEN_USDC[chain_id]
+    else:
+        token_address = CHAIN_TO_PRICE_TOKEN_OLAS[chain_id]
+
+    token_contract = get_contract(
+        contract_address=token_address,
+        abi=abi,
+        ledger_api=ledger_api,
+    )
+
+    return token_contract
