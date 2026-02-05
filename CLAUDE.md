@@ -88,7 +88,7 @@ mechx interact --agent-id 123 --tool tool1 --prompts "..."
 │  ├─ Upload: prompt + tool metadata
 │  └─ Download: mech response
 └─ Smart Contracts
-   ├─ AgentRegistry: tokenURI(agent_id)
+   ├─ AgentRegistry (legacy mech-specific): tokenURI(agent_id)
    └─ AgentMech: request(), deliver()
 
 ENV VARS:
@@ -188,9 +188,9 @@ NOTES:
 ```
 mechx tools-for-agents --agent-ids 1 2 3 --chain-config gnosis
 ├─ HTTP RPC (MECHX_CHAIN_RPC)
-│  └─ Query smart contract: AgentRegistry
+│  └─ Query smart contract: AgentRegistry (legacy mech-specific)
 ├─ Smart Contracts
-│  └─ AgentRegistry: tokenURI(agent_id), totalSupply()
+│  └─ AgentRegistry (legacy mech-specific): tokenURI(agent_id), totalSupply()
 └─ External HTTP
    └─ Fetch metadata from tokenURI URL
 
@@ -200,6 +200,7 @@ ENV VARS:
 NOTES:
   - Read-only, no transactions
   - For legacy mechs only
+  - Uses legacy mech-specific AgentRegistry, not standard Olas service registry
 ```
 
 ### 9. tool-description (Legacy)
@@ -207,7 +208,7 @@ NOTES:
 ```
 mechx tool-description <tool_id> --chain-config gnosis
 ├─ HTTP RPC (MECHX_CHAIN_RPC)
-│  └─ Query: AgentRegistry.tokenURI(agent_id)
+│  └─ Query: AgentRegistry (legacy mech-specific).tokenURI(agent_id)
 └─ External HTTP
    └─ Fetch and parse tool metadata
 
@@ -217,6 +218,7 @@ ENV VARS:
 NOTES:
   - tool_id format: "agent_id-tool_name"
   - Example: "1-openai-gpt-3.5-turbo"
+  - Uses legacy mech-specific AgentRegistry
 ```
 
 ### 10. tool-io-schema (Legacy)
@@ -224,7 +226,7 @@ NOTES:
 ```
 mechx tool-io-schema <tool_id> --chain-config gnosis
 ├─ HTTP RPC (MECHX_CHAIN_RPC)
-│  └─ Query: AgentRegistry.tokenURI(agent_id)
+│  └─ Query: AgentRegistry (legacy mech-specific).tokenURI(agent_id)
 └─ External HTTP
    └─ Fetch and parse tool metadata
 
@@ -234,6 +236,7 @@ ENV VARS:
 NOTES:
   - tool_id format: "agent_id-tool_name"
   - Returns input/output schema for the tool
+  - Uses legacy mech-specific AgentRegistry
 ```
 
 ### 11. tools-for-marketplace-mech
@@ -666,10 +669,11 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 #### Interaction Layers
 
 **Legacy Mechs (`interact.py`)**
-- Direct interaction with individual mech agents via agent registry
+- Direct interaction with individual mech agents via legacy mech-specific agent registry
 - Uses `ConfirmationType` enum (off-chain, on-chain, wait-for-both) for delivery method selection
 - Configuration via `MechConfig` dataclass loaded from `mech_client/configs/mechs.json`
 - Single request/response model per agent
+- Note: Uses legacy mech-specific AgentRegistry, not the standard Olas service registry used by marketplace mechs
 
 **Mech Marketplace (`marketplace_interact.py`)**
 - Interaction via the Mech Marketplace contract
@@ -737,8 +741,8 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 
 **Subgraph queries (`subgraph.py`, `mech_marketplace_subgraph.py`)**
 - GraphQL queries for agent/mech metadata
-- Legacy: queries agent registry
-- Marketplace: queries marketplace contract data
+- Legacy (`subgraph.py`): queries legacy mech-specific agent registry
+- Marketplace (`mech_marketplace_subgraph.py`): queries marketplace contract data and standard Olas service registry
 
 **IPFS (`prompt_to_ipfs.py`, `push_to_ipfs.py`, `fetch_ipfs_hash.py`)**
 - IPFS gateway at `https://gateway.autonolas.tech/ipfs/`
@@ -766,8 +770,8 @@ Key variables:
 - `MECHX_CHAIN_RPC`: Override RPC endpoint (standardized name, used throughout for both agent mode and blockchain interactions)
 - `MECHX_WSS_ENDPOINT`: Override WebSocket endpoint
 - `MECHX_GAS_LIMIT`: Override gas limit
-- `MECHX_AGENT_REGISTRY_CONTRACT`: Override agent registry contract address
-- `MECHX_SERVICE_REGISTRY_CONTRACT`: Override service registry contract address
+- `MECHX_AGENT_REGISTRY_CONTRACT`: Override legacy mech-specific agent registry contract address (for legacy mechs only)
+- `MECHX_SERVICE_REGISTRY_CONTRACT`: Override standard Olas service registry contract address (for marketplace mechs)
 - `MECHX_TRANSACTION_URL`: Override transaction URL template
 - `MECHX_SUBGRAPH_URL`: Override subgraph URL
 - `MECHX_MECH_OFFCHAIN_URL`: Offchain mech HTTP endpoint (required for `--use-offchain`, no default)
@@ -941,8 +945,8 @@ validated_safe = validate_ethereum_address(safe, "Safe address")
 
 **Command Requirements:**
 - `fetch-mm-mechs-info`: Requires marketplace + `MECHX_SUBGRAPH_URL` environment variable
-- `interact` (marketplace): Requires marketplace contract
-- `interact` (legacy): Requires agent registry only
+- `interact` (marketplace): Requires marketplace contract and standard Olas service registry
+- `interact` (legacy): Requires legacy mech-specific agent registry only
 - `deposit-native`: Requires marketplace + native payment support (Gnosis, Base, Polygon, Optimism)
 - `deposit-token`: Requires marketplace + token addresses in config (Gnosis, Base, Polygon, Optimism)
 - `purchase-nvm-subscription`: Requires marketplace + NVM subscription support (Gnosis, Base)
