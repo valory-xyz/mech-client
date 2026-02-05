@@ -81,9 +81,28 @@ Commands:
 
 Learn more about mech marketplace [here](https://olas.network/mech-marketplace)
 
+### Supported Chains
+
+The Mech Client supports multiple chains with different feature availability:
+
+| Chain | Legacy Mechs | Marketplace | Agent Mode | OLAS Payments | USDC Payments |
+|-------|-------------|-------------|------------|---------------|---------------|
+| Gnosis | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Base | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Polygon | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Optimism | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Arbitrum | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Celo | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+**Notes:**
+- **Marketplace**: Chains with marketplace contracts deployed. Required for `interact` with marketplace mechs, `deposit-*`, and `fetch-mm-mechs-info` commands.
+- **Agent Mode**: Chains that support on-chain agent registration via `setup-agent-mode`.
+- **Legacy Mechs**: All chains support direct interaction with legacy mech agents via `interact --agent_id`.
+- **Subgraph**: The `fetch-mm-mechs-info` command requires setting `MECHX_SUBGRAPH_URL` environment variable for any chain.
+
 ### Set up agent mode for on-chain interactions
 
-There are two modes you can use the mechx for on-chain interactions. Currently `agent-mode` is only supported for gnosis and base network.
+There are two modes you can use the mechx for on-chain interactions. Currently `agent-mode` is only supported for Gnosis and Base networks.
 
 -   _agent mode_ (Recommended): This allows to register your on-chain interactions as agent on the olas protocol and allows for A2A activity to be reflected on the client
 -   _client mode_: Simple on-chain interations using EOA
@@ -105,7 +124,14 @@ mechx setup-agent-mode --chain-config <chain_config>
 #### List marketplace mechs
 
 To list the top marketplace mechs based on deliveries, use the `fetch-mm-mechs-info` command. You can specify the chain you want to query. Please note that only the first 20 mechs sorted by number of deliveries will be shown.
-Currently supported chains are gnosis and base
+
+⚠️ This command requires a subgraph URL to be set. Configure it with:
+
+```bash
+export MECHX_SUBGRAPH_URL=<your-subgraph-url>
+```
+
+Supported marketplace chains: gnosis, base, polygon, optimism
 
 ```bash
 mechx fetch-mm-mechs-info --chain-config gnosis

@@ -16,7 +16,7 @@
     "gas_limit": 500000,
     "price": 10000000000000000,
     "transaction_url": "https://gnosisscan.io/tx/{transaction_digest}",
-    "subgraph_url": "https://api.studio.thegraph.com/query/89372/olas-gnosis-mech-marketplace/v0.0.2"
+    "subgraph_url": ""
   },
   "arbitrum": {
     "agent_registry_contract": "0xa4799B083E0068732456EF45ff9fe5c683658327",
@@ -73,7 +73,7 @@
     "gas_limit": 500000,
     "price": 3000000000000,
     "transaction_url": "https://basescan.org/tx/{transaction_digest}",
-    "subgraph_url": "https://api.studio.thegraph.com/query/89372/olas-base-mech-marketplace/v0.0.2"
+    "subgraph_url": ""
   },
   "celo": {
     "agent_registry_contract": "0xE49CB081e8d96920C38aA7AB90cb0294ab4Bc8EA",

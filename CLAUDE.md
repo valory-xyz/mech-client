@@ -266,6 +266,31 @@ All contract ABIs are in `mech_client/abis/`:
    - Never suggest users "see mechs.json" or other internal package files that aren't accessible after installation
    - Provide actionable solutions that end users can actually execute
 
+## Chain Support Matrix
+
+| Chain | Chain ID | Marketplace | Agent Mode | OLAS Token | USDC Token | Subgraph | Legacy Mechs |
+|-------|----------|-------------|------------|------------|------------|----------|--------------|
+| Gnosis | 100 | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Base | 8453 | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Polygon | 137 | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ |
+| Optimism | 10 | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ |
+| Arbitrum | 42161 | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Celo | 42220 | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+**Feature Definitions:**
+- **Marketplace**: Chain has `mech_marketplace_contract` deployed (non-zero address in `mechs.json`)
+- **Agent Mode**: Supports `setup-agent-mode` command and Safe-based agent operations (Gnosis and Base only)
+- **OLAS/USDC Token**: Payment token addresses configured in `marketplace_interact.py`
+- **Subgraph**: Built-in subgraph URL in `mechs.json` (currently all chains have empty `subgraph_url`; must be set via `MECHX_SUBGRAPH_URL` for `fetch-mm-mechs-info`)
+- **Legacy Mechs**: All chains support legacy mech interactions via `agent_id`
+
+**Command Requirements:**
+- `fetch-mm-mechs-info`: Requires marketplace + `MECHX_SUBGRAPH_URL` environment variable
+- `interact` (marketplace): Requires marketplace contract
+- `interact` (legacy): Requires agent registry only
+- `deposit-native/deposit-token`: Requires marketplace + token addresses in config
+- `setup-agent-mode`: Only Gnosis and Base
+
 ## Important Notes
 
 - Python version: >=3.10, <3.12
@@ -273,3 +298,4 @@ All contract ABIs are in `mech_client/abis/`:
 - Agent mode currently only supports Gnosis and Base networks
 - Batch requests only supported for marketplace mechs, not legacy mechs
 - Always use custom RPC providers for reliability (public RPCs may be rate-limited)
+- All chains currently have empty `subgraph_url` in config; set `MECHX_SUBGRAPH_URL` manually for subgraph-dependent commands

@@ -39,6 +39,29 @@ pip install mech-client
 
 **d.** Copy this key in the file `ethereum_private_key.txt` in your project folder. Make sure the file contains only the private key, with no leading or trailing spaces, tabs, or newlines.
 
+## Supported Chains
+
+The Mech Client supports multiple blockchain networks with different feature availability:
+
+| Chain | Legacy Mechs | Marketplace | Agent Mode | OLAS Payments | USDC Payments |
+|-------|-------------|-------------|------------|---------------|---------------|
+| Gnosis | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Base | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Polygon | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Optimism | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Arbitrum | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Celo | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+**Key:**
+- **Marketplace**: Chains with marketplace contracts. Required for marketplace mech interactions and deposit commands.
+- **Agent Mode**: Chains supporting on-chain agent registration (Gnosis and Base only).
+- **Legacy Mechs**: All chains support direct interaction with legacy mech agents.
+- **OLAS/USDC Payments**: Token payment support varies by chain deployment.
+
+**Important Notes:**
+- The `fetch-mm-mechs-info` command works on all marketplace chains (Gnosis, Base, Polygon, Optimism) but requires setting the `MECHX_SUBGRAPH_URL` environment variable.
+- For other marketplace commands (`interact`, deposits), subgraph is not required.
+
 ## 1. How to Send a request to a Mech (registered on the Mech MarketPlace)
 
 To send a request to a Mech that is accessible through the Mech Marketplace, first complete the [setup](#setup), then follow the [instructions](#1-2-sending-requests) below.
@@ -53,11 +76,16 @@ Follow the instructions in the corresponding section.
 
 ### 1. 1. Choosing a Mech
 
-- Use the command mechx in terminal, which is structured as follows. 
+- Use the command mechx in terminal, which is structured as follows.
 ```bash
 mechx fetch-mm-mechs-info --chain-config <chain-config>
+```
 
-Replace `<chain-config>` by the chosen network. Currently supported chains are gnosis and base.
+Replace `<chain-config>` by the chosen network. Supported marketplace chains: gnosis, base, polygon, optimism.
+
+⚠️ **Note**: This command requires a subgraph URL to be set:
+```bash
+export MECHX_SUBGRAPH_URL=<your-subgraph-url>
 ```
 ```bash
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
