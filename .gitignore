@@ -19,6 +19,7 @@ __pycache__
 .env
 .operate*
 keys.json
+.mypy_cache/
 
 .idea/
 .idea/*
