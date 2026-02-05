@@ -72,17 +72,3 @@ def fetch_ipfs_hash(
     v1_file_hash_hex = "f01" + multihash_bytes.hex()
 
     return "0x" + v1_file_hash_hex[9:], v1_file_hash_hex, ipfs_data
-
-
-def main(prompt: str, tool: str) -> None:
-    """
-    Prints the IPFS hash and truncated IPFS hash for the metadata object.
-
-    :param prompt: Prompt string.
-    :type prompt: str
-    :param tool: Tool string.
-    :type tool: str
-    """
-
-    v1_file_hash, _, _ = fetch_ipfs_hash(prompt, tool)
-    print("IPFS file hash v1: {}".format(v1_file_hash))

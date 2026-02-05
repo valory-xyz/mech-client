@@ -31,7 +31,6 @@ from aea_ledger_ethereum import EthereumApi
 from web3.contract import Contract as Web3Contract
 
 
-IPFS_URL_TEMPLATE = "https://gateway.autonolas.tech/ipfs/f01701220{}"
 TRANSACTION_RECEIPT_TIMEOUT = 300.0  # 5 minutes
 
 

@@ -40,7 +40,6 @@ from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
 
 from mech_client.contract_addresses import (
-    CHAIN_TO_NATIVE_BALANCE_TRACKER,
     CHAIN_TO_PRICE_TOKEN_OLAS,
     CHAIN_TO_PRICE_TOKEN_USDC,
     CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS,
@@ -1144,30 +1143,6 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
 
 
 # Contract helper functions for deposits
-
-
-def get_native_balance_tracker_contract(
-    ledger_api: EthereumApi, chain_id: int
-) -> Web3Contract:
-    """
-    Get the native balance tracker contract instance for a given chain.
-
-    :param ledger_api: The Ethereum API used for interacting with the ledger.
-    :type ledger_api: EthereumApi
-    :param chain_id: The chain ID.
-    :type chain_id: int
-    :return: The native balance tracker contract instance.
-    :rtype: Web3Contract
-    """
-    with open(BALANCE_TRACKER_NATIVE_ABI_PATH, encoding="utf-8") as f:
-        abi = json.load(f)
-
-    native_balance_tracker_contract = get_contract(
-        contract_address=CHAIN_TO_NATIVE_BALANCE_TRACKER[chain_id],
-        abi=abi,
-        ledger_api=ledger_api,
-    )
-    return native_balance_tracker_contract
 
 
 def get_token_balance_tracker_contract(
