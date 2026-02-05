@@ -106,7 +106,7 @@ ls ~/.operate_mech_client/services/
 **Purpose**: Send a request to a marketplace mech with per-request native payment
 
 **Prerequisites**:
-- Funded wallet with native tokens (minimum ~0.01 xDAI)
+- Funded wallet with native tokens (minimum ~0.02 xDAI)
 
 **Command**:
 ```bash
