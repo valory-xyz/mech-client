@@ -157,7 +157,7 @@ mechx purchase-nvm-subscription --chain-config gnosis --mech-type native_nvm
 
 ENV VARS:
   MECHX_CHAIN_RPC (required)
-  PLAN_DID (from scripts/nvm_subscription/envs/{chain}.env)
+  PLAN_DID (from mech_client/nvm_subscription/envs/{chain}.env)
   NETWORK_NAME (from envs)
   CHAIN_ID (from envs)
 ```
@@ -527,7 +527,7 @@ mechx tool-description <tool_id_from_list> --chain-config gnosis
 **Cause:** Chain-specific .env file missing or incomplete (PLAN_DID, NETWORK_NAME, CHAIN_ID)
 
 **Solution:**
-Ensure the chain-specific .env file exists in `scripts/nvm_subscription/envs/<chain>.env` and contains all required variables: PLAN_DID, NETWORK_NAME, CHAIN_ID. Contact the development team if these files are missing.
+Ensure the chain-specific .env file exists in `mech_client/nvm_subscription/envs/<chain>.env` and contains all required variables: PLAN_DID, NETWORK_NAME, CHAIN_ID. Contact the development team if these files are missing.
 
 ## Development Commands
 
@@ -671,6 +671,27 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 - Prepaid and per-request payment models
 - Offchain mech support via HTTP endpoints
 - Configuration via `MechMarketplaceRequestConfig`
+- Contract helper functions: `get_native_balance_tracker_contract()`, `get_token_balance_tracker_contract()`, `get_token_contract()`
+
+**Deposits (`deposits.py`)**
+- Prepaid balance deposit functionality for marketplace mechs
+- Functions: `deposit_native_main()`, `deposit_token_main()` - CLI entry points
+- Functions: `deposit_native()`, `deposit_token()`, `approve_token()` - Core deposit operations
+- Supports both agent mode (Safe) and client mode (EOA)
+- Handles token approval and balance checking
+
+**Contract Addresses (`contract_addresses.py`)**
+- Centralized contract address mappings for all supported chains
+- Contains: balance tracker contracts (native, OLAS, USDC), token addresses (OLAS, USDC)
+- Single source of truth for all chain-specific contract addresses
+
+**NVM Subscription (`nvm_subscription/`)**
+- Nevermined (NVM) subscription management for subscription-based payments
+- Main module: `NVMSubscriptionManager` in `manager.py`
+- Contract wrappers in `contracts/`: agreement_manager, did_registry, escrow_payment, lock_payment, nft, nft_sales, subscription_provider, token, transfer_nft
+- Chain-specific configuration in `envs/`: gnosis.env, base.env
+- Network configuration in `resources/networks.json`
+- Entry point: `nvm_subscribe_main()` in `__init__.py`
 
 #### Delivery Mechanisms (`delivery.py`, `wss.py`, `acn.py`)
 
