@@ -83,6 +83,7 @@ CHAIN_TO_TEMPLATE = {
     "gnosis": CURR_DIR / "config" / "mech_client_gnosis.json",
     "base": CURR_DIR / "config" / "mech_client_base.json",
     "polygon": CURR_DIR / "config" / "mech_client_polygon.json",
+    "optimism": CURR_DIR / "config" / "mech_client_optimism.json",
 }
 
 ENV_PATH = BASE_DIR / ".env"

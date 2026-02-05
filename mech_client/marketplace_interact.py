@@ -110,17 +110,28 @@ PAYMENT_TYPE_TO_ABI_PATH: Dict[str, Path] = {
     PaymentType.TOKEN_NVM_USDC.value: BALANCE_TRACKER_NVM_TOKEN_ABI_PATH,
 }
 
-CHAIN_TO_PRICE_TOKEN = {
+CHAIN_TO_PRICE_TOKEN_OLAS = {
     1: "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
     10: "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",
     100: "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-    137: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+    137: "0xFEF5d947472e72Efbb2E388c730B7428406F2F95",
     8453: "0x54330d28ca3357F294334BDC454a032e7f353416",
-    42220: "0x96ffa56a963EC33e5bC7057B9002722D1884fc01",
+    42220: "0xaCFfAe8e57Ec6E394Eb1b41939A8CF7892DbDc51",
+}
+
+CHAIN_TO_PRICE_TOKEN_USDC = {
+    1: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    10: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+    137: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+    8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
 }
 
 
 CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG = {
+    10: {
+        "response_timeout": 300,
+        "payment_data": "0x",
+    },
     100: {
         "response_timeout": 300,
         "payment_data": "0x",
@@ -912,7 +923,10 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
                 print(f"  - Sender Address: {sender}")
                 sys.exit(1)
         if payment_type in PaymentType.get_token_payment_types():
-            price_token = CHAIN_TO_PRICE_TOKEN[chain_id]
+            if payment_type == PaymentType.USDC_TOKEN.value:
+                price_token = CHAIN_TO_PRICE_TOKEN_USDC[chain_id]
+            else:
+                price_token = CHAIN_TO_PRICE_TOKEN_OLAS[chain_id]
             print(
                 f"Token Mech detected, approving token {price_token} for price payment..."
             )

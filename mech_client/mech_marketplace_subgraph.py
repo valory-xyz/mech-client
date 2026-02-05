@@ -40,6 +40,18 @@ CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE = {
         "0x847bBE8b474e0820215f818858e23F5f5591855A": "NvmSubscription Native",
         "0x7beD01f8482fF686F025628e7780ca6C1f0559fc": "NvmSubscription Token USDC",
     },
+    "optimism": {
+        "0xf76953444C35F1FcE2F6CA1b167173357d3F5C17": "Fixed Price Native",
+        "0x26Ea2dC7ce1b41d0AD0E0521535655d7a94b684c": "Fixed Price Token",
+        "0x93111f6C267068A5d7356114D61d0f09bFD53a54": "Fixed Price Token USDC",
+        "0x02C26437B292D86c5F4F21bbCcE0771948274f84": "NvmSubscription Token USDC",
+    },
+    "polygon": {
+        "0x87f89F94033305791B6269AE2F9cF4e09983E56e": "Fixed Price Native",
+        "0xa0DA53447C0f6C4987964d8463da7e6628B30f82": "Fixed Price Token",
+        "0x85899f9d8C058A5BBBaF344ea0f0b63c0CcBe851": "Fixed Price Token USDC",
+        "0x43fB32f25dce34EB76c78C7A42C8F40F84BCD237": "NvmSubscription Token USDC",
+    },
 }
 
 
