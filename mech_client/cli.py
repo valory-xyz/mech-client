@@ -1410,7 +1410,9 @@ def nvm_subscribe(
 
         # Validate chain supports NVM subscriptions
         # Import here to avoid circular import and get the actual dict
-        from scripts.nvm_subscribe import CHAIN_TO_ENVS  # pylint: disable=import-outside-toplevel
+        from scripts.nvm_subscribe import (  # pylint: disable=import-outside-toplevel
+            CHAIN_TO_ENVS,
+        )
 
         if validated_chain not in CHAIN_TO_ENVS:
             available_chains = ", ".join(CHAIN_TO_ENVS.keys())
