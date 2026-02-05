@@ -829,6 +829,13 @@ All contract ABIs are in `mech_client/abis/`:
      - `R1735/R1729`: Use of dict/list instead of comprehension
      - `W0511`: TODOs/FIXMEs allowed
      - `E0611/E1101`: Import and attribute errors (false positives with dynamic imports)
+   - **Safety check ignored vulnerabilities** (in tox.ini):
+     - Build tool vulnerabilities (pip/setuptools in tox environment, not runtime dependencies):
+       - `76752`: setuptools Path Traversal (CVE-2025-47273) - affects PackageIndex.download() in setuptools <78.1.1
+       - `75180`: pip malicious wheel files (PVE-2025-75180) - affects pip <25.0, requires malicious wheel installation
+       - `79883`: pip Arbitrary File Overwrite (CVE-2025-8869) - affects pip <25.2, symlink validation issue
+     - These vulnerabilities affect package installation scenarios, not the CLI tool's runtime operation
+     - Safe to ignore as they require malicious packages/wheels which the project doesn't interact with
 
 9. **User experience**:
    - Error messages should reference environment variables (e.g., `MECHX_CHAIN_RPC`) rather than internal config files
