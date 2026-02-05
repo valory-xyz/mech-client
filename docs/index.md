@@ -39,6 +39,29 @@ pip install mech-client
 
 **d.** Copy this key in the file `ethereum_private_key.txt` in your project folder. Make sure the file contains only the private key, with no leading or trailing spaces, tabs, or newlines.
 
+## Supported Chains
+
+The Mech Client supports multiple blockchain networks with different feature availability:
+
+| Chain | Legacy Mechs | Marketplace | Agent Mode | OLAS Payments | USDC Payments |
+|-------|-------------|-------------|------------|---------------|---------------|
+| Gnosis | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Base | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Polygon | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Optimism | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Arbitrum | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Celo | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+**Key:**
+- **Marketplace**: Chains with marketplace contracts. Required for marketplace mech interactions and deposit commands.
+- **Agent Mode**: Chains supporting on-chain agent registration (all marketplace chains: Gnosis, Base, Polygon, Optimism).
+- **Legacy Mechs**: All chains support direct interaction with legacy mech agents.
+- **OLAS/USDC Payments**: Token payment support varies by chain deployment.
+
+**Important Notes:**
+- The `fetch-mm-mechs-info` command works on all marketplace chains (Gnosis, Base, Polygon, Optimism) but requires setting the `MECHX_SUBGRAPH_URL` environment variable.
+- For other marketplace commands (`interact`, deposits), subgraph is not required.
+
 ## 1. How to Send a request to a Mech (registered on the Mech MarketPlace)
 
 To send a request to a Mech that is accessible through the Mech Marketplace, first complete the [setup](#setup), then follow the [instructions](#1-2-sending-requests) below.
@@ -53,15 +76,20 @@ Follow the instructions in the corresponding section.
 
 ### 1. 1. Choosing a Mech
 
-- Use the command mechx in terminal, which is structured as follows. 
+- Use the command mechx in terminal, which is structured as follows.
 ```bash
 mechx fetch-mm-mechs-info --chain-config <chain-config>
+```
 
-Replace `<chain-config>` by the chosen network. Currently supported chains are gnosis and base.
+Replace `<chain-config>` by the chosen network. Supported marketplace chains: gnosis, base, polygon, optimism.
+
+⚠️ **Note**: This command requires a subgraph URL to be set:
+```bash
+export MECHX_SUBGRAPH_URL=<your-subgraph-url>
 ```
 ```bash
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-|   AI Agent Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
+| AI Agent Id  | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
 +==============+====================+============================================+====================+===============================================================================================================+
 |         2182 | Fixed Price Native | 0xc05e7412439bd7e91730a6880e18d5d5873f632c |              41246 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
@@ -83,20 +111,20 @@ Replace `<chain-config>` by the chosen network. Currently supported chains are g
 - Use the command mechx in terminal, which is structured as follows:
 
 ```bash
-mechx interact <prompt> --chain-config <chain-config> --use-offchain <bool> --tool <tool> --priority-mech <mech_address>
+mechx interact --prompts <prompt> --priority-mech <mech_address> --tools <tool> --chain-config <chain-config> --use-offchain
 ```
 
 Replace each placeholder as follows:
 
 - `<prompt>`: The request description to be sent to the Mech. For instance: "Write a short poem".
 
-- `<chain-config>`: One of the keys in the dictionary defined in `.mech_client/configs/mechs.json` (e.g., "gnosis"). This provides the client with a configuration for the chosen network.
-
-- `<bool>`: True to use the off-chain method; False for on-chain.
+- `<mech_address>`: The address of the Mech to send the request to.
 
 - `<tool>`: The name of the tool to use.
 
-- `<mech_address>`: The address of the Mech to send the request to.
+- `<chain-config>`: One of the keys in the dictionary defined in `mech_client/configs/mechs.json` (e.g., "gnosis"). This provides the client with a configuration for the chosen network.
+
+- `--use-offchain`: Optional flag to use the off-chain method. Omit for on-chain requests.
 
 ### 1. 2. 2. Deposits
 
@@ -149,7 +177,7 @@ After sending a request, a JSON response will appear below the line `"Data for a
 For example, the following command:
 
 ```bash
-mechx interact "write a short poem" --tool openai-gpt-3.5-turbo --chain-config gnosis --priority-mech <mech_address>
+mechx interact --prompts "write a short poem" --tools openai-gpt-3.5-turbo --chain-config gnosis --priority-mech <mech_address>
 ```
 
 you should receive a response as follows:
@@ -173,7 +201,7 @@ Alternatively, if the connection is lost, you can retrieve the response manually
 printf "%x\n" <request_id>
 ```
 
-- Go to the [Mech list](https://mech.olas.network/mechs) and locate your Mech (by its AI agent ID or address).
+- Go to the [Mech list](https://mech.olas.network/mechs) and locate your Mech (by its AI Agent ID or address).
 
 - Click on the Mech’s address to see a list of requests it has received.
 
@@ -207,13 +235,17 @@ PRIORITY_MECH_ADDRESS = "<priority_mech_address>"
 PROMPT_TEXT = "<prompt_text>"
 TOOL_NAME = "<tool_name>"
 CHAIN_CONFIG = "<network_name>"
+AGENT_MODE = False  # Set to True if using agent mode
+SAFE_ADDRESS = ""   # Required if AGENT_MODE is True
 USE_OFFCHAIN = False
 
 result = marketplace_interact(
-    prompt=PROMPT_TEXT,
+    prompts=(PROMPT_TEXT,),  # Note: must be a tuple
     priority_mech=PRIORITY_MECH_ADDRESS,
+    agent_mode=AGENT_MODE,
+    safe_address=SAFE_ADDRESS,
     use_offchain=USE_OFFCHAIN,
-    tool=TOOL_NAME,
+    tools=(TOOL_NAME,),      # Note: must be a tuple
     chain_config=CHAIN_CONFIG
 )
 ```
@@ -228,7 +260,7 @@ Replace the placeholders as follows:
 
 - `<network_name>`: the name of the target network (e.g., "gnosis", "base").
 
-- `USE_OFFCHAIN`: set to True to use off-chain request delivery, or leave to False for on-chain.
+**Note:** If using agent mode (`AGENT_MODE = True`), you must provide a valid `SAFE_ADDRESS`. For client mode, set `AGENT_MODE = False` and `SAFE_ADDRESS = ""`.
 
 The variable **result** contains the response of the mech.
 
@@ -301,10 +333,12 @@ Once you have selected a Mech:
 - Use the command mechx in terminal, which is structured as follows:
 
 ```bash
-mechx interact <prompt> --agent_id <agent_id>
+mechx interact --prompts <prompt> --agent_id <agent_id>
 ```
 
-Replace the placeholders as follows: `<agent_id>`: the number (as an integer, not string) after the character “-” in the column “Mech Instance (Fixed Pricing) - Agent Id” of the table [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs) for the chosen mech; `<prompt>`: string which corresponds to the request to send to the Mech.
+Replace the placeholders as follows:
+- `<prompt>`: string which corresponds to the request to send to the Mech.
+- `<agent_id>`: the number (as an integer, not string) after the character "-" in the column "Mech Instance (Fixed Pricing) - Agent Id" of the table [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs) for the chosen mech.
 
 - The list of ids and the names of the tools that the Mech can use will appear. You will be prompted to enter the id of a tool that the Mech will use to respond to the request.
 
@@ -327,7 +361,7 @@ where `<unique_identifier>` is replaced by the unique id of the tool and `<chain
 - In response to the request, a JSON file is printed below "Data for agent". In this JSON file, the key ‘result’ corresponds to the mech’s response to the request. For instance, with the command
 
 ```bash
-mechx interact "write a short poem" --agent_id 6
+mechx interact --prompts "write a short poem" --agent_id 6
 ```
 
 and after selecting `openai-gpt-3.5-turbo` for the tool, you will receive a response as follows:

@@ -1,9 +1,6 @@
 # Mech Client
 
-A basic client to interact with an AI Mech. [AI Mechs](https://github.com/valory-xyz/mech) allow users to post requests for AI tasks on-chain, and get their result delivered.
-
-> **:warning: Warning** <br />
-> **This is a *hacky* alpha version of the client. Don't rely on it as production software.**
+A client to interact with Mechs - AI agents providing services - on the [Olas Marketplace](https://olas.network/mech-marketplace). It allows users to post requests for AI tasks on-chain, and get their result delivered.
 
 ## Requirements
 
@@ -11,7 +8,7 @@ A basic client to interact with an AI Mech. [AI Mechs](https://github.com/valory
 
 ## Developing, running and deploying Mechs and Mech tools
 
-The easiest way to create, run, deploy and test your own Mech and Mech tools is to follow the Mech and Mech tool docs [here](https://stack.olas.network/open-autonomy/mech-tools-dev/). The [Mech tools dev repo](https://github.com/valory-xyz/mech-tools-dev) used in those docs greatly simplifies the development flow and dev experience.
+The easiest way to create, run, deploy and test your own Mech and Mech tools is to follow the Mech and Mech tool docs [here](https://stack.olas.network/mech-tools-dev/). The [Mech tools dev repo](https://github.com/valory-xyz/mech-tools-dev) used in those docs greatly simplifies the development flow and dev experience.
 
 Only continue reading this README if you know what you are doing and you are specifically interested in this repo.
 
@@ -21,14 +18,13 @@ This guide will walk you through the essential steps to get up and running witho
 
 ## Installation
 
-Find the latest available release on [PyPi](https://pypi.org/project/mech-client/#description).
+Find the latest available release on [PyPi](https://pypi.org/project/mech-client/).
 
 We recommend that you create a virtual Python environment using [Poetry](https://python-poetry.org/). Set up your virtual environment as follows:
 
 ```bash
 poetry new my_project
 cd my_project
-poetry shell
 poetry add mech-client
 ```
 
@@ -81,9 +77,28 @@ Commands:
 
 Learn more about mech marketplace [here](https://olas.network/mech-marketplace)
 
+### Supported Chains
+
+The Mech Client supports multiple chains with different feature availability:
+
+| Chain | Legacy Mechs | Marketplace | Agent Mode | OLAS Payments | USDC Payments |
+|-------|-------------|-------------|------------|---------------|---------------|
+| Gnosis | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Base | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Polygon | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Optimism | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Arbitrum | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Celo | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+**Notes:**
+- **Marketplace**: Chains with marketplace contracts deployed. Required for `interact` with marketplace mechs, `deposit-*`, and `fetch-mm-mechs-info` commands.
+- **Agent Mode**: Chains that support on-chain agent registration via `setup-agent-mode`.
+- **Legacy Mechs**: All chains support direct interaction with legacy mech agents via `interact --agent_id`.
+- **Subgraph**: The `fetch-mm-mechs-info` command requires setting `MECHX_SUBGRAPH_URL` environment variable for any chain.
+
 ### Set up agent mode for on-chain interactions
 
-There are two modes you can use the mechx for on-chain interactions. Currently `agent-mode` is only supported for gnosis and base network.
+There are two modes you can use the mechx for on-chain interactions. Currently `agent-mode` is supported for all marketplace chains (Gnosis, Base, Polygon, and Optimism).
 
 -   _agent mode_ (Recommended): This allows to register your on-chain interactions as agent on the olas protocol and allows for A2A activity to be reflected on the client
 -   _client mode_: Simple on-chain interations using EOA
@@ -105,29 +120,20 @@ mechx setup-agent-mode --chain-config <chain_config>
 #### List marketplace mechs
 
 To list the top marketplace mechs based on deliveries, use the `fetch-mm-mechs-info` command. You can specify the chain you want to query. Please note that only the first 20 mechs sorted by number of deliveries will be shown.
-Currently supported chains are gnosis and base
+
+⚠️ This command requires a subgraph URL to be set. Configure it with:
+
+```bash
+export MECHX_SUBGRAPH_URL=<your-subgraph-url>
+```
+
+Supported marketplace chains: gnosis, base, polygon, optimism
 
 ```bash
 mechx fetch-mm-mechs-info --chain-config gnosis
 ```
 
-```bash
-+--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-|   AI agent Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
-+==============+====================+============================================+====================+===============================================================================================================+
-|         2182 | Fixed Price Native | 0xc05e7412439bd7e91730a6880e18d5d5873f632c |              41246 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
-+--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-|         2235 | Fixed Price Native | 0xb3c6319962484602b00d5587e965946890b82101 |              10127 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
-+--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-|         2198 | Fixed Price Native | 0x601024e27f1c67b28209e24272ced8a31fc8151f |               5714 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
-+--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-|         1722 | Fixed Price Token  | 0x13f36b1a516290b7563b1de574a02ebeb48926a1 |                399 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
-+--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-|         2135 | Fixed Price Native | 0xbead38e4c4777341bb3fd44e8cd4d1ba1a7ad9d7 |                353 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
-+--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-```
-
-You can also find more available Mechs [here](https://mech.olas.network/)
+You can also find available Mechs [here](https://marketplace.olas.network/)
 
 #### Usage
 
@@ -191,13 +197,13 @@ export MECHX_MECH_OFFCHAIN_URL="http://localhost:8000/"
 
 If you want to use a Valory mech for offchain requests, below is the list of mechs and their address and offchain urls.
 
-| AI agent ID |           Priority Mech Address            |                     Offchain URL                      |
+| AI Agent ID |           Priority Mech Address            |                     Offchain URL                      |
 | :---------: | :----------------------------------------: | :---------------------------------------------------: |
 |    2182     | 0xB3C6319962484602b00d5587e965946890b82101 | https://d19715222af5b940.agent.propel.autonolas.tech/ |
 
 ### List tools available for a mech
 
-To list the tools available for a specific marketplace mech, use the `tools-for-marketplace-mech` command. You can specify an AI agent ID to get tools for a specific mech.
+To list the tools available for a specific marketplace mech, use the `tools-for-marketplace-mech` command. You can specify an AI Agent ID to get tools for a specific mech.
 
 ```bash
 mechx tools-for-marketplace-mech 1722 --chain-config gnosis
@@ -621,7 +627,7 @@ poetry shell
 - `poetry lock`
 - `rm -rf dist`
 - `autonomy packages sync --update-packages`
-- `make eject-packages`
+- `make dist`
 - Then, create a release PR and tag the release.
 
 ## FAQ
@@ -646,7 +652,7 @@ No. AI Mechs are currently deployed only on mainnets.
 
 <summary><b>Where can I find the agent blueprint ID?</b></summary>
 
-You can find the agent blueprint IDs for each chain on the [Mech Hub](https://aimechs.autonolas.network/registry) or on the [Mech repository](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
+You can find the agent blueprint IDs for each chain on the [Marketplace](https://marketplace.olas.network) or on the [Mech repository](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
 
 </details>
 

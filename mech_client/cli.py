@@ -681,14 +681,14 @@ def tool_io_schema(tool_id: str, chain_config: str) -> None:
 
 @click.command(name="tools-for-marketplace-mech")
 @click.argument(
-    "service-id",
+    "agent-id",
     type=int,
 )
 @click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
-def tools_for_marketplace_mech(service_id: int, chain_config: str) -> None:
+def tools_for_marketplace_mech(agent_id: int, chain_config: str) -> None:
     """Fetch and display tools for marketplace mechs."""
     try:
-        result = get_tools_for_marketplace_mech(service_id, chain_config)
+        result = get_tools_for_marketplace_mech(agent_id, chain_config)
 
         headers = ["Tool Name", "Unique Identifier"]
         data: List[Tuple[str, ...]] = [
@@ -1025,7 +1025,7 @@ def query_mm_mechs_info_cli(
             return None
 
         headers = [
-            "Service Id",
+            "AI Agent Id",
             "Mech Type",
             "Mech Address",
             "Total Deliveries",
