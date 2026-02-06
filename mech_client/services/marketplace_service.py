@@ -437,7 +437,7 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
 
         return payment_type, service_id, max_delivery_rate
 
-    def _send_marketplace_request(  # pylint: disable=too-many-arguments
+    def _send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         marketplace_contract: Web3Contract,
         data_hashes: List[str],
@@ -469,8 +469,14 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
             else max_delivery_rate * len(data_hashes)
         )
 
-        # Convert payment type to bytes32
-        payment_type_bytes = bytes.fromhex(payment_type.value)
+        # Convert payment type to bytes32; allow optional 0x prefix for robustness
+        payment_type_hex = payment_type.value.removeprefix("0x")
+        try:
+            payment_type_bytes = bytes.fromhex(payment_type_hex)
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid payment type value {payment_type.value!r}: {e}"
+            ) from e
 
         # Payment data (empty bytes for now - can be extended for additional payment info)
         payment_data = b""
