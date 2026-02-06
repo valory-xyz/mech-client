@@ -21,7 +21,7 @@
 
 from typing import Any, Dict
 
-from aea_ledger_ethereum import EthereumApi
+from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
 
