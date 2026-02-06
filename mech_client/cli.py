@@ -76,7 +76,6 @@ from mech_client.to_png import main as to_png_main
 
 
 CURR_DIR = Path(__file__).resolve().parent
-BASE_DIR = CURR_DIR.parent
 OPERATE_FOLDER_NAME = ".operate_mech_client"
 SETUP_MODE_COMMAND = "setup-agent-mode"
 DEFAULT_NETWORK = "gnosis"
@@ -88,7 +87,7 @@ CHAIN_TO_TEMPLATE = {
     "optimism": CURR_DIR / "config" / "mech_client_optimism.json",
 }
 
-ENV_PATH = BASE_DIR / ".env"
+ENV_PATH = Path.home() / OPERATE_FOLDER_NAME / ".env"
 MECHX_CHAIN_CONFIGS = Path(__file__).parent / "configs" / "mechs.json"
 
 
@@ -277,11 +276,91 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
             )
 
 
+def print_wallet_info_box(
+    chain_config: str,
+    master_eoa: str,
+    master_safe: str,
+    agent_eoa: str,
+    agent_safe: str,
+) -> None:
+    """Print wallet information in a nice box format."""
+    title = f" Agent Mode Setup Complete ({chain_config.upper()}) "
+    wallet_info = [
+        ("Master EOA", master_eoa),
+        ("Master Safe", master_safe),
+        ("Agent EOA", agent_eoa),
+        ("Agent Safe", agent_safe),
+    ]
+
+    # Calculate dimensions
+    label_width = max(len(label) for label, _ in wallet_info)
+    box_width = (
+        max(label_width + 46, len(title)) + 4
+    )  # 46 = addr(42) + ": "(2) + pad(2)
+    title_pad = (box_width - len(title) - 2) // 2
+
+    # Build lines
+    lines = [
+        f"╔{'═' * title_pad}{title}{'═' * (box_width - title_pad - len(title) - 2)}╗"
+    ]
+    lines.append(f"║{' ' * (box_width - 2)}║")
+
+    for label, address in wallet_info:
+        content = f"  {label:<{label_width}} : {address}"
+        lines.append(f"║{content}{' ' * (box_width - len(content) - 2)}║")
+
+    lines.append(f"║{' ' * (box_width - 2)}║")
+    lines.append(f"╚{'═' * (box_width - 2)}╝")
+
+    click.echo("\n" + "\n".join(lines) + "\n")
+
+
+def display_setup_wallets(operate: OperateApp, validated_chain: str) -> None:
+    """Extract and display wallet information after setup."""
+    try:
+        # Load master wallet using wallet_manager abstraction
+        master_wallet = operate.wallet_manager.load("ethereum")
+        master_safe = master_wallet.safes.get(validated_chain, "N/A")
+        if master_safe != "N/A":
+            master_safe = str(master_safe)
+
+        # Load service using service_manager abstraction
+        service_manager = operate.service_manager()
+        service_config_id = None
+        for service in service_manager.json:
+            if service["home_chain"] == validated_chain:
+                service_config_id = service["service_config_id"]
+                break
+
+        if service_config_id:
+            service = service_manager.load(service_config_id)
+            agent_eoa = service.agent_addresses[0] if service.agent_addresses else "N/A"
+            agent_safe = (
+                service.chain_configs[validated_chain].chain_data.multisig
+                if validated_chain in service.chain_configs
+                else "N/A"
+            )
+
+            print_wallet_info_box(
+                chain_config=validated_chain,
+                master_eoa=master_wallet.address,
+                master_safe=master_safe,
+                agent_eoa=agent_eoa,
+                agent_safe=agent_safe,
+            )
+        else:
+            click.echo("Agent mode setup completed successfully!")
+    except Exception as e:  # pylint: disable=broad-except
+        click.echo(
+            f"Agent mode setup completed successfully! (Could not display wallet info: {e})"
+        )
+
+
 @click.command()
 @click.option(
     "--chain-config",
     type=str,
-    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+    help="Id of the mech's chain configuration.",
 )
 def setup_agent_mode(
     chain_config: str,
@@ -347,6 +426,9 @@ def setup_agent_mode(
             f"  • Corrupted operate directory\n\n"
             f"Please check the error message above for details."
         ) from e
+
+    # Extract and display wallet information
+    display_setup_wallets(operate, validated_chain)
 
 
 @click.command()
