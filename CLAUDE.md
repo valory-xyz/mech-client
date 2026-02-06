@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Mech Client is a Python CLI tool and library for interacting with AI Mechs (on-chain AI agents) via the Olas protocol. It supports both legacy mechs and the newer Mech Marketplace, enabling users to send AI task requests on-chain and receive results through various delivery methods (ACN, WebSocket, on-chain).
+Mech Client is a Python CLI tool and library for interacting with AI Mechs (on-chain AI agents) via the Olas protocol through the Mech Marketplace, enabling users to send AI task requests on-chain and receive results through on-chain delivery.
 
 ## Command Dependency Diagrams
 
 This section provides visual diagrams showing external resource dependencies and environment variables for each CLI command. Use these during development to understand what each command needs to function.
 
-**Total commands: 15** (14 with detailed diagrams - utility commands have minimal dependencies)
+**Total commands: 12** (11 with detailed diagrams - utility commands have minimal dependencies)
 
 ### Legend
 
@@ -37,7 +37,7 @@ ENV VARS:
   OPERATE_PASSWORD (loaded from .env or prompted)
 ```
 
-### 2. interact --priority-mech (Marketplace Path)
+### 2. interact
 
 ```
 mechx interact --priority-mech 0x... --tools tool1 --prompts "..."
@@ -72,36 +72,7 @@ NOTES:
   - If HTTP RPC is slow/unavailable, command times out at "Waiting for transaction receipt..."
 ```
 
-### 3. interact --agent-id (Legacy Mech Path)
-
-```
-mechx interact --agent-id 123 --tool tool1 --prompts "..."
-├─ HTTP RPC (MECHX_CHAIN_RPC)
-│  ├─ Send transaction
-│  └─ Get transaction receipt
-├─ WebSocket (MECHX_WSS_ENDPOINT) ← USED FOR EVENTS
-│  ├─ Subscribe to Request events
-│  └─ Subscribe to Deliver events
-├─ Agent Communication Network (ACN/libp2p)
-│  └─ Off-chain delivery mechanism
-├─ IPFS Gateway
-│  ├─ Upload: prompt + tool metadata
-│  └─ Download: mech response
-└─ Smart Contracts
-   ├─ AgentRegistry (legacy mech-specific): tokenURI(agent_id)
-   └─ AgentMech: request(), deliver()
-
-ENV VARS:
-  MECHX_CHAIN_RPC (required)
-  MECHX_WSS_ENDPOINT (required for event monitoring)
-
-DELIVERY MODES (--confirm):
-  - off-chain: ACN only
-  - on-chain: WSS events only
-  - wait-for-both: Race ACN vs WSS (default)
-```
-
-### 4. deposit-native
+### 3. deposit-native
 
 ```
 mechx deposit-native --chain-config gnosis --mech-type native --amount 0.01
@@ -121,7 +92,7 @@ NOTES:
   - Supports both agent mode (Safe) and client mode (EOA)
 ```
 
-### 5. deposit-token
+### 4. deposit-token
 
 ```
 mechx deposit-token --chain-config gnosis --token-type olas --amount 1000000000000000000
@@ -143,7 +114,7 @@ SUPPORTED TOKENS:
   - usdc: USDC token (not available on gnosis)
 ```
 
-### 6. purchase-nvm-subscription
+### 5. purchase-nvm-subscription
 
 ```
 mechx purchase-nvm-subscription --chain-config gnosis --mech-type native_nvm
@@ -162,7 +133,7 @@ ENV VARS:
   CHAIN_ID (from envs)
 ```
 
-### 7. fetch-mm-mechs-info
+### 6. fetch-mm-mechs-info
 
 ```
 mechx fetch-mm-mechs-info --chain-config gnosis
@@ -183,63 +154,7 @@ NOTES:
   - Currently all chains have empty subgraph_url in mechs.json
 ```
 
-### 8. tools-for-agents
-
-```
-mechx tools-for-agents --agent-ids 1 2 3 --chain-config gnosis
-├─ HTTP RPC (MECHX_CHAIN_RPC)
-│  └─ Query smart contract: AgentRegistry (legacy mech-specific)
-├─ Smart Contracts
-│  └─ AgentRegistry (legacy mech-specific): tokenURI(agent_id), totalSupply()
-└─ External HTTP
-   └─ Fetch metadata from tokenURI URL
-
-ENV VARS:
-  MECHX_CHAIN_RPC (required)
-
-NOTES:
-  - Read-only, no transactions
-  - For legacy mechs only
-  - Uses legacy mech-specific AgentRegistry, not standard Olas service registry
-```
-
-### 9. tool-description (Legacy)
-
-```
-mechx tool-description <tool_id> --chain-config gnosis
-├─ HTTP RPC (MECHX_CHAIN_RPC)
-│  └─ Query: AgentRegistry (legacy mech-specific).tokenURI(agent_id)
-└─ External HTTP
-   └─ Fetch and parse tool metadata
-
-ENV VARS:
-  MECHX_CHAIN_RPC (required)
-
-NOTES:
-  - tool_id format: "agent_id-tool_name"
-  - Example: "1-openai-gpt-3.5-turbo"
-  - Uses legacy mech-specific AgentRegistry
-```
-
-### 10. tool-io-schema (Legacy)
-
-```
-mechx tool-io-schema <tool_id> --chain-config gnosis
-├─ HTTP RPC (MECHX_CHAIN_RPC)
-│  └─ Query: AgentRegistry (legacy mech-specific).tokenURI(agent_id)
-└─ External HTTP
-   └─ Fetch and parse tool metadata
-
-ENV VARS:
-  MECHX_CHAIN_RPC (required)
-
-NOTES:
-  - tool_id format: "agent_id-tool_name"
-  - Returns input/output schema for the tool
-  - Uses legacy mech-specific AgentRegistry
-```
-
-### 11. tools-for-marketplace-mech
+### 7. tools-for-marketplace-mech
 
 ```
 mechx tools-for-marketplace-mech --agent-id <service_id> --chain-config gnosis
@@ -256,7 +171,7 @@ NOTES:
   - Uses service_id (passed as --agent-id parameter)
 ```
 
-### 12. tool-description-for-marketplace-mech
+### 8. tool-description-for-marketplace-mech
 
 ```
 mechx tool-description-for-marketplace-mech <tool_id> --chain-config gnosis
@@ -273,7 +188,7 @@ NOTES:
   - Example: "1-openai-gpt-3.5-turbo"
 ```
 
-### 13. tool-io-schema-for-marketplace-mech
+### 9. tool-io-schema-for-marketplace-mech
 
 ```
 mechx tool-io-schema-for-marketplace-mech <tool_id> --chain-config gnosis
@@ -290,7 +205,7 @@ NOTES:
   - Returns input/output schema for the tool
 ```
 
-### 14. prompt-to-ipfs & push-to-ipfs
+### 10. prompt-to-ipfs & push-to-ipfs
 
 ```
 mechx prompt-to-ipfs "prompt" "tool"
@@ -306,7 +221,7 @@ NOTES:
   - No RPC or WSS needed
 ```
 
-### 15. to-png
+### 11. to-png
 
 ```
 mechx to-png <ipfs_hash> <path> <request_id>
@@ -325,24 +240,20 @@ NOTES:
 
 ## Quick Reference: Environment Variables by Command
 
-| Command | MECHX_CHAIN_RPC | MECHX_WSS_ENDPOINT | MECHX_SUBGRAPH_URL | MECHX_MECH_OFFCHAIN_URL | OPERATE_PASSWORD |
-|---------|----------------|--------------------|--------------------|------------------------|------------------|
-| setup-agent-mode | ○ | | | | ✓ |
-| interact (marketplace) | ✓ | | | ○ | |
-| interact (legacy) | ✓ | ✓ | | | |
-| deposit-native | ✓ | | | | |
-| deposit-token | ✓ | | | | |
-| purchase-nvm-subscription | ✓ | | | | |
-| fetch-mm-mechs-info | | | ✓ | | |
-| tools-for-agents | ✓ | | | | |
-| tool-description (legacy) | ✓ | | | | |
-| tool-io-schema (legacy) | ✓ | | | | |
-| tools-for-marketplace-mech | ✓ | | | | |
-| tool-description-for-marketplace-mech | ✓ | | | | |
-| tool-io-schema-for-marketplace-mech | ✓ | | | | |
-| prompt-to-ipfs | | | | | |
-| push-to-ipfs | | | | | |
-| to-png | | | | | |
+| Command | MECHX_CHAIN_RPC | MECHX_SUBGRAPH_URL | MECHX_MECH_OFFCHAIN_URL | OPERATE_PASSWORD |
+|---------|----------------|--------------------|-----------------------|------------------|
+| setup-agent-mode | ○ | | | ✓ |
+| interact | ✓ | | ○ | |
+| deposit-native | ✓ | | | |
+| deposit-token | ✓ | | | |
+| purchase-nvm-subscription | ✓ | | | |
+| fetch-mm-mechs-info | | ✓ | | |
+| tools-for-marketplace-mech | ✓ | | | |
+| tool-description-for-marketplace-mech | ✓ | | | |
+| tool-io-schema-for-marketplace-mech | ✓ | | | |
+| prompt-to-ipfs | | | | |
+| push-to-ipfs | | | | |
+| to-png | | | | |
 
 **Legend:**
 - ✓ = Required for command to work
@@ -371,22 +282,6 @@ export MECHX_CHAIN_RPC='https://mainnet.base.org'  # Base
 **Why this happens:**
 - The `wait_for_receipt()` function polls HTTP RPC to get transaction receipt
 - If RPC is slow/down, it times out after 5 minutes (300 seconds)
-- This is NOT a WebSocket issue for marketplace mechs
-
-### Issue: WebSocket connection closed (legacy mechs only)
-
-**Affected Commands:** interact (with --agent-id)
-
-**Cause:** WSS endpoint closed connection during long wait
-
-**Solution:**
-```bash
-# Set a reliable WebSocket provider
-export MECHX_WSS_ENDPOINT='wss://your-wss-provider'
-
-# Examples:
-export MECHX_WSS_ENDPOINT='wss://rpc.gnosischain.com/wss'
-```
 
 ### Issue: "Subgraph URL not set" (fetch-mm-mechs-info)
 
@@ -442,16 +337,13 @@ mechx setup-agent-mode --chain-config gnosis
 
 ### Issue: "Invalid tool ID format"
 
-**Affected Commands:** tool-description, tool-io-schema, tool-description-for-marketplace-mech, tool-io-schema-for-marketplace-mech
+**Affected Commands:** tool-description-for-marketplace-mech, tool-io-schema-for-marketplace-mech
 
 **Cause:** Incorrect tool ID format provided
 
 **Solution:**
 ```bash
-# Legacy mechs: Use format "agent_id-tool_name"
-mechx tool-description 1-openai-gpt-3.5-turbo --chain-config gnosis
-
-# Marketplace mechs: Use format "service_id-tool_name"
+# Use format "service_id-tool_name"
 mechx tool-description-for-marketplace-mech 1-openai-gpt-3.5-turbo --chain-config gnosis
 ```
 
@@ -465,8 +357,7 @@ mechx tool-description-for-marketplace-mech 1-openai-gpt-3.5-turbo --chain-confi
 ```bash
 # Marketplace deposits supported on: gnosis, base, polygon, optimism
 # NVM subscriptions supported on: gnosis, base
-# Use a supported chain or legacy mechs instead:
-mechx interact --agent-id 1 --tool tool1 --prompts "..." --chain-config gnosis
+# Use a supported chain
 ```
 
 ### Issue: "Smart contract error" or "Insufficient balance"
@@ -514,13 +405,10 @@ export MECHX_GAS_LIMIT=500000
 **Solution:**
 ```bash
 # List available tools first
-mechx tools-for-agents --agent-id 1 --chain-config gnosis
-
-# Or for marketplace mechs:
 mechx tools-for-marketplace-mech --agent-id 1 --chain-config gnosis
 
 # Then use exact tool ID from the list
-mechx tool-description <tool_id_from_list> --chain-config gnosis
+mechx tool-description-for-marketplace-mech <tool_id_from_list> --chain-config gnosis
 ```
 
 ### Issue: "Missing required environment variable" (NVM subscription)
@@ -681,13 +569,6 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 
 #### Interaction Layers
 
-**Legacy Mechs (`interact.py`)**
-- Direct interaction with individual mech agents via legacy mech-specific agent registry
-- Uses `ConfirmationType` enum (off-chain, on-chain, wait-for-both) for delivery method selection
-- Configuration via `MechConfig` dataclass loaded from `mech_client/configs/mechs.json`
-- Single request/response model per agent
-- Note: Uses legacy mech-specific AgentRegistry, not the standard Olas service registry used by marketplace mechs
-
 **Mech Marketplace (`marketplace_interact.py`)**
 - Interaction via the Mech Marketplace contract
 - Supports multiple payment types (`PaymentType` enum): NATIVE, TOKEN, USDC_TOKEN, NATIVE_NVM, TOKEN_NVM_USDC
@@ -717,22 +598,12 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 - Network configuration in `resources/networks.json`
 - Entry point: `nvm_subscribe_main()` in `__init__.py`
 
-#### Delivery Mechanisms (`delivery.py`, `wss.py`, `acn.py`)
+#### Delivery Mechanisms (`delivery.py`)
 
 **On-chain delivery (`delivery.py`)**
-- Polls blockchain for `Deliver` events from marketplace or mech contracts
+- Polls blockchain for `Deliver` events from marketplace contracts
 - Extracts IPFS hash from event data
-- Primary method: `watch_for_marketplace_data()` and `watch_for_mech_data_url()`
-
-**WebSocket delivery (`wss.py`)**
-- Connects to chain WSS endpoints for real-time event streaming
-- Watches for `Request` events to get request IDs and `Deliver` events for results
-- Uses websocket-client library
-
-**ACN delivery (`acn.py`)**
-- Agent Communication Network (libp2p-based) for off-chain delivery
-- Loads ACN protocols and p2p_libp2p_client connection from `mech_client/helpers/`
-- Used primarily for legacy mechs
+- Primary method: `watch_for_marketplace_data()`
 
 #### Safe Integration (`safe.py`)
 - Gnosis Safe transaction building and execution for agent mode
@@ -741,21 +612,16 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 
 #### Tool Management
 
-**Legacy (`mech_tool_management.py`)**
-- Fetches tools from agent metadata via complementary metadata hash contract
-- Functions: `get_tools_for_agents()`, `get_tool_description()`, `get_tool_io_schema()`
-
 **Marketplace (`mech_marketplace_tool_management.py`)**
 - Fetches tools from marketplace mech metadata
 - Uses `ToolInfo` and `ToolsForMarketplaceMech` dataclasses
-- Same function signatures as legacy but with "marketplace" in name
+- Functions: `get_tools_for_marketplace_mech()`, `get_tool_description_for_marketplace_mech()`, `get_tool_io_schema_for_marketplace_mech()`
 
 #### Blockchain Interaction
 
-**Subgraph queries (`subgraph.py`, `mech_marketplace_subgraph.py`)**
-- GraphQL queries for agent/mech metadata
-- Legacy (`subgraph.py`): queries legacy mech-specific agent registry
-- Marketplace (`mech_marketplace_subgraph.py`): queries marketplace contract data and standard Olas service registry
+**Subgraph queries (`mech_marketplace_subgraph.py`)**
+- GraphQL queries for marketplace mech metadata
+- Queries marketplace contract data and standard Olas service registry
 
 **IPFS (`prompt_to_ipfs.py`, `push_to_ipfs.py`, `fetch_ipfs_hash.py`)**
 - IPFS gateway at `https://gateway.autonolas.tech/ipfs/`
@@ -781,9 +647,7 @@ All configuration values can be overridden via `MECHX_*` environment variables. 
 
 Key variables:
 - `MECHX_CHAIN_RPC`: Override RPC endpoint (standardized name, used throughout for both agent mode and blockchain interactions)
-- `MECHX_WSS_ENDPOINT`: Override WebSocket endpoint
 - `MECHX_GAS_LIMIT`: Override gas limit
-- `MECHX_AGENT_REGISTRY_CONTRACT`: Override legacy mech-specific agent registry contract address (for legacy mechs only)
 - `MECHX_SERVICE_REGISTRY_CONTRACT`: Override standard Olas service registry contract address (for marketplace mechs)
 - `MECHX_TRANSACTION_URL`: Override transaction URL template
 - `MECHX_SUBGRAPH_URL`: Override subgraph URL
@@ -807,7 +671,6 @@ These are "ejected" into `mech_client/helpers/` during build via `make eject-pac
 ### Smart Contract ABIs
 
 All contract ABIs are in `mech_client/abis/`:
-- `AgentMech.json`, `AgentRegistry.json`: Legacy mech contracts
 - `MechMarketplace.json`: Marketplace contract
 - `IMech.json`, `IToken.json`, `IERC1155.json`: Interfaces
 - `BalanceTracker*.json`: Payment tracking contracts
@@ -890,11 +753,11 @@ All contract ABIs are in `mech_client/abis/`:
 10. **Command validation patterns**:
     - **Chain config**: ALL commands validate chain with `validate_chain_config()` before execution
     - **Addresses**: Commands accepting addresses use `validate_ethereum_address(address, name)` to check format and non-zero
-    - **Tool ID format**: Legacy tools require "agent_id-tool_name", marketplace tools require "service_id-tool_name"
+    - **Tool ID format**: Marketplace tools require "service_id-tool_name"
     - **Amount validation**: Deposit commands validate amount is positive integer (wei/smallest unit)
     - **Marketplace support**: Deposit commands check `mech_marketplace_contract != ADDRESS_ZERO`
     - **NVM support**: purchase-nvm-subscription checks chain exists in `CHAIN_TO_ENVS`
-    - **Service/Agent ID validation**: Tool commands validate ID is non-negative integer
+    - **Service ID validation**: Tool commands validate ID is non-negative integer
 
 ## Validation Helpers
 
@@ -938,14 +801,14 @@ validated_safe = validate_ethereum_address(safe, "Safe address")
 
 ## Chain Support Matrix
 
-| Chain | Chain ID | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Token | USDC Token | Subgraph | Legacy Mechs |
-|-------|----------|-------------|------------|----------------|-------------------|------------|------------|----------|--------------|
-| Gnosis | 100 | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
-| Base | 8453 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
-| Polygon | 137 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ |
-| Optimism | 10 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ |
-| Arbitrum | 42161 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Celo | 42220 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Chain | Chain ID | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Token | USDC Token | Subgraph |
+|-------|----------|-------------|------------|----------------|-------------------|------------|------------|----------|
+| Gnosis | 100 | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Base | 8453 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Polygon | 137 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
+| Optimism | 10 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
+| Arbitrum | 42161 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Celo | 42220 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 **Feature Definitions:**
 - **Marketplace**: Chain has `mech_marketplace_contract` deployed (non-zero address in `mechs.json`)
@@ -954,12 +817,10 @@ validated_safe = validate_ethereum_address(safe, "Safe address")
 - **NVM Subscriptions**: Supports `purchase-nvm-subscription` command for Nevermined subscription-based payments (Gnosis, Base)
 - **OLAS/USDC Token**: Payment token addresses configured in `marketplace_interact.py`
 - **Subgraph**: Built-in subgraph URL in `mechs.json` (currently all chains have empty `subgraph_url`; must be set via `MECHX_SUBGRAPH_URL` for `fetch-mm-mechs-info`)
-- **Legacy Mechs**: All chains support legacy mech interactions via `agent_id`
 
 **Command Requirements:**
 - `fetch-mm-mechs-info`: Requires marketplace + `MECHX_SUBGRAPH_URL` environment variable
-- `interact` (marketplace): Requires marketplace contract and standard Olas service registry
-- `interact` (legacy): Requires legacy mech-specific agent registry only
+- `interact`: Requires marketplace contract and standard Olas service registry
 - `deposit-native`: Requires marketplace + native payment support (Gnosis, Base, Polygon, Optimism)
 - `deposit-token`: Requires marketplace + token addresses in config (Gnosis, Base, Polygon, Optimism)
 - `purchase-nvm-subscription`: Requires marketplace + NVM subscription support (Gnosis, Base)
@@ -970,7 +831,7 @@ validated_safe = validate_ethereum_address(safe, "Safe address")
 - Python version: >=3.10, <3.12 (supports Python 3.10, 3.11)
 - Main dependencies: `olas-operate-middleware`, `safe-eth-py`, `gql`, `click`
 - Agent mode supports all marketplace chains (Gnosis, Base, Polygon, Optimism)
-- Batch requests only supported for marketplace mechs, not legacy mechs
+- Batch requests supported for marketplace mechs
 - Always use custom RPC providers for reliability (public RPCs may be rate-limited)
 - All chains currently have empty `subgraph_url` in config; set `MECHX_SUBGRAPH_URL` manually for subgraph-dependent commands
 - **All CLI commands include comprehensive error handling** with actionable solutions referencing environment variables
