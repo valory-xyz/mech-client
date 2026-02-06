@@ -21,8 +21,7 @@
 
 from typing import Optional
 
-from aea.crypto.base import Crypto as EthereumCrypto
-from aea_ledger_ethereum import EthereumApi
+from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
@@ -119,8 +118,9 @@ class TokenPaymentStrategy(PaymentStrategy):
 
         # Client mode: build, sign, and send
         if self.crypto or private_key:
-            # pylint: disable=abstract-class-instantiated
-            crypto = self.crypto or EthereumCrypto(private_key)
+            if not self.crypto:
+                raise ValueError("Crypto object required for token approval")
+            crypto = self.crypto
             raw_transaction = self.ledger_api.build_transaction(
                 contract_instance=token_contract,
                 method_name=method_name,

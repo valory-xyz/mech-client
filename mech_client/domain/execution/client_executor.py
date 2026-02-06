@@ -21,8 +21,7 @@
 
 from typing import Any, Dict
 
-from aea.crypto.base import Crypto as EthereumCrypto
-from aea_ledger_ethereum import EthereumApi
+from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from web3.contract import Contract as Web3Contract
 
 from mech_client.domain.execution.base import TransactionExecutor
@@ -35,16 +34,15 @@ class ClientExecutor(TransactionExecutor):
     and sent to the network without multisig.
     """
 
-    def __init__(self, ledger_api: EthereumApi, private_key: str):
+    def __init__(self, ledger_api: EthereumApi, crypto: EthereumCrypto):
         """
         Initialize client executor.
 
         :param ledger_api: Ethereum API for blockchain interactions
-        :param private_key: Private key for signing transactions
+        :param crypto: Ethereum crypto object for signing
         """
-        super().__init__(ledger_api, private_key)
-        # pylint: disable=abstract-class-instantiated
-        self.crypto = EthereumCrypto(private_key)
+        super().__init__(ledger_api, crypto.private_key)
+        self.crypto = crypto
 
     def execute_transaction(
         self,
