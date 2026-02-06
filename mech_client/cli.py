@@ -71,7 +71,7 @@ from mech_client.to_png import main as to_png_main
 
 CURR_DIR = Path(__file__).resolve().parent
 OPERATE_FOLDER_NAME = ".operate_mech_client"
-SETUP_MODE_COMMAND = "setup-agent-mode"
+SETUP_MODE_COMMAND = "setup"
 
 CHAIN_TO_TEMPLATE = {
     "gnosis": CURR_DIR / "config" / "mech_client_gnosis.json",
@@ -243,11 +243,16 @@ def fetch_agent_mode_data(
 @click.option(
     "--client-mode",
     is_flag=True,
-    help="Enables client mode",
+    help="Enables client mode (EOA-based). Default is agent mode (Safe-based).",
 )
 @click.pass_context
 def cli(ctx: click.Context, client_mode: bool) -> None:
-    """Command-line tool for interacting with mechs."""
+    """Command-line tool for interacting with AI Mechs on-chain.
+
+    Mech Client enables you to send AI task requests to on-chain AI agents (mechs)
+    via the Olas protocol and Mech Marketplace. Supports multiple payment methods,
+    tool discovery, and both agent mode (Safe multisig) and client mode (EOA).
+    """
     load_dotenv(dotenv_path=ENV_PATH, override=False)
     ctx.ensure_object(dict)
     ctx.obj["client_mode"] = client_mode
@@ -260,7 +265,7 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
         operate_path = get_operate_path()
         if not operate_path.exists():
             raise ClickException(
-                f"""Operate path does not exists at: {operate_path}. Setup agent mode for a chain using mechx setup-agent-mode cli command."""
+                f"""Operate path does not exists at: {operate_path}. Setup agent mode for a chain using 'mechx setup' command."""
             )
 
 
@@ -344,17 +349,24 @@ def display_setup_wallets(operate: OperateApp, validated_chain: str) -> None:
         )
 
 
-@click.command()
+@cli.command()
 @click.option(
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration name. See documentation for supported chains.",
+    help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
-def setup_agent_mode(
+def setup(
     chain_config: str,
 ) -> None:
-    """Sets up the agent mode for users"""
+    """Setup agent mode for on-chain interactions via Safe multisig.
+
+    Agent mode registers your interactions as an Olas protocol agent and uses
+    a Safe multisig wallet for enhanced security. This is the recommended mode
+    for all chains.
+
+    Example: mechx setup --chain-config gnosis
+    """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)
 
@@ -420,70 +432,70 @@ def setup_agent_mode(
     display_setup_wallets(operate, validated_chain)
 
 
-@click.command()
+@cli.command()
 @click.option(
     "--prompts",
     type=str,
     multiple=True,
     required=True,
-    help="One or more prompts to send as a request. Can be repeated.",
+    help="One or more prompts to send as AI task requests. Can be repeated for batch requests.",
 )
 @click.option(
     "--priority-mech",
     type=str,
-    help="Priority Mech to be used for Marketplace Requests",
+    help="Priority mech address to use for the request (0x...).",
 )
 @click.option(
     "--use-prepaid",
     type=bool,
-    help="Uses the prepaid model for marketplace requests",
+    help="Use prepaid balance instead of per-request payment.",
 )
 @click.option(
     "--use-offchain",
     type=bool,
-    help="Uses the offchain model for marketplace requests",
+    help="Use offchain mech (requires MECHX_MECH_OFFCHAIN_URL).",
 )
 @click.option(
     "--key",
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
-    help="Path to private key to use for request minting",
+    help="Path to private key file (client mode only).",
 )
 @click.option(
     "--tools",
     type=str,
     multiple=True,
-    help="One or more tools to be used. Can be repeated.",
+    help="One or more tool identifiers. Can be repeated (must match number of prompts).",
 )
 @click.option(
     "--extra-attribute",
     type=str,
     multiple=True,
-    help="Extra attribute (key=value) to be included in the request metadata",
+    help="Extra attribute (key=value) to be included in the request metadata.",
     metavar="KEY=VALUE",
 )
 @click.option(
     "--retries",
     type=int,
-    help="Number of retries for sending a transaction",
+    help="Number of retries for sending a transaction.",
 )
 @click.option(
     "--timeout",
     type=float,
-    help="Timeout to wait for the transaction",
+    help="Timeout in seconds to wait for the transaction.",
 )
 @click.option(
     "--sleep",
     type=float,
-    help="Amount of sleep before retrying the transaction",
+    help="Sleep duration in seconds before retrying the transaction.",
 )
 @click.option(
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration name. See documentation for supported chains.",
+    help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
 @click.pass_context
-def interact(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
+def request(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
     ctx: click.Context,
     prompts: tuple,
     priority_mech: str,
@@ -498,7 +510,19 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals,too-many-sta
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
 ) -> None:
-    """Interact with a mech specifying a prompt and tool."""
+    """Send an AI task request to a mech on-chain.
+
+    Sends one or more prompts to AI mechs via the Mech Marketplace contract.
+    Supports batch requests (multiple prompts/tools), various payment methods
+    (native, token, prepaid, NVM subscription), and both on-chain and off-chain delivery.
+
+    Examples:
+      # Single request with native payment
+      mechx request --prompts "Summarize this" --tools openai-gpt-4 --chain-config gnosis
+
+      # Batch request with prepaid balance
+      mechx request --prompts "Prompt 1" --prompts "Prompt 2" --tools tool1 --tools tool2 --use-prepaid --chain-config gnosis
+    """
     try:
         agent_mode = is_agent_mode(ctx)
         click.echo(f"Running interact with agent_mode={agent_mode}")
@@ -652,42 +676,147 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals,too-many-sta
         ) from e
 
 
-@click.command()
-@click.argument("prompt")
-@click.argument("tool")
-def prompt_to_ipfs(prompt: str, tool: str) -> None:
-    """Upload a prompt and tool to IPFS as metadata."""
-    prompt_to_ipfs_main(prompt=prompt, tool=tool)
+# ============================================================================
+# COMMAND GROUP: mech
+# ============================================================================
 
 
-@click.command()
-@click.argument("file_path")
-def push_to_ipfs(file_path: str) -> None:
-    """Upload a file to IPFS."""
-    push_to_ipfs_main(file_path=file_path)
+@cli.group()
+def mech() -> None:
+    """Manage and query AI mechs on the marketplace.
+
+    Commands for discovering and retrieving information about available
+    AI mechs (on-chain AI agents) on the Mech Marketplace.
+    """
 
 
-@click.command()
-@click.argument("ipfs_hash")
-@click.argument("path")
-@click.argument("request_id")
-def to_png(ipfs_hash: str, path: str, request_id: str) -> None:
-    """Convert a stability AI API's diffusion model output into a PNG format."""
-    to_png_main(ipfs_hash, path, request_id)
+@mech.command(name="list")
+@click.option(
+    "--chain-config",
+    type=str,
+    required=True,
+    help="Chain configuration name (gnosis, base, polygon, optimism).",
+)
+def mech_list(
+    chain_config: str,
+) -> None:
+    """List available mechs on the marketplace.
+
+    Fetches information about all mechs from the marketplace subgraph,
+    including service IDs, addresses, delivery counts, and metadata links.
+    Requires MECHX_SUBGRAPH_URL environment variable to be set.
+
+    Example: mechx mech list --chain-config gnosis
+    """
+    try:
+        # Validate chain config
+        validated_chain = validate_chain_config(chain_config)
+
+        # Validate MECHX_SUBGRAPH_URL is set before calling query function
+        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
+        if not subgraph_url:
+            raise ClickException(
+                "Environment variable MECHX_SUBGRAPH_URL is required for this command.\n\n"
+                f"This command queries blockchain data via a subgraph API.\n"
+                f"Current chain: {validated_chain}\n\n"
+                f"Please set the subgraph URL:\n"
+                f"  export MECHX_SUBGRAPH_URL='https://your-subgraph-url'\n\n"
+                f"Note: The subgraph URL must match your --chain-config."
+            )
+
+        mech_list_data = query_mm_mechs_info(chain_config=validated_chain)
+        if mech_list_data is None:
+            print("No mechs found")
+            return None
+
+        headers = [
+            "AI Agent Id",
+            "Mech Type",
+            "Mech Address",
+            "Total Deliveries",
+            "Metadata Link",
+        ]
+
+        data = [
+            (
+                items["service"]["id"],
+                items["mech_type"],
+                items["address"],
+                items["service"]["totalDeliveries"],
+                (
+                    IPFS_URL_TEMPLATE.format(
+                        items["service"]["metadata"]["metadata"][2:]
+                    )
+                    if items["service"].get("metadata") is not None
+                    else None
+                ),
+            )
+            for items in mech_list_data
+        ]
+
+        click.echo(tabulate(data, headers=headers, tablefmt="grid"))
+        return None
+    except requests.exceptions.HTTPError as e:
+        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL", "default")
+        raise ClickException(
+            f"Subgraph endpoint error: {e}\n\n"
+            f"Current subgraph URL: {subgraph_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check if the subgraph endpoint is available and accessible\n"
+            f"  2. Set a different subgraph URL: export MECHX_SUBGRAPH_URL='https://your-subgraph-url'\n"
+            f"  3. Check your network connection"
+        ) from e
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL", "default")
+        raise ClickException(
+            f"Network error connecting to subgraph endpoint: {e}\n\n"
+            f"Current subgraph URL: {subgraph_url}\n\n"
+            f"Possible solutions:\n"
+            f"  1. Check your internet connection\n"
+            f"  2. Verify the subgraph URL is correct\n"
+            f"  3. Try a different subgraph provider: export MECHX_SUBGRAPH_URL='https://your-subgraph-url'"
+        ) from e
+    except Exception as e:  # pylint: disable=broad-except
+        raise ClickException(
+            f"Error querying subgraph: {e}\n\n"
+            f"Please check your MECHX_SUBGRAPH_URL and network connection."
+        ) from e
 
 
-@click.command(name="tools-for-marketplace-mech")
+# ============================================================================
+# COMMAND GROUP: tool
+# ============================================================================
+
+
+@cli.group()
+def tool() -> None:
+    """Manage and query mech tools.
+
+    Commands for discovering available tools, their descriptions, and I/O schemas
+    for marketplace mechs. Tools define what AI capabilities a mech provides.
+    """
+
+
+@tool.command(name="list")
 @click.argument(
-    "agent-id",
+    "agent_id",
     type=int,
+    metavar="<agent-id>",
 )
 @click.option(
     "--chain-config",
     required=True,
-    help="Chain configuration name. See documentation for supported chains.",
+    help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
-def tools_for_marketplace_mech(agent_id: int, chain_config: str) -> None:
-    """Fetch and display tools for marketplace mechs."""
+def tool_list(agent_id: int, chain_config: str) -> None:
+    """List all available tools for a mech.
+
+    Retrieves and displays all tools provided by a specific marketplace mech,
+    including tool names and unique identifiers. The agent ID is the service ID
+    of the mech on the Olas service registry.
+
+    Example: mechx tool list 1 --chain-config gnosis
+    """
     try:
         # Validate chain config
         validated_chain = validate_chain_config(chain_config)
@@ -759,15 +888,21 @@ def tools_for_marketplace_mech(agent_id: int, chain_config: str) -> None:
         ) from e
 
 
-@click.command(name="tool-description-for-marketplace-mech")
-@click.argument("tool_id")
+@tool.command(name="describe")
+@click.argument("tool_id", metavar="<tool-id>")
 @click.option(
     "--chain-config",
     required=True,
-    help="Chain configuration name. See documentation for supported chains.",
+    help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
-def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> None:
-    """Fetch and display the description of a specific tool for marketplace mechs."""
+def tool_describe(tool_id: str, chain_config: str) -> None:
+    """Get detailed description of a specific tool.
+
+    Retrieves the description for a tool. Tool ID format is "service_id-tool_name"
+    (e.g., "1-openai-gpt-4"). Use 'mechx tool list' to discover available tools.
+
+    Example: mechx tool describe 1-openai-gpt-4 --chain-config gnosis
+    """
     try:
         # Validate chain config
         validated_chain = validate_chain_config(chain_config)
@@ -825,15 +960,21 @@ def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> No
         ) from e
 
 
-@click.command(name="tool-io-schema-for-marketplace-mech")
-@click.argument("tool_id")
+@tool.command(name="schema")
+@click.argument("tool_id", metavar="<tool-id>")
 @click.option(
     "--chain-config",
     required=True,
-    help="Chain configuration name. See documentation for supported chains.",
+    help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
-def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None:
-    """Fetch and display the tool's name and description along with the input/output schema for a specific tool for marketplace mechs."""
+def tool_schema(tool_id: str, chain_config: str) -> None:
+    """Get input/output schema for a specific tool.
+
+    Retrieves the complete I/O schema including tool name, description, input fields,
+    and output structure. Tool ID format is "service_id-tool_name" (e.g., "1-openai-gpt-4").
+
+    Example: mechx tool schema 1-openai-gpt-4 --chain-config gnosis
+    """
     try:
         # Validate chain config
         validated_chain = validate_chain_config(chain_config)
@@ -911,18 +1052,33 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
         ) from e
 
 
-@click.command(name="deposit-native")
-@click.argument("amount_to_deposit")
+# ============================================================================
+# COMMAND GROUP: deposit
+# ============================================================================
+
+
+@cli.group()
+def deposit() -> None:
+    """Manage prepaid balance deposits.
+
+    Commands for depositing native tokens or ERC20 tokens into your prepaid
+    balance on the marketplace. Prepaid balances can be used for marketplace
+    requests without per-request approval transactions.
+    """
+
+
+@deposit.command(name="native")
+@click.argument("amount_to_deposit", metavar="<amount>")
 @click.option(
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration name. See documentation for supported chains.",
+    help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
 @click.option(
     "--key",
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
-    help="Path to private key to use for deposit",
+    help="Path to private key file (client mode only).",
 )
 @click.pass_context
 def deposit_native(
@@ -932,7 +1088,15 @@ def deposit_native(
     key: Optional[str] = None,
     safe: Optional[str] = None,
 ) -> None:
-    """Deposits Native balance for prepaid requests."""
+    """Deposit native tokens into prepaid balance.
+
+    Deposits native blockchain tokens (xDAI on Gnosis, ETH on Base, MATIC on Polygon, etc.)
+    into your prepaid balance on the marketplace. Amount must be specified in wei
+    (smallest unit, 18 decimals for most chains).
+
+    Example: mechx deposit native 1000000000000000000 --chain-config gnosis
+    (deposits 1.0 xDAI)
+    """
     try:
         # Validate chain config
         validated_chain = validate_chain_config(chain_config)
@@ -1018,18 +1182,18 @@ def deposit_native(
         ) from e
 
 
-@click.command(name="deposit-token")
-@click.argument("amount_to_deposit")
+@deposit.command(name="token")
+@click.argument("amount_to_deposit", metavar="<amount>")
 @click.option(
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration name. See documentation for supported chains.",
+    help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
 @click.option(
     "--key",
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
-    help="Path to private key to use for deposit",
+    help="Path to private key file (client mode only).",
 )
 @click.pass_context
 def deposit_token(
@@ -1039,7 +1203,15 @@ def deposit_token(
     key: Optional[str] = None,
     safe: Optional[str] = None,
 ) -> None:
-    """Deposits Token balance for prepaid requests."""
+    """Deposit ERC20 tokens into prepaid balance.
+
+    Deposits ERC20 tokens (OLAS, USDC) into your prepaid balance on the marketplace.
+    Amount must be specified in the token's smallest unit (e.g., 18 decimals for OLAS,
+    6 decimals for USDC).
+
+    Example: mechx deposit token 1000000000000000000 --chain-config gnosis
+    (deposits 1.0 OLAS)
+    """
     try:
         # Validate chain config
         validated_chain = validate_chain_config(chain_config)
@@ -1126,26 +1298,48 @@ def deposit_token(
         ) from e
 
 
-@click.command(name="purchase-nvm-subscription")
+# ============================================================================
+# COMMAND GROUP: subscription
+# ============================================================================
+
+
+@cli.group()
+def subscription() -> None:
+    """Manage Nevermined (NVM) subscriptions.
+
+    Commands for purchasing and managing NVM subscriptions for subscription-based
+    mech access. NVM subscriptions provide access to mechs without per-request payments.
+    Currently supported on Gnosis and Base chains.
+    """
+
+
+@subscription.command(name="purchase")
 @click.option(
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration name. See documentation for supported chains.",
+    help="Chain configuration name (gnosis, base).",
 )
 @click.option(
     "--key",
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
-    help="Path to private key to use for deposit",
+    help="Path to private key file (client mode only).",
 )
 @click.pass_context
-def nvm_subscribe(
+def subscription_purchase(
     ctx: click.Context,
     chain_config: str,
     safe: Optional[str] = None,
     key: Optional[str] = None,
 ) -> None:
-    """Allows to purchase nvm subscription for nvm mech requests."""
+    """Purchase a Nevermined (NVM) subscription.
+
+    Purchases an NVM subscription for access to subscription-based mechs.
+    NVM subscriptions enable requests without per-transaction payments.
+    Only available on Gnosis and Base chains.
+
+    Example: mechx subscription purchase --chain-config gnosis
+    """
     try:
         # Validate chain config
         validated_chain = validate_chain_config(chain_config)
@@ -1235,104 +1429,78 @@ def nvm_subscribe(
         ) from e
 
 
-@click.command(name="fetch-mm-mechs-info")
-@click.option(
-    "--chain-config",
-    type=str,
-    required=True,
-    help="Chain configuration name. See documentation for supported chains.",
-)
-def query_mm_mechs_info_cli(
-    chain_config: str,
-) -> None:
-    """Fetches info of mm mechs"""
-    try:
-        # Validate chain config
-        validated_chain = validate_chain_config(chain_config)
-
-        # Validate MECHX_SUBGRAPH_URL is set before calling query function
-        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
-        if not subgraph_url:
-            raise ClickException(
-                "Environment variable MECHX_SUBGRAPH_URL is required for this command.\n\n"
-                f"This command queries blockchain data via a subgraph API.\n"
-                f"Current chain: {validated_chain}\n\n"
-                f"Please set the subgraph URL:\n"
-                f"  export MECHX_SUBGRAPH_URL='https://your-subgraph-url'\n\n"
-                f"Note: The subgraph URL must match your --chain-config."
-            )
-
-        mech_list = query_mm_mechs_info(chain_config=validated_chain)
-        if mech_list is None:
-            print("No mechs found")
-            return None
-
-        headers = [
-            "AI Agent Id",
-            "Mech Type",
-            "Mech Address",
-            "Total Deliveries",
-            "Metadata Link",
-        ]
-
-        data = [
-            (
-                items["service"]["id"],
-                items["mech_type"],
-                items["address"],
-                items["service"]["totalDeliveries"],
-                (
-                    IPFS_URL_TEMPLATE.format(
-                        items["service"]["metadata"]["metadata"][2:]
-                    )
-                    if items["service"].get("metadata") is not None
-                    else None
-                ),
-            )
-            for items in mech_list
-        ]
-
-        click.echo(tabulate(data, headers=headers, tablefmt="grid"))
-        return None
-    except requests.exceptions.HTTPError as e:
-        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL", "default")
-        raise ClickException(
-            f"Subgraph endpoint error: {e}\n\n"
-            f"Current subgraph URL: {subgraph_url}\n\n"
-            f"Possible solutions:\n"
-            f"  1. Check if the subgraph endpoint is available and accessible\n"
-            f"  2. Set a different subgraph URL: export MECHX_SUBGRAPH_URL='https://your-subgraph-url'\n"
-            f"  3. Check your network connection"
-        ) from e
-    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL", "default")
-        raise ClickException(
-            f"Network error connecting to subgraph endpoint: {e}\n\n"
-            f"Current subgraph URL: {subgraph_url}\n\n"
-            f"Possible solutions:\n"
-            f"  1. Check your internet connection\n"
-            f"  2. Verify the subgraph URL is correct\n"
-            f"  3. Try a different subgraph provider: export MECHX_SUBGRAPH_URL='https://your-subgraph-url'"
-        ) from e
-    except Exception as e:  # pylint: disable=broad-except
-        raise ClickException(
-            f"Error querying subgraph: {e}\n\n"
-            f"Please check your MECHX_SUBGRAPH_URL and network connection."
-        ) from e
+# ============================================================================
+# COMMAND GROUP: ipfs
+# ============================================================================
 
 
-cli.add_command(setup_agent_mode)
-cli.add_command(interact)
-cli.add_command(prompt_to_ipfs)
-cli.add_command(push_to_ipfs)
-cli.add_command(to_png)
-cli.add_command(tools_for_marketplace_mech)
-cli.add_command(tool_io_schema_for_marketplace_mech)
-cli.add_command(tool_description_for_marketplace_mech)
-cli.add_command(deposit_native)
-cli.add_command(deposit_token)
-cli.add_command(nvm_subscribe)
-cli.add_command(query_mm_mechs_info_cli)
+@cli.group()
+def ipfs() -> None:
+    """IPFS utility operations.
+
+    Commands for uploading files and data to IPFS, and converting responses
+    to different formats. IPFS is used to store request prompts and receive
+    mech responses.
+    """
+
+
+@ipfs.command(name="upload")
+@click.argument("file_path", metavar="<file-path>")
+def ipfs_upload(file_path: str) -> None:
+    """Upload a file to IPFS.
+
+    Uploads any file to IPFS via the Olas IPFS gateway and returns the IPFS hash.
+
+    Example: mechx ipfs upload ./myfile.json
+    """
+    push_to_ipfs_main(file_path=file_path)
+
+
+@ipfs.command(name="upload-prompt")
+@click.argument("prompt", metavar="<prompt>")
+@click.argument("tool_name", metavar="<tool>")
+def ipfs_upload_prompt(prompt: str, tool_name: str) -> None:
+    """Upload prompt metadata to IPFS.
+
+    Creates and uploads prompt metadata (prompt + tool) to IPFS for use in
+    mech requests. Returns the IPFS hash that can be used in requests.
+
+    Example: mechx ipfs upload-prompt "Summarize this text" "openai-gpt-4"
+    """
+    prompt_to_ipfs_main(prompt=prompt, tool=tool_name)
+
+
+@ipfs.command(name="to-png")
+@click.argument("ipfs_hash", metavar="<ipfs-hash>")
+@click.argument("path", metavar="<output-path>")
+@click.argument("request_id", metavar="<request-id>")
+def ipfs_to_png(ipfs_hash: str, path: str, request_id: str) -> None:
+    """Convert diffusion model output to PNG.
+
+    Downloads and converts Stability AI diffusion model output from IPFS
+    to PNG image format. Used for image generation mech responses.
+
+    Example: mechx ipfs to-png Qm... ./output.png 12345
+    """
+    to_png_main(ipfs_hash, path, request_id)
+
+
+# ============================================================================
+# LEGACY: Old commands removed - use new structure above
+# ============================================================================
+# The following commands have been removed in this breaking change:
+# - setup-agent-mode -> mechx setup
+# - interact -> mechx request
+# - fetch-mm-mechs-info -> mechx mech list
+# - tools-for-marketplace-mech -> mechx tool list
+# - tool-description-for-marketplace-mech -> mechx tool describe
+# - tool-io-schema-for-marketplace-mech -> mechx tool schema
+# - deposit-native -> mechx deposit native
+# - deposit-token -> mechx deposit token
+# - purchase-nvm-subscription -> mechx subscription purchase
+# - prompt-to-ipfs -> mechx ipfs upload-prompt
+# - push-to-ipfs -> mechx ipfs upload
+# - to-png -> mechx ipfs to-png
 
 
 if __name__ == "__main__":
