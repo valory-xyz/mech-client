@@ -20,7 +20,6 @@ ENCODING = "utf-8"
 DEFAULT_TIMEOUT = 10
 TOOLS = "tools"
 TOOL_METADATA = "toolMetadata"
-DEFAULT_CONFIG = "gnosis"
 
 
 @dataclass
@@ -58,14 +57,12 @@ def fetch_tools(
     return requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
 
 
-def get_mech_tools(
-    service_id: int, chain_config: Optional[str] = DEFAULT_CONFIG
-) -> Optional[Dict[str, Any]]:
+def get_mech_tools(service_id: int, chain_config: str) -> Optional[Dict[str, Any]]:
     """
     Fetch tools for a given mech's service ID.
 
     :param service_id: The service ID of the mech.
-    :param chain_config: The chain configuration to use (default is "gnosis").
+    :param chain_config: The chain configuration to use (gnosis, base, polygon, optimism).
     :return: A dictionary containing the JSON response from the `tokenURI` contract call, typically including tools and metadata.
     """
     # Get the mech configuration
@@ -93,13 +90,13 @@ def get_mech_tools(
 
 
 def get_tools_for_marketplace_mech(
-    service_id: int, chain_config: str = DEFAULT_CONFIG
+    service_id: int, chain_config: str
 ) -> ToolsForMarketplaceMech:
     """
     Retrieve tools for specified mech's service id.
 
     :param service_id: specific mech's service ID to fetch tools for.
-    :param chain_config: The chain configuration to use.
+    :param chain_config: The chain configuration to use (gnosis, base, polygon, optimism).
     :return: Dictionary of tools with identifiers or a mapping of service IDs to tools.
     """
     empty_response = ToolsForMarketplaceMech(service_id=service_id, tools=[])
@@ -125,14 +122,12 @@ def get_tools_for_marketplace_mech(
         raise
 
 
-def get_tool_description(
-    unique_identifier: str, chain_config: str = DEFAULT_CONFIG
-) -> str:
+def get_tool_description(unique_identifier: str, chain_config: str) -> str:
     """
     Fetch the description of a specific tool based on a unique identifier.
 
     :param unique_identifier: The unique identifier for the tool.
-    :param chain_config: The chain configuration to use.
+    :param chain_config: The chain configuration to use (gnosis, base, polygon, optimism).
     :return: Description of the tool or a default message if not available.
     """
     default_response = "Description not available"
@@ -145,14 +140,12 @@ def get_tool_description(
     )
 
 
-def get_tool_io_schema(
-    unique_identifier: str, chain_config: str = DEFAULT_CONFIG
-) -> Dict[str, Any]:
+def get_tool_io_schema(unique_identifier: str, chain_config: str) -> Dict[str, Any]:
     """
     Fetch the input and output schema along with tool name and description of a specific tool based on a unique identifier.
 
     :param unique_identifier: The unique identifier for the tool.
-    :param chain_config: The chain configuration to use.
+    :param chain_config: The chain configuration to use (gnosis, base, polygon, optimism).
     :return: Dictionary containing name, description, input and output schemas.
     """
     _, tool_info = _get_tool_metadata(unique_identifier, chain_config)
@@ -168,13 +161,13 @@ def get_tool_io_schema(
 
 
 def _get_tool_metadata(
-    unique_identifier: str, chain_config: str = DEFAULT_CONFIG
+    unique_identifier: str, chain_config: str
 ) -> Tuple[str, Optional[Dict[str, Any]]]:
     """
     Helper function to extract tool metadata from the chain config and unique identifier.
 
     :param unique_identifier: The unique identifier in the format "<service_id>-<tool_name>".
-    :param chain_config: The chain configuration to use.
+    :param chain_config: The chain configuration to use (gnosis, base, polygon, optimism).
     :return: Tuple of tool name and its metadata dictionary (or None if not found).
     """
     service_id_str, *tool_parts = unique_identifier.split("-")

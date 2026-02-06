@@ -750,7 +750,7 @@ def check_prepaid_balances(  # pylint: disable=too-many-arguments
             sys.exit(1)
 
 
-def verify_tools(tools: tuple, service_id: int, chain_config: Optional[str]) -> None:
+def verify_tools(tools: tuple, service_id: int, chain_config: str) -> None:
     """
     Verifies user supplied tool(s) with the mech's metadata
 
@@ -778,6 +778,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     priority_mech: str,
     agent_mode: bool,
     safe_address: str,
+    chain_config: str,
     use_prepaid: bool = False,
     use_offchain: bool = False,
     mech_offchain_url: str = "",
@@ -788,7 +789,6 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
-    chain_config: Optional[str] = None,
 ) -> Any:
     """
     Interact with mech marketplace contract.
@@ -823,7 +823,7 @@ def marketplace_interact(  # pylint: disable=too-many-arguments, too-many-locals
     :param sleep: Amount of sleep before retrying the transaction
     :type sleep: float
     :param chain_config: Id of the mech's chain configuration (stored configs/mechs.json)
-    :type chain_config: str:
+    :type chain_config: str
     :rtype: Any
     """
 
