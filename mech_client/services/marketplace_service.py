@@ -173,9 +173,10 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
         if not priority_mech_address:
             raise ValueError("No priority mech address specified")
 
-        # Response timeout (default to 0 for no timeout)
+        # Response timeout (5 minutes, matching historic default)
+        # This was the default in CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG
         # TODO: Make this configurable via MechConfig
-        response_timeout = 0
+        response_timeout = 300
 
         tx_hash = self._send_marketplace_request(
             marketplace_contract=marketplace_contract,
@@ -331,7 +332,7 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
         value = (
             0
             if payment_type.is_token() or use_prepaid
-            else self.mech_config.price * len(data_hashes)
+            else max_delivery_rate * len(data_hashes)
         )
 
         # Convert payment type to bytes32
