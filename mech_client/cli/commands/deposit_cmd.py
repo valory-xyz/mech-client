@@ -62,6 +62,7 @@ def deposit() -> None:
     help="Path to private key file (client mode only).",
 )
 @click.pass_context
+# pylint: disable=too-many-locals,too-many-statements
 def deposit_native(
     ctx: click.Context,
     amount_to_deposit: str,
@@ -217,6 +218,7 @@ def deposit_native(
     help="Path to private key file (client mode only).",
 )
 @click.pass_context
+# pylint: disable=too-many-locals,too-many-statements
 def deposit_token(
     ctx: click.Context,
     amount_to_deposit: str,
@@ -310,7 +312,7 @@ def deposit_token(
         # Execute deposit (defaulting to OLAS token for now)
         amount_int = int(amount_to_deposit)
         click.echo(f"\nDepositing {amount_int} of OLAS tokens...")
-        tx_hash = service.deposit_token(amount_int, token_type="olas")
+        tx_hash = service.deposit_token(amount_int, token_type="olas")  # nosec B106
         click.echo(f"\n✓ Deposit transaction: {tx_hash}")
 
     except ContractLogicError as e:

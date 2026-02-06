@@ -87,7 +87,7 @@ class SetupService:
             print(f"✗ Service setup failed: {e}")
             raise
 
-    def configure_local_config(
+    def configure_local_config(  # pylint: disable=no-self-use
         self, template: ServiceTemplate, operate: OperateApp
     ) -> QuickstartConfig:
         """
@@ -185,7 +185,7 @@ class SetupService:
 
             return wallet_info
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             print(f"⚠ Could not display wallet info: {e}")
             return None
 

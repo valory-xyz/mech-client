@@ -101,7 +101,8 @@ from mech_client.utils.constants import DEFAULT_PRIVATE_KEY_FILE
     help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
 @click.pass_context
-def request(  # pylint: disable=too-many-arguments,too-many-locals
+# pylint: disable=too-many-arguments,too-many-locals,too-many-statements,unused-argument
+def request(
     ctx: click.Context,
     prompts: tuple,
     priority_mech: str,

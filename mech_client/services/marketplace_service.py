@@ -74,9 +74,8 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
         # Load configuration
         self.mech_config: MechConfig = get_mech_config(chain_config)
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
-        self.crypto = EthereumCrypto(
-            private_key
-        )  # pylint: disable=abstract-class-instantiated
+        # pylint: disable=abstract-class-instantiated
+        self.crypto = EthereumCrypto(private_key)
 
         # Create executor
         self.executor: TransactionExecutor = ExecutorFactory.create(
@@ -195,9 +194,8 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
             "receipt": receipt,
         }
 
-    def _validate_tools(
-        self, tools: Tuple[str, ...]
-    ) -> None:  # pylint: disable=no-self-use
+    # pylint: disable=no-self-use
+    def _validate_tools(self, tools: Tuple[str, ...]) -> None:
         """
         Validate that tools exist for the service.
 

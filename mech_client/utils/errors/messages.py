@@ -276,7 +276,7 @@ class ErrorMessages:
                 f"Fix file permissions:\n"
                 f"  chmod 600 ethereum_private_key.txt"
             )
-        elif error_type == "decryption":
+        if error_type == "decryption":
             return (
                 f"Failed to decrypt private key: {details}\n\n"
                 f"Possible causes:\n"
@@ -285,11 +285,10 @@ class ErrorMessages:
                 f"  • Invalid keyfile format\n\n"
                 f"Verify your OPERATE_PASSWORD or re-run setup."
             )
-        elif error_type == "not_found":
+        if error_type == "not_found":
             return (
                 f"Private key file not found: {details}\n\n"
                 f"Provide a valid private key path:\n"
                 f"  --key /path/to/key"
             )
-        else:
-            return f"Private key error: {details}"
+        return f"Private key error: {details}"

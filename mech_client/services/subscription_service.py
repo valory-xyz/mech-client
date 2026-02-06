@@ -87,9 +87,8 @@ class SubscriptionService:
 
         print(f"✓ NVM subscription purchased for {self.chain_config}")
 
-    def check_subscription_status(
-        self, requester_address: str
-    ) -> bool:  # pylint: disable=no-self-use,unused-argument
+    # pylint: disable=no-self-use,unused-argument
+    def check_subscription_status(self, requester_address: str) -> bool:
         """
         Check if requester has active NVM subscription.
 

@@ -31,7 +31,7 @@ from mech_client.domain.payment.token import TokenPaymentStrategy
 from mech_client.infrastructure.config import PaymentType
 
 
-class PaymentStrategyFactory:
+class PaymentStrategyFactory:  # pylint: disable=too-few-public-methods
     """Factory for creating payment strategy instances.
 
     Creates the appropriate payment strategy based on payment type,

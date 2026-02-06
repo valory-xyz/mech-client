@@ -67,9 +67,8 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
         # Load configuration
         self.mech_config: MechConfig = get_mech_config(chain_config)
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
-        self.crypto = EthereumCrypto(
-            private_key
-        )  # pylint: disable=abstract-class-instantiated
+        # pylint: disable=abstract-class-instantiated
+        self.crypto = EthereumCrypto(private_key)
 
         # Create executor
         self.executor: TransactionExecutor = ExecutorFactory.create(
@@ -129,7 +128,7 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
 
         return tx_hash
 
-    def deposit_token(self, amount: int, token_type: str = "olas") -> str:
+    def deposit_token(self, amount: int, token_type: str = "olas") -> str:  # nosec B107
         """
         Deposit ERC20 tokens into prepaid balance.
 
@@ -139,9 +138,9 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
         :raises ValueError: If insufficient balance or chain doesn't support token
         """
         # Determine payment type
-        if token_type == "olas":
+        if token_type == "olas":  # nosec B105
             payment_type = PaymentType.TOKEN
-        elif token_type == "usdc":
+        elif token_type == "usdc":  # nosec B105
             payment_type = PaymentType.USDC_TOKEN
         else:
             raise ValueError(f"Unknown token type: {token_type}")
@@ -167,13 +166,12 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
         # Approve tokens
         print(f"Approving {token_type.upper()} tokens...")
         # Returns None if approval not needed, tx hash otherwise
-        approve_tx = (
-            payment_strategy.approve_if_needed(  # pylint: disable=assignment-from-none
-                payer_address=sender,
-                spender_address=balance_tracker_address,
-                amount=amount,
-                private_key=self.private_key,
-            )
+        # pylint: disable=assignment-from-none
+        approve_tx = payment_strategy.approve_if_needed(
+            payer_address=sender,
+            spender_address=balance_tracker_address,
+            amount=amount,
+            private_key=self.private_key,
         )
         if approve_tx:
             wait_for_receipt(approve_tx, self.ledger_api)

@@ -81,9 +81,8 @@ class AgentExecutor(TransactionExecutor):
         function = contract.functions[method_name](**method_args)
         transaction = function.build_transaction(
             {
-                "chainId": int(
-                    self.ledger_api._chain_id
-                ),  # pylint: disable=protected-access
+                # pylint: disable=protected-access
+                "chainId": int(self.ledger_api._chain_id),
                 "gas": 0,
                 "nonce": self.safe_client.get_nonce(),
             }

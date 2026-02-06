@@ -113,7 +113,7 @@ class NVMPaymentStrategy(PaymentStrategy):
         """
         if self.payment_type == PaymentType.NATIVE_NVM:
             return None  # Native NVM doesn't use a token
-        elif self.payment_type == PaymentType.TOKEN_NVM_USDC:
+        if self.payment_type == PaymentType.TOKEN_NVM_USDC:
             # For USDC NVM, we use the USDC token address
             from mech_client.infrastructure.config import (  # pylint: disable=import-outside-toplevel
                 CHAIN_TO_PRICE_TOKEN_USDC,

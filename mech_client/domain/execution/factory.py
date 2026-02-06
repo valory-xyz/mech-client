@@ -29,7 +29,7 @@ from mech_client.domain.execution.base import TransactionExecutor
 from mech_client.domain.execution.client_executor import ClientExecutor
 
 
-class ExecutorFactory:
+class ExecutorFactory:  # pylint: disable=too-few-public-methods
     """Factory for creating transaction executor instances.
 
     Creates the appropriate executor based on agent mode flag,
