@@ -739,15 +739,15 @@ def mech_list(
 
         data = [
             (
-                items["service"]["id"],
+                items["id"],
                 items["mech_type"],
                 items["address"],
-                items["service"]["totalDeliveries"],
+                items["totalDeliveriesTransactions"],
                 (
                     IPFS_URL_TEMPLATE.format(
-                        items["service"]["metadata"]["metadata"][2:]
+                        items["service"]["metadata"][0]["metadata"][2:]
                     )
-                    if items["service"].get("metadata") is not None
+                    if items["service"].get("metadata")
                     else None
                 ),
             )
