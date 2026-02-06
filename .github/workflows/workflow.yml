@@ -67,9 +67,10 @@ jobs:
       - name: Run unit tests
         run: |
           poetry run pytest tests/unit -v --tb=short -k "not trio"
-      - name: Run integration tests
-        run: |
-          poetry run pytest tests/integration -v --tb=short -k "not trio"
+      # Integration tests disabled - no tests in tests/integration directory yet
+      # - name: Run integration tests
+      #   run: |
+      #     poetry run pytest tests/integration -v --tb=short -k "not trio"
 
   build-pip-packages:
     name: Dry-release framework
