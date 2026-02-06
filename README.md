@@ -432,6 +432,77 @@ This script will:
 - Retrieve and display the description of a specific tool using its unique identifier.
 - Retrieve and display the input and output schema of a specific tool using its unique identifier.
 
+## Architecture & Documentation
+
+### Architecture Overview
+
+Version 0.17.0 introduced a comprehensive architectural refactoring that separates concerns into distinct layers:
+
+```
+┌──────────────────────────────────────┐
+│         CLI Layer                    │  User interface & command routing
+├──────────────────────────────────────┤
+│         Service Layer                │  Business workflow orchestration
+├──────────────────────────────────────┤
+│         Domain Layer                 │  Core business logic & strategies
+├──────────────────────────────────────┤
+│      Infrastructure Layer            │  External system adapters
+└──────────────────────────────────────┘
+```
+
+**Key improvements:**
+- ✅ **Separation of concerns**: Each layer has a specific responsibility
+- ✅ **Strategy pattern**: Flexible payment, execution, and delivery strategies
+- ✅ **Dependency injection**: Better testability and modularity
+- ✅ **Type safety**: Comprehensive type hints throughout
+- ✅ **Comprehensive tests**: 164 unit tests with ~40% coverage
+
+### Documentation
+
+For detailed information about the architecture and development:
+
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Comprehensive architecture guide
+  - Layer descriptions and responsibilities
+  - Data flow diagrams
+  - Key patterns (Factory, Strategy, Repository)
+  - Component reference
+  - Best practices
+
+- **[TESTING.md](./TESTING.md)** - Testing guide for contributors
+  - Test structure and organization
+  - Running tests and coverage reports
+  - Writing tests (patterns, fixtures, mocking)
+  - Testing async components
+  - Best practices
+
+- **[MIGRATION.md](./MIGRATION.md)** - Migration guide from pre-v0.17.0
+  - What changed in v0.17.0
+  - Module mappings (old → new)
+  - Common migration patterns
+  - Breaking changes
+  - Code examples
+
+- **[CLAUDE.md](./CLAUDE.md)** - Development guidelines for Claude Code
+  - Command dependency diagrams
+  - Common issues and solutions
+  - Environment variables reference
+  - Development commands
+
+### For Library Users
+
+If you use mech-client as a library (not just the CLI), see:
+- [Programmatic usage](#programmatic-usage) - Basic usage examples
+- [MIGRATION.md](./MIGRATION.md) - Migrating from older versions
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - Understanding the architecture
+
+### For Contributors
+
+If you want to contribute to mech-client development:
+1. Read [ARCHITECTURE.md](./ARCHITECTURE.md) to understand the structure
+2. Follow [TESTING.md](./TESTING.md) for writing tests
+3. Review [CLAUDE.md](./CLAUDE.md) for development guidelines
+4. See [Developer installation](#developer-installation) below
+
 ## Developer installation
 
 To setup the development environment for this project, clone the repository and run the following commands:
