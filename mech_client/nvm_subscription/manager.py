@@ -72,7 +72,6 @@ class NVMSubscriptionManager:
             "MECHX_CHAIN_RPC", CONFIGS[network]["nvm"]["web3ProviderUri"]
         )
         self.web3 = Web3(Web3.HTTPProvider(self.url))
-        self.web3.middleware_onion.inject(geth_poa_middleware, layer=0)
         self.agent_mode = agent_mode
         if self.agent_mode:
             self.safe_address = str(safe_address)
