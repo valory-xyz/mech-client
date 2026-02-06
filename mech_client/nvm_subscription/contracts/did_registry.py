@@ -41,8 +41,6 @@ class DIDRegistryContract(BaseContract):
         service_endpoint = registered_values[2]
 
         logger.debug(f"Resolved service endpoint: {service_endpoint}")
-        response = self._fetch_ddo_from_endpoint(service_endpoint)
-
         ddo = {
             "did": f"did:nv:{did}",
             "serviceEndpoint": registered_values[2],
@@ -52,8 +50,9 @@ class DIDRegistryContract(BaseContract):
             "royalties": registered_values[6],
             "immutableUrl": registered_values[7],
             "nftInitialized": registered_values[8],
-            "service": response.get("service", []),
-            "proof": response.get("proof", []),
+            # Legacy networks do not host a DDO metadata endpoint; set service/proof empty
+            "service": [],
+            "proof": [],
         }
 
         non_zero_providers = [
@@ -68,24 +67,3 @@ class DIDRegistryContract(BaseContract):
         logger.info(f"NFT INITIALIZED: {ddo['nftInitialized']}")
         logger.info(f"DDO fetched successfully for DID: {did}")
         return ddo
-
-    def _fetch_ddo_from_endpoint(self, endpoint: str) -> Dict[str, Any]:
-        """
-        Helper method to fetch the DDO JSON from a service endpoint.
-
-        Args:
-            endpoint (str): URL to fetch DDO data from.
-
-        Returns:
-            Dict[str, Any]: Parsed JSON response.
-        """
-        import requests
-
-        try:
-            response = requests.get(endpoint, timeout=10)
-            response.raise_for_status()
-            logger.debug(f"Received response from DDO endpoint: {response.status_code}")
-            return response.json()
-        except requests.RequestException as e:
-            logger.error(f"Failed to fetch DDO from {endpoint}: {e}")
-            return {}

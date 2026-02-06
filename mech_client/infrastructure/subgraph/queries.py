@@ -82,8 +82,9 @@ def query_mm_mechs_info(chain_config: str) -> Optional[List]:
     # Filter mechs with deliveries > 0 and add mech type
     filtered_mechs_data = []
     for item in response["meches"]:  # pylint: disable=unsubscriptable-object
-        if item.get("service") and int(item["service"]["totalDeliveries"]) > 0:
-            item["mech_type"] = mech_factory_to_mech_type[item["mechFactory"].lower()]
+        if int(item["totalDeliveriesTransactions"]) > 0:
+            factory = item["mechFactory"].lower()
+            item["mech_type"] = mech_factory_to_mech_type.get(factory, "Unknown")
             filtered_mechs_data.append(item)
 
     return filtered_mechs_data[:RESULTS_LIMIT]

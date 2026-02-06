@@ -72,21 +72,23 @@ class SubgraphClient:
 
     def query_mechs(
         self,
-        order_by: str = "service__totalDeliveries",
+        order_by: str = "totalDeliveriesTransactions",
         order_direction: str = "desc",
     ) -> Dict[str, Any]:
         """
         Query mechs ordered by specified field.
 
-        :param order_by: Field to order by (default: service__totalDeliveries)
+        :param order_by: Field to order by (default: totalDeliveriesTransactions)
         :param order_direction: Sort direction "asc" or "desc" (default: desc)
         :return: Query response with mech data
         """
         query = f"""
         query MechsOrderedByServiceDeliveries {{
           meches(orderBy: {order_by}, orderDirection: {order_direction}) {{
+            id
             address
             mechFactory
+            totalDeliveriesTransactions
             service {{
               id
               totalDeliveries

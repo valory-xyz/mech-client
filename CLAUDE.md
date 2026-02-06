@@ -289,7 +289,17 @@ export MECHX_CHAIN_RPC='https://mainnet.base.org'  # Base
 
 **Solution:**
 ```bash
-export MECHX_SUBGRAPH_URL='https://your-subgraph-url'
+# Gnosis
+export MECHX_SUBGRAPH_URL='https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis'
+
+# Base
+export MECHX_SUBGRAPH_URL='https://api.subgraph.autonolas.tech/api/proxy/marketplace-base'
+
+# Polygon
+export MECHX_SUBGRAPH_URL='https://api.subgraph.autonolas.tech/api/proxy/marketplace-polygon'
+
+# Optimism
+export MECHX_SUBGRAPH_URL='https://api.subgraph.autonolas.tech/api/proxy/marketplace-optimism'
 ```
 
 ### Issue: "Invalid chain configuration" or "Chain not found"
