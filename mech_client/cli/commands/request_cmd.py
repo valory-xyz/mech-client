@@ -19,75 +19,23 @@
 
 """Request command for sending AI task requests to mechs."""
 
+import asyncio
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import click
 import requests
+from aea_ledger_ethereum import EthereumCrypto
 from click import ClickException
+from safe_eth.eth import EthereumClient
 from web3.exceptions import ContractLogicError, Web3ValidationError
 
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
-from mech_client.marketplace_interact import (
-    marketplace_interact as marketplace_interact_,
-)
-
-
-def fetch_agent_mode_data(chain_config: str) -> tuple:
-    """
-    Fetch agent mode data (safe address, key path, key password).
-
-    :param chain_config: Chain configuration name
-    :return: Tuple of (safe_address, key_path, key_password)
-    :raises ClickException: If agent mode data cannot be fetched
-    """
-    # Import here to avoid circular imports
-    # pylint: disable=import-outside-toplevel
-    from pathlib import Path
-
-    from dotenv import load_dotenv
-    from operate.cli import OperateApp
-
-    operate_folder_name = ".operate_mech_client"
-    env_path = Path.home() / operate_folder_name / ".env"
-    load_dotenv(dotenv_path=env_path, override=False)
-
-    operate = OperateApp()
-    operate.setup()
-
-    # Get password
-    env_password = os.getenv("OPERATE_PASSWORD")
-    if not env_password:
-        raise ClickException(
-            "OPERATE_PASSWORD not found in environment.\n"
-            "Please run setup command first or set OPERATE_PASSWORD in .env"
-        )
-    operate.password = env_password
-
-    # Load service
-    services = operate.service_manager().load_or_create()
-    if not services:
-        raise ClickException(
-            "No services found in agent mode.\n" "Please run setup command first."
-        )
-
-    service = services[0]
-    if service.chain_configs.get(chain_config) is None:
-        raise ClickException(
-            f"Service not configured for chain: {chain_config}\n"
-            f"Please run setup command for this chain."
-        )
-
-    # Get safe address
-    safe_address = service.chain_configs[chain_config].chain_data.multisig
-
-    # Get key path
-    keys_manager = operate.service_manager().get_keys_manager_for_service(service)
-    key_path = keys_manager.ledger_key_path
-
-    key_password = operate.password
-
-    return safe_address, str(key_path), key_password
+from mech_client.infrastructure.config import get_mech_config
+from mech_client.infrastructure.operate.key_manager import fetch_agent_mode_keys
+from mech_client.services.marketplace_service import MarketplaceService
+from mech_client.utils.constants import DEFAULT_PRIVATE_KEY_FILE
 
 
 @click.command()
@@ -153,7 +101,8 @@ def fetch_agent_mode_data(chain_config: str) -> tuple:
     help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
 @click.pass_context
-def request(  # pylint: disable=too-many-arguments,too-many-locals
+# pylint: disable=too-many-arguments,too-many-locals,too-many-statements,unused-argument
+def request(
     ctx: click.Context,
     prompts: tuple,
     priority_mech: str,
@@ -237,31 +186,80 @@ def request(  # pylint: disable=too-many-arguments,too-many-locals
         key_path: Optional[str] = key
         key_password: Optional[str] = None
         safe: Optional[str] = None
+        ethereum_client: Optional[EthereumClient] = None
 
         if agent_mode:
-            safe, key_path, key_password = fetch_agent_mode_data(validated_chain)
+            safe, key_path, key_password = fetch_agent_mode_keys(validated_chain)
             if not safe or not key_path:
                 raise ClickException("Cannot fetch safe or key data for agent mode.")
             validate_ethereum_address(safe, "Safe address")
 
-        # Call marketplace interact (using legacy function for now)
-        marketplace_interact_(
-            prompts=prompts,
-            priority_mech=priority_mech,
-            agent_mode=agent_mode,
-            safe_address=safe or "",
+            # Create Ethereum client for agent mode
+            mech_config = get_mech_config(validated_chain)
+            ethereum_client = EthereumClient(mech_config.ledger_config.address)
+        else:
+            # Use provided key path or default
+            key_path = key or DEFAULT_PRIVATE_KEY_FILE
+            if not Path(key_path).exists():
+                raise ClickException(
+                    f"Private key file `{key_path}` does not exist!\n"
+                    f"Specify a valid key file with --key option."
+                )
+
+        # Load private key
+        try:
+            crypto = EthereumCrypto(private_key_path=key_path, password=key_password)
+            private_key_str = crypto.private_key
+        except PermissionError as e:
+            raise ClickException(
+                f"Cannot read private key file: {key_path}\n"
+                f"Permission denied. Check file permissions:\n"
+                f"  chmod 600 {key_path}"
+            ) from e
+        except (ValueError, Exception) as e:
+            error_msg = str(e).lower()
+            if "password" in error_msg or "decrypt" in error_msg or "mac" in error_msg:
+                raise ClickException(
+                    f"Failed to decrypt private key: {e}\n\n"
+                    f"Possible causes:\n"
+                    f"  • Incorrect password\n"
+                    f"  • Corrupted keyfile\n"
+                    f"  • Invalid keyfile format\n\n"
+                    f"Please verify your private key file and password."
+                ) from e
+            raise ClickException(f"Error loading private key: {e}") from e
+
+        # Create marketplace service
+        service = MarketplaceService(
             chain_config=validated_chain,
-            use_prepaid=use_prepaid,
-            use_offchain=use_offchain,
-            mech_offchain_url=mech_offchain_url or "",
-            private_key_path=key_path,
-            private_key_password=key_password,
-            tools=tools,
-            extra_attributes=extra_attributes_dict,
-            retries=retries,
-            timeout=timeout,
-            sleep=sleep,
+            agent_mode=agent_mode,
+            private_key=private_key_str,
+            safe_address=safe,
+            ethereum_client=ethereum_client,
         )
+
+        # Send request
+        click.echo("\nSending marketplace request...")
+        result = asyncio.run(
+            service.send_request(
+                prompts=prompts,
+                tools=tools,  # type: ignore
+                priority_mech=priority_mech,
+                use_prepaid=use_prepaid,
+                use_offchain=use_offchain,
+                mech_offchain_url=mech_offchain_url,
+                extra_attributes=extra_attributes_dict,
+                timeout=timeout,
+            )
+        )
+
+        # Display results
+        click.echo(f"\n✓ Transaction hash: {result['tx_hash']}")
+        click.echo(f"✓ Request IDs: {result['request_ids']}")
+        if result.get("delivery_results"):
+            click.echo("\n✓ Delivery results:")
+            for request_id, data_url in result["delivery_results"].items():
+                click.echo(f"  Request {request_id}: {data_url}")
 
     except requests.exceptions.HTTPError as e:
         rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")

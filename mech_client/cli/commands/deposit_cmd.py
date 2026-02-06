@@ -20,18 +20,22 @@
 """Deposit command for managing prepaid balance deposits."""
 
 import os
+from pathlib import Path
 from typing import Optional
 
 import click
 import requests
+from aea_ledger_ethereum import EthereumCrypto
 from click import ClickException
+from safe_eth.eth import EthereumClient
 from web3.constants import ADDRESS_ZERO
 from web3.exceptions import ContractLogicError, Web3ValidationError
 
-from mech_client.cli.commands.request_cmd import fetch_agent_mode_data
 from mech_client.cli.validators import validate_amount, validate_chain_config
-from mech_client.deposits import deposit_native_main, deposit_token_main
-from mech_client.interact import get_mech_config
+from mech_client.infrastructure.config import get_mech_config
+from mech_client.infrastructure.operate.key_manager import fetch_agent_mode_keys
+from mech_client.services.deposit_service import DepositService
+from mech_client.utils.constants import DEFAULT_PRIVATE_KEY_FILE
 
 
 @click.group()
@@ -58,6 +62,7 @@ def deposit() -> None:
     help="Path to private key file (client mode only).",
 )
 @click.pass_context
+# pylint: disable=too-many-locals,too-many-statements
 def deposit_native(
     ctx: click.Context,
     amount_to_deposit: str,
@@ -98,21 +103,61 @@ def deposit_native(
         key_path: Optional[str] = key
         key_password: Optional[str] = None
         safe: Optional[str] = None
+        ethereum_client: Optional[EthereumClient] = None
 
         if agent_mode:
-            safe, key_path, key_password = fetch_agent_mode_data(validated_chain)
+            safe, key_path, key_password = fetch_agent_mode_keys(validated_chain)
             if not safe or not key_path:
                 raise ClickException("Cannot fetch safe or key data for agent mode.")
 
-        # Execute deposit
-        deposit_native_main(
-            agent_mode=agent_mode,
-            safe_address=safe,
-            amount=amount_to_deposit,
-            private_key_path=key_path,
-            private_key_password=key_password,
+            # Create Ethereum client for agent mode
+            ethereum_client = EthereumClient(mech_config.ledger_config.address)
+        else:
+            # Use provided key path or default
+            key_path = key or DEFAULT_PRIVATE_KEY_FILE
+            if not Path(key_path).exists():
+                raise ClickException(
+                    f"Private key file `{key_path}` does not exist!\n"
+                    f"Specify a valid key file with --key option."
+                )
+
+        # Load private key
+        try:
+            crypto = EthereumCrypto(private_key_path=key_path, password=key_password)
+            private_key_str = crypto.private_key
+        except PermissionError as e:
+            raise ClickException(
+                f"Cannot read private key file: {key_path}\n"
+                f"Permission denied. Check file permissions:\n"
+                f"  chmod 600 {key_path}"
+            ) from e
+        except (ValueError, Exception) as e:
+            error_msg = str(e).lower()
+            if "password" in error_msg or "decrypt" in error_msg or "mac" in error_msg:
+                raise ClickException(
+                    f"Failed to decrypt private key: {e}\n\n"
+                    f"Possible causes:\n"
+                    f"  • Incorrect password\n"
+                    f"  • Corrupted keyfile\n"
+                    f"  • Invalid keyfile format\n\n"
+                    f"Please verify your private key file and password."
+                ) from e
+            raise ClickException(f"Error loading private key: {e}") from e
+
+        # Create deposit service
+        service = DepositService(
             chain_config=validated_chain,
+            agent_mode=agent_mode,
+            private_key=private_key_str,
+            safe_address=safe,
+            ethereum_client=ethereum_client,
         )
+
+        # Execute deposit
+        amount_int = int(amount_to_deposit)
+        click.echo(f"\nDepositing {amount_int} wei of native tokens...")
+        tx_hash = service.deposit_native(amount_int)
+        click.echo(f"\n✓ Deposit transaction: {tx_hash}")
 
     except ContractLogicError as e:
         raise ClickException(
@@ -168,15 +213,23 @@ def deposit_native(
     help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
 @click.option(
+    "--token-type",
+    type=click.Choice(["olas", "usdc"], case_sensitive=False),
+    default="olas",
+    help="Token type to deposit (olas or usdc). Default: olas.",
+)
+@click.option(
     "--key",
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="Path to private key file (client mode only).",
 )
 @click.pass_context
+# pylint: disable=too-many-locals,too-many-statements
 def deposit_token(
     ctx: click.Context,
     amount_to_deposit: str,
     chain_config: str,
+    token_type: str,
     key: Optional[str] = None,
 ) -> None:
     """Deposit ERC20 tokens into prepaid balance.
@@ -185,8 +238,12 @@ def deposit_token(
     marketplace. Amount must be specified in the token's smallest unit
     (e.g., 18 decimals for OLAS, 6 decimals for USDC).
 
-    Example: mechx deposit token 1000000000000000000 --chain-config gnosis
-    (deposits 1.0 OLAS)
+    Examples:
+        mechx deposit token 1000000000000000000 --chain-config gnosis --token-type olas
+        (deposits 1.0 OLAS)
+
+        mechx deposit token 1000000 --chain-config base --token-type usdc
+        (deposits 1.0 USDC)
     """
     try:
         # Validate chain config
@@ -213,21 +270,61 @@ def deposit_token(
         key_path: Optional[str] = key
         key_password: Optional[str] = None
         safe: Optional[str] = None
+        ethereum_client: Optional[EthereumClient] = None
 
         if agent_mode:
-            safe, key_path, key_password = fetch_agent_mode_data(validated_chain)
+            safe, key_path, key_password = fetch_agent_mode_keys(validated_chain)
             if not safe or not key_path:
                 raise ClickException("Cannot fetch safe or key data for agent mode.")
 
-        # Execute deposit
-        deposit_token_main(
-            agent_mode=agent_mode,
-            safe_address=safe,
-            amount=amount_to_deposit,
-            private_key_path=key_path,
-            private_key_password=key_password,
+            # Create Ethereum client for agent mode
+            ethereum_client = EthereumClient(mech_config.ledger_config.address)
+        else:
+            # Use provided key path or default
+            key_path = key or DEFAULT_PRIVATE_KEY_FILE
+            if not Path(key_path).exists():
+                raise ClickException(
+                    f"Private key file `{key_path}` does not exist!\n"
+                    f"Specify a valid key file with --key option."
+                )
+
+        # Load private key
+        try:
+            crypto = EthereumCrypto(private_key_path=key_path, password=key_password)
+            private_key_str = crypto.private_key
+        except PermissionError as e:
+            raise ClickException(
+                f"Cannot read private key file: {key_path}\n"
+                f"Permission denied. Check file permissions:\n"
+                f"  chmod 600 {key_path}"
+            ) from e
+        except (ValueError, Exception) as e:
+            error_msg = str(e).lower()
+            if "password" in error_msg or "decrypt" in error_msg or "mac" in error_msg:
+                raise ClickException(
+                    f"Failed to decrypt private key: {e}\n\n"
+                    f"Possible causes:\n"
+                    f"  • Incorrect password\n"
+                    f"  • Corrupted keyfile\n"
+                    f"  • Invalid keyfile format\n\n"
+                    f"Please verify your private key file and password."
+                ) from e
+            raise ClickException(f"Error loading private key: {e}") from e
+
+        # Create deposit service
+        service = DepositService(
             chain_config=validated_chain,
+            agent_mode=agent_mode,
+            private_key=private_key_str,
+            safe_address=safe,
+            ethereum_client=ethereum_client,
         )
+
+        # Execute deposit
+        amount_int = int(amount_to_deposit)
+        click.echo(f"\nDepositing {amount_int} of {token_type.upper()} tokens...")
+        tx_hash = service.deposit_token(amount_int, token_type=token_type.lower())
+        click.echo(f"\n✓ Deposit transaction: {tx_hash}")
 
     except ContractLogicError as e:
         raise ClickException(

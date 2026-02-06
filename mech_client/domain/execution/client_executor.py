@@ -43,6 +43,7 @@ class ClientExecutor(TransactionExecutor):
         :param private_key: Private key for signing transactions
         """
         super().__init__(ledger_api, private_key)
+        # pylint: disable=abstract-class-instantiated
         self.crypto = EthereumCrypto(private_key)
 
     def execute_transaction(

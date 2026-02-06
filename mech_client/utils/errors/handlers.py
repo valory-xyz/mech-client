@@ -43,6 +43,7 @@ from mech_client.utils.errors.exceptions import (
 from mech_client.utils.errors.messages import ErrorMessages
 
 
+# pylint: disable=too-many-statements
 def handle_cli_errors(func: Callable) -> Callable:
     """
     Decorator to handle common CLI command errors.
@@ -55,6 +56,7 @@ def handle_cli_errors(func: Callable) -> Callable:
     """
 
     @functools.wraps(func)
+    # pylint: disable=too-many-statements
     def wrapper(*args, **kwargs):  # type: ignore
         try:
             return func(*args, **kwargs)

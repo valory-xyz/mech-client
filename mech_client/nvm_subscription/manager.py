@@ -8,9 +8,13 @@ from enum import Enum
 from typing import Any, Dict, Optional, Tuple
 
 from eth_typing import ChecksumAddress
+from safe_eth.eth import EthereumClient
 from web3 import Web3
 
-from mech_client.safe import EthereumClient, get_safe_nonce, send_safe_tx
+from mech_client.infrastructure.blockchain.safe_client import (
+    get_safe_nonce,
+    send_safe_tx,
+)
 
 from .contracts.agreement_manager import AgreementStorageManagerContract
 from .contracts.did_registry import DIDRegistryContract

@@ -119,6 +119,7 @@ class TokenPaymentStrategy(PaymentStrategy):
 
         # Client mode: build, sign, and send
         if self.crypto or private_key:
+            # pylint: disable=abstract-class-instantiated
             crypto = self.crypto or EthereumCrypto(private_key)
             raw_transaction = self.ledger_api.build_transaction(
                 contract_instance=token_contract,

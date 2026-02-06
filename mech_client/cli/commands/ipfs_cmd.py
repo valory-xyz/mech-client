@@ -21,9 +21,11 @@
 
 import click
 
-from mech_client.prompt_to_ipfs import main as prompt_to_ipfs_main
-from mech_client.push_to_ipfs import main as push_to_ipfs_main
-from mech_client.to_png import main as to_png_main
+from mech_client.infrastructure.ipfs.client import push_to_ipfs
+from mech_client.infrastructure.ipfs.converters import (
+    ipfs_to_png as convert_ipfs_to_png,
+)
+from mech_client.infrastructure.ipfs.metadata import push_metadata_to_ipfs
 
 
 @click.group()
@@ -46,7 +48,9 @@ def ipfs_upload(file_path: str) -> None:
 
     Example: mechx ipfs upload ./myfile.json
     """
-    push_to_ipfs_main(file_path=file_path)
+    v1_file_hash, v1_file_hash_hex = push_to_ipfs(file_path)
+    click.echo(f"IPFS file hash v1: {v1_file_hash}")
+    click.echo(f"IPFS file hash v1 hex: {v1_file_hash_hex}")
 
 
 @ipfs.command(name="upload-prompt")
@@ -60,7 +64,11 @@ def ipfs_upload_prompt(prompt: str, tool_name: str) -> None:
 
     Example: mechx ipfs upload-prompt "Summarize this text" "openai-gpt-4"
     """
-    prompt_to_ipfs_main(prompt=prompt, tool=tool_name)
+    v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
+        prompt, tool_name
+    )
+    click.echo(f"Visit url: https://gateway.autonolas.tech/ipfs/{v1_file_hash_hex}")
+    click.echo(f"Hash for Request method: {v1_file_hash_hex_truncated}")
 
 
 @ipfs.command(name="to-png")
@@ -75,4 +83,4 @@ def ipfs_to_png(ipfs_hash: str, path: str, request_id: str) -> None:
 
     Example: mechx ipfs to-png Qm... ./output.png 12345
     """
-    to_png_main(ipfs_hash, path, request_id)
+    convert_ipfs_to_png(ipfs_hash, path, request_id)

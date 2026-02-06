@@ -27,8 +27,8 @@ import requests
 from click import ClickException
 from web3.exceptions import ContractLogicError, Web3ValidationError
 
-from mech_client.cli.commands.request_cmd import fetch_agent_mode_data
 from mech_client.cli.validators import validate_chain_config
+from mech_client.infrastructure.operate.key_manager import fetch_agent_mode_keys
 from mech_client.nvm_subscription import nvm_subscribe_main
 
 
@@ -98,7 +98,7 @@ def subscription_purchase(
         safe: Optional[str] = None
 
         if agent_mode:
-            safe, key_path, key_password = fetch_agent_mode_data(validated_chain)
+            safe, key_path, key_password = fetch_agent_mode_keys(validated_chain)
             if not safe or not key_path:
                 raise ClickException("Cannot fetch safe or key data for agent mode.")
 

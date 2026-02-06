@@ -34,14 +34,14 @@ from mech_client.infrastructure.blockchain.receipt_waiter import wait_for_receip
 from mech_client.infrastructure.config import MechConfig, PaymentType, get_mech_config
 
 
-class DepositService:
+class DepositService:  # pylint: disable=too-many-instance-attributes
     """Service for managing prepaid balance deposits.
 
     Provides operations for depositing native tokens and ERC20 tokens
     into prepaid balances on the marketplace.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         chain_config: str,
         agent_mode: bool,
@@ -67,6 +67,7 @@ class DepositService:
         # Load configuration
         self.mech_config: MechConfig = get_mech_config(chain_config)
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
+        # pylint: disable=abstract-class-instantiated
         self.crypto = EthereumCrypto(private_key)
 
         # Create executor
@@ -127,7 +128,7 @@ class DepositService:
 
         return tx_hash
 
-    def deposit_token(self, amount: int, token_type: str = "olas") -> str:
+    def deposit_token(self, amount: int, token_type: str = "olas") -> str:  # nosec B107
         """
         Deposit ERC20 tokens into prepaid balance.
 
@@ -137,9 +138,9 @@ class DepositService:
         :raises ValueError: If insufficient balance or chain doesn't support token
         """
         # Determine payment type
-        if token_type == "olas":
+        if token_type == "olas":  # nosec B105
             payment_type = PaymentType.TOKEN
-        elif token_type == "usdc":
+        elif token_type == "usdc":  # nosec B105
             payment_type = PaymentType.USDC_TOKEN
         else:
             raise ValueError(f"Unknown token type: {token_type}")
@@ -164,6 +165,8 @@ class DepositService:
 
         # Approve tokens
         print(f"Approving {token_type.upper()} tokens...")
+        # Returns None if approval not needed, tx hash otherwise
+        # pylint: disable=assignment-from-none
         approve_tx = payment_strategy.approve_if_needed(
             payer_address=sender,
             spender_address=balance_tracker_address,

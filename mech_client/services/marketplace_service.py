@@ -41,14 +41,14 @@ from mech_client.infrastructure.config import MechConfig, PaymentType, get_mech_
 from mech_client.infrastructure.ipfs import IPFSClient, push_metadata_to_ipfs
 
 
-class MarketplaceService:
+class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-few-public-methods
     """Service for orchestrating mech marketplace requests.
 
     Composes payment strategies, execution strategies, tool management,
     and delivery watching to provide high-level marketplace operations.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         chain_config: str,
         agent_mode: bool,
@@ -74,6 +74,7 @@ class MarketplaceService:
         # Load configuration
         self.mech_config: MechConfig = get_mech_config(chain_config)
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
+        # pylint: disable=abstract-class-instantiated
         self.crypto = EthereumCrypto(private_key)
 
         # Create executor
@@ -91,7 +92,7 @@ class MarketplaceService:
         # Create IPFS client
         self.ipfs_client = IPFSClient()
 
-    async def send_request(
+    async def send_request(  # pylint: disable=too-many-arguments,too-many-locals,unused-argument
         self,
         prompts: Tuple[str, ...],
         tools: Tuple[str, ...],
@@ -128,9 +129,7 @@ class MarketplaceService:
         marketplace_contract = self._get_marketplace_contract()
 
         # Fetch mech info (payment type, service ID, etc.)
-        payment_type, service_id, max_delivery_rate = self._fetch_mech_info(
-            priority_mech
-        )
+        payment_type, _, _ = self._fetch_mech_info(priority_mech)
 
         # Create payment strategy
         payment_strategy = PaymentStrategyFactory.create(
@@ -195,6 +194,7 @@ class MarketplaceService:
             "receipt": receipt,
         }
 
+    # pylint: disable=no-self-use
     def _validate_tools(self, tools: Tuple[str, ...]) -> None:
         """
         Validate that tools exist for the service.

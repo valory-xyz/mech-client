@@ -105,7 +105,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
             if len(request_ids_data) == len(request_ids):
                 return request_ids_data
 
-    async def watch_for_data_urls(
+    async def watch_for_data_urls(  # pylint: disable=too-many-locals
         self,
         request_ids: List[str],
         from_block: int,

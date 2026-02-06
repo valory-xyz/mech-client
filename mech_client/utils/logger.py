@@ -25,7 +25,7 @@ from typing import Optional
 
 
 # ANSI color codes for terminal output
-class Colors:
+class Colors:  # pylint: disable=too-few-public-methods
     """ANSI color codes for terminal output."""
 
     RESET = "\033[0m"
@@ -102,13 +102,13 @@ def setup_logger(
     :param use_colors: Whether to use colored output for terminal
     :return: Configured logger instance
     """
-    logger = logging.getLogger(name)
+    log = logging.getLogger(name)
 
     # Avoid adding handlers multiple times
-    if logger.handlers:
-        return logger
+    if log.handlers:
+        return log
 
-    logger.setLevel(level)
+    log.setLevel(level)
 
     # Create console handler
     console_handler = logging.StreamHandler(sys.stdout)
@@ -130,9 +130,9 @@ def setup_logger(
         )
 
     console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+    log.addHandler(console_handler)
 
-    return logger
+    return log
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
@@ -156,9 +156,9 @@ def set_log_level(level: int) -> None:
 
     :param level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
-    logger = logging.getLogger("mech_client")
-    logger.setLevel(level)
-    for handler in logger.handlers:
+    log = logging.getLogger("mech_client")
+    log.setLevel(level)
+    for handler in log.handlers:
         handler.setLevel(level)
 
 

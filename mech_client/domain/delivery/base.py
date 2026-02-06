@@ -23,7 +23,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
 
-class DeliveryWatcher(ABC):
+class DeliveryWatcher(ABC):  # pylint: disable=too-few-public-methods
     """Abstract base class for delivery watchers.
 
     Defines the interface for watching and retrieving mech responses
