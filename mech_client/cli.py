@@ -88,7 +88,7 @@ CHAIN_TO_TEMPLATE = {
     "optimism": CURR_DIR / "config" / "mech_client_optimism.json",
 }
 
-ENV_PATH = BASE_DIR / ".env"
+ENV_PATH = Path.home() / OPERATE_FOLDER_NAME / ".env"
 MECHX_CHAIN_CONFIGS = Path(__file__).parent / "configs" / "mechs.json"
 
 
