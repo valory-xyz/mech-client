@@ -437,7 +437,7 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
 
         return payment_type, service_id, max_delivery_rate
 
-    def _send_marketplace_request(  # pylint: disable=too-many-arguments
+    def _send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         marketplace_contract: Web3Contract,
         data_hashes: List[str],
