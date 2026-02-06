@@ -544,7 +544,14 @@ poetry shell
 
 ### Code Quality and Linting
 
+**IMPORTANT: Before committing, run ALL linters to ensure code quality:**
+
 ```bash
+# Run all critical linters at once (REQUIRED before committing)
+tox -e black-check,isort-check,flake8,mypy,pylint,bandit,darglint,vulture
+
+# Or run individually:
+
 # Format code with black
 tox -e black
 
@@ -583,6 +590,12 @@ tox -e liccheck
 ```
 
 **Note:** All linters must pass in CI. See "Key Patterns and Conventions" section #8 for linting approach, including when pylint disable comments are acceptable (must be 10.00/10 for CI).
+
+**Pre-commit checklist:**
+- [ ] Run `tox -e black-check,isort-check,flake8,mypy,pylint,bandit,darglint,vulture`
+- [ ] All linters pass (no failures)
+- [ ] Pylint score is 10.00/10
+- [ ] No unused code flagged by vulture
 
 ### Testing
 

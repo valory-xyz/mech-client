@@ -76,7 +76,6 @@ from mech_client.to_png import main as to_png_main
 
 
 CURR_DIR = Path(__file__).resolve().parent
-BASE_DIR = CURR_DIR.parent
 OPERATE_FOLDER_NAME = ".operate_mech_client"
 SETUP_MODE_COMMAND = "setup-agent-mode"
 DEFAULT_NETWORK = "gnosis"
