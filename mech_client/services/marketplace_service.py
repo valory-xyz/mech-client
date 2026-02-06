@@ -332,7 +332,7 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
         value = (
             0
             if payment_type.is_token() or use_prepaid
-            else self.mech_config.price * len(data_hashes)
+            else max_delivery_rate * len(data_hashes)
         )
 
         # Convert payment type to bytes32
