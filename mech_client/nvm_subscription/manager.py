@@ -5,7 +5,7 @@ import os
 import sys
 import uuid
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from eth_typing import ChecksumAddress
 from safe_eth.eth import EthereumClient
@@ -20,6 +20,7 @@ from .contracts.agreement_manager import AgreementStorageManagerContract
 from .contracts.did_registry import DIDRegistryContract
 from .contracts.escrow_payment import EscrowPaymentConditionContract
 from .contracts.lock_payment import LockPaymentConditionContract
+from .contracts.nevermined_config import NeverminedConfigContract
 from .contracts.nft import SubscriptionNFT
 from .contracts.nft_sales import NFTSalesTemplateContract
 from .contracts.subscription_provider import SubscriptionProvider
@@ -71,10 +72,12 @@ class NVMSubscriptionManager:
             "MECHX_CHAIN_RPC", CONFIGS[network]["nvm"]["web3ProviderUri"]
         )
         self.web3 = Web3(Web3.HTTPProvider(self.url))
+        self.web3.middleware_onion.inject(geth_poa_middleware, layer=0)
         self.agent_mode = agent_mode
         if self.agent_mode:
             self.safe_address = str(safe_address)
         self.ethereum_client = EthereumClient(self.url)
+        self.chain_id = self.web3.eth.chain_id
 
         self.sender: ChecksumAddress = self.web3.to_checksum_address(sender)
 
@@ -85,6 +88,7 @@ class NVMSubscriptionManager:
         self.escrow_payment = EscrowPaymentConditionContract(self.web3)
         self.subscription_nft = SubscriptionNFT(self.web3)
         self.subscription_provider = SubscriptionProvider(self.web3)
+        self.nvm_config = NeverminedConfigContract(self.web3)
 
         # load the subscription token to be used for base
         if network == "BASE":
@@ -106,6 +110,15 @@ class NVMSubscriptionManager:
         self.subscription_id = CONFIGS[network]["nvm"]["subscription_id"]
 
         logger.info("SubscriptionManager initialized")
+
+    def get_marketplace_fee_receiver(self) -> Optional[str]:
+        """Fetch the marketplace fee receiver from the on-chain NeverminedConfig contract."""
+        try:
+            receiver = self.nvm_config.get_fee_receiver()
+            return self.web3.to_checksum_address(receiver)
+        except Exception as e:
+            logger.error(f"Could not fetch fee receiver on-chain: {e}")
+            return None
 
     def _generate_agreement_id_seed(self, length: int = 64) -> str:
         """Generate a random hex string prefixed with 0x."""
@@ -137,18 +150,19 @@ class NVMSubscriptionManager:
         did = did.replace("did:nv:", "0x")
 
         ddo = self.did_registry.get_ddo(did)
-        service = next(
-            (s for s in ddo.get("service", []) if s.get("type") == "nft-sales"), None
-        )
-        if not service:
-            logger.error("No nft-sales service found in DDO")
-            return {"status": "error", "message": "No nft-sales service in DDO"}
 
-        self.publisher = service["templateId"]
-
-        conditions = service["attributes"]["serviceAgreementTemplate"]["conditions"]
+        # derive receivers and publisher from env/config instead of DDO
+        # because NVM doesn't support polygon/gnosis infra anymore
         reward_address = self.escrow_payment.address
-        receivers = conditions[0]["parameters"][-1]["value"]
+        fee_receiver = self.get_marketplace_fee_receiver()
+        if fee_receiver is None:
+            logger.error("Marketplace fee receiver not found")
+            return {"status": "error", "message": "Fee receiver missing"}
+
+        receivers: List[str] = [
+            fee_receiver,
+            get_variable_value("OLAS_MARKETPLACE_ADDRESS"),
+        ]
 
         agreement_id_seed = self._generate_agreement_id_seed()
         agreement_id = self.agreement_storage_manager.agreement_id(
