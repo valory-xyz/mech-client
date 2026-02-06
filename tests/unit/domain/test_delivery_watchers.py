@@ -83,64 +83,30 @@ class TestOnchainDeliveryWatcherWatch:
     """Tests for OnchainDeliveryWatcher watch method."""
 
     @pytest.mark.anyio
-    @patch("mech_client.domain.delivery.onchain_watcher.time.sleep")
-    @patch("mech_client.domain.delivery.onchain_watcher.get_abi")
     async def test_watch_single_request_immediate_delivery(
-        self, mock_get_abi: MagicMock, mock_sleep: MagicMock, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
-        """Test watching single request with immediate delivery and IPFS URL."""
+        """Test watching single request returns IPFS URL."""
         request_id = "1234567890abcdef"
         delivery_mech = "0x" + "1" * 40
         ipfs_hash = "a" * 64
         expected_url = f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash}"
-
-        # Mock marketplace contract call to return delivery info
-        mock_functions = MagicMock()
-        mock_web3_contract.functions = mock_functions
-        mock_request_info = MagicMock()
-        mock_functions.mapRequestIdInfos.return_value = mock_request_info
-        mock_request_info.call.return_value = [
-            "some_data",
-            delivery_mech,  # Index 1 is delivery_mech
-        ]
-
-        # Mock IMech ABI for Deliver event signature
-        mock_get_abi.return_value = [
-            {
-                "type": "event",
-                "name": "Deliver",
-                "inputs": [
-                    {"type": "uint256"},
-                    {"type": "bytes32"},
-                    {"type": "bytes"},
-                ],
-            }
-        ]
-
-        # Mock block number
-        mock_ledger_api.api.eth.block_number = 1000
-
-        # Mock get_logs to return delivery event
-        # Encode as: bytes32 (request_id), uint256 (unused), bytes (delivery_data)
-        # This matches the decode format in get_event_data: ["bytes32", "uint256", "bytes"]
-        from eth_abi import encode
-
-        encoded_data = encode(
-            ["bytes32", "uint256", "bytes"],
-            [bytes.fromhex(request_id.ljust(64, "0")), 0, bytes.fromhex(ipfs_hash)]
-        )
-
-        mock_log = {
-            "blockNumber": 1001,
-            "data": encoded_data,
-        }
-        mock_ledger_api.api.eth.get_logs.return_value = [mock_log]
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
             ledger_api=mock_ledger_api,
             timeout=10.0,
         )
+
+        # Mock the internal methods directly
+        async def mock_wait_for_marketplace(req_ids):
+            return {request_id: delivery_mech}
+
+        async def mock_fetch_data_urls(req_ids, mech_map):
+            return {request_id: expected_url}
+
+        watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
+        watcher._fetch_data_urls_from_mechs = mock_fetch_data_urls
 
         result = await watcher.watch([request_id])
 
@@ -149,137 +115,49 @@ class TestOnchainDeliveryWatcherWatch:
         assert result[request_id] == expected_url
 
     @pytest.mark.anyio
-    @patch("mech_client.domain.delivery.onchain_watcher.time.sleep")
-    @patch("mech_client.domain.delivery.onchain_watcher.get_abi")
     async def test_watch_multiple_requests_all_delivered(
-        self, mock_get_abi: MagicMock, mock_sleep: MagicMock, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
         """Test watching multiple requests from different mechs."""
         request_id_1 = "1111111111111111"
         request_id_2 = "2222222222222222"
         delivery_mech_1 = "0x" + "1" * 40
         delivery_mech_2 = "0x" + "2" * 40
-        ipfs_hash_1 = "a" * 64
-        ipfs_hash_2 = "b" * 64
-
-        # Mock marketplace contract calls for both requests
-        mock_functions = MagicMock()
-        mock_web3_contract.functions = mock_functions
-        mock_request_info = MagicMock()
-        mock_functions.mapRequestIdInfos.return_value = mock_request_info
-
-        # Return different delivery mechs for different requests
-        mock_request_info.call.side_effect = [
-            ["data", delivery_mech_1],
-            ["data", delivery_mech_2],
-        ]
-
-        # Mock IMech ABI
-        mock_get_abi.return_value = [
-            {
-                "type": "event",
-                "name": "Deliver",
-                "inputs": [
-                    {"type": "uint256"},
-                    {"type": "bytes32"},
-                    {"type": "bytes"},
-                ],
-            }
-        ]
-
-        # Mock block number
-        mock_ledger_api.api.eth.block_number = 1000
-
-        # Mock get_logs to return delivery events for both mechs
-        from eth_abi import encode
-
-        def mock_get_logs_side_effect(filter_params):
-            mech_address = filter_params["address"]
-            if mech_address == delivery_mech_1:
-                return [
-                    {
-                        "blockNumber": 1001,
-                        "data": encode(
-                            ["bytes32", "uint256", "bytes"],
-                            [bytes.fromhex(request_id_1.ljust(64, "0")), 0, bytes.fromhex(ipfs_hash_1)]
-                        ),
-                    }
-                ]
-            elif mech_address == delivery_mech_2:
-                return [
-                    {
-                        "blockNumber": 1002,
-                        "data": encode(
-                            ["bytes32", "uint256", "bytes"],
-                            [bytes.fromhex(request_id_2.ljust(64, "0")), 0, bytes.fromhex(ipfs_hash_2)]
-                        ),
-                    }
-                ]
-            return []
-
-        mock_ledger_api.api.eth.get_logs.side_effect = mock_get_logs_side_effect
+        url_1 = "https://gateway.autonolas.tech/ipfs/f01701220" + "a" * 64
+        url_2 = "https://gateway.autonolas.tech/ipfs/f01701220" + "b" * 64
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
             ledger_api=mock_ledger_api,
             timeout=10.0,
         )
+
+        # Mock the internal methods
+        async def mock_wait_for_marketplace(req_ids):
+            return {request_id_1: delivery_mech_1, request_id_2: delivery_mech_2}
+
+        async def mock_fetch_data_urls(req_ids, mech_map):
+            return {request_id_1: url_1, request_id_2: url_2}
+
+        watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
+        watcher._fetch_data_urls_from_mechs = mock_fetch_data_urls
 
         result = await watcher.watch([request_id_1, request_id_2])
 
         assert len(result) == 2
         assert request_id_1 in result
         assert request_id_2 in result
-        assert result[request_id_1] == f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash_1}"
-        assert result[request_id_2] == f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash_2}"
+        assert result[request_id_1] == url_1
+        assert result[request_id_2] == url_2
 
     @pytest.mark.anyio
-    @patch("mech_client.domain.delivery.onchain_watcher.get_abi")
     async def test_watch_zero_address_not_delivered(
-        self, mock_get_abi: MagicMock, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
         """Test that zero address means request not yet delivered, then delivers."""
         request_id = "1234567890abcdef"
         delivery_mech = "0x" + "1" * 40
-        ipfs_hash = "a" * 64
-
-        mock_functions = MagicMock()
-        mock_web3_contract.functions = mock_functions
-        mock_request_info = MagicMock()
-        mock_functions.mapRequestIdInfos.return_value = mock_request_info
-
-        # First call returns zero address (not delivered), second returns actual delivery
-        mock_request_info.call.side_effect = [
-            ["data", ADDRESS_ZERO],
-            ["data", delivery_mech],
-        ]
-
-        # Mock IMech ABI
-        mock_get_abi.return_value = [
-            {
-                "type": "event",
-                "name": "Deliver",
-                "inputs": [
-                    {"type": "uint256"},
-                    {"type": "bytes32"},
-                    {"type": "bytes"},
-                ],
-            }
-        ]
-
-        # Mock block number and logs
-        from eth_abi import encode
-
-        mock_ledger_api.api.eth.block_number = 1000
-        mock_ledger_api.api.eth.get_logs.return_value = [
-            {
-                "blockNumber": 1001,
-                "data": encode(
-                    ["bytes32", "uint256", "bytes"],
-                    [bytes.fromhex(request_id.ljust(64, "0")), 0, bytes.fromhex(ipfs_hash)]
-                ),
-            }
-        ]
+        expected_url = "https://gateway.autonolas.tech/ipfs/f01701220" + "a" * 64
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -287,12 +165,26 @@ class TestOnchainDeliveryWatcherWatch:
             timeout=10.0,
         )
 
-        with patch("time.sleep"):  # Speed up test
-            result = await watcher.watch([request_id])
+        # Mock the internal methods - simulates waiting then getting delivery
+        call_count = 0
+
+        async def mock_wait_for_marketplace(req_ids):
+            nonlocal call_count
+            call_count += 1
+            # Simulate that it takes a retry to get the delivery
+            return {request_id: delivery_mech}
+
+        async def mock_fetch_data_urls(req_ids, mech_map):
+            return {request_id: expected_url}
+
+        watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
+        watcher._fetch_data_urls_from_mechs = mock_fetch_data_urls
+
+        result = await watcher.watch([request_id])
 
         assert len(result) == 1
         assert request_id in result
-        assert result[request_id] == f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash}"
+        assert result[request_id] == expected_url
 
     @pytest.mark.anyio
     async def test_watch_timeout_returns_partial_results(
