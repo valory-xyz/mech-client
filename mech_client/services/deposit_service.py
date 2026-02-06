@@ -67,7 +67,9 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
         # Load configuration
         self.mech_config: MechConfig = get_mech_config(chain_config)
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
-        self.crypto = EthereumCrypto(private_key)  # pylint: disable=abstract-class-instantiated
+        self.crypto = EthereumCrypto(
+            private_key
+        )  # pylint: disable=abstract-class-instantiated
 
         # Create executor
         self.executor: TransactionExecutor = ExecutorFactory.create(
@@ -165,11 +167,13 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
         # Approve tokens
         print(f"Approving {token_type.upper()} tokens...")
         # Returns None if approval not needed, tx hash otherwise
-        approve_tx = payment_strategy.approve_if_needed(  # pylint: disable=assignment-from-none
-            payer_address=sender,
-            spender_address=balance_tracker_address,
-            amount=amount,
-            private_key=self.private_key,
+        approve_tx = (
+            payment_strategy.approve_if_needed(  # pylint: disable=assignment-from-none
+                payer_address=sender,
+                spender_address=balance_tracker_address,
+                amount=amount,
+                private_key=self.private_key,
+            )
         )
         if approve_tx:
             wait_for_receipt(approve_tx, self.ledger_api)
