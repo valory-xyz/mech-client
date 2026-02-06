@@ -19,6 +19,7 @@
 
 """On-chain delivery watcher for marketplace mechs."""
 
+import asyncio
 import time
 from typing import Any, Dict, List, Optional
 
@@ -112,7 +113,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
                 if delivery_mech != ADDRESS_ZERO:
                     request_ids_data[request_id] = delivery_mech
 
-                time.sleep(WAIT_SLEEP)
+                await asyncio.sleep(WAIT_SLEEP)
 
                 elapsed_time = time.time() - start_time
                 if elapsed_time >= self.timeout:
@@ -239,7 +240,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
                     return results
 
             from_block = latest_block + 1
-            time.sleep(WAIT_SLEEP)
+            await asyncio.sleep(WAIT_SLEEP)
             elapsed_time = time.time() - start_time
             if elapsed_time >= self.timeout:
                 print("Timeout reached. Returning partial results.")

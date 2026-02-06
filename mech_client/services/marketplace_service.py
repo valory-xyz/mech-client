@@ -186,7 +186,8 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
             sender = self.executor.get_sender_address()
             if not payment_strategy.check_balance(sender, price):
                 raise ValueError(
-                    f"Insufficient balance. Need: {price}, Have: {payment_strategy.check_balance(sender, 0)}"
+                    f"Insufficient balance for token payment. Required: {price} wei. "
+                    f"Please check your token balance for address: {sender}"
                 )
 
             # Approve if needed
