@@ -64,11 +64,8 @@ Commands:
   push-to-ipfs                             Upload a file to IPFS
   setup-agent-mode                         Sets up the agent mode for users
   to-png                                   Convert a stability AI API's diffusion model output
-  tool-description                         Get the description of a specific tool (legacy mechs)
-  tool-description-for-marketplace-mech    Get the description of a specific tool (marketplace mechs)
-  tool-io-schema                           Get the input/output schema of a specific tool (legacy mechs)
-  tool-io-schema-for-marketplace-mech      Get the input/output schema of a specific tool (marketplace mechs)
-  tools-for-agents                         List tools available for all agents or a specific agent (legacy mechs)
+  tool-description-for-marketplace-mech    Get the description of a specific tool
+  tool-io-schema-for-marketplace-mech      Get the input/output schema of a specific tool
   tools-for-marketplace-mech               List tools available for marketplace mechs
 
 ```
@@ -81,22 +78,19 @@ Learn more about mech marketplace [here](https://olas.network/mech-marketplace)
 
 The Mech Client supports multiple chains with different feature availability:
 
-| Chain | Legacy Mechs | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Payments | USDC Payments |
-|-------|-------------|-------------|------------|----------------|-------------------|---------------|---------------|
-| Gnosis | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Base | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Polygon | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
-| Optimism | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
-| Arbitrum | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Celo | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Chain | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Payments | USDC Payments |
+|-------|-------------|------------|----------------|-------------------|---------------|---------------|
+| Gnosis | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Base | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Polygon | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Optimism | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
 
 **Notes:**
-- **Marketplace**: Chains with marketplace contracts deployed. Required for `interact` with marketplace mechs and `fetch-mm-mechs-info` commands.
-- **Agent Mode**: Chains that support on-chain agent registration via `setup-agent-mode`.
-- **Native Payment**: Chains that support `deposit-native` command for prepaid native token deposits (Gnosis, Base, Polygon, Optimism).
-- **NVM Subscriptions**: Chains that support `purchase-nvm-subscription` command for Nevermined subscription-based payments (Gnosis, Base).
+- **Marketplace**: Chains with marketplace contracts deployed. All supported chains have marketplace support.
+- **Agent Mode**: All supported chains support on-chain agent registration via `setup-agent-mode`.
+- **Native Payment**: Chains that support `deposit-native` command for prepaid native token deposits.
+- **NVM Subscriptions**: Chains that support `purchase-nvm-subscription` command for Nevermined subscription-based payments (Gnosis, Base only).
 - **OLAS/USDC Payments**: Chains that support `deposit-token` command with OLAS or USDC tokens.
-- **Legacy Mechs**: All chains support direct interaction with legacy mech agents via `interact --agent_id`.
 - **Subgraph**: The `fetch-mm-mechs-info` command requires setting `MECHX_SUBGRAPH_URL` environment variable for any chain.
 
 ### Set up agent mode for on-chain interactions
@@ -331,186 +325,6 @@ To use client-mode for cli commands, simply supply `--client-mode` flag before t
 mechx --client-mode <rest of the cli command>
 ```
 
-## Legacy Mechs
-
-#### Select the mech you are going to send requests to
-
-Legacy Mechs are deployed on several networks. Find the list of supported networks and corresponding mech addresses, you can find more available Mechs [here](https://marketplace.olas.network/gnosis/ai-agents?legacy=true) (click on the tab "Legacy Mech" in order to see Legacy Mech (available only on Gnosis) and "Mech Marketplace" for the ones which receive requests via the Mech Marketplace).
-
-#### Legacy Mechs
-
-The basic usage of the Mech Client is as follows:
-
-```bash
-mechx interact --prompts <prompt> --tools <tool> --agent_id <agent_id>
-```
-
-where agent blueprint with `<agent_id>` will process `<prompt>` with the `<tool>` and default options. Each chain has its own set of Mech agents. You can find the agent blueprint IDs for each chain on the [Mech Hub](https://aimechs.autonolas.network/registry) or on the [Mech repository](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
-
-⚠️ Batch requests and tools are not supported for legacy mechs
-
-Some useful options:
-
--   `--key <private_key_path>`: Specifies the path of the private key. The default value is `./ethereum_private_key.txt`.
--   `--tools  <name>`: Name of the tool to process the prompt. If you are aware about the tools that are provided by an agent you can directly provide its name using this option. If not provided, it will show a list of available tools for the agent so that you can select which one you want to use:
-
-    ```text
-    Select prompting tool
-    |--------------------------------------------------|
-    | ID | Tool                                        |
-    |--------------------------------------------------|
-    | 0  | openai-text-davinci-002                     |
-    | ...| ...                                         |
-    |--------------------------------------------------|
-    Tool ID >
-    ```
-
--   `--chain-config <name>`: Use default chain configuration parameters (RPC, WSS, ...). [See below](#chain-configuration) for more details. Available values are
-
-    -   `arbitrum`
-    -   `base`
-    -   `celo`
-    -   `gnosis` (Default)
-    -   `optimism`
-    -   `polygon`
-
--   `--confirm <type>`: Specify how to wait for the result of your request:
-    -   `off-chain`: Wait for the result using the ACN.
-    -   `on-chain`: Wait for the result using the Subgraph and the Websocket subscription (whichever arrives first).
-    -   `wait-for-both` (Default): Wait for the result using both `off-chain` and `on-chain` (whichever arrives first).
-
-##### Example
-
-Example of a request specifying a key file and tool:
-
-```bash
-mechx interact --prompts "write a short poem" --agent_id 6 --key ~/ethereum_private_key.txt --tools openai-gpt-3.5-turbo --chain-config gnosis --confirm on-chain
-```
-
-You will see an output like this:
-
-```bash
-Chain configuration: gnosis
-Prompt uploaded: https://gateway.autonolas.tech/ipfs/f01701220af9e4e8b4bd62d76394064f493081917bcc0b9c34a4aff60f82623b717617279
-Transaction sent: https://gnosisscan.io/tx/0x61359f9cc6a1debb07d34ce1038f6aa30d25257c17edeb2b161741805e43e8d0
-Waiting for transaction receipt...
-Created on-chain request with ID 100407405856633966395081711430940962809568685031934329025999216833965518452765
-Data arrived: https://gateway.autonolas.tech/ipfs/f01701220a462120d5bb03f406fa5ef3573df77184a20ab6343d7bade76bd321654aa7251
-Data from agent: {'requestId': 100407405856633966395081711430940962809568685031934329025999216833965518452765, 'result': "In a world of chaos and strife,\nThere's beauty in the simplest of life.\nA gentle breeze whispers through the trees,\nAnd birds sing melodies with ease.\n\nThe sun sets in a fiery hue,\nPainting the sky in shades of blue.\nStars twinkle in the darkness above,\nGuiding us with their light and love.\n\nSo take a moment to pause and see,\nThe wonders of this world so free.\nEmbrace the joy that each day brings,\nAnd let your heart soar on gentle wings.", 'prompt': 'write a short poem', 'cost_dict': {}, 'metadata': {'model': None, 'tool': 'openai-gpt-3.5-turbo'}}
-```
-
-You can use the option `--key <private_key_file_path>` in order to customize the path to the private key file.
-
-### List tools available for legacy mechs and marketplace mechs
-
-#### For legacy mechs
-
-To list the tools available for a specific agent or for all agents, use the `tools-for-agents` command. You can specify an agent blueprint ID to get tools for a specific agent, or omit it to list tools for all agents.
-
-```bash
-mechx tools-for-agents
-```
-
-```bash
-You will see an output like this:
-+------------+---------------------------------------------+-----------------------------------------------+
-|   Agent ID | Tool Name                                   | UniqueIdentifier                             |
-+============+=============================================+===============================================+
-|          3 | claude-prediction-offline                   | 3-claude-prediction-offline                   |
-+------------+---------------------------------------------+-----------------------------------------------+
-|          3 | claude-prediction-online                    | 3-claude-prediction-online                    |
-+------------+---------------------------------------------+-----------------------------------------------+
-|          3 | deepmind-optimization                       | 3-deepmind-optimization                       |
-+------------+---------------------------------------------+-----------------------------------------------+
-|          3 | deepmind-optimization-strong                | 3-deepmind-optimization-strong                |
-+------------+---------------------------------------------+-----------------------------------------------+
-```
-
-```bash
-mechx tools-for-agents --agent-id "agent_id"
-```
-
-Example usage
-
-```bash
-mechx tools-for-agents --agent-id 6
-```
-
-```bash
-You will see an output like this:
-+---------------------------------------------+-----------------------------------------------+
-| Tool Name                                   | Unique Identifier                             |
-+=============================================+===============================================+
-| claude-prediction-offline                   | 6-claude-prediction-offline                   |
-+---------------------------------------------+-----------------------------------------------+
-| claude-prediction-online                    | 6-claude-prediction-online                    |
-+---------------------------------------------+-----------------------------------------------+
-| deepmind-optimization                       | 6-deepmind-optimization                       |
-+---------------------------------------------+-----------------------------------------------+
-```
-
-### Get Tool Description
-
-To get the description of a specific tool, use the `tool-description` command. You need to specify the unique identifier of the tool.
-
-```bash
-mechx tool-description <unique_identifier> --chain-config <chain_config>
-```
-
-Example usage:
-
-```bash
-mechx tool-description "6-claude-prediction-offline" --chain-config gnosis
-```
-
-You will see an output like this:
-
-```bash
-Description for tool 6-claude-prediction-offline: Makes a prediction using Claude
-```
-
-### Get Tool Input/Output Schema
-
-To get the input/output schema of a specific tool, use the `tool-io-schema` command. You need to specify the unique identifier of the tool.
-
-```bash
-mechx tool-io-schema <unique_identifier> --chain-config <chain_config>
-```
-
-Example usage:
-
-```bash
-mechx tool-io-schema "6-prediction-offline" --chain-config gnosis
-```
-
-You will see an output like this:
-
-```bash
-Tool Details:
-+---------------------------+-----------------------------------------------+
-| Tool Name                 | Tool Description                              |
-+===========================+===============================================+
-| OpenAI Prediction Offline | Makes a prediction using OpenAI GPT-3.5 Turbo |
-+---------------------------+-----------------------------------------------+
-Input Schema:
-+-------------+----------------------------------+
-| Field       | Value                            |
-+=============+==================================+
-| type        | text                             |
-+-------------+----------------------------------+
-| description | The text to make a prediction on |
-+-------------+----------------------------------+
-Output Schema:
-+-----------+---------+-----------------------------------------------+
-| Field     | Type    | Description                                   |
-+===========+=========+===============================================+
-| requestId | integer | Unique identifier for the request             |
-+-----------+---------+-----------------------------------------------+
-| result    | string  | Result information in JSON format as a string |
-+-----------+---------+-----------------------------------------------+
-| prompt    | string  | Prompt used for probability estimation.       |
-+-----------+---------+-----------------------------------------------+
-```
 
 > **:pencil2: Note** <br /> > **If you encounter an "Out of gas" error when executing the Mech Client, you will need to increase the gas limit, e.g.,**
 >
@@ -526,7 +340,6 @@ Additionally, you can override any configuration parameter by exporting any of t
 
 ```bash
 MECHX_CHAIN_RPC
-MECHX_WSS_ENDPOINT
 MECHX_GAS_LIMIT
 MECHX_TRANSACTION_URL
 MECHX_SUBGRAPH_URL
@@ -552,26 +365,29 @@ You can also use the Mech Client as a library on your Python project.
 3. Edit `my_script.py` as follows:
 
     ```python
-    from mech_client.interact import interact, ConfirmationType
+    from mech_client.marketplace_interact import marketplace_interact
 
-    prompt_text = 'Will Gnosis pay reach 100k cards in 2024?'
-    agent_id = 6
-    tool_name = "prediction-online"
-    chain_config = "gnosis"
-    private_key_path="ethereum_private_key.txt"
+    PRIORITY_MECH_ADDRESS = "0x77af31De935740567Cf4fF1986D04B2c964A786a"
+    PROMPT_TEXT = "Will Gnosis pay reach 100k cards in 2024?"
+    TOOL_NAME = "openai-gpt-4o-2024-05-13"
+    CHAIN_CONFIG = "gnosis"
+    AGENT_MODE = False  # Set to True if using agent mode
+    SAFE_ADDRESS = ""   # Required if AGENT_MODE is True
+    USE_OFFCHAIN = False
 
-    result = interact(
-        prompt=prompt_text,
-        agent_id=agent_id,
-        tool=tool_name,
-        chain_config=chain_config,
-        confirmation_type=ConfirmationType.ON_CHAIN,
-        private_key_path=private_key_path
+    result = marketplace_interact(
+        prompts=(PROMPT_TEXT,),  # Note: must be a tuple
+        priority_mech=PRIORITY_MECH_ADDRESS,
+        agent_mode=AGENT_MODE,
+        safe_address=SAFE_ADDRESS,
+        use_offchain=USE_OFFCHAIN,
+        tools=(TOOL_NAME,),      # Note: must be a tuple
+        chain_config=CHAIN_CONFIG
     )
     print(result)
     ```
 
-You can also use the Mech Client to programmatically fetch tools for agents in your Python project, as well as retrieve descriptions and input/output schemas for specific tools given their unique identifier.
+You can also use the Mech Client to programmatically fetch tools for marketplace mechs in your Python project, as well as retrieve descriptions and input/output schemas for specific tools given their unique identifier.
 
 1. Set up the private key as specified [above](#set-up-the-private-key). Store the resulting key file (e.g., `ethereum_private_key.txt`) in a convenient and secure location.
 
@@ -584,36 +400,35 @@ You can also use the Mech Client to programmatically fetch tools for agents in y
 3. Edit `fetch_tools_script.py` as follows:
 
     ```python
-    from mech_client.mech_tool_management import get_tools_for_agents, get_tool_description, get_tool_io_schema
+    from mech_client.mech_marketplace_tool_management import (
+        get_tools_for_marketplace_mech,
+        get_tool_description_for_marketplace_mech,
+        get_tool_io_schema_for_marketplace_mech
+    )
 
-    # Fetching tools for a specific agent or all agents
-    agent_id = 6  # Specify the agent blueprint ID or set to None to fetch tools for all agents
+    # Fetching tools for a specific marketplace mech
+    service_id = 1722  # Specify the service ID
     chain_config = "gnosis"  # Specify the chain configuration
-    tools = get_tools_for_agents(agent_id=agent_id, chain_config=chain_config)
-    print(f"Tools for agent {agent_id}:", tools)
+    tools = get_tools_for_marketplace_mech(service_id=service_id, chain_config=chain_config)
+    print(f"Tools for marketplace mech {service_id}:", tools)
 
     # Assuming you know the tool name, construct the unique identifier
-    tool_name = "claude-prediction-offline"  # Example tool name
-    unique_identifier = f"{agent_id}-{tool_name}"  # Construct the unique identifier
+    tool_name = "openai-gpt-4o-2024-05-13"  # Example tool name
+    unique_identifier = f"{service_id}-{tool_name}"  # Construct the unique identifier
 
     # Fetching description and I/O schema for a specific tool using the unique identifier
-    description = get_tool_description(unique_identifier, chain_config)
+    description = get_tool_description_for_marketplace_mech(unique_identifier, chain_config)
     print(f"Description for {unique_identifier}:", description)
 
-    io_schema = get_tool_io_schema(unique_identifier, chain_config)
+    io_schema = get_tool_io_schema_for_marketplace_mech(unique_identifier, chain_config)
     print(f"Input/Output Schema for {unique_identifier}:", io_schema)
     ```
 
 This script will:
-- Fetch and print the tools available for a specified agent or for all agents if `agent_id` is set to `None`.
-- Construct the unique identifier for a tool using the format `agentId-toolName`.
+- Fetch and print the tools available for a specified marketplace mech.
+- Construct the unique identifier for a tool using the format `serviceId-toolName`.
 - Retrieve and display the description of a specific tool using its unique identifier.
 - Retrieve and display the input and output schema of a specific tool using its unique identifier.
-
-#### For Mechs receiving requests via the Mech Marketplace
-
-In this case, the script is the same, except for the function result. When this function has no argument agent_id,
-the request is sent to the Mech Marketplace. The target Mech to which the request is relayed should be in the chain_config file (key `priority_mech_address`).
 
 ## Developer installation
 
@@ -663,10 +478,10 @@ You can find the agent blueprint IDs for each chain on the [Marketplace](https:/
 
 <summary><b>How do I access an AI Mech on a different chain?</b></summary>
 
-Use the `--chain-config <name>` parameter together with a valid `<agent_id>`, for example:
+Use the `--chain-config <name>` parameter together with a valid `--priority-mech` address, for example:
 
 ```bash
-mechx interact --prompts "write a short poem" --agent_id 2 --key ./ethereum_private_key.txt --tools openai-gpt-4 --chain-config celo --confirm on-chain
+mechx interact --prompts "write a short poem" --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a --key ./ethereum_private_key.txt --tools openai-gpt-4o-2024-05-13 --chain-config gnosis
 ```
 
 </details>

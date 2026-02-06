@@ -29,7 +29,6 @@ This guide provides step-by-step instructions for manually testing all CLI comma
    ```bash
    # Create .env file or export these:
    export MECHX_CHAIN_RPC='https://rpc.gnosischain.com'
-   export MECHX_WSS_ENDPOINT='wss://rpc.gnosischain.com/wss'
    export MECHX_SUBGRAPH_URL='https://your-subgraph-url'  # For fetch-mm-mechs-info
    export MECHX_MECH_OFFCHAIN_URL='http://localhost:8000/'  # For offchain testing
    ```
@@ -53,7 +52,6 @@ Use this checklist to track your testing progress:
 - [ ] interact (marketplace - prepaid - client mode)
 - [ ] interact (marketplace - prepaid - agent mode)
 - [ ] interact (marketplace - offchain)
-- [ ] interact (legacy mech)
 - [ ] deposit-native (client mode)
 - [ ] deposit-native (agent mode)
 - [ ] deposit-token (client mode)
@@ -61,9 +59,6 @@ Use this checklist to track your testing progress:
 - [ ] purchase-nvm-subscription (client mode)
 - [ ] purchase-nvm-subscription (agent mode)
 - [ ] fetch-mm-mechs-info
-- [ ] tools-for-agents
-- [ ] tool-description (legacy)
-- [ ] tool-io-schema (legacy)
 - [ ] tools-for-marketplace-mech
 - [ ] tool-description-for-marketplace-mech
 - [ ] tool-io-schema-for-marketplace-mech
@@ -266,45 +261,7 @@ Sending offchain request to http://localhost:8000/...
 
 ---
 
-### 6. Interact - Legacy Mech
-
-**Purpose**: Interact with legacy (non-marketplace) mech
-
-**Prerequisites**:
-- `MECHX_WSS_ENDPOINT` environment variable set
-
-**Command**:
-```bash
-export MECHX_WSS_ENDPOINT='wss://rpc.gnosischain.com/wss'
-
-mechx --client-mode interact \
-  --prompts "What is the capital of France?" \
-  --agent-id 6 \
-  --tool openai-gpt-4o-2024-05-13 \
-  --chain-config gnosis \
-  --key ethereum_private_key.txt
-```
-
-**Expected Output**:
-```
-...
-Legacy mech interaction mode
-  - Transaction sent: https://gnosisscan.io/tx/0x...
-  - Waiting for response via WebSocket...
-  - Data arrived: ...
-...
-```
-
-**Success Criteria**:
-- ✅ WebSocket connection established
-- ✅ Request and Deliver events received
-- ✅ Response data retrieved
-
-**Note**: Only supports single prompts (no batch requests)
-
----
-
-### 7. Deposit Native (Client Mode)
+### 6. Deposit Native (Client Mode)
 
 **Purpose**: Deposit native tokens for prepaid marketplace requests using client mode (EOA)
 
@@ -341,7 +298,7 @@ Check your prepaid balance on the blockchain explorer for the BalanceTrackerFixe
 
 ---
 
-### 7b. Deposit Native (Agent Mode)
+### 6b. Deposit Native (Agent Mode)
 
 **Purpose**: Deposit native tokens via Safe multisig in agent mode
 
@@ -376,7 +333,7 @@ Deposit successful!
 
 ---
 
-### 8. Deposit Token (Client Mode)
+### 7. Deposit Token (Client Mode)
 
 **Purpose**: Deposit OLAS tokens for prepaid marketplace requests using client mode (EOA)
 
@@ -414,7 +371,7 @@ Deposit successful!
 
 ---
 
-### 8b. Deposit Token (Agent Mode)
+### 7b. Deposit Token (Agent Mode)
 
 **Purpose**: Deposit OLAS tokens via Safe multisig in agent mode
 
@@ -454,7 +411,7 @@ Deposit successful!
 
 ---
 
-### 9. Purchase NVM Subscription (Client Mode)
+### 8. Purchase NVM Subscription (Client Mode)
 
 **Purpose**: Purchase Nevermined subscription for subscription-based payments using client mode (EOA)
 
@@ -486,7 +443,7 @@ Subscription purchased successfully!
 
 ---
 
-### 9b. Purchase NVM Subscription (Agent Mode)
+### 8b. Purchase NVM Subscription (Agent Mode)
 
 **Purpose**: Purchase Nevermined subscription via Safe multisig in agent mode
 
@@ -521,7 +478,7 @@ Subscription purchased successfully!
 
 ---
 
-### 10. Fetch Marketplace Mechs Info
+### 9. Fetch Marketplace Mechs Info
 
 **Purpose**: Query subgraph for marketplace mechs with most deliveries
 
@@ -554,100 +511,7 @@ mechx fetch-mm-mechs-info --chain-config gnosis
 
 ---
 
-### 11. Tools for Agents (Legacy)
-
-**Purpose**: List tools available for legacy mechs
-
-**Command**:
-```bash
-# List all agents and their tools
-mechx tools-for-agents --chain-config gnosis
-
-# List tools for specific agent
-mechx tools-for-agents --agent-id 6 --chain-config gnosis
-```
-
-**Expected Output** (specific agent):
-```
-+---------------------------------+------------------------+---------------------------+
-| Tool Name                       | Unique Identifier      | Mech Marketplace Support  |
-+---------------------------------+------------------------+---------------------------+
-| openai-gpt-4o-2024-05-13        | 6-openai-gpt-4o-...    | ✓                         |
-| prediction-online-sum-url-...   | 6-prediction-online... | ✓                         |
-+---------------------------------+------------------------+---------------------------+
-```
-
-**Success Criteria**:
-- ✅ Tools listed for agent
-- ✅ Unique identifiers follow "agent_id-tool_name" format
-- ✅ Marketplace support indicated
-
----
-
-### 12. Tool Description (Legacy)
-
-**Purpose**: Get description of a specific legacy mech tool
-
-**Command**:
-```bash
-mechx tool-description 6-openai-gpt-4o-2024-05-13 --chain-config gnosis
-```
-
-**Expected Output**:
-```
-Description for tool 6-openai-gpt-4o-2024-05-13: Uses OpenAI's GPT-4o model to generate text responses based on prompts.
-```
-
-**Success Criteria**:
-- ✅ Description returned
-- ✅ No errors
-
-**Note**: Tool ID format is "agent_id-tool_name"
-
----
-
-### 13. Tool I/O Schema (Legacy)
-
-**Purpose**: Get input/output schema for a legacy mech tool
-
-**Command**:
-```bash
-mechx tool-io-schema 6-openai-gpt-4o-2024-05-13 --chain-config gnosis
-```
-
-**Expected Output**:
-```
-Tool Details:
-+---------------------------+--------------------------------------------------+
-| Tool Name                 | Tool Description                                  |
-+---------------------------+--------------------------------------------------+
-| openai-gpt-4o-2024-05-13  | Uses OpenAI's GPT-4o model...                    |
-+---------------------------+--------------------------------------------------+
-
-Input Schema:
-+--------+------------------+
-| Field  | Value            |
-+--------+------------------+
-| type   | string           |
-| format | prompt           |
-+--------+------------------+
-
-Output Schema:
-+---------+--------+------------------+
-| Field   | Type   | Description      |
-+---------+--------+------------------+
-| result  | string | Generated text   |
-+---------+--------+------------------+
-```
-
-**Success Criteria**:
-- ✅ Tool details displayed
-- ✅ Input schema shown
-- ✅ Output schema shown
-
----
-
-### 14. Tools for Marketplace Mech
+### 10. Tools for Marketplace Mech
 
 **Purpose**: List tools available for a marketplace mech
 
@@ -674,7 +538,7 @@ mechx tools-for-marketplace-mech 1 --chain-config gnosis
 
 ---
 
-### 15. Tool Description for Marketplace Mech
+### 11. Tool Description for Marketplace Mech
 
 **Purpose**: Get description of a marketplace mech tool
 
@@ -694,7 +558,7 @@ Description for tool 1-openai-gpt-4o-2024-05-13: Uses OpenAI's GPT-4o model to g
 
 ---
 
-### 16. Tool I/O Schema for Marketplace Mech
+### 12. Tool I/O Schema for Marketplace Mech
 
 **Purpose**: Get I/O schema for a marketplace mech tool
 
@@ -721,7 +585,7 @@ Output Schema:
 
 ---
 
-### 17. Prompt to IPFS
+### 13. Prompt to IPFS
 
 **Purpose**: Upload prompt and tool metadata to IPFS
 
@@ -749,7 +613,7 @@ Hash for Request method: 0xdef456...
 
 ---
 
-### 18. Push to IPFS
+### 14. Push to IPFS
 
 **Purpose**: Upload any file to IPFS
 
@@ -773,7 +637,7 @@ IPFS file hash v1 hex: f01701220def456...
 
 ---
 
-### 19. To PNG
+### 15. To PNG
 
 **Purpose**: Convert Stability AI diffusion model output from IPFS to PNG
 
@@ -1034,15 +898,6 @@ export MECHX_SUBGRAPH_URL='https://api.studio.thegraph.com/query/.../version/lat
 chmod 600 ethereum_private_key.txt
 ```
 
-### Issue: WebSocket connection closed (legacy mechs)
-
-**Cause**: WSS endpoint unavailable
-
-**Solution**:
-```bash
-export MECHX_WSS_ENDPOINT='wss://rpc.gnosischain.com/wss'
-```
-
 ---
 
 ## Testing Best Practices
@@ -1080,7 +935,6 @@ Use this template to document your testing:
 | interact (marketplace - token) | agent | ✅ / ❌ | |
 | interact (marketplace - prepaid) | client | ✅ / ❌ | |
 | interact (marketplace - prepaid) | agent | ✅ / ❌ | |
-| interact (legacy) | client | ✅ / ❌ | |
 | deposit-native | client | ✅ / ❌ | |
 | deposit-native | agent | ✅ / ❌ | |
 | deposit-token | client | ✅ / ❌ | |
@@ -1088,7 +942,7 @@ Use this template to document your testing:
 | purchase-nvm-subscription | client | ✅ / ❌ | |
 | purchase-nvm-subscription | agent | ✅ / ❌ | |
 | fetch-mm-mechs-info | N/A | ✅ / ❌ | |
-| tools-for-agents | N/A | ✅ / ❌ | |
+| tools-for-marketplace-mech | N/A | ✅ / ❌ | |
 | prompt-to-ipfs | N/A | ✅ / ❌ | |
 
 ### Issues Found
@@ -1145,7 +999,7 @@ mechx prompt-to-ipfs "Test" "test-tool"
 
 Complete testing of all features:
 
-1. Run all 19 command tests
+1. Run all 15 command tests
 2. Test both agent mode and client mode
 3. Test all supported chains
 4. Test error scenarios

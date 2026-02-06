@@ -17,86 +17,16 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Websocket helpers."""
+"""Websocket and transaction receipt helpers for marketplace operations."""
 
-import asyncio
-import json
 import time
-from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, cast
+from typing import Dict, List
 
-import websocket
-from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumApi
 from web3.contract import Contract as Web3Contract
 
 
 TRANSACTION_RECEIPT_TIMEOUT = 300.0  # 5 minutes
-
-
-def register_event_handlers(  # pylint: disable=too-many-arguments
-    wss: websocket.WebSocket,
-    mech_contract_address: str,
-    marketplace_contract_address: str,
-    crypto: Crypto,
-    mech_request_signature: str,
-    marketplace_deliver_signature: str,
-) -> None:
-    """
-    Register event handlers.
-
-    :param wss: The WebSocket connection object.
-    :type wss: websocket.WebSocket
-    :param mech_contract_address: The address of the mech contract.
-    :type mech_contract_address: str
-    :param marketplace_contract_address: The address of the marketplace contract.
-    :type marketplace_contract_address: str
-    :param crypto: The cryptographic object.
-    :type crypto: Crypto
-    :param mech_request_signature: Topic signature for Request event
-    :type mech_request_signature: str
-    :param marketplace_deliver_signature: Topic signature for MarketplaceDelivery event
-    :type marketplace_deliver_signature: str
-    """
-
-    subscription_request = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "eth_subscribe",
-        "params": [
-            "logs",
-            {
-                "address": mech_contract_address,
-                "topics": [
-                    mech_request_signature,
-                    ["0x" + "0" * 24 + crypto.address[2:]],
-                ],
-            },
-        ],
-    }
-    content = bytes(json.dumps(subscription_request), "utf-8")
-    wss.send(content)
-
-    # registration confirmation
-    _ = wss.recv()
-
-    marketplace_subscription_deliver = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "eth_subscribe",
-        "params": [
-            "logs",
-            {
-                "address": marketplace_contract_address,
-                "topics": [marketplace_deliver_signature],
-            },
-        ],
-    }
-    content = bytes(json.dumps(marketplace_subscription_deliver), "utf-8")
-    wss.send(content)
-
-    # registration confirmation
-    _ = wss.recv()
 
 
 def wait_for_receipt(
@@ -145,40 +75,6 @@ def wait_for_receipt(
             time.sleep(1)
 
 
-def watch_for_request_id(  # pylint: disable=too-many-arguments
-    wss: websocket.WebSocket,
-    mech_contract: Web3Contract,
-    ledger_api: EthereumApi,
-    request_signature: str,
-) -> str:
-    """
-    Watches for events on mech.
-
-    :param wss: The WebSocket connection object.
-    :type wss: websocket.WebSocket
-    :param mech_contract: The mech contract instance.
-    :type mech_contract: Web3Contract
-    :param ledger_api: The Ethereum API used for interacting with the ledger.
-    :type ledger_api: EthereumApi
-    :return: The requested ID.
-    :param request_signature: Topic signature for Request event
-    :type request_signature: str
-    :rtype: str
-    """
-    while True:
-        msg = wss.recv()
-        data = json.loads(msg)
-        tx_hash = data["params"]["result"]["transactionHash"]
-        tx_receipt = wait_for_receipt(tx_hash=tx_hash, ledger_api=ledger_api)
-        event_signature = tx_receipt["logs"][0]["topics"][0].hex()
-        if event_signature != request_signature:
-            continue
-
-        rich_logs = mech_contract.events.Request().process_receipt(tx_receipt)
-        request_id = str(rich_logs[0]["args"]["requestId"])
-        return request_id
-
-
 def watch_for_marketplace_request_ids(  # pylint: disable=too-many-arguments, unused-argument
     marketplace_contract: Web3Contract,
     ledger_api: EthereumApi,
@@ -208,55 +104,3 @@ def watch_for_marketplace_request_ids(  # pylint: disable=too-many-arguments, un
         request_ids = rich_logs[0]["args"]["requestIds"]
         request_ids_hex = [request_id.hex() for request_id in request_ids]
         return request_ids_hex
-
-
-async def watch_for_data_url_from_wss(  # pylint: disable=too-many-arguments
-    request_id: str,
-    wss: websocket.WebSocket,
-    mech_contract: Web3Contract,
-    deliver_signature: str,
-    ledger_api: EthereumApi,
-    loop: asyncio.AbstractEventLoop,
-) -> Any:
-    """
-    Watches for data on-chain.
-
-    :param request_id: The ID of the request.
-    :type request_id: str
-    :param wss: The WebSocket connection object.
-    :type wss: websocket.WebSocket
-    :param mech_contract: The mech contract instance.
-    :type mech_contract: Web3Contract
-    :param deliver_signature: Topic signature for Deliver event
-    :type deliver_signature: str
-    :param ledger_api: The Ethereum API used for interacting with the ledger.
-    :type ledger_api: EthereumApi
-    :param loop: The event loop used for asynchronous operations.
-    :type loop: asyncio.AbstractEventLoop
-    :return: The data received from on-chain.
-    :rtype: Any
-    """
-    with ThreadPoolExecutor() as executor:
-        try:
-            while True:
-                msg = await loop.run_in_executor(executor=executor, func=wss.recv)
-                data = json.loads(msg)
-                tx_hash = data["params"]["result"]["transactionHash"]
-                tx_receipt = await loop.run_in_executor(
-                    executor, wait_for_receipt, tx_hash, ledger_api
-                )
-                event_signature = tx_receipt["logs"][0]["topics"][0].hex()
-                if event_signature != deliver_signature:
-                    continue
-
-                rich_logs = mech_contract.events.Deliver().process_receipt(tx_receipt)
-                data = cast(bytes, rich_logs[0]["args"]["data"])
-                if request_id != str(rich_logs[0]["args"]["requestId"]):
-                    continue
-                return f"https://gateway.autonolas.tech/ipfs/f01701220{data.hex()}"
-        except websocket.WebSocketConnectionClosedException as e:
-            print(f"WebSocketConnectionClosedException {repr(e)}")
-            print(
-                "Error: The WSS connection was likely closed by the remote party. Please, try using another WSS provider."
-            )
-            return None
