@@ -86,19 +86,11 @@ class TestOnchainDeliveryWatcherWatch:
     async def test_watch_single_request_immediate_delivery(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
-        """Test watching single request with immediate delivery."""
+        """Test watching single request returns IPFS URL."""
         request_id = "1234567890abcdef"
         delivery_mech = "0x" + "1" * 40
-
-        # Mock contract call to return delivery info
-        mock_functions = MagicMock()
-        mock_web3_contract.functions = mock_functions
-        mock_request_info = MagicMock()
-        mock_functions.mapRequestIdInfos.return_value = mock_request_info
-        mock_request_info.call.return_value = [
-            "some_data",
-            delivery_mech,  # Index 1 is delivery_mech
-        ]
+        ipfs_hash = "a" * 64
+        expected_url = f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash}"
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -106,35 +98,33 @@ class TestOnchainDeliveryWatcherWatch:
             timeout=10.0,
         )
 
+        # Mock the internal methods directly
+        async def mock_wait_for_marketplace(req_ids):
+            return {request_id: delivery_mech}
+
+        async def mock_fetch_data_urls(req_ids, mech_map):
+            return {request_id: expected_url}
+
+        watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
+        watcher._fetch_data_urls_from_mechs = mock_fetch_data_urls
+
         result = await watcher.watch([request_id])
 
         assert len(result) == 1
-        assert result[request_id] == delivery_mech
-        mock_functions.mapRequestIdInfos.assert_called_once_with(
-            bytes.fromhex(request_id)
-        )
+        assert request_id in result
+        assert result[request_id] == expected_url
 
     @pytest.mark.anyio
     async def test_watch_multiple_requests_all_delivered(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
-        """Test watching multiple requests with all delivered."""
+        """Test watching multiple requests from different mechs."""
         request_id_1 = "1111111111111111"
         request_id_2 = "2222222222222222"
         delivery_mech_1 = "0x" + "1" * 40
         delivery_mech_2 = "0x" + "2" * 40
-
-        # Mock contract calls for both requests
-        mock_functions = MagicMock()
-        mock_web3_contract.functions = mock_functions
-        mock_request_info = MagicMock()
-        mock_functions.mapRequestIdInfos.return_value = mock_request_info
-
-        # Return different delivery mechs for different requests
-        mock_request_info.call.side_effect = [
-            ["data", delivery_mech_1],
-            ["data", delivery_mech_2],
-        ]
+        url_1 = "https://gateway.autonolas.tech/ipfs/f01701220" + "a" * 64
+        url_2 = "https://gateway.autonolas.tech/ipfs/f01701220" + "b" * 64
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -142,30 +132,32 @@ class TestOnchainDeliveryWatcherWatch:
             timeout=10.0,
         )
 
+        # Mock the internal methods
+        async def mock_wait_for_marketplace(req_ids):
+            return {request_id_1: delivery_mech_1, request_id_2: delivery_mech_2}
+
+        async def mock_fetch_data_urls(req_ids, mech_map):
+            return {request_id_1: url_1, request_id_2: url_2}
+
+        watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
+        watcher._fetch_data_urls_from_mechs = mock_fetch_data_urls
+
         result = await watcher.watch([request_id_1, request_id_2])
 
         assert len(result) == 2
-        assert result[request_id_1] == delivery_mech_1
-        assert result[request_id_2] == delivery_mech_2
+        assert request_id_1 in result
+        assert request_id_2 in result
+        assert result[request_id_1] == url_1
+        assert result[request_id_2] == url_2
 
     @pytest.mark.anyio
     async def test_watch_zero_address_not_delivered(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
-        """Test that zero address means request not yet delivered."""
+        """Test that zero address means request not yet delivered, then delivers."""
         request_id = "1234567890abcdef"
-
-        mock_functions = MagicMock()
-        mock_web3_contract.functions = mock_functions
-        mock_request_info = MagicMock()
-        mock_functions.mapRequestIdInfos.return_value = mock_request_info
-
-        # First call returns zero address (not delivered), second returns actual delivery
         delivery_mech = "0x" + "1" * 40
-        mock_request_info.call.side_effect = [
-            ["data", ADDRESS_ZERO],
-            ["data", delivery_mech],
-        ]
+        expected_url = "https://gateway.autonolas.tech/ipfs/f01701220" + "a" * 64
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -173,11 +165,26 @@ class TestOnchainDeliveryWatcherWatch:
             timeout=10.0,
         )
 
-        with patch("time.sleep"):  # Speed up test
-            result = await watcher.watch([request_id])
+        # Mock the internal methods - simulates waiting then getting delivery
+        call_count = 0
+
+        async def mock_wait_for_marketplace(req_ids):
+            nonlocal call_count
+            call_count += 1
+            # Simulate that it takes a retry to get the delivery
+            return {request_id: delivery_mech}
+
+        async def mock_fetch_data_urls(req_ids, mech_map):
+            return {request_id: expected_url}
+
+        watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
+        watcher._fetch_data_urls_from_mechs = mock_fetch_data_urls
+
+        result = await watcher.watch([request_id])
 
         assert len(result) == 1
-        assert result[request_id] == delivery_mech
+        assert request_id in result
+        assert result[request_id] == expected_url
 
     @pytest.mark.anyio
     async def test_watch_timeout_returns_partial_results(
@@ -235,7 +242,7 @@ class TestOnchainDeliveryWatcherWatch:
     async def test_watch_invalid_delivery_mech_format(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
-        """Test that invalid delivery mech format returns request info."""
+        """Test that invalid delivery mech format returns empty dict."""
         request_id = "1234567890abcdef"
 
         mock_functions = MagicMock()
@@ -255,8 +262,8 @@ class TestOnchainDeliveryWatcherWatch:
 
         result = await watcher.watch([request_id])
 
-        # Should return the invalid request info as-is
-        assert result == invalid_request_info
+        # Should return empty dict when format is invalid
+        assert result == {}
 
 
 class TestOnchainDeliveryWatcherDataUrls:

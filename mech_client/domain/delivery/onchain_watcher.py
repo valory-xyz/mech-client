@@ -24,10 +24,12 @@ from typing import Any, Dict, List, Optional
 
 from aea_ledger_ethereum import EthereumApi
 from eth_abi import decode
+from eth_utils import keccak
 from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
 
 from mech_client.domain.delivery.base import DeliveryWatcher
+from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 
 
@@ -62,15 +64,33 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 
     async def watch(self, request_ids: List[str]) -> Dict[str, Any]:
         """
-        Watch for marketplace delivery for request IDs.
+        Watch for marketplace delivery and extract IPFS URLs.
 
-        Polls the marketplace contract until all requests are delivered
-        or timeout is reached.
+        First polls marketplace to see which mechs delivered, then polls
+        each mech's contract to extract the actual IPFS URLs with response data.
+
+        :param request_ids: List of request IDs to watch for
+        :return: Dictionary mapping request ID to IPFS URL with response data
+        """
+        # Step 1: Wait for marketplace delivery (get mech addresses)
+        request_id_to_mech = await self._wait_for_marketplace_delivery(request_ids)
+
+        if not request_id_to_mech:
+            return {}
+
+        # Step 2: Get IPFS URLs from mech contracts
+        return await self._fetch_data_urls_from_mechs(request_ids, request_id_to_mech)
+
+    async def _wait_for_marketplace_delivery(
+        self, request_ids: List[str]
+    ) -> Dict[str, str]:
+        """
+        Wait for marketplace to register delivery from mechs.
 
         :param request_ids: List of request IDs to watch for
         :return: Dictionary mapping request ID to delivery mech address
         """
-        request_ids_data: Dict = {}
+        request_ids_data: Dict[str, str] = {}
         start_time = time.time()
 
         while True:
@@ -87,23 +107,80 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
                 if not isinstance(delivery_mech, str) or not delivery_mech.startswith(
                     "0x"
                 ):
-                    return request_id_info
+                    return {}
 
                 if delivery_mech != ADDRESS_ZERO:
-                    request_ids_data.update({request_id: delivery_mech})
+                    request_ids_data[request_id] = delivery_mech
 
                 time.sleep(WAIT_SLEEP)
 
                 elapsed_time = time.time() - start_time
                 if elapsed_time >= self.timeout:
                     print(
-                        "Timeout reached. Breaking the loop and returning partial data."
+                        "Timeout reached while waiting for marketplace delivery. "
+                        "Returning partial data."
                     )
                     return request_ids_data
 
             # All requests delivered
             if len(request_ids_data) == len(request_ids):
                 return request_ids_data
+
+    async def _fetch_data_urls_from_mechs(
+        self, request_ids: List[str], request_id_to_mech: Dict[str, str]
+    ) -> Dict[str, str]:
+        """
+        Fetch IPFS URLs from mech contracts.
+
+        Groups requests by mech and fetches Deliver events from each mech
+        to extract IPFS URLs with response data.
+
+        :param request_ids: List of request IDs
+        :param request_id_to_mech: Mapping of request ID to mech address
+        :return: Dictionary mapping request ID to IPFS URL
+        """
+        # Group request IDs by mech
+        mech_to_request_ids: Dict[str, List[str]] = {}
+        for request_id in request_ids:
+            mech = request_id_to_mech.get(request_id)
+            if mech:
+                mech_to_request_ids.setdefault(mech, []).append(request_id)
+
+        # Get Deliver event signature from IMech ABI
+        mech_deliver_signature = self._get_deliver_event_signature()
+
+        # Get current block
+        current_block = self.ledger_api.api.eth.block_number
+
+        # Fetch data URLs from each mech
+        all_results: Dict[str, str] = {}
+        for mech_address, mech_request_ids in mech_to_request_ids.items():
+            results = await self.watch_for_data_urls(
+                request_ids=mech_request_ids,
+                from_block=current_block - 100,  # Look back 100 blocks
+                mech_contract_address=mech_address,
+                mech_deliver_signature=mech_deliver_signature,
+            )
+            all_results.update(results)
+
+        return all_results
+
+    def _get_deliver_event_signature(self) -> str:  # pylint: disable=no-self-use
+        """
+        Calculate Deliver event signature from IMech ABI.
+
+        :return: Event signature hash (without 0x prefix)
+        """
+        abi = get_abi("IMech.json")
+        for item in abi:
+            if item.get("type") == "event" and item.get("name") == "Deliver":
+                # Build event signature: Deliver(uint256,bytes32,bytes)
+                param_types = [param["type"] for param in item.get("inputs", [])]
+                event_signature = f"Deliver({','.join(param_types)})"
+                # Calculate keccak256 hash
+                return keccak(text=event_signature).hex()
+
+        raise ValueError("Deliver event not found in IMech ABI")
 
     async def watch_for_data_urls(  # pylint: disable=too-many-locals
         self,
