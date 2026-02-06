@@ -21,7 +21,7 @@
 
 from typing import Any, Dict
 
-from aea_ledger_ethereum import EthereumApi
+from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
 
@@ -40,7 +40,7 @@ class AgentExecutor(TransactionExecutor):
     def __init__(
         self,
         ledger_api: EthereumApi,
-        private_key: str,
+        crypto: EthereumCrypto,
         safe_address: str,
         ethereum_client: EthereumClient,
     ):
@@ -48,11 +48,11 @@ class AgentExecutor(TransactionExecutor):
         Initialize agent executor.
 
         :param ledger_api: Ethereum API for blockchain interactions
-        :param private_key: Private key for signing Safe transactions
+        :param crypto: Ethereum crypto object for signing
         :param safe_address: Address of the Safe multisig wallet
         :param ethereum_client: Ethereum client for Safe operations
         """
-        super().__init__(ledger_api, private_key)
+        super().__init__(ledger_api, crypto.private_key)
         self.safe_address = safe_address
         self.ethereum_client = ethereum_client
         self.safe_client = SafeClient(ethereum_client, safe_address)

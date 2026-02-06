@@ -22,8 +22,7 @@
 from dataclasses import asdict
 from typing import Optional
 
-from aea.crypto.base import Crypto as EthereumCrypto
-from aea_ledger_ethereum import EthereumApi
+from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from safe_eth.eth import EthereumClient
 
 from mech_client.domain.execution import ExecutorFactory, TransactionExecutor
@@ -45,7 +44,7 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
         self,
         chain_config: str,
         agent_mode: bool,
-        private_key: str,
+        crypto: EthereumCrypto,
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
     ):
@@ -54,27 +53,26 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
 
         :param chain_config: Chain configuration name (gnosis, base, etc.)
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
-        :param private_key: Private key for signing transactions
+        :param crypto: Ethereum crypto object for signing
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
         """
         self.chain_config = chain_config
         self.agent_mode = agent_mode
-        self.private_key = private_key
+        self.crypto = crypto
+        self.private_key = crypto.private_key
         self.safe_address = safe_address
         self.ethereum_client = ethereum_client
 
         # Load configuration
         self.mech_config: MechConfig = get_mech_config(chain_config)
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
-        # pylint: disable=abstract-class-instantiated
-        self.crypto = EthereumCrypto(private_key)
 
         # Create executor
         self.executor: TransactionExecutor = ExecutorFactory.create(
             agent_mode=agent_mode,
             ledger_api=self.ledger_api,
-            private_key=private_key,
+            crypto=crypto,
             safe_address=safe_address,
             ethereum_client=ethereum_client,
         )
@@ -124,7 +122,9 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
         wait_for_receipt(tx_hash, self.ledger_api)
 
         print(f"✓ Native deposit successful: {amount} wei")
-        print(f"  Transaction: {self.mech_config.transaction_url.format(tx_hash)}")
+        # Format with the expected {transaction_digest} placeholder
+        tx_url = self.mech_config.transaction_url.format(transaction_digest=tx_hash)
+        print(f"  Transaction: {tx_url}")
 
         return tx_hash
 
@@ -202,7 +202,9 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
         wait_for_receipt(tx_hash, self.ledger_api)
 
         print(f"✓ {token_type.upper()} deposit successful: {amount}")
-        print(f"  Transaction: {self.mech_config.transaction_url.format(tx_hash)}")
+        # Format with the expected {transaction_digest} placeholder
+        tx_url = self.mech_config.transaction_url.format(transaction_digest=tx_hash)
+        print(f"  Transaction: {tx_url}")
 
         return tx_hash
 

@@ -21,8 +21,7 @@
 
 from typing import Optional
 
-from aea.crypto.base import Crypto as EthereumCrypto
-from aea_ledger_ethereum import EthereumApi
+from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.domain.payment.native import NativePaymentStrategy
