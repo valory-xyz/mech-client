@@ -261,6 +261,7 @@ def fetch_agent_mode_data(
 @click.pass_context
 def cli(ctx: click.Context, client_mode: bool) -> None:
     """Command-line tool for interacting with mechs."""
+    load_dotenv(dotenv_path=ENV_PATH, override=False)
     ctx.ensure_object(dict)
     ctx.obj["client_mode"] = client_mode
 
