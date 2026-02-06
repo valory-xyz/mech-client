@@ -193,7 +193,7 @@ class TestSubgraphClientQueryMechs:
         # Verify query was constructed with default parameters
         call_args = mock_gql.call_args[1]
         query_str = call_args["request_string"]
-        assert "orderBy: service__totalDeliveries" in query_str
+        assert "orderBy: totalDeliveriesTransactions" in query_str
         assert "orderDirection: desc" in query_str
 
         # Verify result
