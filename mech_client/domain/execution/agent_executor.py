@@ -40,7 +40,7 @@ class AgentExecutor(TransactionExecutor):
     def __init__(
         self,
         ledger_api: EthereumApi,
-        crypto: "EthereumCrypto",
+        crypto: EthereumCrypto,
         safe_address: str,
         ethereum_client: EthereumClient,
     ):
