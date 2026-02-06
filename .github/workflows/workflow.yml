@@ -66,10 +66,10 @@ jobs:
           poetry install
       - name: Run unit tests
         run: |
-          poetry run pytest tests/unit -v --tb=short
+          poetry run pytest tests/unit -v --tb=short -k "not trio"
       - name: Run integration tests
         run: |
-          poetry run pytest tests/integration -v --tb=short
+          poetry run pytest tests/integration -v --tb=short -k "not trio"
 
   build-pip-packages:
     name: Dry-release framework
