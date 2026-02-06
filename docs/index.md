@@ -54,14 +54,14 @@ All commands require `--chain-config` with one of these four chain names.
 
 **Key:**
 - **Marketplace**: All supported chains have marketplace contracts deployed.
-- **Agent Mode**: All supported chains support on-chain agent registration via `setup-agent-mode`.
-- **Native Payment**: Chains supporting `deposit-native` command for prepaid native token deposits.
-- **NVM Subscriptions**: Chains supporting `purchase-nvm-subscription` command for Nevermined subscription-based payments (Gnosis, Base only).
-- **OLAS/USDC Payments**: Chains supporting `deposit-token` command with OLAS or USDC tokens.
+- **Agent Mode**: All supported chains support on-chain agent registration via `setup`.
+- **Native Payment**: Chains supporting `deposit native` command for prepaid native token deposits.
+- **NVM Subscriptions**: Chains supporting `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base only).
+- **OLAS/USDC Payments**: Chains supporting `deposit token` command with OLAS or USDC tokens.
 
 **Important Notes:**
-- The `fetch-mm-mechs-info` command works on all marketplace chains (Gnosis, Base, Polygon, Optimism) but requires setting the `MECHX_SUBGRAPH_URL` environment variable.
-- For other marketplace commands (`interact`, deposits), subgraph is not required.
+- The `mech list` command works on all marketplace chains (Gnosis, Base, Polygon, Optimism) but requires setting the `MECHX_SUBGRAPH_URL` environment variable.
+- For other marketplace commands (`request`, deposits), subgraph is not required.
 
 ## 1. How to Send a request to a Mech (registered on the Mech MarketPlace)
 
@@ -79,7 +79,7 @@ Follow the instructions in the corresponding section.
 
 - Use the command mechx in terminal, which is structured as follows.
 ```bash
-mechx fetch-mm-mechs-info --chain-config <chain-config>
+mechx mech list --chain-config <chain-config>
 ```
 
 Replace `<chain-config>` by the chosen network. Supported marketplace chains: gnosis, base, polygon, optimism.
@@ -112,7 +112,7 @@ export MECHX_SUBGRAPH_URL=<your-subgraph-url>
 - Use the command mechx in terminal, which is structured as follows:
 
 ```bash
-mechx interact --prompts <prompt> --priority-mech <mech_address> --tools <tool> --chain-config <chain-config> --use-offchain
+mechx request --prompts <prompt> --priority-mech <mech_address> --tools <tool> --chain-config <chain-config> --use-offchain
 ```
 
 Replace each placeholder as follows:
@@ -150,13 +150,13 @@ Note: For Mechs using the Nevermined subscription model, this value corresponds 
 - For fixed-price Mechs using native tokens:
 
 ```bash
-mechx deposit-native --chain-config <network_name> <amount>
+mechx deposit native --chain-config <network_name> <amount>
 ```
 
 - For fixed-price Mechs using OLAS tokens (amount in ether):
 
 ```bash
-mechx deposit-token --chain-config <network_name> <amount>
+mechx deposit token --chain-config <network_name> <amount>
 ```
 
 In both cases above, `<amount>` must be at least the Mech's price (as given by maxDeliveryRate).
@@ -164,7 +164,7 @@ In both cases above, `<amount>` must be at least the Mech's price (as given by m
 - For Mechs using Nevermined subscriptions:
 
 ```bash
-mechx purchase-nvm-subscription --chain-config <network_name>
+mechx subscription purchase --chain-config <network_name>
 ```
 
 This command purchases a fixed-price subscription that enables multiple requests.
@@ -178,7 +178,7 @@ After sending a request, a JSON response will appear below the line `"Data for a
 For example, the following command:
 
 ```bash
-mechx interact --prompts "write a short poem" --tools openai-gpt-3.5-turbo --chain-config gnosis --priority-mech <mech_address>
+mechx request --prompts "write a short poem" --tools openai-gpt-3.5-turbo --chain-config gnosis --priority-mech <mech_address>
 ```
 
 you should receive a response as follows:
