@@ -350,7 +350,7 @@ def deposit_native_main(  # pylint: disable=too-many-arguments,too-many-locals
     print("This script will assist you in depositing native balance for mech requests.")
     print()
 
-    amount_to_deposit = int(float(amount) * 10**18)
+    amount_to_deposit = int(amount)
     private_key_path = private_key_path or PRIVATE_KEY_FILE_PATH
 
     mech_config = get_mech_config(chain_config)
@@ -425,7 +425,7 @@ def deposit_token_main(  # pylint: disable=too-many-arguments,too-many-locals,to
     print("This script will assist you in depositing token balance for mech requests.")
     print()
 
-    amount_to_deposit = int(float(amount) * 10**18)
+    amount_to_deposit = int(amount)
     private_key_path = private_key_path or PRIVATE_KEY_FILE_PATH
 
     mech_config = get_mech_config(chain_config)
