@@ -83,14 +83,18 @@ class TestOnchainDeliveryWatcherWatch:
     """Tests for OnchainDeliveryWatcher watch method."""
 
     @pytest.mark.anyio
+    @patch("mech_client.domain.delivery.onchain_watcher.time.sleep")
+    @patch("mech_client.domain.delivery.onchain_watcher.get_abi")
     async def test_watch_single_request_immediate_delivery(
-        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self, mock_get_abi: MagicMock, mock_sleep: MagicMock, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
-        """Test watching single request with immediate delivery."""
+        """Test watching single request with immediate delivery and IPFS URL."""
         request_id = "1234567890abcdef"
         delivery_mech = "0x" + "1" * 40
+        ipfs_hash = "a" * 64
+        expected_url = f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash}"
 
-        # Mock contract call to return delivery info
+        # Mock marketplace contract call to return delivery info
         mock_functions = MagicMock()
         mock_web3_contract.functions = mock_functions
         mock_request_info = MagicMock()
@@ -99,6 +103,38 @@ class TestOnchainDeliveryWatcherWatch:
             "some_data",
             delivery_mech,  # Index 1 is delivery_mech
         ]
+
+        # Mock IMech ABI for Deliver event signature
+        mock_get_abi.return_value = [
+            {
+                "type": "event",
+                "name": "Deliver",
+                "inputs": [
+                    {"type": "uint256"},
+                    {"type": "bytes32"},
+                    {"type": "bytes"},
+                ],
+            }
+        ]
+
+        # Mock block number
+        mock_ledger_api.api.eth.block_number = 1000
+
+        # Mock get_logs to return delivery event
+        # Encode as: bytes32 (request_id), uint256 (unused), bytes (delivery_data)
+        # This matches the decode format in get_event_data: ["bytes32", "uint256", "bytes"]
+        from eth_abi import encode
+
+        encoded_data = encode(
+            ["bytes32", "uint256", "bytes"],
+            [bytes.fromhex(request_id.ljust(64, "0")), 0, bytes.fromhex(ipfs_hash)]
+        )
+
+        mock_log = {
+            "blockNumber": 1001,
+            "data": encoded_data,
+        }
+        mock_ledger_api.api.eth.get_logs.return_value = [mock_log]
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -109,22 +145,24 @@ class TestOnchainDeliveryWatcherWatch:
         result = await watcher.watch([request_id])
 
         assert len(result) == 1
-        assert result[request_id] == delivery_mech
-        mock_functions.mapRequestIdInfos.assert_called_once_with(
-            bytes.fromhex(request_id)
-        )
+        assert request_id in result
+        assert result[request_id] == expected_url
 
     @pytest.mark.anyio
+    @patch("mech_client.domain.delivery.onchain_watcher.time.sleep")
+    @patch("mech_client.domain.delivery.onchain_watcher.get_abi")
     async def test_watch_multiple_requests_all_delivered(
-        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self, mock_get_abi: MagicMock, mock_sleep: MagicMock, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
-        """Test watching multiple requests with all delivered."""
+        """Test watching multiple requests from different mechs."""
         request_id_1 = "1111111111111111"
         request_id_2 = "2222222222222222"
         delivery_mech_1 = "0x" + "1" * 40
         delivery_mech_2 = "0x" + "2" * 40
+        ipfs_hash_1 = "a" * 64
+        ipfs_hash_2 = "b" * 64
 
-        # Mock contract calls for both requests
+        # Mock marketplace contract calls for both requests
         mock_functions = MagicMock()
         mock_web3_contract.functions = mock_functions
         mock_request_info = MagicMock()
@@ -136,6 +174,51 @@ class TestOnchainDeliveryWatcherWatch:
             ["data", delivery_mech_2],
         ]
 
+        # Mock IMech ABI
+        mock_get_abi.return_value = [
+            {
+                "type": "event",
+                "name": "Deliver",
+                "inputs": [
+                    {"type": "uint256"},
+                    {"type": "bytes32"},
+                    {"type": "bytes"},
+                ],
+            }
+        ]
+
+        # Mock block number
+        mock_ledger_api.api.eth.block_number = 1000
+
+        # Mock get_logs to return delivery events for both mechs
+        from eth_abi import encode
+
+        def mock_get_logs_side_effect(filter_params):
+            mech_address = filter_params["address"]
+            if mech_address == delivery_mech_1:
+                return [
+                    {
+                        "blockNumber": 1001,
+                        "data": encode(
+                            ["bytes32", "uint256", "bytes"],
+                            [bytes.fromhex(request_id_1.ljust(64, "0")), 0, bytes.fromhex(ipfs_hash_1)]
+                        ),
+                    }
+                ]
+            elif mech_address == delivery_mech_2:
+                return [
+                    {
+                        "blockNumber": 1002,
+                        "data": encode(
+                            ["bytes32", "uint256", "bytes"],
+                            [bytes.fromhex(request_id_2.ljust(64, "0")), 0, bytes.fromhex(ipfs_hash_2)]
+                        ),
+                    }
+                ]
+            return []
+
+        mock_ledger_api.api.eth.get_logs.side_effect = mock_get_logs_side_effect
+
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
             ledger_api=mock_ledger_api,
@@ -145,15 +228,20 @@ class TestOnchainDeliveryWatcherWatch:
         result = await watcher.watch([request_id_1, request_id_2])
 
         assert len(result) == 2
-        assert result[request_id_1] == delivery_mech_1
-        assert result[request_id_2] == delivery_mech_2
+        assert request_id_1 in result
+        assert request_id_2 in result
+        assert result[request_id_1] == f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash_1}"
+        assert result[request_id_2] == f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash_2}"
 
     @pytest.mark.anyio
+    @patch("mech_client.domain.delivery.onchain_watcher.get_abi")
     async def test_watch_zero_address_not_delivered(
-        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self, mock_get_abi: MagicMock, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
-        """Test that zero address means request not yet delivered."""
+        """Test that zero address means request not yet delivered, then delivers."""
         request_id = "1234567890abcdef"
+        delivery_mech = "0x" + "1" * 40
+        ipfs_hash = "a" * 64
 
         mock_functions = MagicMock()
         mock_web3_contract.functions = mock_functions
@@ -161,10 +249,36 @@ class TestOnchainDeliveryWatcherWatch:
         mock_functions.mapRequestIdInfos.return_value = mock_request_info
 
         # First call returns zero address (not delivered), second returns actual delivery
-        delivery_mech = "0x" + "1" * 40
         mock_request_info.call.side_effect = [
             ["data", ADDRESS_ZERO],
             ["data", delivery_mech],
+        ]
+
+        # Mock IMech ABI
+        mock_get_abi.return_value = [
+            {
+                "type": "event",
+                "name": "Deliver",
+                "inputs": [
+                    {"type": "uint256"},
+                    {"type": "bytes32"},
+                    {"type": "bytes"},
+                ],
+            }
+        ]
+
+        # Mock block number and logs
+        from eth_abi import encode
+
+        mock_ledger_api.api.eth.block_number = 1000
+        mock_ledger_api.api.eth.get_logs.return_value = [
+            {
+                "blockNumber": 1001,
+                "data": encode(
+                    ["bytes32", "uint256", "bytes"],
+                    [bytes.fromhex(request_id.ljust(64, "0")), 0, bytes.fromhex(ipfs_hash)]
+                ),
+            }
         ]
 
         watcher = OnchainDeliveryWatcher(
@@ -177,7 +291,8 @@ class TestOnchainDeliveryWatcherWatch:
             result = await watcher.watch([request_id])
 
         assert len(result) == 1
-        assert result[request_id] == delivery_mech
+        assert request_id in result
+        assert result[request_id] == f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash}"
 
     @pytest.mark.anyio
     async def test_watch_timeout_returns_partial_results(
@@ -235,7 +350,7 @@ class TestOnchainDeliveryWatcherWatch:
     async def test_watch_invalid_delivery_mech_format(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
-        """Test that invalid delivery mech format returns request info."""
+        """Test that invalid delivery mech format returns empty dict."""
         request_id = "1234567890abcdef"
 
         mock_functions = MagicMock()
@@ -255,8 +370,8 @@ class TestOnchainDeliveryWatcherWatch:
 
         result = await watcher.watch([request_id])
 
-        # Should return the invalid request info as-is
-        assert result == invalid_request_info
+        # Should return empty dict when format is invalid
+        assert result == {}
 
 
 class TestOnchainDeliveryWatcherDataUrls:
