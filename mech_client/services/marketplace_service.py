@@ -128,8 +128,10 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
         # Get marketplace contract
         marketplace_contract = self._get_marketplace_contract()
 
-        # Fetch mech info (payment type, service ID, etc.)
-        payment_type, _, _ = self._fetch_mech_info(priority_mech)
+        # Fetch mech info (payment type, service ID, max delivery rate)
+        payment_type, _service_id, max_delivery_rate = self._fetch_mech_info(
+            priority_mech
+        )
 
         # Create payment strategy
         payment_strategy = PaymentStrategyFactory.create(
@@ -166,10 +168,22 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
             )
 
         # Send marketplace request
+        # Get priority mech address (use configured or provided)
+        priority_mech_address = priority_mech or self.mech_config.priority_mech_address
+        if not priority_mech_address:
+            raise ValueError("No priority mech address specified")
+
+        # Response timeout (default to 0 for no timeout)
+        # TODO: Make this configurable via MechConfig
+        response_timeout = 0
+
         tx_hash = self._send_marketplace_request(
             marketplace_contract=marketplace_contract,
             data_hashes=data_hashes,
+            max_delivery_rate=max_delivery_rate,
             payment_type=payment_type,
+            priority_mech=priority_mech_address,
+            response_timeout=response_timeout,
             use_prepaid=use_prepaid,
         )
 
@@ -254,11 +268,14 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
 
         return payment_type, service_id, max_delivery_rate
 
-    def _send_marketplace_request(
+    def _send_marketplace_request(  # pylint: disable=too-many-arguments
         self,
         marketplace_contract: Web3Contract,
         data_hashes: List[str],
+        max_delivery_rate: int,
         payment_type: PaymentType,
+        priority_mech: str,
+        response_timeout: int,
         use_prepaid: bool,
     ) -> str:
         """
@@ -266,7 +283,10 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
 
         :param marketplace_contract: Marketplace contract instance
         :param data_hashes: List of IPFS data hashes
+        :param max_delivery_rate: Maximum delivery rate
         :param payment_type: Payment type
+        :param priority_mech: Priority mech address
+        :param response_timeout: Response timeout in seconds
         :param use_prepaid: Whether to use prepaid balance
         :return: Transaction hash
         """
@@ -280,9 +300,35 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
             else self.mech_config.price * len(data_hashes)
         )
 
-        method_args = {
-            "data": data_hashes if len(data_hashes) > 1 else data_hashes[0],
-        }
+        # Convert payment type to bytes32
+        payment_type_bytes = bytes.fromhex(payment_type.value)
+
+        # Payment data (empty bytes for now - can be extended for additional payment info)
+        payment_data = b""
+
+        # Build method arguments according to ABI
+        if len(data_hashes) > 1:
+            # requestBatch(bytes[] requestDatas, uint256 maxDeliveryRate, bytes32 paymentType,
+            #              address priorityMech, uint256 responseTimeout, bytes paymentData)
+            method_args = {
+                "requestDatas": data_hashes,
+                "maxDeliveryRate": max_delivery_rate,
+                "paymentType": payment_type_bytes,
+                "priorityMech": priority_mech,
+                "responseTimeout": response_timeout,
+                "paymentData": payment_data,
+            }
+        else:
+            # request(bytes requestData, uint256 maxDeliveryRate, bytes32 paymentType,
+            #         address priorityMech, uint256 responseTimeout, bytes paymentData)
+            method_args = {
+                "requestData": data_hashes[0],
+                "maxDeliveryRate": max_delivery_rate,
+                "paymentType": payment_type_bytes,
+                "priorityMech": priority_mech,
+                "responseTimeout": response_timeout,
+                "paymentData": payment_data,
+            }
 
         tx_args = {
             "sender_address": sender,
