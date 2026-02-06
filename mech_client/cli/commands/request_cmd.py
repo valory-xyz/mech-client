@@ -209,7 +209,6 @@ def request(
         # Load private key
         try:
             crypto = EthereumCrypto(private_key_path=key_path, password=key_password)
-            private_key_str = crypto.private_key
         except PermissionError as e:
             raise ClickException(
                 f"Cannot read private key file: {key_path}\n"
@@ -233,7 +232,7 @@ def request(
         service = MarketplaceService(
             chain_config=validated_chain,
             agent_mode=agent_mode,
-            private_key=private_key_str,
+            crypto=crypto,
             safe_address=safe,
             ethereum_client=ethereum_client,
         )

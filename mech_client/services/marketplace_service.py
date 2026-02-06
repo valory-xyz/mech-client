@@ -23,8 +23,7 @@ from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import requests
-from aea.crypto.base import Crypto as EthereumCrypto
-from aea_ledger_ethereum import EthereumApi
+from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from eth_utils import to_checksum_address
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
@@ -54,7 +53,7 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
         self,
         chain_config: str,
         agent_mode: bool,
-        private_key: str,
+        crypto: EthereumCrypto,
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
     ):
@@ -63,27 +62,26 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
 
         :param chain_config: Chain configuration name (gnosis, base, etc.)
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
-        :param private_key: Private key for signing transactions
+        :param crypto: Ethereum crypto object for signing
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
         """
         self.chain_config = chain_config
         self.agent_mode = agent_mode
-        self.private_key = private_key
+        self.crypto = crypto
+        self.private_key = crypto.private_key
         self.safe_address = safe_address
         self.ethereum_client = ethereum_client
 
         # Load configuration
         self.mech_config: MechConfig = get_mech_config(chain_config)
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
-        # pylint: disable=abstract-class-instantiated
-        self.crypto = EthereumCrypto(private_key)
 
         # Create executor
         self.executor: TransactionExecutor = ExecutorFactory.create(
             agent_mode=agent_mode,
             ledger_api=self.ledger_api,
-            private_key=private_key,
+            crypto=crypto,
             safe_address=safe_address,
             ethereum_client=ethereum_client,
         )

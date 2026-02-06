@@ -36,26 +36,30 @@ class TestExecutorFactory:
         self, mock_crypto: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
         """Test factory creates client executor for client mode."""
+        mock_crypto_instance = MagicMock()
+        mock_crypto.return_value = mock_crypto_instance
+        
         executor = ExecutorFactory.create(
             agent_mode=False,
             ledger_api=mock_ledger_api,
-            private_key="test_key",
+            crypto=mock_crypto_instance,
             safe_address=None,
             ethereum_client=None,
         )
 
         assert isinstance(executor, ClientExecutor)
-        assert executor.private_key == "test_key"
-        mock_crypto.assert_called_once_with("test_key")
+        assert executor.crypto == mock_crypto_instance
 
     def test_create_agent_executor(
         self, mock_ledger_api: MagicMock, mock_ethereum_client: MagicMock
     ) -> None:
         """Test factory creates agent executor for agent mode."""
+        mock_crypto = MagicMock()
+        
         executor = ExecutorFactory.create(
             agent_mode=True,
             ledger_api=mock_ledger_api,
-            private_key="test_key",
+            crypto=mock_crypto,
             safe_address="0x" + "a" * 40,
             ethereum_client=mock_ethereum_client,
         )
@@ -67,13 +71,15 @@ class TestExecutorFactory:
         self, mock_ledger_api: MagicMock, mock_ethereum_client: MagicMock
     ) -> None:
         """Test factory raises error when safe_address missing in agent mode."""
+        mock_crypto = MagicMock()
+        
         with pytest.raises(
             ValueError, match="Safe address and Ethereum client required"
         ):
             ExecutorFactory.create(
                 agent_mode=True,
                 ledger_api=mock_ledger_api,
-                private_key="test_key",
+                crypto=mock_crypto,
                 safe_address=None,
                 ethereum_client=mock_ethereum_client,
             )
@@ -82,13 +88,15 @@ class TestExecutorFactory:
         self, mock_ledger_api: MagicMock
     ) -> None:
         """Test factory raises error when ethereum_client missing in agent mode."""
+        mock_crypto = MagicMock()
+        
         with pytest.raises(
             ValueError, match="Safe address and Ethereum client required"
         ):
             ExecutorFactory.create(
                 agent_mode=True,
                 ledger_api=mock_ledger_api,
-                private_key="test_key",
+                crypto=mock_crypto,
                 safe_address="0x" + "a" * 40,
                 ethereum_client=None,
             )

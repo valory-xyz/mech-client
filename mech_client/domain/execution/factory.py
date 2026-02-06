@@ -21,7 +21,7 @@
 
 from typing import Optional
 
-from aea_ledger_ethereum import EthereumApi
+from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from safe_eth.eth import EthereumClient
 
 from mech_client.domain.execution.agent_executor import AgentExecutor
@@ -40,7 +40,7 @@ class ExecutorFactory:  # pylint: disable=too-few-public-methods
     def create(
         agent_mode: bool,
         ledger_api: EthereumApi,
-        private_key: str,
+        crypto: EthereumCrypto,
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
     ) -> TransactionExecutor:
@@ -49,7 +49,7 @@ class ExecutorFactory:  # pylint: disable=too-few-public-methods
 
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
         :param ledger_api: Ethereum API for blockchain interactions
-        :param private_key: Private key for signing transactions
+        :param crypto: Ethereum crypto object for signing
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
         :return: Concrete executor instance
@@ -62,9 +62,9 @@ class ExecutorFactory:  # pylint: disable=too-few-public-methods
                 )
             return AgentExecutor(
                 ledger_api,
-                private_key,
+                crypto,
                 safe_address,
                 ethereum_client,
             )
 
-        return ClientExecutor(ledger_api, private_key)
+        return ClientExecutor(ledger_api, crypto)
