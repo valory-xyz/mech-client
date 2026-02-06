@@ -25,50 +25,56 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 
 ### Test Statistics
 
-- **Total tests**: 164 (excluding unsupported trio backend)
-- **Test files**: 15
-- **Test classes**: 40
-- **Coverage**: ~40% (target: 70%)
+- **Total tests**: 238 (excluding unsupported trio backend)
+- **Test files**: 18
+- **Test classes**: 55+
+- **Coverage**: ~50% (target: 70%)
 
 ### Test Breakdown by Layer
 
 | Layer | Tests | Files | Coverage Focus |
 |-------|-------|-------|----------------|
 | Utils | 75 | 2 | Validators, error handling |
-| Domain | 36 | 3 | Strategies, watchers, factories |
-| Services | 11 | 2 | Orchestration, workflows |
-| Infrastructure | 42 | 6 | Adapters, clients, loaders |
+| Domain | 66 | 5 | Strategies, watchers, factories, tools |
+| Services | 29 | 3 | Orchestration, workflows, deposits |
+| Infrastructure | 68 | 8 | Adapters, clients, loaders, Safe |
 
 ## Test Structure
 
 ```
 tests/
-├── conftest.py                      # Shared fixtures for all tests
-├── unit/                            # Unit tests
+├── conftest.py                              # Shared fixtures for all tests
+├── pytest.ini                               # Pytest configuration
+├── unit/                                    # Unit tests
 │   ├── __init__.py
-│   ├── utils/                       # Utils layer tests
+│   ├── utils/                               # Utils layer tests (75 tests)
 │   │   ├── __init__.py
-│   │   ├── test_validators.py      # 45 tests
-│   │   └── test_errors.py          # 30 tests
-│   ├── domain/                      # Domain layer tests
+│   │   ├── test_validators.py              # 45 tests
+│   │   └── test_errors.py                  # 30 tests
+│   ├── domain/                              # Domain layer tests (66 tests)
 │   │   ├── __init__.py
 │   │   ├── test_payment_strategies.py      # 15 tests
 │   │   ├── test_execution_strategies.py    # 4 tests
-│   │   └── test_delivery_watchers.py       # 15 tests (asyncio)
-│   ├── services/                    # Service layer tests
+│   │   ├── test_delivery_watchers.py       # 11 tests (asyncio)
+│   │   ├── test_offchain_watcher.py        # 14 tests (asyncio)
+│   │   └── test_tool_manager.py            # 22 tests
+│   ├── services/                            # Service layer tests (29 tests)
 │   │   ├── __init__.py
 │   │   ├── test_tool_service.py            # 10 tests
-│   │   └── test_marketplace_service.py     # 1 test
-│   └── infrastructure/              # Infrastructure layer tests
+│   │   ├── test_marketplace_service.py     # 9 tests
+│   │   └── test_deposit_service.py         # 10 tests
+│   └── infrastructure/                      # Infrastructure layer tests (68 tests)
 │       ├── __init__.py
 │       ├── test_config_loader.py           # 7 tests
 │       ├── test_ipfs_client.py             # 8 tests
 │       ├── test_abi_loader.py              # 7 tests
 │       ├── test_contracts.py               # 3 tests
 │       ├── test_receipt_waiter.py          # 8 tests
-│       └── test_subgraph_client.py         # 9 tests
-└── integration/                     # Integration tests (future)
-    └── test_cli_commands.py         # End-to-end CLI tests
+│       ├── test_subgraph_client.py         # 9 tests
+│       ├── test_subgraph_queries.py        # 15 tests
+│       └── test_safe_client.py             # 16 tests
+└── integration/                             # Integration tests (future)
+    └── test_cli_commands.py                 # End-to-end CLI tests
 ```
 
 ## Running Tests

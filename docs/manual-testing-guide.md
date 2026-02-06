@@ -44,27 +44,27 @@ This guide provides step-by-step instructions for manually testing all CLI comma
 
 Use this checklist to track your testing progress:
 
-- [ ] setup-agent-mode
-- [ ] interact (marketplace - native payment - client mode)
-- [ ] interact (marketplace - native payment - agent mode)
-- [ ] interact (marketplace - token payment - client mode)
-- [ ] interact (marketplace - token payment - agent mode)
-- [ ] interact (marketplace - prepaid - client mode)
-- [ ] interact (marketplace - prepaid - agent mode)
-- [ ] interact (marketplace - offchain)
-- [ ] deposit-native (client mode)
-- [ ] deposit-native (agent mode)
-- [ ] deposit-token (client mode)
-- [ ] deposit-token (agent mode)
-- [ ] purchase-nvm-subscription (client mode)
-- [ ] purchase-nvm-subscription (agent mode)
-- [ ] fetch-mm-mechs-info
-- [ ] tools-for-marketplace-mech
-- [ ] tool-description-for-marketplace-mech
-- [ ] tool-io-schema-for-marketplace-mech
-- [ ] prompt-to-ipfs
-- [ ] push-to-ipfs
-- [ ] to-png
+- [ ] setup
+- [ ] request (marketplace - native payment - client mode)
+- [ ] request (marketplace - native payment - agent mode)
+- [ ] request (marketplace - token payment - client mode)
+- [ ] request (marketplace - token payment - agent mode)
+- [ ] request (marketplace - prepaid - client mode)
+- [ ] request (marketplace - prepaid - agent mode)
+- [ ] request (marketplace - offchain)
+- [ ] deposit native (client mode)
+- [ ] deposit native (agent mode)
+- [ ] deposit token (client mode)
+- [ ] deposit token (agent mode)
+- [ ] subscription purchase (client mode)
+- [ ] subscription purchase (agent mode)
+- [ ] mech list
+- [ ] tool list
+- [ ] tool describe
+- [ ] tool schema
+- [ ] ipfs upload-prompt
+- [ ] ipfs upload
+- [ ] ipfs to-png
 
 ---
 
@@ -76,7 +76,7 @@ Use this checklist to track your testing progress:
 
 **Command**:
 ```bash
-mechx setup-agent-mode --chain-config gnosis
+mechx setup --chain-config gnosis
 ```
 
 **Expected Output**:
@@ -102,7 +102,7 @@ ls ~/.operate_mech_client/services/
 
 ---
 
-### 2. Interact - Marketplace (Native Payment)
+### 2. Request - Marketplace (Native Payment)
 
 **Purpose**: Send a request to a marketplace mech with per-request native payment
 
@@ -112,15 +112,15 @@ ls ~/.operate_mech_client/services/
 **Command**:
 ```bash
 # Client mode (simple)
-mechx --client-mode interact \
+mechx --client-mode request \
   --prompts "What is the weather in Paris today?" \
   --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
   --tools openai-gpt-4o-2024-05-13 \
   --chain-config gnosis \
   --key ethereum_private_key.txt
 
-# OR Agent mode (if setup-agent-mode was run)
-mechx interact \
+# OR Agent mode (if setup was run)
+mechx request \
   --prompts "What is the weather in Paris today?" \
   --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
   --tools openai-gpt-4o-2024-05-13 \
@@ -160,7 +160,7 @@ Sending Mech Marketplace request...
 
 ---
 
-### 3. Interact - Marketplace (Token Payment)
+### 3. Request - Marketplace (Token Payment)
 
 **Purpose**: Send a request with OLAS token payment
 
@@ -170,7 +170,7 @@ Sending Mech Marketplace request...
 
 **Command**:
 ```bash
-mechx --client-mode interact \
+mechx --client-mode request \
   --prompts "Summarize the latest news about AI" \
   --priority-mech 0x4554fE75c1f8D614Fc8614Fef4c99D1E44e39fAE \
   --tools openai-gpt-4o-2024-05-13 \
@@ -195,7 +195,7 @@ Sending Mech Marketplace request...
 
 ---
 
-### 4. Interact - Marketplace (Prepaid)
+### 4. Request - Marketplace (Prepaid)
 
 **Purpose**: Use prepaid balance for marketplace requests
 
@@ -204,7 +204,7 @@ Sending Mech Marketplace request...
 
 **Command**:
 ```bash
-mechx --client-mode interact \
+mechx --client-mode request \
   --prompts "What is 2+2?" \
   --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
   --tools openai-gpt-4o-2024-05-13 \
@@ -227,7 +227,7 @@ Using prepaid balance for request...
 
 ---
 
-### 5. Interact - Marketplace (Offchain)
+### 5. Request - Marketplace (Offchain)
 
 **Purpose**: Send request to offchain mech via HTTP
 
@@ -239,7 +239,7 @@ Using prepaid balance for request...
 ```bash
 export MECHX_MECH_OFFCHAIN_URL='http://localhost:8000/'
 
-mechx --client-mode interact \
+mechx --client-mode request \
   --prompts "Test offchain request" \
   --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
   --tools openai-gpt-4o-2024-05-13 \
@@ -271,7 +271,7 @@ Sending offchain request to http://localhost:8000/...
 **Command**:
 ```bash
 # Deposit 0.01 xDAI (18 decimals = 10000000000000000 wei)
-mechx --client-mode deposit-native \
+mechx --client-mode deposit native \
   10000000000000000 \
   --chain-config gnosis \
   --key ethereum_private_key.txt
@@ -303,13 +303,13 @@ Check your prepaid balance on the blockchain explorer for the BalanceTrackerFixe
 **Purpose**: Deposit native tokens via Safe multisig in agent mode
 
 **Prerequisites**:
-- Agent mode setup completed (run `setup-agent-mode`)
+- Agent mode setup completed (run `setup`)
 - Safe address funded with native tokens
 
 **Command**:
 ```bash
 # No --client-mode flag = uses agent mode
-mechx deposit-native \
+mechx deposit native \
   10000000000000000 \
   --chain-config gnosis
 ```
@@ -343,7 +343,7 @@ Deposit successful!
 **Command**:
 ```bash
 # Deposit 1 OLAS (18 decimals = 1000000000000000000 wei)
-mechx --client-mode deposit-token \
+mechx --client-mode deposit token \
   1000000000000000000 \
   --chain-config gnosis \
   --key ethereum_private_key.txt
@@ -376,13 +376,13 @@ Deposit successful!
 **Purpose**: Deposit OLAS tokens via Safe multisig in agent mode
 
 **Prerequisites**:
-- Agent mode setup completed (run `setup-agent-mode`)
+- Agent mode setup completed (run `setup`)
 - Safe address funded with OLAS tokens
 
 **Command**:
 ```bash
 # No --client-mode flag = uses agent mode
-mechx deposit-token \
+mechx deposit token \
   1000000000000000000 \
   --chain-config gnosis
 ```
@@ -421,7 +421,7 @@ Deposit successful!
 
 **Command**:
 ```bash
-mechx --client-mode purchase-nvm-subscription \
+mechx --client-mode subscription purchase \
   --chain-config gnosis \
   --key ethereum_private_key.txt
 ```
@@ -448,14 +448,14 @@ Subscription purchased successfully!
 **Purpose**: Purchase Nevermined subscription via Safe multisig in agent mode
 
 **Prerequisites**:
-- Agent mode setup completed (run `setup-agent-mode`)
+- Agent mode setup completed (run `setup`)
 - Chain supports NVM (gnosis or base only)
 - Safe address funded
 
 **Command**:
 ```bash
 # No --client-mode flag = uses agent mode
-mechx purchase-nvm-subscription \
+mechx subscription purchase \
   --chain-config gnosis
 ```
 
@@ -489,7 +489,7 @@ Subscription purchased successfully!
 ```bash
 export MECHX_SUBGRAPH_URL='https://api.studio.thegraph.com/query/57238/mech-marketplace-gnosis/version/latest'
 
-mechx fetch-mm-mechs-info --chain-config gnosis
+mechx mech list --chain-config gnosis
 ```
 
 **Expected Output**:
@@ -517,7 +517,7 @@ mechx fetch-mm-mechs-info --chain-config gnosis
 
 **Command**:
 ```bash
-mechx tools-for-marketplace-mech 1 --chain-config gnosis
+mechx tool list 1 --chain-config gnosis
 ```
 
 **Expected Output**:
@@ -544,7 +544,7 @@ mechx tools-for-marketplace-mech 1 --chain-config gnosis
 
 **Command**:
 ```bash
-mechx tool-description-for-marketplace-mech 1-openai-gpt-4o-2024-05-13 --chain-config gnosis
+mechx tool describe 1-openai-gpt-4o-2024-05-13 --chain-config gnosis
 ```
 
 **Expected Output**:
@@ -564,7 +564,7 @@ Description for tool 1-openai-gpt-4o-2024-05-13: Uses OpenAI's GPT-4o model to g
 
 **Command**:
 ```bash
-mechx tool-io-schema-for-marketplace-mech 1-openai-gpt-4o-2024-05-13 --chain-config gnosis
+mechx tool schema 1-openai-gpt-4o-2024-05-13 --chain-config gnosis
 ```
 
 **Expected Output**:
@@ -591,7 +591,7 @@ Output Schema:
 
 **Command**:
 ```bash
-mechx prompt-to-ipfs "What is AI?" "openai-gpt-4o-2024-05-13"
+mechx ipfs upload-prompt "What is AI?" "openai-gpt-4o-2024-05-13"
 ```
 
 **Expected Output**:
@@ -622,7 +622,7 @@ Hash for Request method: 0xdef456...
 # Create a test file
 echo '{"test": "data"}' > test.json
 
-mechx push-to-ipfs test.json
+mechx ipfs upload test.json
 ```
 
 **Expected Output**:
@@ -646,7 +646,7 @@ IPFS file hash v1 hex: f01701220def456...
 
 **Command**:
 ```bash
-mechx to-png <ipfs_hash> output.png <request_id>
+mechx ipfs to-png <ipfs_hash> output.png <request_id>
 ```
 
 **Expected Output**:
@@ -679,7 +679,7 @@ PNG file saved to: output.png
 ```bash
 export MECHX_CHAIN_RPC='https://rpc.gnosischain.com'
 
-mechx --client-mode interact \
+mechx --client-mode request \
   --prompts "What is the current time in UTC?" \
   --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
   --tools openai-gpt-4o-2024-05-13 \
@@ -696,7 +696,7 @@ mechx --client-mode interact \
 **Goal**: Test agent mode setup and prepaid workflow using Safe multisig
 
 **Steps**:
-1. Run `setup-agent-mode` to configure Safe
+1. Run `setup` to configure Safe
 2. Fund Safe address with native tokens
 3. Deposit native tokens to prepaid balance (via Safe)
 4. Send prepaid marketplace request (via Safe)
@@ -705,16 +705,16 @@ mechx --client-mode interact \
 **Commands**:
 ```bash
 # 1. Setup agent mode (creates Safe)
-mechx setup-agent-mode --chain-config gnosis
+mechx setup --chain-config gnosis
 # Note the Safe address from the output
 
 # 2. Fund the Safe address with native tokens (manual step using your wallet)
 
 # 3. Deposit via Safe (NO --client-mode flag = agent mode)
-mechx deposit-native 10000000000000000 --chain-config gnosis
+mechx deposit native 10000000000000000 --chain-config gnosis
 
 # 4. Send prepaid request via Safe (NO --client-mode flag = agent mode)
-mechx interact \
+mechx request \
   --prompts "Test prepaid request" \
   --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
   --tools openai-gpt-4o-2024-05-13 \
@@ -724,7 +724,7 @@ mechx interact \
 # 5. Verify on block explorer that transactions came from Safe address
 ```
 
-**Important**: All commands without `--client-mode` flag will use agent mode (Safe) after setup-agent-mode is run.
+**Important**: All commands without `--client-mode` flag will use agent mode (Safe) after setup is run.
 
 ---
 
@@ -750,20 +750,20 @@ mechx interact \
 mechx --version  # Should show agent mode config
 
 # Test 1: Native payment request (agent mode)
-mechx interact \
+mechx request \
   --prompts "Agent mode native payment test" \
   --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
   --tools openai-gpt-4o-2024-05-13 \
   --chain-config gnosis
 
 # Test 2: Native deposit (agent mode)
-mechx deposit-native 10000000000000000 --chain-config gnosis
+mechx deposit native 10000000000000000 --chain-config gnosis
 
 # Test 3: Token deposit (agent mode)
-mechx deposit-token 1000000000000000000 --chain-config gnosis
+mechx deposit token 1000000000000000000 --chain-config gnosis
 
 # Test 4: Prepaid request (agent mode)
-mechx interact \
+mechx request \
   --prompts "Agent mode prepaid test" \
   --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
   --tools openai-gpt-4o-2024-05-13 \
@@ -771,14 +771,14 @@ mechx interact \
   --chain-config gnosis
 
 # Test 5: Token payment request (agent mode)
-mechx interact \
+mechx request \
   --prompts "Agent mode token payment test" \
   --priority-mech 0x4554fE75c1f8D614Fc8614Fef4c99D1E44e39fAE \
   --tools openai-gpt-4o-2024-05-13 \
   --chain-config gnosis
 
 # Test 6: NVM subscription (agent mode - gnosis/base only)
-mechx purchase-nvm-subscription --chain-config gnosis
+mechx subscription purchase --chain-config gnosis
 ```
 
 **Success Criteria**:
@@ -815,7 +815,7 @@ mechx purchase-nvm-subscription --chain-config gnosis
 ```bash
 export MECHX_CHAIN_RPC='https://mainnet.base.org'
 
-mechx --client-mode interact \
+mechx --client-mode request \
   --prompts "Hello from Base" \
   --priority-mech <base-mech-address> \
   --tools <tool-name> \
@@ -928,22 +928,22 @@ Use this template to document your testing:
 
 | Command | Mode | Status | Notes |
 |---------|------|--------|-------|
-| setup-agent-mode | N/A | ✅ / ❌ | |
-| interact (marketplace - native) | client | ✅ / ❌ | |
-| interact (marketplace - native) | agent | ✅ / ❌ | |
-| interact (marketplace - token) | client | ✅ / ❌ | |
-| interact (marketplace - token) | agent | ✅ / ❌ | |
-| interact (marketplace - prepaid) | client | ✅ / ❌ | |
-| interact (marketplace - prepaid) | agent | ✅ / ❌ | |
-| deposit-native | client | ✅ / ❌ | |
-| deposit-native | agent | ✅ / ❌ | |
-| deposit-token | client | ✅ / ❌ | |
-| deposit-token | agent | ✅ / ❌ | |
-| purchase-nvm-subscription | client | ✅ / ❌ | |
-| purchase-nvm-subscription | agent | ✅ / ❌ | |
-| fetch-mm-mechs-info | N/A | ✅ / ❌ | |
-| tools-for-marketplace-mech | N/A | ✅ / ❌ | |
-| prompt-to-ipfs | N/A | ✅ / ❌ | |
+| setup | N/A | ✅ / ❌ | |
+| request (marketplace - native) | client | ✅ / ❌ | |
+| request (marketplace - native) | agent | ✅ / ❌ | |
+| request (marketplace - token) | client | ✅ / ❌ | |
+| request (marketplace - token) | agent | ✅ / ❌ | |
+| request (marketplace - prepaid) | client | ✅ / ❌ | |
+| request (marketplace - prepaid) | agent | ✅ / ❌ | |
+| deposit native | client | ✅ / ❌ | |
+| deposit native | agent | ✅ / ❌ | |
+| deposit token | client | ✅ / ❌ | |
+| deposit token | agent | ✅ / ❌ | |
+| subscription purchase | client | ✅ / ❌ | |
+| subscription purchase | agent | ✅ / ❌ | |
+| mech list | N/A | ✅ / ❌ | |
+| tool list | N/A | ✅ / ❌ | |
+| ipfs upload-prompt | N/A | ✅ / ❌ | |
 
 ### Issues Found
 
@@ -981,7 +981,7 @@ mechx --version
 mechx --help
 
 # 3. Simple marketplace request (client mode)
-mechx --client-mode interact \
+mechx --client-mode request \
   --prompts "Test" \
   --priority-mech 0x77af31De935740567Cf4fF1986D04B2c964A786a \
   --tools openai-gpt-4o-2024-05-13 \
@@ -989,10 +989,10 @@ mechx --client-mode interact \
   --key ethereum_private_key.txt
 
 # 4. List tools
-mechx tools-for-marketplace-mech 1 --chain-config gnosis
+mechx tool list 1 --chain-config gnosis
 
 # 5. IPFS upload
-mechx prompt-to-ipfs "Test" "test-tool"
+mechx ipfs upload-prompt "Test" "test-tool"
 ```
 
 ### Full Test Suite (2-3 hours)
@@ -1020,6 +1020,6 @@ If you encounter issues during testing:
 
 ---
 
-**Last Updated**: 2026-02-05
+**Last Updated**: 2026-02-06
 **Maintained By**: Valory AG
 **License**: Apache 2.0
