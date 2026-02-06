@@ -27,8 +27,7 @@ from web3.constants import ADDRESS_ZERO
 from mech_client.domain.delivery.base import DeliveryWatcher
 from mech_client.domain.delivery.onchain_watcher import OnchainDeliveryWatcher
 
-# Configure anyio to only use asyncio backend (avoid trio requirement)
-pytestmark = pytest.mark.anyio
+# Configure tests to use asyncio only for async functions
 
 
 class TestDeliveryWatcherBase:
@@ -82,7 +81,7 @@ class TestOnchainDeliveryWatcherInitialization:
 class TestOnchainDeliveryWatcherWatch:
     """Tests for OnchainDeliveryWatcher watch method."""
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_watch_single_request_immediate_delivery(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
@@ -114,7 +113,7 @@ class TestOnchainDeliveryWatcherWatch:
         assert request_id in result
         assert result[request_id] == expected_url
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_watch_multiple_requests_all_delivered(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
@@ -150,7 +149,7 @@ class TestOnchainDeliveryWatcherWatch:
         assert result[request_id_1] == url_1
         assert result[request_id_2] == url_2
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_watch_zero_address_not_delivered(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
@@ -186,7 +185,7 @@ class TestOnchainDeliveryWatcherWatch:
         assert request_id in result
         assert result[request_id] == expected_url
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_watch_timeout_returns_partial_results(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
@@ -213,7 +212,7 @@ class TestOnchainDeliveryWatcherWatch:
         # Should return empty dict since nothing was delivered
         assert len(result) == 0
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_watch_unexpected_structure_returns_empty(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
@@ -238,7 +237,7 @@ class TestOnchainDeliveryWatcherWatch:
 
         assert result == {}
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_watch_invalid_delivery_mech_format(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
@@ -269,7 +268,7 @@ class TestOnchainDeliveryWatcherWatch:
 class TestOnchainDeliveryWatcherDataUrls:
     """Tests for OnchainDeliveryWatcher watch_for_data_urls method."""
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     @patch("mech_client.domain.delivery.onchain_watcher.decode")
     async def test_watch_for_data_urls_single_delivery(
         self,
@@ -316,7 +315,7 @@ class TestOnchainDeliveryWatcherDataUrls:
         assert ipfs_hash in result[request_id_padded]
         mock_ledger_api.api.eth.get_logs.assert_called()
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     @patch("mech_client.domain.delivery.onchain_watcher.decode")
     async def test_watch_for_data_urls_multiple_deliveries(
         self,
@@ -369,7 +368,7 @@ class TestOnchainDeliveryWatcherDataUrls:
         assert ipfs_hash_1 in result[request_id_1_padded]
         assert ipfs_hash_2 in result[request_id_2_padded]
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     async def test_watch_for_data_urls_no_logs(
         self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
     ) -> None:
@@ -398,7 +397,7 @@ class TestOnchainDeliveryWatcherDataUrls:
 
         assert len(result) == 0
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     @patch("mech_client.domain.delivery.onchain_watcher.decode")
     async def test_watch_for_data_urls_duplicate_logs_ignored(
         self,
@@ -447,7 +446,7 @@ class TestOnchainDeliveryWatcherDataUrls:
         assert ipfs_hash_1 in result[request_id_padded]
         assert ipfs_hash_2 not in result[request_id_padded]
 
-    @pytest.mark.anyio
+    @pytest.mark.asyncio
     @patch("mech_client.domain.delivery.onchain_watcher.decode")
     async def test_watch_for_data_urls_updates_from_block(
         self,
