@@ -513,9 +513,7 @@ Note: A `ethereum_private_key.txt` file is required in `stress_tests/` for stres
 make dist
 ```
 
-The `make dist` target runs:
-1. `eject-packages` (currently a no-op; packages pre-ejected in repo)
-2. `poetry build` (builds sdist and wheel)
+The `make dist` target runs `poetry build` to build sdist and wheel distribution packages.
 
 For releases, manually:
 1. Bump version in `pyproject.toml`, `mech_client/__init__.py`, and `SECURITY.md`
@@ -659,14 +657,12 @@ Key variables:
 
 ### Open Autonomy Integration
 
-The project includes Open AEA packages in `packages/valory/`:
+The project includes Open AEA packages in `packages/valory/` that are used for agent mode operations:
 - `agents/mech_client`: AEA agent package
 - `services/mech_client`: Service package
-
-These are "ejected" into `mech_client/helpers/` during build via `make eject-packages`:
-- `p2p_libp2p_client`: libp2p connection
-- `acn`: ACN protocol
-- `acn_data_share`: ACN data sharing protocol
+- `connections/p2p_libp2p_client`: libp2p connection
+- `protocols/acn`: ACN protocol
+- `protocols/acn_data_share`: ACN data sharing protocol
 
 ### Smart Contract ABIs
 
@@ -718,9 +714,9 @@ All contract ABIs are in `mech_client/abis/`:
    - **Target**: All linters must pass in CI (black-check, flake8, mypy, pylint)
    - **Pylint score**: Must be 10.00/10 for CI to pass
    - **Ignore paths**:
-     - `mech_client/helpers/*` (ejected Open AEA packages)
      - `*_pb2.py` (generated protobuf files)
      - `packages/valory/*` (Open Autonomy packages)
+     - `mech_client/nvm_subscription/*` (NVM subscription module)
    - **Line length**: 88 characters (Black style)
    - **Pylint disable comments**: Acceptable for specific cases with justification:
      - `too-many-statements`: For complex functions that cannot be easily split (e.g., `interact` function with 65 statements)

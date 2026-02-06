@@ -6,23 +6,6 @@ authors = ["David Minarsch <david.minarsch@googlemail.com>"]
 readme = "README.md"
 packages = [{include = "mech_client"}, {include = "scripts"}]
 license = "Apache-2.0"
-include = [
-    "mech_client/helpers/acn/*",
-    "mech_client/helpers/acn/*.md",
-    "mech_client/helpers/acn/*.yaml",
-    "mech_client/helpers/acn/*.proto",
-    "mech_client/helpers/acn/tests/*",
-    "mech_client/helpers/acn_data_share/*",
-    "mech_client/helpers/acn_data_share/*.md",
-    "mech_client/helpers/acn_data_share/*.yaml",
-    "mech_client/helpers/acn_data_share/*.proto",
-    "mech_client/helpers/acn_data_share/tests/*",
-    "mech_client/helpers/p2p_libp2p_client/*",
-    "mech_client/helpers/p2p_libp2p_client/*.md",
-    "mech_client/helpers/p2p_libp2p_client/*.yaml",
-    "mech_client/helpers/p2p_libp2p_client/*.proto",
-    "mech_client/helpers/p2p_libp2p_client/tests/*",
-]
 
 [tool.poetry.dependencies]
 python = ">=3.10, <3.12"
