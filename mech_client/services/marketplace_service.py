@@ -20,14 +20,16 @@
 """Marketplace service for orchestrating mech requests."""
 
 from dataclasses import asdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
+import requests
 from aea.crypto.base import Crypto as EthereumCrypto
 from aea_ledger_ethereum import EthereumApi
+from eth_utils import to_checksum_address
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
 
-from mech_client.domain.delivery import OnchainDeliveryWatcher
+from mech_client.domain.delivery import OffchainDeliveryWatcher, OnchainDeliveryWatcher
 from mech_client.domain.execution import ExecutorFactory, TransactionExecutor
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.domain.tools import ToolManager
@@ -92,7 +94,7 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
         # Create IPFS client
         self.ipfs_client = IPFSClient()
 
-    async def send_request(  # pylint: disable=too-many-arguments,too-many-locals,unused-argument
+    async def send_request(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         prompts: Tuple[str, ...],
         tools: Tuple[str, ...],
@@ -122,6 +124,9 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
                 f"Number of prompts ({len(prompts)}) must match number of tools ({len(tools)})"
             )
 
+        if use_offchain and not mech_offchain_url:
+            raise ValueError("mech_offchain_url required when use_offchain=True")
+
         # Get marketplace contract
         marketplace_contract = self._get_marketplace_contract()
 
@@ -133,6 +138,31 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
         # Validate tools exist for this service
         self._validate_tools(tools, service_id)
 
+        # Get priority mech address (use configured or provided)
+        priority_mech_address = priority_mech or self.mech_config.priority_mech_address
+        if not priority_mech_address:
+            raise ValueError("No priority mech address specified")
+
+        # Response timeout (5 minutes, matching historic default)
+        response_timeout = 300
+
+        # Branch between on-chain and off-chain flows
+        if use_offchain:
+            # mech_offchain_url and timeout are validated above
+            return await self._send_offchain_request(
+                marketplace_contract=marketplace_contract,
+                prompts=prompts,
+                tools=tools,
+                priority_mech_address=priority_mech_address,
+                max_delivery_rate=max_delivery_rate,
+                payment_type=payment_type,
+                response_timeout=response_timeout,
+                mech_offchain_url=cast(str, mech_offchain_url),
+                extra_attributes=extra_attributes,
+                timeout=timeout or 300.0,
+            )
+
+        # On-chain flow
         # Create payment strategy
         payment_strategy = PaymentStrategyFactory.create(
             payment_type=payment_type,
@@ -167,17 +197,7 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
                 private_key=self.private_key,
             )
 
-        # Send marketplace request
-        # Get priority mech address (use configured or provided)
-        priority_mech_address = priority_mech or self.mech_config.priority_mech_address
-        if not priority_mech_address:
-            raise ValueError("No priority mech address specified")
-
-        # Response timeout (5 minutes, matching historic default)
-        # This was the default in CHAIN_TO_DEFAULT_MECH_MARKETPLACE_REQUEST_CONFIG
-        # TODO: Make this configurable via MechConfig
-        response_timeout = 300
-
+        # Send on-chain marketplace request
         tx_hash = self._send_marketplace_request(
             marketplace_contract=marketplace_contract,
             data_hashes=data_hashes,
@@ -194,19 +214,134 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
             marketplace_contract, self.ledger_api, tx_hash
         )
 
-        # Watch for delivery (if not offchain)
-        results = {}
-        if not use_offchain:
-            watcher = OnchainDeliveryWatcher(
-                marketplace_contract, self.ledger_api, timeout
-            )
-            results = await watcher.watch(request_ids)
+        # Watch for on-chain delivery
+        watcher = OnchainDeliveryWatcher(marketplace_contract, self.ledger_api, timeout)
+        results = await watcher.watch(request_ids)
 
         return {
             "tx_hash": tx_hash,
             "request_ids": request_ids,
             "delivery_results": results,
             "receipt": receipt,
+        }
+
+    async def _send_offchain_request(  # pylint: disable=too-many-arguments,too-many-locals,unused-argument
+        self,
+        marketplace_contract: Web3Contract,
+        prompts: Tuple[str, ...],
+        tools: Tuple[str, ...],
+        priority_mech_address: str,
+        max_delivery_rate: int,
+        payment_type: PaymentType,
+        response_timeout: int,
+        mech_offchain_url: str,
+        extra_attributes: Optional[Dict[str, Any]],
+        timeout: float,
+    ) -> Dict[str, Any]:
+        """
+        Send offchain request to mech HTTP endpoint.
+
+        :param marketplace_contract: Marketplace contract instance
+        :param prompts: Tuple of prompt strings
+        :param tools: Tuple of tool identifiers
+        :param priority_mech_address: Mech address
+        :param max_delivery_rate: Max delivery rate from mech
+        :param payment_type: Payment type
+        :param response_timeout: Response timeout in seconds
+        :param mech_offchain_url: Base URL of offchain mech
+        :param extra_attributes: Extra attributes for metadata
+        :param timeout: Delivery watching timeout
+        :return: Dictionary with request results
+        """
+        print("Sending offchain mech marketplace request...")
+
+        # Get current nonce from contract
+        sender = self.crypto.address
+        current_nonce = marketplace_contract.functions.mapNonces(sender).call()
+
+        # Prepare and send each request
+        request_ids_hex = []
+        request_ids_int = []
+
+        for i, (prompt, tool) in enumerate(zip(prompts, tools)):
+            # Prepare metadata (get hash and data without uploading)
+            # Import here to avoid circular dependency
+            from mech_client.infrastructure.ipfs.metadata import (  # pylint: disable=import-outside-toplevel
+                fetch_ipfs_hash,
+            )
+
+            data_hash, data_hash_full, ipfs_data = fetch_ipfs_hash(
+                prompt, tool, extra_attributes or {}
+            )
+            print(
+                f"  - Prompt will be uploaded to: https://gateway.autonolas.tech/ipfs/{data_hash_full}"
+            )
+
+            # Calculate request ID
+            # payment_type.value is already a hex string, just add 0x prefix
+            payment_type_hex = "0x" + payment_type.value
+            nonce = current_nonce + i
+            request_id_bytes = marketplace_contract.functions.getRequestId(
+                to_checksum_address(priority_mech_address),
+                sender,
+                data_hash,
+                max_delivery_rate,
+                payment_type_hex,
+                nonce,
+            ).call()
+
+            request_id_int = int.from_bytes(request_id_bytes, byteorder="big")
+            request_id_hex = request_id_bytes.hex()
+
+            # Sign the request ID
+            signature = self.crypto.sign_message(
+                request_id_bytes, is_deprecated_mode=True
+            )
+
+            # Prepare payload
+            payload = {
+                "sender": sender,
+                "signature": signature,
+                "ipfs_hash": data_hash,
+                "request_id": request_id_int,
+                "delivery_rate": max_delivery_rate,
+                "nonce": nonce,
+                "ipfs_data": ipfs_data,
+            }
+
+            # Send HTTP POST request
+            url = f"{mech_offchain_url.rstrip('/')}/send_signed_requests"
+            try:
+                response = requests.post(
+                    url=url,
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=30,
+                )
+                response.raise_for_status()
+                # Response contains request confirmation but we don't need to use it
+                _ = response.json()
+
+                request_ids_hex.append(request_id_hex)
+                request_ids_int.append(str(request_id_int))
+
+                print(f"  - Created offchain request with ID {request_id_int}")
+
+            except requests.exceptions.RequestException as e:
+                raise ValueError(f"Failed to send offchain request: {e}") from e
+
+        print("")
+
+        # Watch for offchain delivery
+        print("Waiting for offchain mech marketplace deliver...")
+        watcher = OffchainDeliveryWatcher(mech_offchain_url, timeout)
+        results = await watcher.watch(request_ids_hex)
+
+        return {
+            "tx_hash": None,  # No on-chain transaction for offchain requests
+            "request_ids": request_ids_hex,
+            "delivery_results": results,
+            "receipt": None,  # No receipt for offchain requests
         }
 
     def _validate_tools(self, tools: Tuple[str, ...], service_id: int) -> None:

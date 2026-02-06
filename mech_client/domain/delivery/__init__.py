@@ -20,10 +20,12 @@
 """Delivery mechanisms for mech responses."""
 
 from mech_client.domain.delivery.base import DeliveryWatcher
+from mech_client.domain.delivery.offchain_watcher import OffchainDeliveryWatcher
 from mech_client.domain.delivery.onchain_watcher import OnchainDeliveryWatcher
 
 
 __all__ = [
     "DeliveryWatcher",
+    "OffchainDeliveryWatcher",
     "OnchainDeliveryWatcher",
 ]
