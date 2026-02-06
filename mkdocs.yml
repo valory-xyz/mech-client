@@ -37,6 +37,7 @@ extra_css:
 
 nav:
   - mech-client: 'index.md'
+  - Manual Testing Guide: 'manual-testing-guide.md'
 
 
 plugins:

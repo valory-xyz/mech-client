@@ -1,1 +1,0 @@
-"""Mech client scripts"""

@@ -1,28 +1,11 @@
 [tool.poetry]
 name = "mech-client"
-version = "0.14.1"
+version = "0.17.0"
 description = "Basic client to interact with a mech"
 authors = ["David Minarsch <david.minarsch@googlemail.com>"]
 readme = "README.md"
 packages = [{include = "mech_client"}, {include = "scripts"}]
 license = "Apache-2.0"
-include = [
-    "mech_client/helpers/acn/*",
-    "mech_client/helpers/acn/*.md",
-    "mech_client/helpers/acn/*.yaml",
-    "mech_client/helpers/acn/*.proto",
-    "mech_client/helpers/acn/tests/*",
-    "mech_client/helpers/acn_data_share/*",
-    "mech_client/helpers/acn_data_share/*.md",
-    "mech_client/helpers/acn_data_share/*.yaml",
-    "mech_client/helpers/acn_data_share/*.proto",
-    "mech_client/helpers/acn_data_share/tests/*",
-    "mech_client/helpers/p2p_libp2p_client/*",
-    "mech_client/helpers/p2p_libp2p_client/*.md",
-    "mech_client/helpers/p2p_libp2p_client/*.yaml",
-    "mech_client/helpers/p2p_libp2p_client/*.proto",
-    "mech_client/helpers/p2p_libp2p_client/tests/*",
-]
 
 [tool.poetry.dependencies]
 python = ">=3.10, <3.12"
@@ -31,12 +14,12 @@ asn1crypto = ">=1.4.0,<1.5.0"
 websocket-client = ">=0.32.0,<1"
 tabulate = "^0.9.0"
 setuptools = "^77.0.3"
-olas-operate-middleware = { git = "https://github.com/valory-xyz/olas-operate-middleware.git", rev = "417f5f9079127cb9e675b82890d84eddb119182f"}
-safe-eth-py = "v6.4.0"
+olas-operate-middleware = "0.14.7"
+safe-eth-py = "^7.18.0"
 click = "8.1.8"
 
 [tool.poetry.scripts]
-mechx = "mech_client.cli:cli"
+mechx = "mech_client.cli.main:cli"
 
 [tool.poetry.group.dev.dependencies]
 tomte = {version = "0.2.17", extras = ["tox"]}

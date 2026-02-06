@@ -39,6 +39,30 @@ pip install mech-client
 
 **d.** Copy this key in the file `ethereum_private_key.txt` in your project folder. Make sure the file contains only the private key, with no leading or trailing spaces, tabs, or newlines.
 
+## Supported Chains
+
+**Supported chains:** `gnosis`, `base`, `polygon`, `optimism`
+
+All commands require `--chain-config` with one of these four chain names.
+
+| Chain | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Payments | USDC Payments |
+|-------|-------------|------------|----------------|-------------------|---------------|---------------|
+| Gnosis | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Base | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Polygon | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Optimism | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+
+**Key:**
+- **Marketplace**: All supported chains have marketplace contracts deployed.
+- **Agent Mode**: All supported chains support on-chain agent registration via `setup-agent-mode`.
+- **Native Payment**: Chains supporting `deposit-native` command for prepaid native token deposits.
+- **NVM Subscriptions**: Chains supporting `purchase-nvm-subscription` command for Nevermined subscription-based payments (Gnosis, Base only).
+- **OLAS/USDC Payments**: Chains supporting `deposit-token` command with OLAS or USDC tokens.
+
+**Important Notes:**
+- The `fetch-mm-mechs-info` command works on all marketplace chains (Gnosis, Base, Polygon, Optimism) but requires setting the `MECHX_SUBGRAPH_URL` environment variable.
+- For other marketplace commands (`interact`, deposits), subgraph is not required.
+
 ## 1. How to Send a request to a Mech (registered on the Mech MarketPlace)
 
 To send a request to a Mech that is accessible through the Mech Marketplace, first complete the [setup](#setup), then follow the [instructions](#1-2-sending-requests) below.
@@ -53,15 +77,20 @@ Follow the instructions in the corresponding section.
 
 ### 1. 1. Choosing a Mech
 
-- Use the command mechx in terminal, which is structured as follows. 
+- Use the command mechx in terminal, which is structured as follows.
 ```bash
 mechx fetch-mm-mechs-info --chain-config <chain-config>
+```
 
-Replace `<chain-config>` by the chosen network. Currently supported chains are gnosis and base.
+Replace `<chain-config>` by the chosen network. Supported marketplace chains: gnosis, base, polygon, optimism.
+
+⚠️ **Note**: This command requires a subgraph URL to be set:
+```bash
+export MECHX_SUBGRAPH_URL=<your-subgraph-url>
 ```
 ```bash
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
-|   AI Agent Id | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
+| AI Agent Id  | Mech Type          | Mech Address                               |   Total Deliveries | Metadata Link                                                                                                 |
 +==============+====================+============================================+====================+===============================================================================================================+
 |         2182 | Fixed Price Native | 0xc05e7412439bd7e91730a6880e18d5d5873f632c |              41246 | https://gateway.autonolas.tech/ipfs/f01701220157d3b106831e2713b86af1b52af76a3ef28c52ae0853e9638180902ebee41d4 |
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
@@ -83,20 +112,20 @@ Replace `<chain-config>` by the chosen network. Currently supported chains are g
 - Use the command mechx in terminal, which is structured as follows:
 
 ```bash
-mechx interact <prompt> --chain-config <chain-config> --use-offchain <bool> --tool <tool> --priority-mech <mech_address>
+mechx interact --prompts <prompt> --priority-mech <mech_address> --tools <tool> --chain-config <chain-config> --use-offchain
 ```
 
 Replace each placeholder as follows:
 
 - `<prompt>`: The request description to be sent to the Mech. For instance: "Write a short poem".
 
-- `<chain-config>`: One of the keys in the dictionary defined in `.mech_client/configs/mechs.json` (e.g., "gnosis"). This provides the client with a configuration for the chosen network.
-
-- `<bool>`: True to use the off-chain method; False for on-chain.
+- `<mech_address>`: The address of the Mech to send the request to.
 
 - `<tool>`: The name of the tool to use.
 
-- `<mech_address>`: The address of the Mech to send the request to.
+- `<chain-config>`: One of the keys in the dictionary defined in `mech_client/configs/mechs.json` (e.g., "gnosis"). This provides the client with a configuration for the chosen network.
+
+- `--use-offchain`: Optional flag to use the off-chain method. Omit for on-chain requests.
 
 ### 1. 2. 2. Deposits
 
@@ -149,21 +178,21 @@ After sending a request, a JSON response will appear below the line `"Data for a
 For example, the following command:
 
 ```bash
-mechx interact "write a short poem" --tool openai-gpt-3.5-turbo --chain-config gnosis --priority-mech <mech_address>
+mechx interact --prompts "write a short poem" --tools openai-gpt-3.5-turbo --chain-config gnosis --priority-mech <mech_address>
 ```
 
 you should receive a response as follows:
         ![screenshot_response](./imgs/screenshot_request.png)
 
-**Troubleshooting: websocket connection lost**
+**Troubleshooting: timeout waiting for response**
 
-For some Mechs, the response may take a few minutes to arrive. During that time, the WebSocket connection might be lost. To avoid this, you can configure a custom WebSocket provider (we suggest QuickNode as an example). Once you have your WebSocket URL, set the following environment variable:
+For some Mechs, the response may take a few minutes to arrive. If you encounter timeout issues, ensure you have a reliable RPC provider configured:
 
 ```bash
-export MECHX_WSS_ENDPOINT=<wss_url>
+export MECHX_CHAIN_RPC=<your_rpc_url>
 ```
 
-Alternatively, if the connection is lost, you can retrieve the response manually. To do this:
+If the connection times out, you can retrieve the response manually. To do this:
 
 - Note the `request_id` printed in the logs.
 
@@ -173,7 +202,7 @@ Alternatively, if the connection is lost, you can retrieve the response manually
 printf "%x\n" <request_id>
 ```
 
-- Go to the [Mech list](https://mech.olas.network/mechs) and locate your Mech (by its AI agent ID or address).
+- Go to the [Mech list](https://marketplace.olas.network/gnosis/ai-agents) and locate your Mech (by its AI Agent ID or address).
 
 - Click on the Mech’s address to see a list of requests it has received.
 
@@ -207,13 +236,17 @@ PRIORITY_MECH_ADDRESS = "<priority_mech_address>"
 PROMPT_TEXT = "<prompt_text>"
 TOOL_NAME = "<tool_name>"
 CHAIN_CONFIG = "<network_name>"
+AGENT_MODE = False  # Set to True if using agent mode
+SAFE_ADDRESS = ""   # Required if AGENT_MODE is True
 USE_OFFCHAIN = False
 
 result = marketplace_interact(
-    prompt=PROMPT_TEXT,
+    prompts=(PROMPT_TEXT,),  # Note: must be a tuple
     priority_mech=PRIORITY_MECH_ADDRESS,
+    agent_mode=AGENT_MODE,
+    safe_address=SAFE_ADDRESS,
     use_offchain=USE_OFFCHAIN,
-    tool=TOOL_NAME,
+    tools=(TOOL_NAME,),      # Note: must be a tuple
     chain_config=CHAIN_CONFIG
 )
 ```
@@ -228,16 +261,16 @@ Replace the placeholders as follows:
 
 - `<network_name>`: the name of the target network (e.g., "gnosis", "base").
 
-- `USE_OFFCHAIN`: set to True to use off-chain request delivery, or leave to False for on-chain.
+**Note:** If using agent mode (`AGENT_MODE = True`), you must provide a valid `SAFE_ADDRESS`. For client mode, set `AGENT_MODE = False` and `SAFE_ADDRESS = ""`.
 
 The variable **result** contains the response of the mech.
 
 ### 1. 4. Sending requests through the web interface
 
-**1.** Create a wallet (e.g., using [MetaMask](https://metamask.io/)) and connect it to the [web interface](https://mech.olas.network/gnosis/mechs) by clicking the **“Connect wallet”** button at the top of the page.
+**1.** Create a wallet (e.g., using [MetaMask](https://metamask.io/)) and connect it to the [web interface](https://marketplace.olas.network/gnosis/ai-agents) by clicking the **“Connect wallet”** button at the top of the page.
 The wallet must have some xDAI to pay for requests.
 
-**2.** On the [web interface](https://mech.olas.network/gnosis/mechs), click on the address of the Mech you want to interact with.
+**2.** On the [web interface](https://marketplace.olas.network/gnosis/ai-agents), click on the address of the Mech you want to interact with.
 
 **3.** Click on **"New Request"**. A pop-up window will appear:
 
@@ -255,123 +288,3 @@ Click **"Confirm"** to send the request.
 
 Once the request is fulfilled, a **"Delivers Data"** link will appear in the same row under the **"Delivers data"** column. Click it to view the Mech’s response.
 
-## 2. Sending requests to legacy Mechs
-
-You can also send requests to Mechs that were deployed before the introduction of the Mech Marketplace. We refer to these as _legacy Mechs_. This section explains how to interact with them.
-
-First, complete the steps in the [setup](#setup) section, then [choose a Mech](#2-1-choosing-a-mech).
-After that, there are three ways to send a request to a legacy Mech: via the [terminal](#2-2-in-terminal), using a Python [script](#2-3-script-for-automatizing-request-sending), or through the [web interface](#2-4-sending-requests-through-the-web-interface).
-
-### 2. 1. Choosing a Mech
-
-- A list of chains where legacy Mechs are deployed, along with their contract addresses, can be found [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs).
-  The relevant section is also shown in the image below.
-
-  **Important**: Choose a Mech from the **"Mech Instance (Fixed Pricing)"** column, **not** the "Mech Instance (Nevermined)" column.
-  Then, note the **agent ID** (the number following the dash `-` in the agent identifier).
-
-  ![List of Mechs](./imgs/list_of_mechs.png)
-
-- For the Gnosis network, additional legacy Mechs are listed on [this webpage](https://mech.olas.network/). Click the **"Legacy"** tab, as shown below:
-
-  ![Mech Marketplace vs Legacy](./imgs/legacy_tab.png)
-
-  You will then see the list of available legacy Mechs.
-
-Once you have selected a Mech:
-
-- Fund your EOA account (created during [setup](#setup)) with the appropriate token for the Mech’s network. Refer to the **"Network"** column in the deployment table to determine which token to use.
-
-**Finding the Mech’s price per request**
-
-1. Open the Mech’s contract in the block explorer of its network.
-   For example, [this contract](https://gnosisscan.io/address/0x77af31De935740567Cf4fF1986D04B2c964A786a#readContract) is for a Mech on the Gnosis chain.
-
-2. Click on **“Contract”**, then **“Read Contract”**.
-
-3. Scroll down to find the `price` function and click on it.
-
-4. The result is given as an integer. Divide the value by \(10^8\) to obtain the price per request in the native token.
-   (In the example above, this gives 0.01 xDAI.)
-
-### 2. 2. In terminal
-
-**1.** Send a request:
-
-- Use the command mechx in terminal, which is structured as follows:
-
-```bash
-mechx interact <prompt> --agent_id <agent_id>
-```
-
-Replace the placeholders as follows: `<agent_id>`: the number (as an integer, not string) after the character “-” in the column “Mech Instance (Fixed Pricing) - Agent Id” of the table [here](https://github.com/valory-xyz/mech?tab=readme-ov-file#examples-of-deployed-mechs) for the chosen mech; `<prompt>`: string which corresponds to the request to send to the Mech.
-
-- The list of ids and the names of the tools that the Mech can use will appear. You will be prompted to enter the id of a tool that the Mech will use to respond to the request.
-
-- In order to select a tool, you can use the following to see which tools are used by which agents:
-
-```bash
-mechx tools-for-agents
-```
-
-You can identify which tools are used by a Mech by looking at the "Agent ID" column. Using the unique identifier of the tool, you can find a description of the tool, using the following:
-
-```bash
-mechx tool-description <unique_identifier> --chain-config <chain_config>
-```
-
-where `<unique_identifier>` is replaced by the unique id of the tool and `<chain_config>` by the name of the network.
-
-**2.** Receive the response:
-
-- In response to the request, a JSON file is printed below "Data for agent". In this JSON file, the key ‘result’ corresponds to the mech’s response to the request. For instance, with the command
-
-```bash
-mechx interact "write a short poem" --agent_id 6
-```
-
-and after selecting `openai-gpt-3.5-turbo` for the tool, you will receive a response as follows:
-        ![screenshot_response](./imgs/screenshot_request.png)
-
-- Remark: If an "Out of gas" error is encountered, an increase of the gas limit, can solve the problem, using the following line:
-
-```bash
-export MECHX_GAS_LIMIT=200000
-```
-
-### 2. 3. Script for automatizing request sending
-
-The following script can be used in order to automatize request sending:
-
-```python
-from mech_client.interact import interact
-
-PROMPT_TEXT = 'Will Gnosis pay reach 100k cards in 2024?'
-AGENT_ID = 6
-TOOL_NAME = "prediction-online"
-
-result = interact(
-    prompt=PROMPT_TEXT,
-    agent_id=AGENT_ID,
-    tool=TOOL_NAME
-)
-```
-
-The variables **PROMPT_TEXT**, **AGENT_ID** and **TOOL_NAME** can be changed. The variable **result** contains the response of the mech.
-
-### 2. 4. Sending requests through the web interface
-
-**1.** Create a wallet (for instance with [Metamask](https://metamask.io/)) and connect it to the web interface by clicking on the button “Connect wallet” on the webpage. This wallet must be provided with xDAI in order to pay the Mechs for the requests.
-
-**2.** Go to the webpage [here](https://mech.olas.network/gnosis/mechs?legacy=true). Click on the address of the Mech you want to send a request to.
-
-**4.** Click on "New Request". The following pop-up will appear:
-![screenshot](./imgs/screenshot.png)
-
-**5.** Enter a prompt and select the tool, then click on "Request".
-
-**6.** A window like the one as follows will appear:
-![confirmation](./imgs/confirmation.png)
-Click on "Confirm".
-
-**7.** You can find the request by searching for your wallet's address in the column "Sender". When the request is delivered, you can access the delivered data in the column "Delivers data" in the corresponding row.

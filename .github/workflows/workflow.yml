@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.10.9"]
+        python-version: ["3.10", "3.11"]
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@v2
@@ -45,3 +45,57 @@ jobs:
       run: tox -e spell-check
     - name: License compatibility check
       run: tox -e liccheck
+
+  test:
+    name: Run tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11"]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry==1.4.2
+          poetry install
+      - name: Run unit tests
+        run: |
+          poetry run pytest tests/unit -v --tb=short -k "not trio"
+      # Integration tests disabled - no tests in tests/integration directory yet
+      # - name: Run integration tests
+      #   run: |
+      #     poetry run pytest tests/integration -v --tb=short -k "not trio"
+
+  build-pip-packages:
+    name: Dry-release framework
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          sudo apt-get update --fix-missing
+          sudo apt-get autoremove
+          sudo apt-get autoclean
+          python -m pip install --upgrade pip
+          pip install twine poetry==1.4.2
+          poetry install
+          poetry run pip install --upgrade setuptools
+          poetry run autonomy packages sync --update-packages
+
+      - name: Build wheels and source tarball
+        run: |
+          echo Building distribution
+          make dist
