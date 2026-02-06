@@ -20,10 +20,10 @@ from .contracts.agreement_manager import AgreementStorageManagerContract
 from .contracts.did_registry import DIDRegistryContract
 from .contracts.escrow_payment import EscrowPaymentConditionContract
 from .contracts.lock_payment import LockPaymentConditionContract
+from .contracts.nevermined_config import NeverminedConfigContract
 from .contracts.nft import SubscriptionNFT
 from .contracts.nft_sales import NFTSalesTemplateContract
 from .contracts.subscription_provider import SubscriptionProvider
-from .contracts.nevermined_config import NeverminedConfigContract
 from .contracts.token import SubscriptionToken
 from .contracts.transfer_nft import TransferNFTConditionContract
 

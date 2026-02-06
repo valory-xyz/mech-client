@@ -1,8 +1,10 @@
 import logging
-from typing import Dict, Any
+from typing import Any, Dict
+
 from web3 import Web3
 
 from .base_contract import BaseContract
+
 
 logger = logging.getLogger(__name__)
 
