@@ -28,7 +28,7 @@ from tabulate import tabulate  # type: ignore
 
 from mech_client.cli.validators import validate_chain_config
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
-from mech_client.mech_marketplace_subgraph import query_mm_mechs_info
+from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
 
 
 @click.group()

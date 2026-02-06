@@ -29,17 +29,7 @@ from tabulate import tabulate  # type: ignore
 from web3.exceptions import ContractLogicError, Web3ValidationError
 
 from mech_client.cli.validators import validate_chain_config, validate_tool_id
-from mech_client.mech_marketplace_tool_management import (
-    extract_input_schema,
-    extract_output_schema,
-)
-from mech_client.mech_marketplace_tool_management import (
-    get_tool_description as get_tool_description_for_marketplace_mech,
-)
-from mech_client.mech_marketplace_tool_management import (
-    get_tool_io_schema as get_tool_io_schema_for_marketplace_mech,
-)
-from mech_client.mech_marketplace_tool_management import get_tools_for_marketplace_mech
+from mech_client.services.tool_service import ToolService
 
 
 @click.group()
@@ -80,7 +70,8 @@ def tool_list(agent_id: int, chain_config: str) -> None:
             )
 
         # Fetch tools
-        result = get_tools_for_marketplace_mech(agent_id, validated_chain)
+        tool_service = ToolService(validated_chain)
+        result = tool_service.get_tools_info(agent_id)
 
         # Format and display
         headers = ["Tool Name", "Unique Identifier"]
@@ -165,9 +156,8 @@ def tool_describe(tool_id: str, chain_config: str) -> None:
         validated_tool_id = validate_tool_id(tool_id)
 
         # Fetch description
-        description = get_tool_description_for_marketplace_mech(
-            validated_tool_id, validated_chain
-        )
+        tool_service = ToolService(validated_chain)
+        description = tool_service.get_description(validated_tool_id)
         click.echo(f"Description for tool {tool_id}: {description}")
 
     except requests.exceptions.HTTPError as e:
@@ -239,14 +229,13 @@ def tool_schema(tool_id: str, chain_config: str) -> None:
         validated_tool_id = validate_tool_id(tool_id)
 
         # Fetch schema
-        result = get_tool_io_schema_for_marketplace_mech(
-            validated_tool_id, validated_chain
-        )
+        tool_service = ToolService(validated_chain)
+        result = tool_service.get_schema(validated_tool_id)
 
         name = result["name"]
         description = result["description"]
-        input_schema = extract_input_schema(result["input"])
-        output_schema = extract_output_schema(result["output"])
+        input_schema = tool_service.format_input_schema(result["input"])
+        output_schema = tool_service.format_output_schema(result["output"])
 
         # Display results
         click.echo("Tool Details:")
