@@ -169,10 +169,14 @@ payment model of the Mech. For a fixed price Mech receiving payments in native t
 mechx deposit native --chain-config <chain_config> <amount>
 ```
 
-For a fixed price Mech receiving payments in OLAS, use the following (the amount is in ether):
+For a fixed price Mech receiving payments in OLAS or USDC tokens, use the following:
 
 ```bash
-mechx deposit token --chain-config <chain_config> <amount>
+# Deposit OLAS tokens (amount in wei, 18 decimals)
+mechx deposit token --chain-config <chain_config> --token-type olas <amount>
+
+# Deposit USDC tokens (amount in smallest unit, 6 decimals)
+mechx deposit token --chain-config <chain_config> --token-type usdc <amount>
 ```
 
 For a Mech using Nevermined subscriptions, to make requests, it is necessary to buy a subscription. To do that you can use the following command:

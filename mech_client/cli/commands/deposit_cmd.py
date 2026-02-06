@@ -213,6 +213,12 @@ def deposit_native(
     help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
 @click.option(
+    "--token-type",
+    type=click.Choice(["olas", "usdc"], case_sensitive=False),
+    default="olas",
+    help="Token type to deposit (olas or usdc). Default: olas.",
+)
+@click.option(
     "--key",
     type=click.Path(exists=True, file_okay=True, dir_okay=False),
     help="Path to private key file (client mode only).",
@@ -223,6 +229,7 @@ def deposit_token(
     ctx: click.Context,
     amount_to_deposit: str,
     chain_config: str,
+    token_type: str,
     key: Optional[str] = None,
 ) -> None:
     """Deposit ERC20 tokens into prepaid balance.
@@ -231,8 +238,12 @@ def deposit_token(
     marketplace. Amount must be specified in the token's smallest unit
     (e.g., 18 decimals for OLAS, 6 decimals for USDC).
 
-    Example: mechx deposit token 1000000000000000000 --chain-config gnosis
-    (deposits 1.0 OLAS)
+    Examples:
+        mechx deposit token 1000000000000000000 --chain-config gnosis --token-type olas
+        (deposits 1.0 OLAS)
+
+        mechx deposit token 1000000 --chain-config base --token-type usdc
+        (deposits 1.0 USDC)
     """
     try:
         # Validate chain config
@@ -309,10 +320,10 @@ def deposit_token(
             ethereum_client=ethereum_client,
         )
 
-        # Execute deposit (defaulting to OLAS token for now)
+        # Execute deposit
         amount_int = int(amount_to_deposit)
-        click.echo(f"\nDepositing {amount_int} of OLAS tokens...")
-        tx_hash = service.deposit_token(amount_int, token_type="olas")  # nosec B106
+        click.echo(f"\nDepositing {amount_int} of {token_type.upper()} tokens...")
+        tx_hash = service.deposit_token(amount_int, token_type=token_type.lower())
         click.echo(f"\n✓ Deposit transaction: {tx_hash}")
 
     except ContractLogicError as e:
