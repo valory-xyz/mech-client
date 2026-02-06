@@ -19,7 +19,7 @@
 
 """Tests for deposit service."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import ANY, MagicMock, Mock, patch
 
 import pytest
 
@@ -44,8 +44,20 @@ def create_mock_mech_config() -> MagicMock:
     mock_mech_config = MagicMock()
     mock_mech_config.ledger_config = ledger_config
     mock_mech_config.gas_limit = 500000
-    mock_mech_config.transaction_url = "https://explorer.com/tx/{}"
+    mock_mech_config.transaction_url = "https://explorer.com/tx/{transaction_digest}"
     return mock_mech_config
+
+
+def create_mock_crypto(private_key: str = "0x" + "1" * 64) -> MagicMock:
+    """
+    Create a mock EthereumCrypto object.
+
+    :param private_key: Private key to use
+    :return: Mock crypto instance
+    """
+    mock_crypto = MagicMock()
+    mock_crypto.private_key = private_key
+    return mock_crypto
 
 
 class TestDepositServiceInitialization:
@@ -53,12 +65,10 @@ class TestDepositServiceInitialization:
 
     @patch("mech_client.services.deposit_service.get_mech_config")
     @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.EthereumCrypto")
     @patch("mech_client.services.deposit_service.ExecutorFactory")
     def test_initialization_client_mode(
         self,
         mock_executor_factory: MagicMock,
-        mock_crypto: MagicMock,
         mock_ledger_api: MagicMock,
         mock_config: MagicMock,
     ) -> None:
@@ -67,12 +77,13 @@ class TestDepositServiceInitialization:
         mock_config.return_value = create_mock_mech_config()
         mock_executor = MagicMock()
         mock_executor_factory.create.return_value = mock_executor
+        mock_crypto = create_mock_crypto()
 
         # Initialize service
         service = DepositService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "1" * 64,
+            crypto=mock_crypto,
         )
 
         # Verify initialization
@@ -86,21 +97,20 @@ class TestDepositServiceInitialization:
 
     @patch("mech_client.services.deposit_service.get_mech_config")
     @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.EthereumCrypto")
     @patch("mech_client.services.deposit_service.ExecutorFactory")
     def test_initialization_agent_mode(
         self,
         mock_executor_factory: MagicMock,
-        mock_crypto: MagicMock,
         mock_ledger_api: MagicMock,
         mock_config: MagicMock,
-        mock_ethereum_client: MagicMock,
     ) -> None:
         """Test DepositService initialization in agent mode."""
         # Setup mocks
         mock_config.return_value = create_mock_mech_config()
         mock_executor = MagicMock()
         mock_executor_factory.create.return_value = mock_executor
+        mock_crypto = create_mock_crypto()
+        mock_ethereum_client = MagicMock()
 
         safe_address = "0x" + "2" * 40
 
@@ -108,7 +118,7 @@ class TestDepositServiceInitialization:
         service = DepositService(
             chain_config="gnosis",
             agent_mode=True,
-            private_key="0x" + "1" * 64,
+            crypto=mock_crypto,
             safe_address=safe_address,
             ethereum_client=mock_ethereum_client,
         )
@@ -166,7 +176,7 @@ class TestDepositNative:
         service = DepositService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "3" * 64,
+            crypto=create_mock_crypto("0x" + "3" * 64),
         )
 
         # Execute deposit
@@ -214,7 +224,7 @@ class TestDepositNative:
         service = DepositService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "3" * 64,
+            crypto=create_mock_crypto("0x" + "3" * 64),
         )
 
         # Execute deposit and expect error
@@ -273,7 +283,7 @@ class TestDepositToken:
         service = DepositService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "3" * 64,
+            crypto=create_mock_crypto("0x" + "3" * 64),
         )
 
         # Execute deposit
@@ -286,7 +296,7 @@ class TestDepositToken:
             payment_type=PaymentType.TOKEN,
             ledger_api=mock_ledger_api,
             chain_id=mock_config.return_value.ledger_config.chain_id,
-            crypto=mock_crypto,
+            crypto=ANY,
         )
         mock_payment_strategy.check_balance.assert_called_once()
         mock_payment_strategy.approve_if_needed.assert_called_once()
@@ -340,7 +350,7 @@ class TestDepositToken:
         service = DepositService(
             chain_config="base",
             agent_mode=False,
-            private_key="0x" + "3" * 64,
+            crypto=create_mock_crypto("0x" + "3" * 64),
         )
 
         # Execute deposit
@@ -353,7 +363,7 @@ class TestDepositToken:
             payment_type=PaymentType.USDC_TOKEN,
             ledger_api=mock_ledger_api,
             chain_id=mock_config.return_value.ledger_config.chain_id,
-            crypto=mock_crypto,
+            crypto=ANY,
         )
         # Approval should have been executed
         assert mock_wait_receipt.call_count == 2  # Once for approval, once for deposit
@@ -389,7 +399,7 @@ class TestDepositToken:
         service = DepositService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "3" * 64,
+            crypto=create_mock_crypto("0x" + "3" * 64),
         )
 
         # Execute deposit and expect error
@@ -419,7 +429,7 @@ class TestDepositToken:
         service = DepositService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "3" * 64,
+            crypto=create_mock_crypto("0x" + "3" * 64),
         )
 
         # Execute deposit with invalid token type
@@ -462,7 +472,7 @@ class TestCheckBalance:
         service = DepositService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "3" * 64,
+            crypto=create_mock_crypto("0x" + "3" * 64),
         )
 
         # Check balance
@@ -512,7 +522,7 @@ class TestCheckBalance:
         service = DepositService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "3" * 64,
+            crypto=create_mock_crypto("0x" + "3" * 64),
         )
 
         # Check balance

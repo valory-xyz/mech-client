@@ -44,10 +44,22 @@ def create_mock_mech_config() -> MagicMock:
     mock_mech_config = MagicMock()
     mock_mech_config.ledger_config = ledger_config
     mock_mech_config.gas_limit = 500000
-    mock_mech_config.transaction_url = "https://explorer.com/tx/{}"
+    mock_mech_config.transaction_url = "https://explorer.com/tx/{transaction_digest}"
     mock_mech_config.priority_mech_address = "0x" + "9" * 40
     mock_mech_config.price = 10**16  # 0.01 tokens
     return mock_mech_config
+
+
+def create_mock_crypto(private_key: str = "0x" + "1" * 64) -> MagicMock:
+    """
+    Create a mock EthereumCrypto object.
+
+    :param private_key: Private key to use
+    :return: Mock crypto instance
+    """
+    mock_crypto = MagicMock()
+    mock_crypto.private_key = private_key
+    return mock_crypto
 
 
 class TestMarketplaceServiceInitialization:
@@ -78,7 +90,7 @@ class TestMarketplaceServiceInitialization:
         service = MarketplaceService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "1" * 64,
+            crypto=create_mock_crypto(),
         )
 
         # Verify initialization
@@ -179,7 +191,7 @@ class TestGetMarketplaceContract:
         service = MarketplaceService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "1" * 64,
+            crypto=create_mock_crypto(),
         )
 
         # Get contract
@@ -239,7 +251,7 @@ class TestFetchMechInfo:
         service = MarketplaceService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "1" * 64,
+            crypto=create_mock_crypto(),
         )
 
         # Fetch mech info
@@ -293,7 +305,7 @@ class TestValidateTools:
         service = MarketplaceService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "1" * 64,
+            crypto=create_mock_crypto(),
         )
 
         # Validate tools - should not raise
@@ -335,7 +347,7 @@ class TestValidateTools:
         service = MarketplaceService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "1" * 64,
+            crypto=create_mock_crypto(),
         )
 
         # Validate invalid tool - should raise
@@ -387,7 +399,7 @@ class TestSendMarketplaceRequest:
         service = MarketplaceService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "1" * 64,
+            crypto=create_mock_crypto(),
         )
 
         # Send request
@@ -447,7 +459,7 @@ class TestSendMarketplaceRequest:
         service = MarketplaceService(
             chain_config="gnosis",
             agent_mode=False,
-            private_key="0x" + "1" * 64,
+            crypto=create_mock_crypto(),
         )
 
         # Send batch request (multiple hashes)
