@@ -76,7 +76,9 @@ Learn more about mech marketplace [here](https://olas.network/mech-marketplace)
 
 ### Supported Chains
 
-The Mech Client supports multiple chains with different feature availability:
+**Supported chains:** `gnosis`, `base`, `polygon`, `optimism`
+
+All commands require `--chain-config` with one of these four chain names.
 
 | Chain | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Payments | USDC Payments |
 |-------|-------------|------------|----------------|-------------------|---------------|---------------|

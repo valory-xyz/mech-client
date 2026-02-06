@@ -300,8 +300,8 @@ export MECHX_SUBGRAPH_URL='https://your-subgraph-url'
 
 **Solution:**
 ```bash
-# Available chains: gnosis, base, polygon, optimism, arbitrum, celo
-# Use exact names:
+# Supported chains: gnosis, base, polygon, optimism
+# Use exact chain names:
 mechx interact --chain-config gnosis ...
 ```
 
@@ -800,6 +800,10 @@ validated_safe = validate_ethereum_address(safe, "Safe address")
 **Pattern:** All commands that accept addresses (interact, deposit commands) use this validator.
 
 ## Chain Support Matrix
+
+**Supported chains:** `gnosis`, `base`, `polygon`, `optimism`
+
+All commands require `--chain-config` with one of these four chain names. Arbitrum and Celo exist in the configuration but have no marketplace support and are currently non-functional.
 
 | Chain | Chain ID | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Token | USDC Token | Subgraph |
 |-------|----------|-------------|------------|----------------|-------------------|------------|------------|----------|

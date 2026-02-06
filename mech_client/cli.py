@@ -348,7 +348,7 @@ def display_setup_wallets(operate: OperateApp, validated_chain: str) -> None:
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+    help="Chain configuration name. See documentation for supported chains.",
 )
 def setup_agent_mode(
     chain_config: str,
@@ -479,7 +479,7 @@ def setup_agent_mode(
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+    help="Chain configuration name. See documentation for supported chains.",
 )
 @click.pass_context
 def interact(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
@@ -683,7 +683,7 @@ def to_png(ipfs_hash: str, path: str, request_id: str) -> None:
 @click.option(
     "--chain-config",
     required=True,
-    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+    help="Chain configuration name. See documentation for supported chains.",
 )
 def tools_for_marketplace_mech(agent_id: int, chain_config: str) -> None:
     """Fetch and display tools for marketplace mechs."""
@@ -763,7 +763,7 @@ def tools_for_marketplace_mech(agent_id: int, chain_config: str) -> None:
 @click.option(
     "--chain-config",
     required=True,
-    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+    help="Chain configuration name. See documentation for supported chains.",
 )
 def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> None:
     """Fetch and display the description of a specific tool for marketplace mechs."""
@@ -829,7 +829,7 @@ def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> No
 @click.option(
     "--chain-config",
     required=True,
-    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+    help="Chain configuration name. See documentation for supported chains.",
 )
 def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None:
     """Fetch and display the tool's name and description along with the input/output schema for a specific tool for marketplace mechs."""
@@ -916,7 +916,7 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+    help="Chain configuration name. See documentation for supported chains.",
 )
 @click.option(
     "--key",
@@ -1023,7 +1023,7 @@ def deposit_native(
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+    help="Chain configuration name. See documentation for supported chains.",
 )
 @click.option(
     "--key",
@@ -1130,7 +1130,7 @@ def deposit_token(
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+    help="Chain configuration name. See documentation for supported chains.",
 )
 @click.option(
     "--key",
@@ -1239,7 +1239,7 @@ def nvm_subscribe(
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+    help="Chain configuration name. See documentation for supported chains.",
 )
 def query_mm_mechs_info_cli(
     chain_config: str,
