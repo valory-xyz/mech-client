@@ -122,16 +122,16 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
                 f"Number of prompts ({len(prompts)}) must match number of tools ({len(tools)})"
             )
 
-        # Validate tools exist
-        self._validate_tools(tools)
-
         # Get marketplace contract
         marketplace_contract = self._get_marketplace_contract()
 
         # Fetch mech info (payment type, service ID, max delivery rate)
-        payment_type, _service_id, max_delivery_rate = self._fetch_mech_info(
+        payment_type, service_id, max_delivery_rate = self._fetch_mech_info(
             priority_mech
         )
+
+        # Validate tools exist for this service
+        self._validate_tools(tools, service_id)
 
         # Create payment strategy
         payment_strategy = PaymentStrategyFactory.create(
@@ -208,19 +208,53 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
             "receipt": receipt,
         }
 
-    # pylint: disable=no-self-use
-    def _validate_tools(self, tools: Tuple[str, ...]) -> None:
+    def _validate_tools(self, tools: Tuple[str, ...], service_id: int) -> None:
         """
         Validate that tools exist for the service.
 
+        Fetches the available tools for the service from metadata and validates
+        that all requested tools are available.
+
         :param tools: Tuple of tool identifiers
-        :raises ValueError: If any tool is invalid
+        :param service_id: Service ID of the mech
+        :raises ValueError: If any tool is invalid or not available
         """
-        # For marketplace mechs, tools are validated against service metadata
-        # This is a placeholder - full validation would check service metadata
+        # Basic validation - check for empty tools
         for tool in tools:
             if not tool:
                 raise ValueError("Empty tool identifier")
+
+        # Fetch available tools for this service
+        try:
+            tools_info = self.tool_manager.get_tools(service_id)
+        except (AttributeError, KeyError, TypeError) as e:
+            # If fetching fails due to unexpected metadata structure,
+            # warn but allow request to proceed
+            print(
+                f"Warning: Failed to fetch tool metadata for service {service_id}: {e}. "
+                f"Tool validation skipped."
+            )
+            return
+
+        if not tools_info:
+            # If we can't fetch tools, warn but don't fail
+            # This allows requests to proceed even if metadata fetch fails
+            print(
+                f"Warning: Could not fetch tool metadata for service {service_id}. "
+                f"Tool validation skipped."
+            )
+            return
+
+        # Get list of available tool names
+        available_tools = {tool.tool_name for tool in tools_info.tools}
+
+        # Validate each requested tool
+        for tool in tools:
+            if tool not in available_tools:
+                raise ValueError(
+                    f"Tool {tool!r} not available for service {service_id}. "
+                    f"Available tools: {', '.join(sorted(available_tools))}"
+                )
 
     def _get_marketplace_contract(self) -> Web3Contract:
         """
