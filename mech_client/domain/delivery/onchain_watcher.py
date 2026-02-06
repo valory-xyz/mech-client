@@ -113,18 +113,20 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
                 if delivery_mech != ADDRESS_ZERO:
                     request_ids_data[request_id] = delivery_mech
 
-                await asyncio.sleep(WAIT_SLEEP)
-
-                elapsed_time = time.time() - start_time
-                if elapsed_time >= self.timeout:
-                    print(
-                        "Timeout reached while waiting for marketplace delivery. "
-                        "Returning partial data."
-                    )
-                    return request_ids_data
-
             # All requests delivered
             if len(request_ids_data) == len(request_ids):
+                return request_ids_data
+
+            # Sleep once per polling cycle, not per request ID
+            await asyncio.sleep(WAIT_SLEEP)
+
+            # Check timeout once per polling cycle
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= self.timeout:
+                print(
+                    "Timeout reached while waiting for marketplace delivery. "
+                    "Returning partial data."
+                )
                 return request_ids_data
 
     async def _fetch_data_urls_from_mechs(
