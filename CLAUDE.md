@@ -577,23 +577,23 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 
 #### Interaction Layers
 
-**Mech Marketplace (`marketplace_interact.py`)**
-- Interaction via the Mech Marketplace contract
+**Marketplace Service (`services/marketplace_service.py`)**
+- Service layer for marketplace request operations
 - Supports multiple payment types (`PaymentType` enum): NATIVE, TOKEN, USDC_TOKEN, NATIVE_NVM, TOKEN_NVM_USDC
 - Batch request support (multiple prompts/tools)
 - Prepaid and per-request payment models
 - Offchain mech support via HTTP endpoints
-- Configuration via `MechMarketplaceRequestConfig`
-- Contract helper functions: `get_token_balance_tracker_contract()`, `get_token_contract()`
+- Uses payment strategies and execution strategies
+- Main method: `send_request()`
 
-**Deposits (`deposits.py`)**
-- Prepaid balance deposit functionality for marketplace mechs
-- Functions: `deposit_native_main()`, `deposit_token_main()` - CLI entry points
-- Functions: `deposit_native()`, `deposit_token()`, `approve_token()` - Core deposit operations
+**Deposit Service (`services/deposit_service.py`)**
+- Service layer for prepaid balance deposit functionality
+- Methods: `deposit_native()`, `deposit_token()` for balance deposits
 - Supports both agent mode (Safe) and client mode (EOA)
-- Handles token approval and balance checking
+- Handles token approval and balance checking via payment strategies
+- Uses execution strategies for transaction submission
 
-**Contract Addresses (`contract_addresses.py`)**
+**Contract Addresses (`infrastructure/config/contract_addresses.py`)**
 - Centralized contract address mappings for all supported chains
 - Contains: balance tracker contracts (native, OLAS, USDC), token addresses (OLAS, USDC)
 - Single source of truth for all chain-specific contract addresses
@@ -606,32 +606,51 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 - Network configuration in `resources/networks.json`
 - Entry point: `nvm_subscribe_main()` in `__init__.py`
 
-#### Delivery Mechanisms (`delivery.py`)
+#### Delivery Mechanisms
 
-**On-chain delivery (`delivery.py`)**
-- Polls blockchain for `Deliver` events from marketplace contracts
-- Extracts IPFS hash from event data
-- Primary method: `watch_for_marketplace_data()`
+**Delivery Watchers (`domain/delivery/`)**
+- Strategy pattern for delivery watching
+- `OnchainDeliveryWatcher`: Polls blockchain for `Deliver` events
+- `OffchainDeliveryWatcher`: Watches offchain mech endpoints
+- `DeliveryWatcherFactory`: Creates appropriate watcher based on mode
+- Async/await pattern for concurrent delivery watching
 
-#### Safe Integration (`safe.py`)
+#### Safe Integration
+
+**Safe Client (`infrastructure/blockchain/safe_client.py`)**
 - Gnosis Safe transaction building and execution for agent mode
-- Functions: `send_safe_tx()` and `get_safe_nonce()`
+- Functions: `build_safe_tx()`, `send_safe_tx()`, `get_safe_nonce()`
 - Uses `safe-eth-py` library
+
+**Agent Executor (`domain/execution/agent_executor.py`)**
+- Execution strategy for agent mode (Safe multisig)
+- Integrates with Olas Operate middleware
+- Handles Safe transaction building and submission
 
 #### Tool Management
 
-**Marketplace (`mech_marketplace_tool_management.py`)**
-- Fetches tools from marketplace mech metadata
-- Uses `ToolInfo` and `ToolsForMarketplaceMech` dataclasses
-- Functions: `get_tools_for_marketplace_mech()`, `get_tool_description_for_marketplace_mech()`, `get_tool_io_schema_for_marketplace_mech()`
+**Tool Service (`services/tool_service.py`)**
+- Service layer for tool discovery and management
+- Methods: `list_tools()`, `get_description()`, `get_tools_info()`, `format_input_schema()`, `format_output_schema()`
+- Uses `ToolInfo`, `ToolsForMarketplaceMech`, `ToolSchema` dataclasses
+
+**Tool Manager (`domain/tools/manager.py`)**
+- Domain logic for fetching and parsing tool metadata
+- Queries ComplementaryMetadataHash contract for tool information
+- Parses tool schemas and descriptions from metadata
 
 #### Blockchain Interaction
 
-**Subgraph queries (`mech_marketplace_subgraph.py`)**
-- GraphQL queries for marketplace mech metadata
+**Subgraph Client (`infrastructure/subgraph/`)**
+- `SubgraphClient`: GraphQL client for subgraph queries
+- `queries.py`: Predefined queries for marketplace mech metadata
 - Queries marketplace contract data and standard Olas service registry
+- Function: `query_mm_mechs_info()` for mech list command
 
-**IPFS (`prompt_to_ipfs.py`, `push_to_ipfs.py`, `fetch_ipfs_hash.py`)**
+**IPFS Client (`infrastructure/ipfs/`)**
+- `IPFSClient`: Client for IPFS gateway operations
+- `metadata.py`: Functions for uploading prompt metadata
+- `converters.py`: Functions for converting responses (e.g., ipfs_to_png)
 - IPFS gateway at `https://gateway.autonolas.tech/ipfs/`
 - Prompts and metadata stored on IPFS before on-chain requests
 - Results delivered as IPFS hashes
@@ -729,7 +748,8 @@ All contract ABIs are in `mech_client/abis/`:
      - `mech_client/nvm_subscription/*` (NVM subscription module)
    - **Line length**: 88 characters (Black style)
    - **Pylint disable comments**: Acceptable for specific cases with justification:
-     - `too-many-statements`: For complex functions that cannot be easily split (e.g., `interact` function with 65 statements)
+     - `too-many-statements`: For complex CLI command functions with extensive validation and error handling
+     - `too-many-locals`: For service methods orchestrating multiple domain strategies
      - `import-outside-toplevel`: When avoiding circular imports or conditional dependencies (e.g., `CHAIN_TO_ENVS` in `nvm_subscribe`)
      - `protected-access`: When accessing internal APIs for diagnostics (e.g., `ledger_api._api.provider` for error messages)
      - Always add inline comment explaining why the disable is necessary
@@ -825,7 +845,7 @@ All commands require `--chain-config` with one of these four chain names. Arbitr
 - **Agent Mode**: Supports `setup` command and Safe-based agent operations (all marketplace chains: Gnosis, Base, Polygon, Optimism)
 - **Native Payment**: Supports `deposit native` command for prepaid native token deposits (Gnosis, Base, Polygon, Optimism)
 - **NVM Subscriptions**: Supports `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base)
-- **OLAS/USDC Token**: Payment token addresses configured in `marketplace_interact.py`
+- **OLAS/USDC Token**: Payment token addresses configured in `infrastructure/config/contract_addresses.py`
 - **Subgraph**: Built-in subgraph URL in `mechs.json` (currently all chains have empty `subgraph_url`; must be set via `MECHX_SUBGRAPH_URL` for `mech list`)
 
 **Command Requirements:**

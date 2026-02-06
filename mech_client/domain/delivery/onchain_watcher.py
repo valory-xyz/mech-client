@@ -1,0 +1,169 @@
+# -*- coding: utf-8 -*-
+# ------------------------------------------------------------------------------
+#
+#   Copyright 2025 Valory AG
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+# ------------------------------------------------------------------------------
+
+"""On-chain delivery watcher for marketplace mechs."""
+
+import time
+from typing import Any, Dict, List, Optional
+
+from aea_ledger_ethereum import EthereumApi
+from eth_abi import decode
+from web3.constants import ADDRESS_ZERO
+from web3.contract import Contract as Web3Contract
+
+from mech_client.domain.delivery.base import DeliveryWatcher
+from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
+
+
+DEFAULT_TIMEOUT = 900.0  # 15 minutes
+WAIT_SLEEP = 3.0
+DELIVERY_MECH_INDEX = 1
+
+
+class OnchainDeliveryWatcher(DeliveryWatcher):
+    """Watcher for on-chain mech response delivery.
+
+    Polls the marketplace contract for delivery events and extracts
+    response data from on-chain logs.
+    """
+
+    def __init__(
+        self,
+        marketplace_contract: Web3Contract,
+        ledger_api: EthereumApi,
+        timeout: Optional[float] = None,
+    ):
+        """
+        Initialize on-chain delivery watcher.
+
+        :param marketplace_contract: Marketplace contract instance
+        :param ledger_api: Ethereum API for blockchain interactions
+        :param timeout: Maximum time to wait for delivery (default: 15 minutes)
+        """
+        super().__init__(timeout or DEFAULT_TIMEOUT)
+        self.marketplace_contract = marketplace_contract
+        self.ledger_api = ledger_api
+
+    async def watch(self, request_ids: List[str]) -> Dict[str, Any]:
+        """
+        Watch for marketplace delivery for request IDs.
+
+        Polls the marketplace contract until all requests are delivered
+        or timeout is reached.
+
+        :param request_ids: List of request IDs to watch for
+        :return: Dictionary mapping request ID to delivery mech address
+        """
+        request_ids_data: Dict = {}
+        start_time = time.time()
+
+        while True:
+            for request_id in request_ids:
+                request_id_info = self.marketplace_contract.functions.mapRequestIdInfos(
+                    bytes.fromhex(request_id)
+                ).call()
+
+                # Return empty data if structure is unexpected
+                if len(request_id_info) <= DELIVERY_MECH_INDEX:
+                    return request_ids_data
+
+                delivery_mech = request_id_info[DELIVERY_MECH_INDEX]
+                if not isinstance(delivery_mech, str) or not delivery_mech.startswith(
+                    "0x"
+                ):
+                    return request_id_info
+
+                if delivery_mech != ADDRESS_ZERO:
+                    request_ids_data.update({request_id: delivery_mech})
+
+                time.sleep(WAIT_SLEEP)
+
+                elapsed_time = time.time() - start_time
+                if elapsed_time >= self.timeout:
+                    print(
+                        "Timeout reached. Breaking the loop and returning partial data."
+                    )
+                    return request_ids_data
+
+            # All requests delivered
+            if len(request_ids_data) == len(request_ids):
+                return request_ids_data
+
+    async def watch_for_data_urls(  # pylint: disable=too-many-locals
+        self,
+        request_ids: List[str],
+        from_block: int,
+        mech_contract_address: str,
+        mech_deliver_signature: str,
+    ) -> Dict[str, str]:
+        """
+        Watch for delivery events and extract IPFS URLs.
+
+        Polls blockchain logs for Deliver events and extracts IPFS hash
+        from event data.
+
+        :param request_ids: List of request IDs to watch for
+        :param from_block: Block number to start searching from
+        :param mech_contract_address: Mech contract address
+        :param mech_deliver_signature: Topic signature for Deliver event
+        :return: Dictionary mapping request ID to IPFS URL
+        """
+        results = {}
+        start_time = time.time()
+
+        def get_logs(from_block_: int) -> List:
+            logs = self.ledger_api.api.eth.get_logs(
+                {
+                    "fromBlock": from_block_,
+                    "toBlock": "latest",
+                    "address": mech_contract_address,
+                    "topics": ["0x" + mech_deliver_signature],
+                }
+            )
+            return logs
+
+        def get_event_data(log: Dict) -> tuple:
+            data_types = ["bytes32", "uint256", "bytes"]
+            data_bytes = bytes(log["data"])
+            request_id_bytes, _, delivery_data_bytes = decode(data_types, data_bytes)
+            return request_id_bytes, delivery_data_bytes
+
+        while True:
+            logs = get_logs(from_block)
+            latest_block = from_block
+            for log in logs:
+                latest_block = max(latest_block, log["blockNumber"])
+                event_data = get_event_data(log)
+                request_id, delivery_data = (data.hex() for data in event_data)
+
+                if request_id in results:
+                    continue
+
+                if request_id in request_ids:
+                    results[request_id] = IPFS_URL_TEMPLATE.format(delivery_data)
+
+                if len(results) == len(request_ids):
+                    return results
+
+            from_block = latest_block + 1
+            time.sleep(WAIT_SLEEP)
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= self.timeout:
+                print("Timeout reached. Returning partial results.")
+                return results
