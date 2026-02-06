@@ -20,10 +20,10 @@ This section provides visual diagrams showing external resource dependencies and
 └─ Contract: contract name
 ```
 
-### 1. setup-agent-mode
+### 1. setup
 
 ```
-mechx setup-agent-mode
+mechx setup
 ├─ HTTP RPC (MECHX_CHAIN_RPC)
 │  └─ Blockchain queries for Safe setup
 ├─ Olas Operate Middleware
@@ -37,10 +37,10 @@ ENV VARS:
   OPERATE_PASSWORD (loaded from .env or prompted)
 ```
 
-### 2. interact
+### 2. request
 
 ```
-mechx interact --priority-mech 0x... --tools tool1 --prompts "..."
+mechx request --priority-mech 0x... --tools tool1 --prompts "..."
 ├─ HTTP RPC (MECHX_CHAIN_RPC) ← PRIMARY DEPENDENCY
 │  ├─ Send transaction (approve, request)
 │  ├─ Wait for transaction receipt ← TIMES OUT HERE IF RPC SLOW
@@ -72,10 +72,10 @@ NOTES:
   - If HTTP RPC is slow/unavailable, command times out at "Waiting for transaction receipt..."
 ```
 
-### 3. deposit-native
+### 3. deposit native
 
 ```
-mechx deposit-native --chain-config gnosis --mech-type native --amount 0.01
+mechx deposit native --chain-config gnosis --mech-type native --amount 0.01
 ├─ HTTP RPC (MECHX_CHAIN_RPC)
 │  ├─ Check native balance
 │  ├─ Send transfer transaction
@@ -92,10 +92,10 @@ NOTES:
   - Supports both agent mode (Safe) and client mode (EOA)
 ```
 
-### 4. deposit-token
+### 4. deposit token
 
 ```
-mechx deposit-token --chain-config gnosis --token-type olas --amount 1000000000000000000
+mechx deposit token --chain-config gnosis --token-type olas --amount 1000000000000000000
 ├─ HTTP RPC (MECHX_CHAIN_RPC)
 │  ├─ Check ERC20 balance
 │  ├─ Send approve() transaction
@@ -114,10 +114,10 @@ SUPPORTED TOKENS:
   - usdc: USDC token (not available on gnosis)
 ```
 
-### 5. purchase-nvm-subscription
+### 5. subscription purchase
 
 ```
-mechx purchase-nvm-subscription --chain-config gnosis --mech-type native_nvm
+mechx subscription purchase --chain-config gnosis --mech-type native_nvm
 ├─ HTTP RPC (MECHX_CHAIN_RPC)
 │  └─ Send NVM subscription transaction
 ├─ Nevermined Network
@@ -133,10 +133,10 @@ ENV VARS:
   CHAIN_ID (from envs)
 ```
 
-### 6. fetch-mm-mechs-info
+### 6. mech list
 
 ```
-mechx fetch-mm-mechs-info --chain-config gnosis
+mechx mech list --chain-config gnosis
 ├─ Subgraph GraphQL API (MECHX_SUBGRAPH_URL) ← REQUIRED, NO DEFAULT
 │  └─ Query: MechsOrderedByServiceDeliveries
 │     ├─ Returns: service IDs, addresses, delivery counts
@@ -154,10 +154,10 @@ NOTES:
   - Currently all chains have empty subgraph_url in mechs.json
 ```
 
-### 7. tools-for-marketplace-mech
+### 7. tool list
 
 ```
-mechx tools-for-marketplace-mech --agent-id <service_id> --chain-config gnosis
+mechx tool list --agent-id <service_id> --chain-config gnosis
 ├─ HTTP RPC (MECHX_CHAIN_RPC)
 │  └─ Query: ComplementaryMetadataHash contract
 └─ External HTTP
@@ -171,10 +171,10 @@ NOTES:
   - Uses service_id (passed as --agent-id parameter)
 ```
 
-### 8. tool-description-for-marketplace-mech
+### 8. tool describe
 
 ```
-mechx tool-description-for-marketplace-mech <tool_id> --chain-config gnosis
+mechx tool describe <tool_id> --chain-config gnosis
 ├─ HTTP RPC (MECHX_CHAIN_RPC)
 │  └─ Query: ComplementaryMetadataHash.tokenURI(service_id)
 └─ External HTTP
@@ -188,10 +188,10 @@ NOTES:
   - Example: "1-openai-gpt-3.5-turbo"
 ```
 
-### 9. tool-io-schema-for-marketplace-mech
+### 9. tool schema
 
 ```
-mechx tool-io-schema-for-marketplace-mech <tool_id> --chain-config gnosis
+mechx tool schema <tool_id> --chain-config gnosis
 ├─ HTTP RPC (MECHX_CHAIN_RPC)
 │  └─ Query: ComplementaryMetadataHash.tokenURI(service_id)
 └─ External HTTP
@@ -205,11 +205,11 @@ NOTES:
   - Returns input/output schema for the tool
 ```
 
-### 10. prompt-to-ipfs & push-to-ipfs
+### 10. ipfs upload-prompt & ipfs upload
 
 ```
-mechx prompt-to-ipfs "prompt" "tool"
-mechx push-to-ipfs /path/to/file
+mechx ipfs upload-prompt "prompt" "tool"
+mechx ipfs upload /path/to/file
 └─ IPFS Gateway (https://gateway.autonolas.tech/ipfs/)
    └─ Upload file/metadata
 
@@ -221,10 +221,10 @@ NOTES:
   - No RPC or WSS needed
 ```
 
-### 11. to-png
+### 11. ipfs to-png
 
 ```
-mechx to-png <ipfs_hash> <path> <request_id>
+mechx ipfs to-png <ipfs_hash> <path> <request_id>
 └─ IPFS Gateway (https://gateway.autonolas.tech/ipfs/)
    └─ Download diffusion model output and convert to PNG
 
@@ -242,18 +242,18 @@ NOTES:
 
 | Command | MECHX_CHAIN_RPC | MECHX_SUBGRAPH_URL | MECHX_MECH_OFFCHAIN_URL | OPERATE_PASSWORD |
 |---------|----------------|--------------------|-----------------------|------------------|
-| setup-agent-mode | ○ | | | ✓ |
-| interact | ✓ | | ○ | |
-| deposit-native | ✓ | | | |
-| deposit-token | ✓ | | | |
-| purchase-nvm-subscription | ✓ | | | |
-| fetch-mm-mechs-info | | ✓ | | |
-| tools-for-marketplace-mech | ✓ | | | |
-| tool-description-for-marketplace-mech | ✓ | | | |
-| tool-io-schema-for-marketplace-mech | ✓ | | | |
-| prompt-to-ipfs | | | | |
-| push-to-ipfs | | | | |
-| to-png | | | | |
+| setup | ○ | | | ✓ |
+| request | ✓ | | ○ | |
+| deposit native | ✓ | | | |
+| deposit token | ✓ | | | |
+| subscription purchase | ✓ | | | |
+| mech list | | ✓ | | |
+| tool list | ✓ | | | |
+| tool describe | ✓ | | | |
+| tool schema | ✓ | | | |
+| ipfs upload-prompt | | | | |
+| ipfs upload | | | | |
+| ipfs to-png | | | | |
 
 **Legend:**
 - ✓ = Required for command to work
@@ -264,7 +264,7 @@ NOTES:
 
 ### Issue: "Timeout while waiting for transaction receipt"
 
-**Affected Commands:** interact, deposit-native, deposit-token, purchase-nvm-subscription
+**Affected Commands:** request, deposit native, deposit token, subscription purchase
 
 **Cause:** HTTP RPC endpoint is slow, rate-limiting, or unavailable
 
@@ -283,7 +283,7 @@ export MECHX_CHAIN_RPC='https://mainnet.base.org'  # Base
 - The `wait_for_receipt()` function polls HTTP RPC to get transaction receipt
 - If RPC is slow/down, it times out after 5 minutes (300 seconds)
 
-### Issue: "Subgraph URL not set" (fetch-mm-mechs-info)
+### Issue: "Subgraph URL not set" (mech list)
 
 **Cause:** MECHX_SUBGRAPH_URL environment variable not set (no default in config)
 
@@ -302,12 +302,12 @@ export MECHX_SUBGRAPH_URL='https://your-subgraph-url'
 ```bash
 # Supported chains: gnosis, base, polygon, optimism
 # Use exact chain names:
-mechx interact --chain-config gnosis ...
+mechx request --chain-config gnosis ...
 ```
 
 ### Issue: "Permission denied" when reading private key
 
-**Affected Commands:** interact, deposit-native, deposit-token, purchase-nvm-subscription
+**Affected Commands:** request, deposit native, deposit token, subscription purchase
 
 **Cause:** Private key file has incorrect permissions or is in a protected directory
 
@@ -317,12 +317,12 @@ mechx interact --chain-config gnosis ...
 chmod 600 ethereum_private_key.txt
 
 # Or specify different key file
-mechx interact --key /path/to/key ...
+mechx request --key /path/to/key ...
 ```
 
 ### Issue: "Failed to decrypt private key" or "Incorrect password"
 
-**Affected Commands:** interact, deposit-native, deposit-token, purchase-nvm-subscription (agent mode)
+**Affected Commands:** request, deposit native, deposit token, subscription purchase (agent mode)
 
 **Cause:** Wrong password for encrypted keyfile, corrupted keyfile, or invalid keyfile format
 
@@ -332,24 +332,24 @@ mechx interact --key /path/to/key ...
 - Try re-creating the agent mode setup if keyfile is corrupted:
 ```bash
 # Re-run setup
-mechx setup-agent-mode --chain-config gnosis
+mechx setup --chain-config gnosis
 ```
 
 ### Issue: "Invalid tool ID format"
 
-**Affected Commands:** tool-description-for-marketplace-mech, tool-io-schema-for-marketplace-mech
+**Affected Commands:** tool describe, tool schema
 
 **Cause:** Incorrect tool ID format provided
 
 **Solution:**
 ```bash
 # Use format "service_id-tool_name"
-mechx tool-description-for-marketplace-mech 1-openai-gpt-3.5-turbo --chain-config gnosis
+mechx tool describe 1-openai-gpt-3.5-turbo --chain-config gnosis
 ```
 
 ### Issue: "Chain does not support marketplace deposits" or "NVM subscriptions not available"
 
-**Affected Commands:** deposit-native, deposit-token, purchase-nvm-subscription
+**Affected Commands:** deposit native, deposit token, subscription purchase
 
 **Cause:** Chain doesn't have marketplace contract or NVM support deployed
 
@@ -362,7 +362,7 @@ mechx tool-description-for-marketplace-mech 1-openai-gpt-3.5-turbo --chain-confi
 
 ### Issue: "Smart contract error" or "Insufficient balance"
 
-**Affected Commands:** interact, deposit-native, deposit-token, purchase-nvm-subscription
+**Affected Commands:** request, deposit native, deposit token, subscription purchase
 
 **Cause:** ContractLogicError - typically insufficient balance, failed approval, invalid parameters, or contract paused
 
@@ -375,13 +375,13 @@ cast balance <YOUR_ADDRESS> --rpc-url $MECHX_CHAIN_RPC
 # Verify you have enough native tokens for gas
 # Check if you need to approve tokens first (done automatically but may fail)
 
-# For interact command, ensure you have deposited balance or per-request payment
-mechx deposit-native 1000000000000000000 --chain-config gnosis
+# For request command, ensure you have deposited balance or per-request payment
+mechx deposit native 1000000000000000000 --chain-config gnosis
 ```
 
 ### Issue: "Transaction validation error" (ValidationError)
 
-**Affected Commands:** interact, deposit-native, deposit-token, purchase-nvm-subscription
+**Affected Commands:** request, deposit native, deposit token, subscription purchase
 
 **Cause:** Transaction failed validation before being sent - gas estimation failure, nonce issues, or invalid parameters
 
@@ -398,22 +398,22 @@ export MECHX_GAS_LIMIT=500000
 
 ### Issue: "Tool not found" or "Missing description/schema"
 
-**Affected Commands:** tool-description*, tool-io-schema*
+**Affected Commands:** tool describe, tool schema
 
 **Cause:** Tool doesn't exist, tool ID is wrong, or metadata is incomplete
 
 **Solution:**
 ```bash
 # List available tools first
-mechx tools-for-marketplace-mech --agent-id 1 --chain-config gnosis
+mechx tool list --agent-id 1 --chain-config gnosis
 
 # Then use exact tool ID from the list
-mechx tool-description-for-marketplace-mech <tool_id_from_list> --chain-config gnosis
+mechx tool describe <tool_id_from_list> --chain-config gnosis
 ```
 
 ### Issue: "Missing required environment variable" (NVM subscription)
 
-**Affected Commands:** purchase-nvm-subscription
+**Affected Commands:** subscription purchase
 
 **Cause:** Chain-specific .env file missing or incomplete (PLAN_DID, NETWORK_NAME, CHAIN_ID)
 
@@ -543,7 +543,7 @@ mechx --client-mode <command>
 
 ### Two Operating Modes
 
-1. **Agent Mode (Recommended for all chains)**: Registers on-chain interactions as an agent in the Olas protocol, using Safe multisig for transactions. Configured via `setup-agent-mode` command and uses the `olas-operate-middleware` package.
+1. **Agent Mode (Recommended for all chains)**: Registers on-chain interactions as an agent in the Olas protocol, using Safe multisig for transactions. Configured via `setup` command and uses the `olas-operate-middleware` package.
 
 2. **Client Mode**: Simple EOA-based interactions without agent registration. Enabled with `--client-mode` flag.
 
@@ -756,7 +756,7 @@ All contract ABIs are in `mech_client/abis/`:
     - **Tool ID format**: Marketplace tools require "service_id-tool_name"
     - **Amount validation**: Deposit commands validate amount is positive integer (wei/smallest unit)
     - **Marketplace support**: Deposit commands check `mech_marketplace_contract != ADDRESS_ZERO`
-    - **NVM support**: purchase-nvm-subscription checks chain exists in `CHAIN_TO_ENVS`
+    - **NVM support**: subscription purchase checks chain exists in `CHAIN_TO_ENVS`
     - **Service ID validation**: Tool commands validate ID is non-negative integer
 
 ## Validation Helpers
@@ -797,7 +797,7 @@ validated_safe = validate_ethereum_address(safe, "Safe address")
 
 **Location:** `mech_client/cli.py:128`
 
-**Pattern:** All commands that accept addresses (interact, deposit commands) use this validator.
+**Pattern:** All commands that accept addresses (request, deposit commands) use this validator.
 
 ## Chain Support Matrix
 
@@ -816,19 +816,19 @@ All commands require `--chain-config` with one of these four chain names. Arbitr
 
 **Feature Definitions:**
 - **Marketplace**: Chain has `mech_marketplace_contract` deployed (non-zero address in `mechs.json`)
-- **Agent Mode**: Supports `setup-agent-mode` command and Safe-based agent operations (all marketplace chains: Gnosis, Base, Polygon, Optimism)
-- **Native Payment**: Supports `deposit-native` command for prepaid native token deposits (Gnosis, Base, Polygon, Optimism)
-- **NVM Subscriptions**: Supports `purchase-nvm-subscription` command for Nevermined subscription-based payments (Gnosis, Base)
+- **Agent Mode**: Supports `setup` command and Safe-based agent operations (all marketplace chains: Gnosis, Base, Polygon, Optimism)
+- **Native Payment**: Supports `deposit native` command for prepaid native token deposits (Gnosis, Base, Polygon, Optimism)
+- **NVM Subscriptions**: Supports `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base)
 - **OLAS/USDC Token**: Payment token addresses configured in `marketplace_interact.py`
-- **Subgraph**: Built-in subgraph URL in `mechs.json` (currently all chains have empty `subgraph_url`; must be set via `MECHX_SUBGRAPH_URL` for `fetch-mm-mechs-info`)
+- **Subgraph**: Built-in subgraph URL in `mechs.json` (currently all chains have empty `subgraph_url`; must be set via `MECHX_SUBGRAPH_URL` for `mech list`)
 
 **Command Requirements:**
-- `fetch-mm-mechs-info`: Requires marketplace + `MECHX_SUBGRAPH_URL` environment variable
-- `interact`: Requires marketplace contract and standard Olas service registry
-- `deposit-native`: Requires marketplace + native payment support (Gnosis, Base, Polygon, Optimism)
-- `deposit-token`: Requires marketplace + token addresses in config (Gnosis, Base, Polygon, Optimism)
-- `purchase-nvm-subscription`: Requires marketplace + NVM subscription support (Gnosis, Base)
-- `setup-agent-mode`: All marketplace chains (Gnosis, Base, Polygon, Optimism)
+- `mech list`: Requires marketplace + `MECHX_SUBGRAPH_URL` environment variable
+- `request`: Requires marketplace contract and standard Olas service registry
+- `deposit native`: Requires marketplace + native payment support (Gnosis, Base, Polygon, Optimism)
+- `deposit token`: Requires marketplace + token addresses in config (Gnosis, Base, Polygon, Optimism)
+- `subscription purchase`: Requires marketplace + NVM subscription support (Gnosis, Base)
+- `setup`: All marketplace chains (Gnosis, Base, Polygon, Optimism)
 
 ## Important Notes
 
