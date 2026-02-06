@@ -62,7 +62,7 @@ def fetch_ipfs_hash(
             json.dump(metadata, f)
 
         client = IPFSClient()
-        _, v1_file_hash_hex = client.upload(file_name)
+        _, v1_file_hash_hex = client.upload(file_name, pin=False)
 
         # Truncate hash for on-chain use (remove first 9 chars and add 0x prefix)
         truncated_hash = "0x" + v1_file_hash_hex[9:]

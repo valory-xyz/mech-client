@@ -41,15 +41,16 @@ class IPFSClient:
         """Initialize IPFS client."""
         self._ipfs_tool = IPFSTool()
 
-    def upload(self, file_path: str) -> Tuple[str, str]:
+    def upload(self, file_path: str, pin: bool = True) -> Tuple[str, str]:
         """
         Upload a file to IPFS.
 
         :param file_path: Path of the file to be pushed to IPFS
+        :param pin: Whether to pin the file (default: True for persistence)
         :return: A tuple containing (v1_file_hash, v1_file_hash_hex)
         """
         response = self._ipfs_tool.client.add(
-            file_path, pin=True, recursive=True, wrap_with_directory=False
+            file_path, pin=pin, recursive=True, wrap_with_directory=False
         )
         v1_file_hash = to_v1(response["Hash"])
         cid_bytes = multibase.decode(v1_file_hash)
