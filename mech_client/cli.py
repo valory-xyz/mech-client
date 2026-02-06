@@ -72,7 +72,6 @@ from mech_client.to_png import main as to_png_main
 CURR_DIR = Path(__file__).resolve().parent
 OPERATE_FOLDER_NAME = ".operate_mech_client"
 SETUP_MODE_COMMAND = "setup-agent-mode"
-DEFAULT_NETWORK = "gnosis"
 
 CHAIN_TO_TEMPLATE = {
     "gnosis": CURR_DIR / "config" / "mech_client_gnosis.json",
@@ -85,7 +84,7 @@ ENV_PATH = Path.home() / OPERATE_FOLDER_NAME / ".env"
 MECHX_CHAIN_CONFIGS = Path(__file__).parent / "configs" / "mechs.json"
 
 
-def validate_chain_config(chain_config: Optional[str]) -> str:
+def validate_chain_config(chain_config: str) -> str:
     """
     Validate that the chain config exists in mechs.json.
 
@@ -93,11 +92,6 @@ def validate_chain_config(chain_config: Optional[str]) -> str:
     :return: Validated chain config name
     :raises ClickException: If chain config is invalid or not found
     """
-    if not chain_config:
-        raise ClickException(
-            "Chain configuration is required.\n"
-            "Use --chain-config flag with one of: gnosis, base, polygon, optimism, arbitrum, celo"
-        )
 
     try:
         with open(MECHX_CHAIN_CONFIGS, encoding="utf-8") as f:
@@ -209,10 +203,9 @@ def mech_client_configure_local_config(
 
 
 def fetch_agent_mode_data(
-    chain_config: Optional[str],
+    chain_config: str,
 ) -> Tuple[str, str, Optional[str]]:
     """Fetches the agent mode data of safe address and the keystore path plus password"""
-    chain_config = chain_config or DEFAULT_NETWORK
 
     # This is acceptable way to as the main functionality
     # of keys manager is to allow access to the required data.
@@ -354,7 +347,8 @@ def display_setup_wallets(operate: OperateApp, validated_chain: str) -> None:
 @click.option(
     "--chain-config",
     type=str,
-    help="Id of the mech's chain configuration.",
+    required=True,
+    help="Chain configuration to use (gnosis, base, polygon, optimism).",
 )
 def setup_agent_mode(
     chain_config: str,
@@ -484,13 +478,15 @@ def setup_agent_mode(
 @click.option(
     "--chain-config",
     type=str,
-    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+    required=True,
+    help="Chain configuration to use (gnosis, base, polygon, optimism).",
 )
 @click.pass_context
 def interact(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
     ctx: click.Context,
     prompts: tuple,
     priority_mech: str,
+    chain_config: str,
     use_prepaid: bool,
     use_offchain: bool,
     key: Optional[str],
@@ -500,7 +496,6 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals,too-many-sta
     retries: Optional[int] = None,
     timeout: Optional[float] = None,
     sleep: Optional[float] = None,
-    chain_config: Optional[str] = None,
 ) -> None:
     """Interact with a mech specifying a prompt and tool."""
     try:
@@ -561,11 +556,19 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals,too-many-sta
             validate_ethereum_address(safe, "Safe address")
 
         # safe and mech_offchain_url are guaranteed to be set at this point if needed
+        # Validate chain config is provided (required for marketplace)
+        if not chain_config:
+            raise ClickException(
+                "Chain configuration is required for marketplace interactions.\n"
+                "Use --chain-config flag with one of: gnosis, base, polygon, optimism"
+            )
+
         marketplace_interact_(
             prompts=prompts,
             priority_mech=priority_mech,
             agent_mode=agent_mode,
             safe_address=safe or "",  # Will be set if agent_mode is True
+            chain_config=chain_config,
             use_prepaid=use_prepaid,
             use_offchain=use_offchain,
             mech_offchain_url=mech_offchain_url or "",  # Checked above if use_offchain
@@ -576,7 +579,6 @@ def interact(  # pylint: disable=too-many-arguments,too-many-locals,too-many-sta
             retries=retries,
             timeout=timeout,
             sleep=sleep,
-            chain_config=chain_config,
         )
     except requests.exceptions.HTTPError as e:
         rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
@@ -678,7 +680,11 @@ def to_png(ipfs_hash: str, path: str, request_id: str) -> None:
     "agent-id",
     type=int,
 )
-@click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
+@click.option(
+    "--chain-config",
+    required=True,
+    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+)
 def tools_for_marketplace_mech(agent_id: int, chain_config: str) -> None:
     """Fetch and display tools for marketplace mechs."""
     try:
@@ -754,7 +760,11 @@ def tools_for_marketplace_mech(agent_id: int, chain_config: str) -> None:
 
 @click.command(name="tool-description-for-marketplace-mech")
 @click.argument("tool_id")
-@click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
+@click.option(
+    "--chain-config",
+    required=True,
+    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+)
 def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> None:
     """Fetch and display the description of a specific tool for marketplace mechs."""
     try:
@@ -816,7 +826,11 @@ def tool_description_for_marketplace_mech(tool_id: str, chain_config: str) -> No
 
 @click.command(name="tool-io-schema-for-marketplace-mech")
 @click.argument("tool_id")
-@click.option("--chain-config", default="gnosis", help="Chain configuration to use.")
+@click.option(
+    "--chain-config",
+    required=True,
+    help="Chain configuration to use (gnosis, base, polygon, optimism).",
+)
 def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None:
     """Fetch and display the tool's name and description along with the input/output schema for a specific tool for marketplace mechs."""
     try:
@@ -901,7 +915,8 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
 @click.option(
     "--chain-config",
     type=str,
-    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+    required=True,
+    help="Chain configuration to use (gnosis, base, polygon, optimism).",
 )
 @click.option(
     "--key",
@@ -912,9 +927,9 @@ def tool_io_schema_for_marketplace_mech(tool_id: str, chain_config: str) -> None
 def deposit_native(
     ctx: click.Context,
     amount_to_deposit: str,
+    chain_config: str,
     key: Optional[str] = None,
     safe: Optional[str] = None,
-    chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Native balance for prepaid requests."""
     try:
@@ -1007,7 +1022,8 @@ def deposit_native(
 @click.option(
     "--chain-config",
     type=str,
-    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+    required=True,
+    help="Chain configuration to use (gnosis, base, polygon, optimism).",
 )
 @click.option(
     "--key",
@@ -1018,9 +1034,9 @@ def deposit_native(
 def deposit_token(
     ctx: click.Context,
     amount_to_deposit: str,
+    chain_config: str,
     key: Optional[str] = None,
     safe: Optional[str] = None,
-    chain_config: Optional[str] = None,
 ) -> None:
     """Deposits Token balance for prepaid requests."""
     try:
@@ -1113,7 +1129,8 @@ def deposit_token(
 @click.option(
     "--chain-config",
     type=str,
-    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+    required=True,
+    help="Chain configuration to use (gnosis, base, polygon, optimism).",
 )
 @click.option(
     "--key",
@@ -1221,7 +1238,8 @@ def nvm_subscribe(
 @click.option(
     "--chain-config",
     type=str,
-    help="Id of the mech's chain configuration (stored configs/mechs.json)",
+    required=True,
+    help="Chain configuration to use (gnosis, base, polygon, optimism).",
 )
 def query_mm_mechs_info_cli(
     chain_config: str,
