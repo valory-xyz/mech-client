@@ -9,7 +9,8 @@ import requests
 from aea_ledger_ethereum import EthereumApi
 from web3.constants import ADDRESS_ZERO
 
-from mech_client.interact import get_contract, get_mech_config
+from mech_client.infrastructure.blockchain.contracts import get_contract
+from mech_client.infrastructure.config import get_mech_config
 
 
 ABI_DIR_PATH = Path(__file__).parent / "abis"

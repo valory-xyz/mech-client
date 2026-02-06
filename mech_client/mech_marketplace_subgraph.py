@@ -24,7 +24,7 @@ from typing import List, Optional
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
-from mech_client.interact import get_mech_config
+from mech_client.infrastructure.config import get_mech_config
 
 
 RESULTS_LIMIT = 20

@@ -31,7 +31,7 @@ class SubscriptionService:
     for subscription-based mech access.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         chain_config: str,
         agent_mode: bool,
@@ -87,7 +87,7 @@ class SubscriptionService:
 
         print(f"✓ NVM subscription purchased for {self.chain_config}")
 
-    def check_subscription_status(self, requester_address: str) -> bool:
+    def check_subscription_status(self, requester_address: str) -> bool:  # pylint: disable=no-self-use,unused-argument
         """
         Check if requester has active NVM subscription.
 

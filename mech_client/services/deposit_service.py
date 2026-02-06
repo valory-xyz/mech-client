@@ -34,14 +34,14 @@ from mech_client.infrastructure.blockchain.receipt_waiter import wait_for_receip
 from mech_client.infrastructure.config import MechConfig, PaymentType, get_mech_config
 
 
-class DepositService:
+class DepositService:  # pylint: disable=too-many-instance-attributes
     """Service for managing prepaid balance deposits.
 
     Provides operations for depositing native tokens and ERC20 tokens
     into prepaid balances on the marketplace.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         chain_config: str,
         agent_mode: bool,
@@ -67,7 +67,7 @@ class DepositService:
         # Load configuration
         self.mech_config: MechConfig = get_mech_config(chain_config)
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
-        self.crypto = EthereumCrypto(private_key)
+        self.crypto = EthereumCrypto(private_key)  # pylint: disable=abstract-class-instantiated
 
         # Create executor
         self.executor: TransactionExecutor = ExecutorFactory.create(
@@ -164,7 +164,8 @@ class DepositService:
 
         # Approve tokens
         print(f"Approving {token_type.upper()} tokens...")
-        approve_tx = payment_strategy.approve_if_needed(
+        # Returns None if approval not needed, tx hash otherwise
+        approve_tx = payment_strategy.approve_if_needed(  # pylint: disable=assignment-from-none
             payer_address=sender,
             spender_address=balance_tracker_address,
             amount=amount,

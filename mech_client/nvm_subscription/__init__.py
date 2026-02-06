@@ -28,8 +28,10 @@ from aea_ledger_ethereum import EthereumCrypto
 from dotenv import load_dotenv
 from web3 import Web3
 
-from mech_client.interact import PRIVATE_KEY_FILE_PATH
 from mech_client.nvm_subscription.manager import NVMSubscriptionManager
+from mech_client.utils.constants import (
+    DEFAULT_PRIVATE_KEY_FILE as PRIVATE_KEY_FILE_PATH,
+)
 
 
 BASE_ENV_PATH = Path(__file__).parent / "envs"
