@@ -122,7 +122,9 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
         wait_for_receipt(tx_hash, self.ledger_api)
 
         print(f"✓ Native deposit successful: {amount} wei")
-        print(f"  Transaction: {self.mech_config.transaction_url.format(tx_hash)}")
+        # Format with the expected {transaction_digest} placeholder
+        tx_url = self.mech_config.transaction_url.format(transaction_digest=tx_hash)
+        print(f"  Transaction: {tx_url}")
 
         return tx_hash
 
@@ -200,7 +202,9 @@ class DepositService:  # pylint: disable=too-many-instance-attributes
         wait_for_receipt(tx_hash, self.ledger_api)
 
         print(f"✓ {token_type.upper()} deposit successful: {amount}")
-        print(f"  Transaction: {self.mech_config.transaction_url.format(tx_hash)}")
+        # Format with the expected {transaction_digest} placeholder
+        tx_url = self.mech_config.transaction_url.format(transaction_digest=tx_hash)
+        print(f"  Transaction: {tx_url}")
 
         return tx_hash
 
