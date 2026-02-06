@@ -6,6 +6,7 @@ retries  # CLI parameter in request_cmd.py - reserved for retry logic
 sleep  # CLI parameter in request_cmd.py - reserved for retry delay
 
 # Public API methods (service layer interfaces)
+get_from_ipfs  # IPFSClient helper - used by converters.ipfs_to_png()
 watch_for_data_urls  # OnchainDeliveryWatcher method - used in specific delivery scenarios
 ToolSchema  # Data model class - used for type hints and validation
 fetch_ipfs_hash  # IPFS utility - public API for external use
