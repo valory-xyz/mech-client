@@ -32,7 +32,9 @@ from mech_client.infrastructure.config import PaymentType
 from mech_client.services.base_service import BaseTransactionService
 
 
-class DepositService(BaseTransactionService):  # pylint: disable=too-many-instance-attributes
+class DepositService(
+    BaseTransactionService
+):  # pylint: disable=too-many-instance-attributes
     """Service for managing prepaid balance deposits.
 
     Provides operations for depositing native tokens and ERC20 tokens

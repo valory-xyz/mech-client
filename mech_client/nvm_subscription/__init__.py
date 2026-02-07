@@ -97,9 +97,6 @@ def nvm_subscribe_main(
     # Load configuration
     mech_config = MechConfig.from_chain(chain_config)
 
-    # Create ledger API
-    ledger_api = EthereumApi(**mech_config.ledger.dict())
-
     # Create Ethereum client for agent mode
     ethereum_client = None
     if agent_mode:
@@ -112,7 +109,6 @@ def nvm_subscribe_main(
     service = SubscriptionService(
         chain_config=chain_config,
         crypto=crypto,
-        ledger_api=ledger_api,
         agent_mode=agent_mode,
         ethereum_client=ethereum_client,
         safe_address=safe_address,

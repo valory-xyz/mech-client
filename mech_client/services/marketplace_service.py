@@ -41,7 +41,9 @@ from mech_client.infrastructure.ipfs import IPFSClient, push_metadata_to_ipfs
 from mech_client.services.base_service import BaseTransactionService
 
 
-class MarketplaceService(BaseTransactionService):  # pylint: disable=too-many-instance-attributes,too-few-public-methods
+class MarketplaceService(
+    BaseTransactionService
+):  # pylint: disable=too-many-instance-attributes,too-few-public-methods
     """Service for orchestrating mech marketplace requests.
 
     Composes payment strategies, execution strategies, tool management,

@@ -19,6 +19,7 @@
 
 """Subscription service for NVM subscription management."""
 
+from dataclasses import asdict
 from typing import Any, Dict, Optional, cast
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
@@ -32,6 +33,7 @@ from mech_client.domain.subscription import (
     SubscriptionBalanceChecker,
     SubscriptionManager,
 )
+from mech_client.infrastructure.config.loader import get_mech_config
 from mech_client.infrastructure.nvm.config import NVMConfig
 from mech_client.infrastructure.nvm.contracts import (
     AgreementManagerContract,
@@ -61,7 +63,6 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes
         self,
         chain_config: str,
         crypto: EthereumCrypto,
-        ledger_api: EthereumApi,
         agent_mode: bool,
         ethereum_client: Optional[EthereumClient] = None,
         safe_address: Optional[str] = None,
@@ -71,17 +72,19 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes
 
         :param chain_config: Chain configuration name (gnosis, base)
         :param crypto: Ethereum crypto object with private key
-        :param ledger_api: Ethereum API for blockchain interactions
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
         :param ethereum_client: Ethereum client (required for agent mode)
         :param safe_address: Safe address (required for agent mode)
         """
         self.chain_config = chain_config
         self.crypto = crypto
-        self.ledger_api = ledger_api
         self.agent_mode = agent_mode
         self.ethereum_client = ethereum_client
         self.safe_address = safe_address
+
+        # Load mech configuration and create ledger API
+        mech_config = get_mech_config(chain_config)
+        self.ledger_api = EthereumApi(**asdict(mech_config.ledger_config))
 
         # Load NVM configuration
         self.config = NVMConfig.from_chain(chain_config)

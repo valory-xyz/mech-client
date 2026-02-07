@@ -21,7 +21,6 @@
 
 import logging
 
-
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
 
 

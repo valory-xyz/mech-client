@@ -22,12 +22,10 @@
 from typing import Optional
 
 import click
-from aea_ledger_ethereum import EthereumApi
 from click import ClickException
 
 from mech_client.cli.common import setup_wallet_command
 from mech_client.cli.validators import validate_chain_config
-from mech_client.infrastructure.config import get_mech_config
 from mech_client.services.subscription_service import SubscriptionService
 from mech_client.utils.errors.handlers import handle_cli_errors
 
@@ -88,17 +86,10 @@ def subscription_purchase(  # pylint: disable=too-many-statements,too-many-local
     # Setup wallet command (agent mode detection, key loading, etc.)
     wallet_ctx = setup_wallet_command(ctx, validated_chain, key)
 
-    # Load configuration and create ledger API
-    from dataclasses import asdict  # pylint: disable=import-outside-toplevel
-
-    mech_config = get_mech_config(validated_chain)
-    ledger_api = EthereumApi(**asdict(mech_config.ledger_config))
-
     # Create subscription service
     service = SubscriptionService(
         chain_config=validated_chain,
         crypto=wallet_ctx.crypto,
-        ledger_api=ledger_api,
         agent_mode=wallet_ctx.agent_mode,
         ethereum_client=wallet_ctx.ethereum_client,
         safe_address=wallet_ctx.safe_address,
@@ -116,7 +107,5 @@ def subscription_purchase(  # pylint: disable=too-many-statements,too-many-local
     click.echo(f"Fulfillment Transaction: {result['fulfillment_tx_hash']}")
     click.echo(f"Credits Before: {result['credits_before']}")
     click.echo(f"Credits After: {result['credits_after']}")
-    click.echo(
-        f"Credits Gained: {result['credits_after'] - result['credits_before']}"
-    )
+    click.echo(f"Credits Gained: {result['credits_after'] - result['credits_before']}")
     click.echo("=" * 70)

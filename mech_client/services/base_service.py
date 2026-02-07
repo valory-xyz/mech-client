@@ -29,7 +29,7 @@ from mech_client.domain.execution import ExecutorFactory, TransactionExecutor
 from mech_client.infrastructure.config import MechConfig, get_mech_config
 
 
-class BaseTransactionService:  # pylint: disable=too-few-public-methods
+class BaseTransactionService:  # pylint: disable=too-few-public-methods,too-many-instance-attributes
     """
     Base class for services that execute blockchain transactions.
 

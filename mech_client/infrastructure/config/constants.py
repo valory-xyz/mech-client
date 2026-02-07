@@ -38,3 +38,17 @@ TRANSACTION_RECEIPT_TIMEOUT = 300.0
 # IPFS gateway
 IPFS_GATEWAY_URL = "https://gateway.autonolas.tech/ipfs/"
 IPFS_URL_TEMPLATE = "https://gateway.autonolas.tech/ipfs/f01701220{}"
+
+# Chain IDs for supported networks
+CHAIN_ID_GNOSIS = 100
+CHAIN_ID_BASE = 8453
+CHAIN_ID_POLYGON = 137
+CHAIN_ID_OPTIMISM = 10
+
+# Mapping from chain ID to chain name
+CHAIN_ID_TO_NAME = {
+    CHAIN_ID_GNOSIS: "gnosis",
+    CHAIN_ID_BASE: "base",
+    CHAIN_ID_POLYGON: "polygon",
+    CHAIN_ID_OPTIMISM: "optimism",
+}

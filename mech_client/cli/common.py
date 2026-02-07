@@ -133,13 +133,3 @@ def setup_wallet_command(
         safe_address=safe,
         ethereum_client=ethereum_client,
     )
-
-
-def get_agent_mode_from_context(ctx: click.Context) -> bool:
-    """
-    Extract agent mode flag from Click context.
-
-    :param ctx: Click context object
-    :return: True if agent mode enabled, False if client mode
-    """
-    return not ctx.obj.get("client_mode", False)
