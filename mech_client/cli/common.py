@@ -21,7 +21,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional, TypeVar
 
 import click
 from aea_ledger_ethereum import EthereumCrypto
@@ -133,3 +133,30 @@ def setup_wallet_command(
         safe_address=safe,
         ethereum_client=ethereum_client,
     )
+
+
+F = TypeVar("F", bound=Callable)
+
+
+def common_wallet_options(func: F) -> F:
+    """
+    Decorator that adds common wallet command options.
+
+    Adds --chain-config and --key options to CLI commands that need wallet access.
+    Use this decorator on wallet commands (request, deposit, subscription).
+
+    :param func: The command function to decorate
+    :return: Decorated function with wallet options
+    """
+    func = click.option(
+        "--key",
+        type=click.Path(exists=True, file_okay=True, dir_okay=False),
+        help="Path to private key file (client mode only).",
+    )(func)
+    func = click.option(
+        "--chain-config",
+        type=str,
+        required=True,
+        help="Chain configuration name (gnosis, base, polygon, optimism).",
+    )(func)
+    return func

@@ -145,21 +145,14 @@ class TokenPaymentStrategy(PaymentStrategy):
         :raises ValueError: If balance tracker not available for this chain/type
         """
         if self.payment_type.is_usdc():
-            tracker_address = CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC.get(self.chain_id, "")
-            if not tracker_address:
-                raise ValueError(
-                    f"USDC balance tracker not available for chain {self.chain_id}"
-                )
-        elif self.payment_type.is_olas():
-            tracker_address = CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS.get(self.chain_id, "")
-            if not tracker_address:
-                raise ValueError(
-                    f"OLAS balance tracker not available for chain {self.chain_id}"
-                )
-        else:
-            raise ValueError(f"Unknown token payment type: {self.payment_type}")
-
-        return tracker_address
+            return self._lookup_balance_tracker(
+                CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC, "USDC"
+            )
+        if self.payment_type.is_olas():
+            return self._lookup_balance_tracker(
+                CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS, "OLAS"
+            )
+        raise ValueError(f"Unknown token payment type: {self.payment_type}")
 
     def get_payment_token_address(self) -> Optional[str]:
         """

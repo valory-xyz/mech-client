@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional
 import click
 from click import ClickException
 
-from mech_client.cli.common import setup_wallet_command
+from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
 from mech_client.services.marketplace_service import MarketplaceService
 from mech_client.utils.errors.handlers import handle_cli_errors
@@ -56,11 +56,6 @@ from mech_client.utils.errors.handlers import handle_cli_errors
     help="Use offchain mech (requires MECHX_MECH_OFFCHAIN_URL).",
 )
 @click.option(
-    "--key",
-    type=click.Path(exists=True, file_okay=True, dir_okay=False),
-    help="Path to private key file (client mode only).",
-)
-@click.option(
     "--tools",
     type=str,
     multiple=True,
@@ -88,12 +83,7 @@ from mech_client.utils.errors.handlers import handle_cli_errors
     type=float,
     help="Sleep duration in seconds before retrying the transaction.",
 )
-@click.option(
-    "--chain-config",
-    type=str,
-    required=True,
-    help="Chain configuration name (gnosis, base, polygon, optimism).",
-)
+@common_wallet_options
 @click.pass_context
 @handle_cli_errors
 # pylint: disable=too-many-arguments,too-many-locals,too-many-statements,unused-argument

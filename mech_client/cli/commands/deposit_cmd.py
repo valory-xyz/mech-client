@@ -25,7 +25,7 @@ import click
 from click import ClickException
 from web3.constants import ADDRESS_ZERO
 
-from mech_client.cli.common import setup_wallet_command
+from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_amount, validate_chain_config
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.services.deposit_service import DepositService
@@ -44,17 +44,7 @@ def deposit() -> None:
 
 @deposit.command(name="native")
 @click.argument("amount_to_deposit", metavar="<amount>")
-@click.option(
-    "--chain-config",
-    type=str,
-    required=True,
-    help="Chain configuration name (gnosis, base, polygon, optimism).",
-)
-@click.option(
-    "--key",
-    type=click.Path(exists=True, file_okay=True, dir_okay=False),
-    help="Path to private key file (client mode only).",
-)
+@common_wallet_options
 @click.pass_context
 @handle_cli_errors
 # pylint: disable=too-many-locals,too-many-statements
@@ -111,22 +101,12 @@ def deposit_native(
 @deposit.command(name="token")
 @click.argument("amount_to_deposit", metavar="<amount>")
 @click.option(
-    "--chain-config",
-    type=str,
-    required=True,
-    help="Chain configuration name (gnosis, base, polygon, optimism).",
-)
-@click.option(
     "--token-type",
     type=click.Choice(["olas", "usdc"], case_sensitive=False),
     default="olas",
     help="Token type to deposit (olas or usdc). Default: olas.",
 )
-@click.option(
-    "--key",
-    type=click.Path(exists=True, file_okay=True, dir_okay=False),
-    help="Path to private key file (client mode only).",
-)
+@common_wallet_options
 @click.pass_context
 @handle_cli_errors
 # pylint: disable=too-many-locals,too-many-statements

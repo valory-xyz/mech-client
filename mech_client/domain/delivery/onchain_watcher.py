@@ -30,12 +30,11 @@ from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
 
 from mech_client.domain.delivery.base import DeliveryWatcher
+from mech_client.domain.delivery.constants import DEFAULT_TIMEOUT, WAIT_SLEEP
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 
 
-DEFAULT_TIMEOUT = 900.0  # 15 minutes
-WAIT_SLEEP = 3.0
 DELIVERY_MECH_INDEX = 1
 
 

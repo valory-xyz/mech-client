@@ -24,7 +24,7 @@ from typing import Optional
 import click
 from click import ClickException
 
-from mech_client.cli.common import setup_wallet_command
+from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config
 from mech_client.services.subscription_service import SubscriptionService
 from mech_client.utils.errors.handlers import handle_cli_errors
@@ -42,17 +42,7 @@ def subscription() -> None:
 
 
 @subscription.command(name="purchase")
-@click.option(
-    "--chain-config",
-    type=str,
-    required=True,
-    help="Chain configuration name (gnosis, base).",
-)
-@click.option(
-    "--key",
-    type=click.Path(exists=True, file_okay=True, dir_okay=False),
-    help="Path to private key file (client mode only).",
-)
+@common_wallet_options
 @click.pass_context
 @handle_cli_errors
 def subscription_purchase(  # pylint: disable=too-many-statements,too-many-locals

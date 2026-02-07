@@ -20,7 +20,7 @@
 """Base payment strategy interface."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Dict, Optional
 
 from aea_ledger_ethereum import EthereumApi
 
@@ -118,3 +118,24 @@ class PaymentStrategy(ABC):
         :return: Prepaid balance amount
         """
         return 0
+
+    def _lookup_balance_tracker(
+        self, tracker_map: Dict[int, str], tracker_type: str
+    ) -> str:
+        """
+        Helper method to lookup balance tracker address from chain ID.
+
+        Consolidates the common pattern of looking up addresses by chain ID
+        and raising a ValueError if not found.
+
+        :param tracker_map: Dictionary mapping chain IDs to tracker addresses
+        :param tracker_type: Description of tracker type for error message
+        :return: Balance tracker contract address
+        :raises ValueError: If tracker not available for this chain
+        """
+        tracker_address = tracker_map.get(self.chain_id, "")
+        if not tracker_address:
+            raise ValueError(
+                f"{tracker_type} balance tracker not available for chain {self.chain_id}"
+            )
+        return tracker_address

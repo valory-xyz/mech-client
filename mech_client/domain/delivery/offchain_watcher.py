@@ -26,10 +26,10 @@ from typing import Any, Dict, List
 import requests
 
 from mech_client.domain.delivery.base import DeliveryWatcher
+from mech_client.domain.delivery.constants import WAIT_SLEEP
 
 
 # Constants for offchain polling
-WAIT_SLEEP = 3.0
 OFFCHAIN_DELIVER_ENDPOINT = "fetch_offchain_info"
 
 

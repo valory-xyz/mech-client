@@ -88,22 +88,15 @@ class NVMPaymentStrategy(PaymentStrategy):
         """
         if self.payment_type == PaymentType.NATIVE_NVM:
             # NVM native subscription uses native balance tracker
-            tracker_address = CHAIN_TO_NATIVE_BALANCE_TRACKER.get(self.chain_id, "")
-            if not tracker_address:
-                raise ValueError(
-                    f"NVM native balance tracker not available for chain {self.chain_id}"
-                )
-        elif self.payment_type == PaymentType.TOKEN_NVM_USDC:
+            return self._lookup_balance_tracker(
+                CHAIN_TO_NATIVE_BALANCE_TRACKER, "NVM native"
+            )
+        if self.payment_type == PaymentType.TOKEN_NVM_USDC:
             # NVM USDC subscription uses USDC balance tracker
-            tracker_address = CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC.get(self.chain_id, "")
-            if not tracker_address:
-                raise ValueError(
-                    f"NVM USDC balance tracker not available for chain {self.chain_id}"
-                )
-        else:
-            raise ValueError(f"Unknown NVM payment type: {self.payment_type}")
-
-        return tracker_address
+            return self._lookup_balance_tracker(
+                CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC, "NVM USDC"
+            )
+        raise ValueError(f"Unknown NVM payment type: {self.payment_type}")
 
     def get_payment_token_address(self) -> Optional[str]:
         """

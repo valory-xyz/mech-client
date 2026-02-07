@@ -17,18 +17,8 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Delivery mechanisms for mech responses."""
+"""Shared constants for delivery watching."""
 
-from mech_client.domain.delivery.base import DeliveryWatcher
-from mech_client.domain.delivery.constants import DEFAULT_TIMEOUT, WAIT_SLEEP
-from mech_client.domain.delivery.offchain_watcher import OffchainDeliveryWatcher
-from mech_client.domain.delivery.onchain_watcher import OnchainDeliveryWatcher
-
-
-__all__ = [
-    "DeliveryWatcher",
-    "OffchainDeliveryWatcher",
-    "OnchainDeliveryWatcher",
-    "DEFAULT_TIMEOUT",
-    "WAIT_SLEEP",
-]
+# Timeout and polling constants shared across delivery watchers
+DEFAULT_TIMEOUT = 900.0  # 15 minutes
+WAIT_SLEEP = 3.0  # 3 seconds between polling attempts
