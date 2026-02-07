@@ -35,7 +35,9 @@ from mech_client.services.subscription_service import SubscriptionService
 
 
 # Reference new infrastructure location for env files
-BASE_ENV_PATH = Path(__file__).parent.parent / "infrastructure" / "nvm" / "resources" / "envs"
+BASE_ENV_PATH = (
+    Path(__file__).parent.parent / "infrastructure" / "nvm" / "resources" / "envs"
+)
 
 CHAIN_TO_ENVS: Dict[str, Path] = {
     "gnosis": BASE_ENV_PATH / "gnosis.env",

@@ -67,6 +67,17 @@ format_output_schema  # ToolService method - output schema formatter
 payment_data  # ChainConfig attribute - payment configuration data
 ipfs_to_png  # IPFSConverters function - IPFS to PNG converter
 
+# NVM Config dataclass fields (used by dataclass, marked as unused by vulture)
+network_name  # NVMConfig field - network identifier
+receiver_plan  # NVMConfig field - plan receiver address
+web3_provider_uri  # NVMConfig field - Web3 provider URI (overridden by MECHX_CHAIN_RPC)
+marketplace_uri  # NVMConfig field - NVM marketplace URI
+nevermined_node_uri  # NVMConfig field - Nevermined node URI
+nevermined_node_address  # NVMConfig field - Nevermined node address
+etherscan_url  # NVMConfig field - block explorer URL
+native_token  # NVMConfig field - native token symbol
+get_marketplace_fee  # NeverminedConfigContract method - reserved for marketplace fee query
+
 # Constants (configuration and infrastructure)
 CLI_NAME  # Application name constant
 DEFAULT_WAIT_SLEEP  # Default sleep interval for polling
