@@ -43,6 +43,9 @@ OPERATE_FOLDER_NAME = ".operate_mech_client"
 ENV_PATH = Path.home() / OPERATE_FOLDER_NAME / ".env"
 SETUP_MODE_COMMAND = "setup"
 
+# Commands that require wallet operations (agent mode or client mode)
+WALLET_COMMANDS = {"request", "deposit", "subscription"}
+
 
 @click.group(name="mechx")
 @click.version_option(__version__, prog_name="mechx")
@@ -65,8 +68,10 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
 
     cli_command = ctx.invoked_subcommand if ctx.invoked_subcommand else None
     is_setup_called = cli_command == SETUP_MODE_COMMAND
+    is_wallet_command = cli_command in WALLET_COMMANDS
 
-    if not is_setup_called and not client_mode:
+    # Only check agent mode for wallet-based commands
+    if is_wallet_command and not is_setup_called and not client_mode:
         click.echo("Agent mode enabled")
         operate_path = Path.home() / OPERATE_FOLDER_NAME
         if not operate_path.exists():
