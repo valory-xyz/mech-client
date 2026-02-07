@@ -796,8 +796,8 @@ When contributing tests:
 
 ## Further Reading
 
-- [CLAUDE.md](./CLAUDE.md) - Development guidelines and patterns
+- [../CLAUDE.md](../CLAUDE.md) - Development guidelines and patterns
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture overview
-- [docs/COMMANDS.md](./docs/COMMANDS.md) - Command reference with dependency diagrams
+- [COMMANDS.md](./COMMANDS.md) - Command reference with dependency diagrams
 - [pytest documentation](https://docs.pytest.org/)
 - [unittest.mock documentation](https://docs.python.org/3/library/unittest.mock.html)

@@ -411,7 +411,7 @@ You can also use the Mech Client as a library on your Python project.
     print(f"Result: {result.get('result')}")
     ```
 
-    **Note:** See [MIGRATION.md](./MIGRATION.md) for detailed migration guide and more examples.
+    **Note:** See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for architecture details and more examples.
 
 You can also use the Mech Client to programmatically fetch tools for marketplace mechs in your Python project, as well as retrieve descriptions and input/output schemas for specific tools given their unique identifier.
 
@@ -467,7 +467,7 @@ You can also use the Mech Client to programmatically fetch tools for marketplace
     print(f"Output schema: {output_schema}")
     ```
 
-    **Note:** This example demonstrates the new service-based API. See [MIGRATION.md](./MIGRATION.md) for complete migration guide from pre-v0.17.0 APIs.
+    **Note:** This example demonstrates the service-based API introduced in v0.17.0.
 
 ## Architecture & Documentation
 
@@ -492,32 +492,25 @@ Version 0.17.0 introduced a comprehensive architectural refactoring that separat
 - ✅ **Strategy pattern**: Flexible payment, execution, and delivery strategies
 - ✅ **Dependency injection**: Better testability and modularity
 - ✅ **Type safety**: Comprehensive type hints throughout
-- ✅ **Comprehensive tests**: 164 unit tests with ~40% coverage
+- ✅ **Comprehensive tests**: 288 unit tests with ~50% coverage
 
 ### Documentation
 
 For detailed information about the architecture and development:
 
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Comprehensive architecture guide
+- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - Comprehensive architecture guide
   - Layer descriptions and responsibilities
   - Data flow diagrams
   - Key patterns (Factory, Strategy, Repository)
   - Component reference
   - Best practices
 
-- **[TESTING.md](./TESTING.md)** - Testing guide for contributors
+- **[docs/TESTING.md](./docs/TESTING.md)** - Testing guide for contributors
   - Test structure and organization
   - Running tests and coverage reports
   - Writing tests (patterns, fixtures, mocking)
   - Testing async components
   - Best practices
-
-- **[MIGRATION.md](./MIGRATION.md)** - Migration guide from pre-v0.17.0
-  - What changed in v0.17.0
-  - Module mappings (old → new)
-  - Common migration patterns
-  - Breaking changes
-  - Code examples
 
 - **[CLAUDE.md](./CLAUDE.md)** - Development guidelines for Claude Code
   - Command dependency diagrams
@@ -529,14 +522,13 @@ For detailed information about the architecture and development:
 
 If you use mech-client as a library (not just the CLI), see:
 - [Programmatic usage](#programmatic-usage) - Basic usage examples
-- [MIGRATION.md](./MIGRATION.md) - Migrating from older versions
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - Understanding the architecture
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) - Understanding the architecture
 
 ### For Contributors
 
 If you want to contribute to mech-client development:
-1. Read [ARCHITECTURE.md](./ARCHITECTURE.md) to understand the structure
-2. Follow [TESTING.md](./TESTING.md) for writing tests
+1. Read [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) to understand the structure
+2. Follow [docs/TESTING.md](./docs/TESTING.md) for writing tests
 3. Review [CLAUDE.md](./CLAUDE.md) for development guidelines
 4. See [Developer installation](#developer-installation) below
 
