@@ -175,7 +175,8 @@ def request(ctx: click.Context, priority_mech: str, tools: List[str], prompts: L
     # Create service
     service = MarketplaceService(
         chain_config=chain_config,
-        ledger_api=ledger_api,
+        agent_mode=agent_mode,
+        crypto=crypto,
         agent_mode=agent_mode,
         # ... other dependencies
     )
@@ -212,6 +213,30 @@ def request(ctx: click.Context, priority_mech: str, tools: List[str], prompts: L
 - Handle business workflow logic
 - Keep services stateless where possible
 
+**Base Service Pattern**:
+
+Transaction services inherit from `BaseTransactionService` which provides common initialization:
+
+```python
+class BaseTransactionService:
+    """Base class for services that execute blockchain transactions."""
+
+    def __init__(
+        self,
+        chain_config: str,
+        agent_mode: bool,
+        crypto: EthereumCrypto,
+        safe_address: Optional[str] = None,
+        ethereum_client: Optional[EthereumClient] = None,
+    ):
+        # Initializes: mech_config, ledger_api, executor
+        # Subclasses get these automatically
+
+class MarketplaceService(BaseTransactionService):
+    # Inherits ledger_api, executor, mech_config
+    pass
+```
+
 **Example**:
 ```python
 class MarketplaceService:
@@ -239,11 +264,8 @@ class MarketplaceService:
             self.payer_address, self.price, self.marketplace_address
         )
 
-        # 5. Execute transaction
-        executor = ExecutorFactory.create(
-            self.mode, self.ledger_api, self.safe_address
-        )
-        tx_hash = executor.execute(tx_params)
+        # 5. Execute transaction (executor from BaseTransactionService)
+        tx_hash = self.executor.execute(tx_params)
 
         # 6. Watch for delivery
         watcher = OnchainDeliveryWatcher(
@@ -494,17 +516,19 @@ tx_hash = strategy.approve_if_needed(payer, amount, marketplace)
 Constructor injection for testability:
 
 ```python
-class MarketplaceService:
+class MarketplaceService(BaseTransactionService):
     def __init__(
         self,
-        ledger_api: EthereumApi,
-        ipfs_client: IPFSClient,
-        marketplace_contract: Web3Contract,
-        # ... other dependencies
+        chain_config: str,
+        agent_mode: bool,
+        crypto: EthereumCrypto,
+        safe_address: Optional[str] = None,
+        ethereum_client: Optional[EthereumClient] = None,
     ):
-        self.ledger_api = ledger_api
-        self.ipfs_client = ipfs_client
-        self.marketplace_contract = marketplace_contract
+        # BaseTransactionService initializes: ledger_api, executor, mech_config
+        super().__init__(chain_config, agent_mode, crypto, safe_address, ethereum_client)
+        # Service-specific initialization
+        self.ipfs_client = IPFSClient()
 ```
 
 ### 4. Repository Pattern
@@ -545,6 +569,17 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 ```
 
 ## Component Reference
+
+### Service Components
+
+| Component | Layer | Purpose |
+|-----------|-------|---------|
+| `BaseTransactionService` | Service | Base class for transaction services |
+| `MarketplaceService` | Service | Marketplace request orchestration |
+| `DepositService` | Service | Deposit orchestration |
+| `SubscriptionService` | Service | NVM subscription management |
+| `ToolService` | Service | Tool metadata operations |
+| `SetupService` | Service | Agent mode setup |
 
 ### Payment Components
 
@@ -883,6 +918,7 @@ def subscription_purchase(
     service = SubscriptionService(
         chain_config=validated_chain,
         crypto=crypto,
+        agent_mode=agent_mode,
         ledger_api=ledger_api,
         agent_mode=agent_mode,
         ethereum_client=ethereum_client,
