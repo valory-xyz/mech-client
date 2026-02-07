@@ -1116,7 +1116,7 @@ See [MIGRATION.md](./MIGRATION.md) for guidance on migrating from pre-v0.17.0 co
 
 ## Further Reading
 
+- [CLAUDE.md](./CLAUDE.md) - Development guidelines and patterns for Claude Code
 - [TESTING.md](./TESTING.md) - Comprehensive testing guide
-- [CLAUDE.md](./CLAUDE.md) - Development guidelines for Claude Code
+- [docs/COMMANDS.md](./docs/COMMANDS.md) - Command reference with dependency diagrams
 - [README.md](./README.md) - User documentation and examples
-- [PHASE6_SUMMARY.md](./PHASE6_SUMMARY.md) - Refactoring progress and statistics
