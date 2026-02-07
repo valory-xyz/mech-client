@@ -291,6 +291,7 @@ Critical bugs fixed in v0.17.1:
 
 Known issues:
 5. **Token Approval Agent Mode** (`domain/payment/token.py`): Only implements client mode path 📋 Documented in `docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md`
+6. **Agent Mode RPC Configuration** (`infrastructure/config/chain_config.py`): Commands don't read RPC from stored operate config 📋 Documented in `docs/AGENT_MODE_RPC_CONFIGURATION_ISSUE.md`
 
 ## Release Workflow
 
@@ -318,5 +319,6 @@ Version bump checklist:
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**: System architecture, layers, and design principles
 - **[docs/TESTING.md](./docs/TESTING.md)**: Testing guidelines, running tests, writing tests
 - **[docs/COMMANDS.md](./docs/COMMANDS.md)**: Command reference with dependency diagrams
-- **[docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md](./docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md)**: Known issue documentation
+- **[docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md](./docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md)**: Known issue - token approval in agent mode
+- **[docs/AGENT_MODE_RPC_CONFIGURATION_ISSUE.md](./docs/AGENT_MODE_RPC_CONFIGURATION_ISSUE.md)**: Known issue - RPC config not loaded from operate
 - **[README.md](./README.md)**: User documentation and examples

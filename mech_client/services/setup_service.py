@@ -124,30 +124,43 @@ class SetupService:
             config.rpc = {}
 
         # Configure RPC for each chain in template
-        for chain in template["configurations"]:
-            import os  # pylint: disable=import-outside-toplevel
+        import os  # pylint: disable=import-outside-toplevel
 
-            # Use environment variable if set, otherwise fall back to default
-            env_rpc = os.getenv("MECHX_CHAIN_RPC")
-            if env_rpc is None:
-                mech_config = get_mech_config(chain)
-                env_rpc = mech_config.rpc_url
-            config.rpc[chain] = env_rpc
+        for chain in template["configurations"]:
+            # Get default RPC URL for this specific chain from mechs.json
+            mech_config = get_mech_config(chain)
+            rpc_url = mech_config.rpc_url
+
+            # Override with MECHX_CHAIN_RPC environment variable if set
+            # This allows users to override RPC for setup, but it applies to all chains
+            env_rpc_override = os.getenv("MECHX_CHAIN_RPC")
+            if env_rpc_override is not None:
+                rpc_url = env_rpc_override
+                print(
+                    f"  Using MECHX_CHAIN_RPC override for {chain}: {rpc_url[:50]}..."
+                )
+            else:
+                print(f"  Using default RPC for {chain}: {rpc_url[:50]}...")
+
+            config.rpc[chain] = rpc_url
 
         config.principal_chain = template["home_chain"]
 
         # Set chain configs in service template
         for chain in template["configurations"]:
+            rpc_for_chain = config.rpc[chain]
             template["configurations"][chain] |= {
                 "staking_program_id": NO_STAKING_PROGRAM_ID,
-                "rpc": config.rpc[chain],
+                "rpc": rpc_for_chain,
                 "cost_of_bond": 1,
             }
+            print(f"  Set template RPC for {chain}: {rpc_for_chain[:50]}...")
 
         if config.user_provided_args is None:
             config.user_provided_args = {}
 
         config.store()
+        print(f"  Stored configuration to: {config.path}")
         return config
 
     def display_wallets(self) -> Optional[Dict[str, str]]:
