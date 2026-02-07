@@ -903,6 +903,58 @@ When refactoring CLI code, be aware of these gotchas discovered during the v0.17
 
 6. **Token Approval Agent Mode**: ERC20 token approvals must use the executor pattern to work in both agent and client modes. In agent mode, approvals must go through the Safe multisig (via `executor.execute_transaction()`), not directly from the EOA. If you build/sign/send the approval transaction directly, it approves the EOA address, not the Safe, causing subsequent token transfers from the Safe to fail with "insufficient allowance". Always pass the `executor` to payment strategy methods that need to execute transactions.
 
+7. **IPFS Pin Flag for Offchain Requests**: The `IPFSClient.upload()` method pins files to IPFS by default. For offchain mech requests, use `upload(file_path, pin=False)` to only compute the IPFS hash without actually uploading/pinning the file. Offchain mechs handle their own IPFS upload. If you forget `pin=False`, files get unnecessarily uploaded and pinned to the gateway. Example: `mech_client/infrastructure/ipfs/metadata.py:fetch_ipfs_hash()` uses `pin=False`, while `push_metadata_to_ipfs()` uses the default `pin=True`.
+
+8. **Polling Cycle Sleep Placement**: When polling for events or delivery, ensure `await asyncio.sleep()` is placed OUTSIDE the loop that iterates over request IDs, not inside. Otherwise you sleep N times per cycle (where N = number of request IDs) instead of once per cycle. Example bug: in a polling loop `while True: for request_id in request_ids: ... await asyncio.sleep(3)` sleeps 3 seconds per request ID. Correct pattern: `while True: for request_id in request_ids: ... <no sleep here>; await asyncio.sleep(3)` sleeps once per cycle. See `mech_client/domain/delivery/onchain_watcher.py:_wait_for_marketplace_delivery()` (fixed) vs `watch_for_data_urls()` (correct).
+
+9. **Blocking Async Event Loop**: Never use `time.sleep()` in async functions. Always use `await asyncio.sleep()` to avoid blocking the event loop. Blocking the event loop causes hangs, timeouts, and prevents concurrent operations. Pattern: if you see `async def` function with `time.sleep()`, replace with `await asyncio.sleep()`.
+
+## Post-v0.17.0 Refactor Bug Fixes
+
+After the v0.17.0 layered architecture refactor, several bugs were identified and fixed:
+
+### Critical Bugs (Fixed in v0.17.1)
+
+1. **Blocking Event Loop in Delivery Watcher** (`mech_client/domain/delivery/onchain_watcher.py`)
+   - **Issue**: Used `time.sleep(WAIT_SLEEP)` in async methods, blocking the entire event loop
+   - **Impact**: Delivery watching would hang, causing timeouts and failed requests
+   - **Fix**: Replaced with `await asyncio.sleep(WAIT_SLEEP)` in lines 116, 243
+   - **Status**: ✅ Fixed
+
+2. **Misleading Balance Error Message** (`mech_client/services/marketplace_service.py:189`)
+   - **Issue**: Error message showed `payment_strategy.check_balance(sender, 0)` which returns bool, not amount
+   - **Impact**: Users saw "Have: True" or "Have: False" instead of actual balance
+   - **Fix**: Removed incorrect balance display, show clear message without misleading data
+   - **Status**: ✅ Fixed
+
+3. **Polling Cycle Sleep Timing** (`mech_client/domain/delivery/onchain_watcher.py`)
+   - **Issue**: Sleep was inside `for request_id in request_ids` loop, sleeping N times per cycle
+   - **Impact**: With 3 request IDs, slept 9 seconds per cycle instead of 3 seconds
+   - **Fix**: Moved sleep and timeout check outside the request ID loop
+   - **Status**: ✅ Fixed
+
+4. **IPFS Pinning in Offchain Requests** (`mech_client/infrastructure/ipfs/metadata.py:65`)
+   - **Issue**: `fetch_ipfs_hash()` called `upload(file_name)` which pins to IPFS
+   - **Impact**: Offchain requests unnecessarily uploaded/pinned files to IPFS gateway
+   - **Fix**: Changed to `upload(file_name, pin=False)` to only compute hash locally
+   - **Status**: ✅ Fixed
+
+### Known Issues (Documented, Not Yet Fixed)
+
+5. **Token Approval Agent Mode** (`mech_client/domain/payment/token.py`)
+   - **Issue**: `approve_if_needed()` only implements client mode path, doesn't use executor pattern
+   - **Impact**: In agent mode, approval comes from EOA not Safe, causing "insufficient allowance" errors
+   - **Fix Required**: Accept `executor` parameter and use `executor.execute_transaction()`
+   - **Status**: 📋 Documented in `TOKEN_APPROVAL_AGENT_MODE_ISSUE.md`
+   - **Workaround**: Use `--client-mode` flag for token payments until fixed
+
+### Testing Coverage
+
+All fixes verified with:
+- ✅ 164 unit tests pass (asyncio)
+- ✅ Pylint 10.00/10
+- ✅ All linters pass (black, isort, flake8, mypy, bandit, darglint, vulture, liccheck)
+
 ## Validation Helpers
 
 The CLI module now in `cli/` directory includes centralized validation functions used across all commands:
