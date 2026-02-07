@@ -411,7 +411,7 @@ You can also use the Mech Client as a library on your Python project.
     print(f"Result: {result.get('result')}")
     ```
 
-    **Note:** See [MIGRATION.md](./MIGRATION.md) for detailed migration guide and more examples.
+    **Note:** See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for architecture details and more examples.
 
 You can also use the Mech Client to programmatically fetch tools for marketplace mechs in your Python project, as well as retrieve descriptions and input/output schemas for specific tools given their unique identifier.
 
@@ -467,7 +467,7 @@ You can also use the Mech Client to programmatically fetch tools for marketplace
     print(f"Output schema: {output_schema}")
     ```
 
-    **Note:** This example demonstrates the new service-based API. See [MIGRATION.md](./MIGRATION.md) for complete migration guide from pre-v0.17.0 APIs.
+    **Note:** This example demonstrates the service-based API introduced in v0.17.0.
 
 ## Architecture & Documentation
 
@@ -512,13 +512,6 @@ For detailed information about the architecture and development:
   - Testing async components
   - Best practices
 
-- **[MIGRATION.md](./MIGRATION.md)** - Migration guide from pre-v0.17.0
-  - What changed in v0.17.0
-  - Module mappings (old → new)
-  - Common migration patterns
-  - Breaking changes
-  - Code examples
-
 - **[CLAUDE.md](./CLAUDE.md)** - Development guidelines for Claude Code
   - Command dependency diagrams
   - Common issues and solutions
@@ -529,7 +522,6 @@ For detailed information about the architecture and development:
 
 If you use mech-client as a library (not just the CLI), see:
 - [Programmatic usage](#programmatic-usage) - Basic usage examples
-- [MIGRATION.md](./MIGRATION.md) - Migrating from older versions
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) - Understanding the architecture
 
 ### For Contributors

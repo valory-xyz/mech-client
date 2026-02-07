@@ -147,7 +147,7 @@ Version 0.17.0 introduces a comprehensive architectural refactoring that separat
 #### Documentation
 - **docs/ARCHITECTURE.md**: Comprehensive architecture guide with diagrams
 - **docs/TESTING.md**: Testing guide for contributors
-- **MIGRATION.md**: Detailed migration guide from pre-v0.17.0
+- **docs/COMMANDS.md**: Command reference with dependency diagrams
 - **Updated CLAUDE.md**: Development guidelines for Claude Code
 - **Updated README.md**: New examples and command structure
 
@@ -205,7 +205,7 @@ Version 0.17.0 introduces a comprehensive architectural refactoring that separat
 - Delivery watching now uses async/await
 - Configuration access via `get_mech_config()` instead of direct dict access
 
-**Migration**: See [MIGRATION.md](./MIGRATION.md) for detailed migration guide with code examples.
+**Migration**: See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for architecture details and code examples.
 
 #### Improved
 
@@ -241,14 +241,14 @@ Version 0.17.0 introduces a comprehensive architectural refactoring that separat
 - **Strategies**: 7 (3 payment + 2 execution + 2 delivery)
 - **Factories**: 3 (Payment, Executor, DeliveryWatcher)
 - **Custom exceptions**: 11 specific exception types
-- **Documentation files**: 5 (docs/ARCHITECTURE.md, docs/TESTING.md, MIGRATION.md, CLAUDE.md, README.md)
+- **Documentation files**: 5 (docs/ARCHITECTURE.md, docs/TESTING.md, docs/COMMANDS.md, CLAUDE.md, README.md)
 
-### 🔗 Migration Guide
+### 🔗 Documentation
 
-For detailed migration instructions, code examples, and best practices, see:
-- **[MIGRATION.md](./MIGRATION.md)** - Complete migration guide from pre-v0.17.0
+For detailed information about the architecture and development:
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - Architecture overview and patterns
 - **[docs/TESTING.md](./docs/TESTING.md)** - Testing guide for contributors
+- **[docs/COMMANDS.md](./docs/COMMANDS.md)** - Command reference and dependencies
 
 ### ⚠️ Important Notes
 
