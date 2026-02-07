@@ -34,7 +34,8 @@ from mech_client.infrastructure.config import MechConfig
 from mech_client.services.subscription_service import SubscriptionService
 
 
-BASE_ENV_PATH = Path(__file__).parent / "envs"
+# Reference new infrastructure location for env files
+BASE_ENV_PATH = Path(__file__).parent.parent / "infrastructure" / "nvm" / "resources" / "envs"
 
 CHAIN_TO_ENVS: Dict[str, Path] = {
     "gnosis": BASE_ENV_PATH / "gnosis.env",
@@ -100,7 +101,7 @@ def nvm_subscribe_main(
     # Create Ethereum client for agent mode
     ethereum_client = None
     if agent_mode:
-        ethereum_client = EthereumClient(mech_config.chain_rpc)
+        ethereum_client = EthereumClient(mech_config.rpc_url)
 
     # Display sender address
     print(f"Sender address: {crypto.address}")
