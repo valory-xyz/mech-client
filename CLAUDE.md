@@ -410,7 +410,7 @@ mechx tool describe <tool_id_from_list> --chain-config gnosis
 **Cause:** Chain-specific .env file missing or incomplete (PLAN_DID, NETWORK_NAME, CHAIN_ID)
 
 **Solution:**
-Ensure the chain-specific .env file exists in `mech_client/nvm_subscription/envs/<chain>.env` and contains all required variables: PLAN_DID, NETWORK_NAME, CHAIN_ID. Contact the development team if these files are missing.
+Ensure the chain-specific .env file exists in `mech_client/infrastructure/nvm/resources/envs/<chain>.env` and contains all required variables: PLAN_DID, NETWORK_NAME, CHAIN_ID. Contact the development team if these files are missing.
 
 ## Development Commands
 
@@ -639,13 +639,47 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 - Contains: balance tracker contracts (native, OLAS, USDC), token addresses (OLAS, USDC)
 - Single source of truth for all chain-specific contract addresses
 
-**NVM Subscription (`nvm_subscription/`)**
-- Nevermined (NVM) subscription management for subscription-based payments
-- Main module: `NVMSubscriptionManager` in `manager.py`
-- Contract wrappers in `contracts/`: agreement_manager, did_registry, escrow_payment, lock_payment, nft, nft_sales, subscription_provider, token, transfer_nft
-- Chain-specific configuration in `envs/`: gnosis.env, base.env
-- Network configuration in `resources/networks.json`
-- Entry point: `nvm_subscribe_main()` in `__init__.py`
+**NVM Subscription Module (Refactored in v0.17.0+)**
+
+The NVM (Nevermined) subscription module enables subscription-based payments for marketplace mechs. Refactored to follow layered architecture:
+
+- **Infrastructure Layer** (`infrastructure/nvm/`):
+  - `config.py`: `NVMConfig` dataclass with `from_chain()` loader
+  - `contracts/`: 11 refactored contract wrappers (NO transaction building methods)
+    - `base.py`: `NVMContractWrapper` - simplified base class
+    - `factory.py`: `NVMContractFactory` - creates all contract instances
+    - Contract wrappers: agreement_manager, did_registry, escrow_payment, lock_payment, nft, nft_sales, nevermined_config, subscription_provider, token, transfer_nft
+  - `resources/`: Configuration files (envs/gnosis.env, envs/base.env, networks.json)
+
+- **Domain Layer** (`domain/subscription/`):
+  - `manager.py`: `SubscriptionManager` - orchestrates 3-transaction workflow
+  - `agreement.py`: `AgreementBuilder` - builds agreement data structure
+  - `fulfillment.py`: `FulfillmentBuilder` - builds fulfillment parameters
+  - `balance_checker.py`: `SubscriptionBalanceChecker` - validates sufficient balance
+
+- **Service Layer** (`services/subscription_service.py`):
+  - `SubscriptionService` - orchestrates dependencies and workflow
+  - Uses `ExecutorFactory` for agent/client mode transaction handling
+  - Coordinates domain managers and infrastructure components
+
+- **CLI Layer** (`cli/commands/subscription_cmd.py`):
+  - `subscription purchase` command - user interface for subscription purchase
+  - Supports both agent mode (Safe) and client mode (EOA)
+
+- **Deprecated** (`nvm_subscription/__init__.py`):
+  - Backward compatibility wrapper with deprecation warning
+  - Calls new `SubscriptionService` internally
+  - Will be removed in future release
+
+**Subscription Purchase Workflow** (3 transactions):
+1. Check balance (native for Gnosis, USDC for Base)
+2. Approve USDC token (Base only, skipped on Gnosis)
+3. Create agreement on-chain (payment transaction)
+4. Fulfill agreement (activate subscription)
+
+**Important**: `domain/payment/nvm.py` (`NVMPaymentStrategy`) is SEPARATE functionality - it checks if a user HAS a valid subscription when making marketplace requests, not for purchasing subscriptions. Both components serve different purposes and should coexist.
+
+**Supported Chains**: gnosis (native xDAI), base (USDC token)
 
 #### Delivery Mechanisms
 
@@ -785,7 +819,7 @@ All contract ABIs are in `mech_client/abis/`:
    - **Ignore paths**:
      - `*_pb2.py` (generated protobuf files)
      - `packages/valory/*` (Open Autonomy packages)
-     - `mech_client/nvm_subscription/*` (NVM subscription module)
+     - `mech_client/nvm_subscription/*` (deprecated backward compatibility wrapper only - new NVM code in infrastructure/nvm/ and domain/subscription/ is fully linted)
    - **Line length**: 88 characters (Black style)
    - **Pylint disable comments**: Acceptable for specific cases with justification:
      - `too-many-statements`: For complex CLI command functions with extensive validation and error handling
