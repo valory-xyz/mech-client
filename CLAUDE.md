@@ -825,6 +825,27 @@ All contract ABIs are in `mech_client/abis/`:
     - **NVM support**: subscription purchase checks chain exists in `CHAIN_TO_ENVS`
     - **Service ID validation**: Tool commands validate ID is non-negative integer
 
+11. **Operate Library Gotchas**:
+    - **ChainType Enum Keys**: The `olas-operate-middleware` library uses `ChainType` enum objects (not strings) as dictionary keys in `wallet.safes`. When accessing safes, iterate and match `chain_type.value` against your string chain config:
+      ```python
+      master_safe = "N/A"
+      for chain_type, safe_address in master_wallet.safes.items():
+          if hasattr(chain_type, "value") and chain_type.value == self.chain_config:
+              master_safe = str(safe_address)
+              break
+      ```
+    - **Service Token ID**: Access via `service.chain_configs[chain_config].chain_data.token`. Token is `-1` if service not deployed on-chain yet. Use for constructing marketplace URLs: `https://marketplace.olas.network/{chain}/ai-agents/{token}`
+    - **Test Mocking**: When mocking operate objects in tests, create ChainType-like mocks with a `value` attribute:
+      ```python
+      mock_chain_type = MagicMock()
+      mock_chain_type.value = "gnosis"
+      mock_wallet.safes = {mock_chain_type: "0x5678"}
+      ```
+
+12. **Release Workflow Patterns**:
+    - **PyPI Publish**: Always set `skip_existing: false` in GitHub Actions `pypa/gh-action-pypi-publish` to fail explicitly on duplicate versions. Using `skip_existing: true` causes silent success when version already exists, hiding deployment issues.
+    - **Version Bump Checklist**: Update `pyproject.toml`, `mech_client/__init__.py`, and `SECURITY.md`, then run `poetry lock`
+
 ## Validation Helpers
 
 The CLI module (`cli.py`) includes centralized validation functions used across all commands:
