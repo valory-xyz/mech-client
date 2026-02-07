@@ -25,6 +25,8 @@ from unittest.mock import MagicMock, Mock
 import pytest
 from web3.constants import ADDRESS_ZERO
 
+from mech_client.infrastructure.config.chain_config import LedgerConfig
+
 
 @pytest.fixture
 def mock_ledger_api() -> MagicMock:
@@ -175,3 +177,44 @@ def sample_request_id() -> str:
     :return: Request ID as string
     """
     return "12345"
+
+
+@pytest.fixture
+def mock_mech_config() -> MagicMock:
+    """
+    Mock MechConfig with proper LedgerConfig dataclass.
+
+    Used across service tests for consistent configuration mocking.
+
+    :return: Mock MechConfig instance
+    """
+    ledger_config = LedgerConfig(
+        address="https://rpc.example.com",
+        chain_id=100,
+        poa_chain=False,
+        default_gas_price_strategy="eip1559",
+        is_gas_estimation_enabled=True,
+    )
+    mock_mech_config = MagicMock()
+    mock_mech_config.ledger_config = ledger_config
+    mock_mech_config.gas_limit = 500000
+    mock_mech_config.transaction_url = "https://explorer.com/tx/{transaction_digest}"
+    mock_mech_config.priority_mech_address = "0x" + "9" * 40
+    mock_mech_config.price = 10**16  # 0.01 tokens
+    return mock_mech_config
+
+
+@pytest.fixture
+def mock_crypto() -> MagicMock:
+    """
+    Mock EthereumCrypto object for service testing.
+
+    Provides basic crypto mock with private_key attribute.
+    For more complete mocking, use mock_ethereum_crypto fixture.
+
+    :return: Mock crypto instance
+    """
+    mock_crypto = MagicMock()
+    mock_crypto.private_key = "0x" + "1" * 64
+    mock_crypto.address = "0x1234567890123456789012345678901234567890"
+    return mock_crypto

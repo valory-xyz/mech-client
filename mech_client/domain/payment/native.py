@@ -74,12 +74,7 @@ class NativePaymentStrategy(PaymentStrategy):
         :return: Balance tracker contract address
         :raises ValueError: If native balance tracker not available for this chain
         """
-        tracker_address = CHAIN_TO_NATIVE_BALANCE_TRACKER.get(self.chain_id, "")
-        if not tracker_address:
-            raise ValueError(
-                f"Native balance tracker not available for chain {self.chain_id}"
-            )
-        return tracker_address
+        return self._lookup_balance_tracker(CHAIN_TO_NATIVE_BALANCE_TRACKER, "Native")
 
     def get_payment_token_address(self) -> Optional[str]:
         """

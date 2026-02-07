@@ -258,6 +258,48 @@ Key variables:
 - Provide actionable solutions that end users can execute
 - Never show raw Python tracebacks for network failures
 
+### 11. Code Reuse Patterns (Established v0.17.2)
+
+**CLI Command Helper:**
+```python
+from mech_client.cli.common import setup_wallet_command
+
+# Use in all wallet commands (request, deposit, subscription)
+wallet_ctx = setup_wallet_command(ctx, chain_config, key)
+# Returns: crypto, agent_mode, safe_address, ethereum_client
+```
+
+**Error Handling Decorator:**
+```python
+from mech_client.utils.errors.handlers import handle_cli_errors
+
+@click.command()
+@handle_cli_errors  # Catches and formats common errors
+def my_command():
+    pass
+```
+
+**Base Service Class:**
+```python
+from mech_client.services.base_service import BaseTransactionService
+
+class MyService(BaseTransactionService):
+    def __init__(self, chain_config, agent_mode, crypto, safe_address=None, ethereum_client=None):
+        super().__init__(chain_config, agent_mode, crypto, safe_address, ethereum_client)
+        # self.ledger_api, self.executor, self.mech_config already initialized
+```
+
+**NVM Contract Wrappers:**
+```python
+class MyContract(NVMContractWrapper):
+    CONTRACT_NAME = "MyContract"  # No need for __init__
+```
+
+**Chain ID Constants:**
+```python
+from mech_client.infrastructure.config.constants import CHAIN_ID_GNOSIS, CHAIN_ID_TO_NAME
+```
+
 ## Common Refactoring Pitfalls
 
 When refactoring CLI code, be aware of these gotchas (discovered during v0.17.0 refactor):

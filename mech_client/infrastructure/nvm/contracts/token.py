@@ -23,7 +23,6 @@ import logging
 from typing import Union
 
 from eth_typing import ChecksumAddress
-from web3 import Web3
 from web3.types import ENS
 
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
@@ -40,15 +39,7 @@ class TokenContract(NVMContractWrapper):
     Use executor.execute_transaction() to call approve().
     """
 
-    def __init__(self, w3: Web3):
-        """
-        Initialize the Token instance.
-
-        :param w3: Web3 instance connected to the network
-        """
-        logger.debug("Initializing Subscription Token")
-        super().__init__(w3, name="SubscriptionToken")
-        logger.info("Token initialized")
+    CONTRACT_NAME = "SubscriptionToken"
 
     def get_balance(self, sender: Union[ChecksumAddress, ENS]) -> int:
         """

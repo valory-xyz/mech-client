@@ -3,18 +3,15 @@
 Public API for using mech-client as a library.
 
 Example usage:
-    >>> from mech_client import MarketplaceService, PaymentType, get_mech_config
-    >>> from aea_ledger_ethereum import EthereumApi, EthereumCrypto
+    >>> from mech_client import MarketplaceService, PaymentType
+    >>> from aea_ledger_ethereum import EthereumCrypto
     >>>
-    >>> config = get_mech_config("gnosis")
     >>> crypto = EthereumCrypto("ethereum_private_key.txt")
-    >>> ledger_api = EthereumApi(**config.ledger_config.__dict__)
     >>>
     >>> service = MarketplaceService(
     ...     chain_config="gnosis",
-    ...     ledger_api=ledger_api,
-    ...     payer_address=crypto.address,
-    ...     mode="client",
+    ...     agent_mode=False,
+    ...     crypto=crypto,
     ... )
     >>>
     >>> result = service.send_request(

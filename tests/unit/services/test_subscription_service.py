@@ -47,10 +47,16 @@ class TestSubscriptionService:
         """Create mock EthereumClient."""
         return MagicMock()
 
+    @patch("mech_client.services.subscription_service.asdict")
+    @patch("mech_client.services.subscription_service.EthereumApi")
+    @patch("mech_client.services.subscription_service.get_mech_config")
     @patch("mech_client.services.subscription_service.NVMConfig")
     def test_initialization(
         self,
         mock_config_class: MagicMock,
+        mock_get_mech_config: MagicMock,
+        mock_ethereum_api_class: MagicMock,
+        mock_asdict: MagicMock,
         mock_crypto: MagicMock,
         mock_ledger_api: MagicMock,
     ) -> None:
@@ -60,10 +66,16 @@ class TestSubscriptionService:
         mock_config = MagicMock()
         mock_config_class.from_chain.return_value = mock_config
 
+        mock_mech_config = MagicMock()
+        mock_mech_config.ledger_config = MagicMock()
+        mock_get_mech_config.return_value = mock_mech_config
+
+        mock_asdict.return_value = {}
+        mock_ethereum_api_class.return_value = mock_ledger_api
+
         service = SubscriptionService(
             chain_config="gnosis",
             crypto=mock_crypto,
-            ledger_api=mock_ledger_api,
             agent_mode=False,
             ethereum_client=None,
             safe_address=None,
@@ -72,6 +84,7 @@ class TestSubscriptionService:
         assert service.chain_config == "gnosis"
         assert service.agent_mode is False
         mock_config_class.from_chain.assert_called_once_with("gnosis")
+        mock_get_mech_config.assert_called_once_with("gnosis")
 
     @patch("mech_client.services.subscription_service.SubscriptionManager")
     @patch("mech_client.services.subscription_service.SubscriptionBalanceChecker")
@@ -79,10 +92,16 @@ class TestSubscriptionService:
     @patch("mech_client.services.subscription_service.AgreementBuilder")
     @patch("mech_client.services.subscription_service.NVMContractFactory")
     @patch("mech_client.services.subscription_service.ExecutorFactory")
+    @patch("mech_client.services.subscription_service.asdict")
+    @patch("mech_client.services.subscription_service.EthereumApi")
+    @patch("mech_client.services.subscription_service.get_mech_config")
     @patch("mech_client.services.subscription_service.NVMConfig")
     def test_purchase_subscription_client_mode(
         self,
         mock_config_class: MagicMock,
+        mock_get_mech_config: MagicMock,
+        mock_ethereum_api_class: MagicMock,
+        mock_asdict: MagicMock,
         mock_executor_factory: MagicMock,
         mock_contract_factory: MagicMock,
         mock_agreement_builder_class: MagicMock,
@@ -100,6 +119,13 @@ class TestSubscriptionService:
         mock_config.plan_did = "did:nvm:default"
         mock_config.requires_token_approval.return_value = False
         mock_config_class.from_chain.return_value = mock_config
+
+        mock_mech_config = MagicMock()
+        mock_mech_config.ledger_config = MagicMock()
+        mock_get_mech_config.return_value = mock_mech_config
+
+        mock_asdict.return_value = {}
+        mock_ethereum_api_class.return_value = mock_ledger_api
 
         mock_executor = MagicMock()
         mock_executor_factory.create.return_value = mock_executor
@@ -132,7 +158,6 @@ class TestSubscriptionService:
         service = SubscriptionService(
             chain_config="gnosis",
             crypto=mock_crypto,
-            ledger_api=mock_ledger_api,
             agent_mode=False,
             ethereum_client=None,
             safe_address=None,
@@ -170,10 +195,16 @@ class TestSubscriptionService:
     @patch("mech_client.services.subscription_service.AgreementBuilder")
     @patch("mech_client.services.subscription_service.NVMContractFactory")
     @patch("mech_client.services.subscription_service.ExecutorFactory")
+    @patch("mech_client.services.subscription_service.asdict")
+    @patch("mech_client.services.subscription_service.EthereumApi")
+    @patch("mech_client.services.subscription_service.get_mech_config")
     @patch("mech_client.services.subscription_service.NVMConfig")
     def test_purchase_subscription_agent_mode(
         self,
         mock_config_class: MagicMock,
+        mock_get_mech_config: MagicMock,
+        mock_ethereum_api_class: MagicMock,
+        mock_asdict: MagicMock,
         mock_executor_factory: MagicMock,
         mock_contract_factory: MagicMock,
         mock_agreement_builder_class: MagicMock,
@@ -192,6 +223,13 @@ class TestSubscriptionService:
         mock_config.plan_did = "did:nvm:default"
         mock_config.requires_token_approval.return_value = False
         mock_config_class.from_chain.return_value = mock_config
+
+        mock_mech_config = MagicMock()
+        mock_mech_config.ledger_config = MagicMock()
+        mock_get_mech_config.return_value = mock_mech_config
+
+        mock_asdict.return_value = {}
+        mock_ethereum_api_class.return_value = mock_ledger_api
 
         mock_executor = MagicMock()
         mock_executor_factory.create.return_value = mock_executor
@@ -220,7 +258,6 @@ class TestSubscriptionService:
         service = SubscriptionService(
             chain_config="gnosis",
             crypto=mock_crypto,
-            ledger_api=mock_ledger_api,
             agent_mode=True,
             ethereum_client=mock_ethereum_client,
             safe_address="0x" + "a" * 40,
@@ -245,10 +282,16 @@ class TestSubscriptionService:
     @patch("mech_client.services.subscription_service.AgreementBuilder")
     @patch("mech_client.services.subscription_service.NVMContractFactory")
     @patch("mech_client.services.subscription_service.ExecutorFactory")
+    @patch("mech_client.services.subscription_service.asdict")
+    @patch("mech_client.services.subscription_service.EthereumApi")
+    @patch("mech_client.services.subscription_service.get_mech_config")
     @patch("mech_client.services.subscription_service.NVMConfig")
     def test_purchase_subscription_custom_plan_did(
         self,
         mock_config_class: MagicMock,
+        mock_get_mech_config: MagicMock,
+        mock_ethereum_api_class: MagicMock,
+        mock_asdict: MagicMock,
         mock_executor_factory: MagicMock,
         mock_contract_factory: MagicMock,
         mock_agreement_builder_class: MagicMock,
@@ -266,6 +309,13 @@ class TestSubscriptionService:
         mock_config.plan_did = "did:nvm:default"
         mock_config.requires_token_approval.return_value = False
         mock_config_class.from_chain.return_value = mock_config
+
+        mock_mech_config = MagicMock()
+        mock_mech_config.ledger_config = MagicMock()
+        mock_get_mech_config.return_value = mock_mech_config
+
+        mock_asdict.return_value = {}
+        mock_ethereum_api_class.return_value = mock_ledger_api
 
         mock_executor = MagicMock()
         mock_executor_factory.create.return_value = mock_executor
@@ -291,7 +341,6 @@ class TestSubscriptionService:
         service = SubscriptionService(
             chain_config="gnosis",
             crypto=mock_crypto,
-            ledger_api=mock_ledger_api,
             agent_mode=False,
             ethereum_client=None,
             safe_address=None,
@@ -305,10 +354,16 @@ class TestSubscriptionService:
         mock_manager.purchase_subscription.assert_called_once_with(custom_plan)
 
     @patch("mech_client.services.subscription_service.NVMContractFactory")
+    @patch("mech_client.services.subscription_service.asdict")
+    @patch("mech_client.services.subscription_service.EthereumApi")
+    @patch("mech_client.services.subscription_service.get_mech_config")
     @patch("mech_client.services.subscription_service.NVMConfig")
     def test_check_subscription_status(
         self,
         mock_config_class: MagicMock,
+        mock_get_mech_config: MagicMock,
+        mock_ethereum_api_class: MagicMock,
+        mock_asdict: MagicMock,
         mock_contract_factory: MagicMock,
         mock_crypto: MagicMock,
         mock_ledger_api: MagicMock,
@@ -321,6 +376,13 @@ class TestSubscriptionService:
         mock_config.subscription_id = "1"
         mock_config_class.from_chain.return_value = mock_config
 
+        mock_mech_config = MagicMock()
+        mock_mech_config.ledger_config = MagicMock()
+        mock_get_mech_config.return_value = mock_mech_config
+
+        mock_asdict.return_value = {}
+        mock_ethereum_api_class.return_value = mock_ledger_api
+
         mock_nft_contract = MagicMock()
         mock_nft_contract.get_balance.return_value = 100
         mock_contract_factory.create.return_value = mock_nft_contract
@@ -329,7 +391,6 @@ class TestSubscriptionService:
         service = SubscriptionService(
             chain_config="gnosis",
             crypto=mock_crypto,
-            ledger_api=mock_ledger_api,
             agent_mode=False,
             ethereum_client=None,
             safe_address=None,

@@ -21,8 +21,6 @@
 
 import logging
 
-from web3 import Web3
-
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
 
 
@@ -32,15 +30,7 @@ logger = logging.getLogger(__name__)
 class NeverminedConfigContract(NVMContractWrapper):
     """Wrapper for the NeverminedConfig contract."""
 
-    def __init__(self, w3: Web3):
-        """
-        Initialize the NeverminedConfig contract.
-
-        :param w3: Web3 instance connected to the network
-        """
-        logger.debug("Initializing NeverminedConfig contract")
-        super().__init__(w3, name="NeverminedConfig")
-        logger.info("NeverminedConfig initialized")
+    CONTRACT_NAME = "NeverminedConfig"
 
     def get_fee_receiver(self) -> str:
         """

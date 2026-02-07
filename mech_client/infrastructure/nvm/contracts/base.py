@@ -27,6 +27,8 @@ from typing import Any, Dict
 from web3 import Web3
 from web3.contract import Contract
 
+from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
+
 
 logger = logging.getLogger(__name__)
 
@@ -37,27 +39,37 @@ class NVMContractWrapper:  # pylint: disable=too-few-public-methods
 
     Handles loading of contract ABI and instantiating a Web3 contract instance.
     Does NOT include transaction building methods - use executor pattern for that.
+
+    Subclasses can either:
+    1. Set CONTRACT_NAME class attribute and omit __init__ (preferred)
+    2. Call super().__init__(w3, name="ContractName") manually
     """
 
-    def __init__(self, w3: Web3, name: str):
+    CONTRACT_NAME: str = ""  # Subclasses can set this to avoid __init__ boilerplate
+
+    def __init__(self, w3: Web3, name: str = ""):
         """
         Initialize the NVM contract wrapper.
 
         :param w3: Web3 instance connected to the network
-        :param name: Contract artifact filename (without extension)
+        :param name: Contract artifact filename (without extension). If empty, uses CONTRACT_NAME.
         """
         self.w3 = w3
-        self.name = name
+        self.name = (
+            name
+            or self.CONTRACT_NAME
+            or self.__class__.__name__.replace("Contract", "")
+        )
         self.chain_id = self.w3.eth.chain_id
 
+        # Log initialization
+        if not name and self.CONTRACT_NAME:
+            logger.debug(f"Initializing {self.__class__.__name__}")
+        else:
+            logger.debug(f"Initializing contract wrapper for {self.name!r}")
+
         # Map chain ID to chain name for contract artifacts
-        chain_name_by_id = {
-            100: "gnosis",
-            8453: "base",
-            137: "polygon",
-            10: "optimism",
-        }
-        self.chain_name = chain_name_by_id.get(self.chain_id)
+        self.chain_name = CHAIN_ID_TO_NAME.get(self.chain_id)
         if not self.chain_name:
             raise ValueError(
                 f"Unsupported chain ID {self.chain_id}; "
@@ -67,7 +79,12 @@ class NVMContractWrapper:  # pylint: disable=too-few-public-methods
         logger.debug(f"Initializing contract wrapper for {self.name!r}")
         self.contract = self._load_contract()
         self.address = self.contract.address
-        logger.info(f"Contract {self.name!r} loaded at {self.address}")
+
+        # Log completion
+        if not name and self.CONTRACT_NAME:
+            logger.info(f"{self.__class__.__name__} initialized")
+        else:
+            logger.info(f"Contract {self.name!r} loaded at {self.address}")
 
     def _load_contract_info(self) -> Dict[str, Any]:
         """

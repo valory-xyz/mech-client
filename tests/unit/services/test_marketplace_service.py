@@ -67,10 +67,10 @@ class TestMarketplaceServiceInitialization:
 
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
-    @patch("mech_client.services.marketplace_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.marketplace_service.EthereumCrypto")
-    @patch("mech_client.services.marketplace_service.EthereumApi")
-    @patch("mech_client.services.marketplace_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_initialization_client_mode(
         self,
         mock_config: MagicMock,
@@ -155,10 +155,10 @@ class TestGetMarketplaceContract:
     @patch("mech_client.services.marketplace_service.get_abi")
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
-    @patch("mech_client.services.marketplace_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.marketplace_service.EthereumCrypto")
-    @patch("mech_client.services.marketplace_service.EthereumApi")
-    @patch("mech_client.services.marketplace_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_get_marketplace_contract_success(
         self,
         mock_config: MagicMock,
@@ -212,10 +212,10 @@ class TestFetchMechInfo:
     @patch("mech_client.services.marketplace_service.get_abi")
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
-    @patch("mech_client.services.marketplace_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.marketplace_service.EthereumCrypto")
-    @patch("mech_client.services.marketplace_service.EthereumApi")
-    @patch("mech_client.services.marketplace_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_fetch_mech_info_success(
         self,
         mock_config: MagicMock,
@@ -270,10 +270,10 @@ class TestValidateTools:
 
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
-    @patch("mech_client.services.marketplace_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.marketplace_service.EthereumCrypto")
-    @patch("mech_client.services.marketplace_service.EthereumApi")
-    @patch("mech_client.services.marketplace_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_validate_tools_success(
         self,
         mock_config: MagicMock,
@@ -315,10 +315,10 @@ class TestValidateTools:
 
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
-    @patch("mech_client.services.marketplace_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.marketplace_service.EthereumCrypto")
-    @patch("mech_client.services.marketplace_service.EthereumApi")
-    @patch("mech_client.services.marketplace_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_validate_tools_invalid_tool(
         self,
         mock_config: MagicMock,
@@ -364,10 +364,10 @@ class TestSendMarketplaceRequest:
     @patch("mech_client.services.marketplace_service.get_abi")
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
-    @patch("mech_client.services.marketplace_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.marketplace_service.EthereumCrypto")
-    @patch("mech_client.services.marketplace_service.EthereumApi")
-    @patch("mech_client.services.marketplace_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_send_marketplace_request_single(
         self,
         mock_config: MagicMock,
@@ -424,10 +424,10 @@ class TestSendMarketplaceRequest:
     @patch("mech_client.services.marketplace_service.get_abi")
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
-    @patch("mech_client.services.marketplace_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.marketplace_service.EthereumCrypto")
-    @patch("mech_client.services.marketplace_service.EthereumApi")
-    @patch("mech_client.services.marketplace_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_send_marketplace_request_batch(
         self,
         mock_config: MagicMock,
