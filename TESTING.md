@@ -25,9 +25,9 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 
 ### Test Statistics
 
-- **Total tests**: 238 (excluding unsupported trio backend)
-- **Test files**: 18
-- **Test classes**: 55+
+- **Total tests**: 245 (excluding unsupported trio backend)
+- **Test files**: 19
+- **Test classes**: 59+
 - **Coverage**: ~50% (target: 70%)
 
 ### Test Breakdown by Layer
@@ -36,7 +36,7 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 |-------|-------|-------|----------------|
 | Utils | 75 | 2 | Validators, error handling |
 | Domain | 66 | 5 | Strategies, watchers, factories, tools |
-| Services | 29 | 3 | Orchestration, workflows, deposits |
+| Services | 36 | 4 | Orchestration, workflows, deposits, setup |
 | Infrastructure | 68 | 8 | Adapters, clients, loaders, Safe |
 
 ## Test Structure
@@ -58,11 +58,12 @@ tests/
 │   │   ├── test_delivery_watchers.py       # 11 tests (asyncio)
 │   │   ├── test_offchain_watcher.py        # 14 tests (asyncio)
 │   │   └── test_tool_manager.py            # 22 tests
-│   ├── services/                            # Service layer tests (29 tests)
+│   ├── services/                            # Service layer tests (36 tests)
 │   │   ├── __init__.py
 │   │   ├── test_tool_service.py            # 10 tests
 │   │   ├── test_marketplace_service.py     # 9 tests
-│   │   └── test_deposit_service.py         # 10 tests
+│   │   ├── test_deposit_service.py         # 10 tests
+│   │   └── test_setup_service.py           # 7 tests
 │   └── infrastructure/                      # Infrastructure layer tests (68 tests)
 │       ├── __init__.py
 │       ├── test_config_loader.py           # 7 tests

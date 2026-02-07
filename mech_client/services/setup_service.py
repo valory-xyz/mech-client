@@ -58,6 +58,8 @@ class SetupService:
 
         :raises Exception: If setup fails
         """
+        import sys  # pylint: disable=import-outside-toplevel
+
         # Ensure Operate is initialized
         operate = self.operate_manager.operate
         operate.setup()
@@ -72,6 +74,18 @@ class SetupService:
 
         # Configure local config with RPC override
         print(f"Configuring service for {self.chain_config}...")
+
+        # Monkey-patch configure_local_config to use our custom implementation
+        # This is necessary to override the RPC configuration from MECHX_CHAIN_RPC
+        # Create a wrapper function without self parameter for monkey-patching
+        def _configure_wrapper(
+            template: ServiceTemplate, operate_instance: OperateApp
+        ) -> QuickstartConfig:
+            return self.configure_local_config(template, operate_instance)
+
+        sys.modules[
+            "operate.quickstart.run_service"
+        ].configure_local_config = _configure_wrapper  # type: ignore
 
         # Run service setup
         try:
