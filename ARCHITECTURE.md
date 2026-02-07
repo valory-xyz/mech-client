@@ -592,6 +592,406 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 | `get_mech_config()` | Infrastructure | Config loader |
 | `CONTRACT_ADDRESSES` | Infrastructure | Address mappings |
 
+### Subscription Components
+
+| Component | Layer | Purpose |
+|-----------|-------|---------|
+| `NVMConfig` | Infrastructure | NVM subscription configuration |
+| `NVMContractWrapper` | Infrastructure | Base class for NVM contracts |
+| `NVMContractFactory` | Infrastructure | Factory for creating NVM contracts |
+| `SubscriptionManager` | Domain | Orchestrates subscription purchase workflow |
+| `AgreementBuilder` | Domain | Builds agreement data structure |
+| `FulfillmentBuilder` | Domain | Builds fulfillment parameters |
+| `SubscriptionBalanceChecker` | Domain | Validates sufficient balance |
+| `SubscriptionService` | Service | Service orchestration for subscriptions |
+| `NVMPaymentStrategy` | Domain | Payment strategy for checking subscription status |
+
+## NVM Subscription Architecture
+
+The NVM (Nevermined) subscription module enables subscription-based payments for marketplace mechs. This section describes the refactored architecture introduced in v0.17.0+.
+
+### Overview
+
+NVM subscriptions provide an alternative payment model where users purchase a subscription plan to access mechs without per-request payments. The subscription purchase involves a 3-transaction workflow:
+
+1. **Balance Check**: Verify sufficient funds (native tokens for Gnosis, USDC for Base)
+2. **Token Approval** (Base only): Approve USDC for lock payment contract
+3. **Create Agreement**: On-chain agreement creation with payment
+4. **Fulfill Agreement**: Complete subscription activation
+
+### Architecture Layers
+
+#### Infrastructure Layer (`infrastructure/nvm/`)
+
+Provides NVM-specific infrastructure adapters:
+
+**Configuration** (`config.py`):
+```python
+@dataclass
+class NVMConfig:
+    """Configuration for NVM subscription operations."""
+
+    chain_config: str
+    chain_id: int
+    network_name: str
+    plan_did: str
+    subscription_credits: str
+    plan_fee_nvm: str
+    plan_price_mechs: str
+    subscription_nft_address: str
+    token_address: str
+    web3_provider_uri: str  # Overridable by MECHX_CHAIN_RPC
+    # ... other configuration fields
+
+    @classmethod
+    def from_chain(cls, chain_config: str) -> "NVMConfig":
+        """Load configuration from envs/{chain}.env and networks.json."""
+        # Validates chain support (gnosis, base only)
+        # Loads chain-specific settings
+        # Supports MECHX_CHAIN_RPC override in __post_init__
+
+    def requires_token_approval(self) -> bool:
+        """Check if token approval needed (Base = True, Gnosis = False)."""
+        return self.token_address != "0x0000..."
+
+    def get_transaction_value(self) -> int:
+        """Get native token value for transaction (Gnosis only)."""
+        if self.requires_token_approval():
+            return 0  # Base: paying with USDC, no native value
+        return int(self.plan_fee_nvm) + int(self.plan_price_mechs)
+```
+
+**Contract Wrappers** (`contracts/`):
+- `base.py`: `NVMContractWrapper` - simplified base class (no transaction building)
+- `factory.py`: `NVMContractFactory` - creates all NVM contract instances
+- 11 contract wrappers: `agreement_manager.py`, `did_registry.py`, `escrow_payment.py`, `lock_payment.py`, `nft.py`, `nft_sales.py`, `nevermined_config.py`, `subscription_provider.py`, `token.py`, `transfer_nft.py`
+
+Key design: Contract wrappers provide **read-only methods** and contract instances. Transaction building is handled by the executor pattern.
+
+**Resources** (`resources/`):
+- `envs/gnosis.env`, `envs/base.env`: Chain-specific configuration
+- `networks.json`: Network RPC endpoints and NVM node addresses
+
+#### Domain Layer (`domain/subscription/`)
+
+Implements subscription purchase business logic:
+
+**Subscription Manager** (`manager.py`):
+```python
+class SubscriptionManager:
+    """Orchestrates the subscription purchase workflow."""
+
+    def purchase_subscription(self, plan_did: str) -> Dict[str, Any]:
+        """
+        Execute 3-transaction workflow:
+        1. Check balance
+        2. [Base only] Approve USDC token
+        3. Create agreement
+        4. Fulfill agreement
+        """
+        # Step 1: Check balance
+        self.balance_checker.check()
+
+        # Step 2: Build agreement data
+        agreement = self.agreement_builder.build(plan_did)
+
+        # Step 3: Token approval (Base only)
+        if self.config.requires_token_approval():
+            self._approve_token()
+
+        # Step 4: Create agreement on-chain
+        agreement_tx_hash = self._create_agreement(agreement)
+
+        # Step 5: Fulfill agreement
+        fulfillment_tx_hash = self._fulfill_agreement(agreement)
+
+        return {
+            "status": "success",
+            "agreement_id": agreement.agreement_id.hex(),
+            "agreement_tx_hash": agreement_tx_hash,
+            "fulfillment_tx_hash": fulfillment_tx_hash,
+        }
+```
+
+**Agreement Builder** (`agreement.py`):
+```python
+class AgreementBuilder:
+    """Builds agreement data structure with condition IDs."""
+
+    def build(self, plan_did: str) -> AgreementData:
+        """
+        Build agreement data:
+        - Generate agreement ID seed and ID
+        - Fetch DDO from DID Registry
+        - Calculate condition hashes (lock, transfer, escrow)
+        - Build receiver list
+        """
+        agreement_id_seed = os.urandom(32)
+        agreement_id = self.agreement_manager.agreement_id(
+            agreement_id_seed, self.sender
+        )
+
+        # Fetch DDO metadata
+        ddo = self.did_registry.get_ddo(plan_did)
+
+        # Calculate condition IDs
+        lock_id = self.lock_payment.generate_id(agreement_id, ...)
+        transfer_id = self.transfer_nft.generate_id(agreement_id, ...)
+        escrow_id = self.escrow_payment.generate_id(agreement_id, ...)
+
+        return AgreementData(
+            agreement_id=agreement_id,
+            did=plan_did,
+            ddo=ddo,
+            lock_id=lock_id,
+            # ... other fields
+        )
+```
+
+**Fulfillment Builder** (`fulfillment.py`):
+```python
+class FulfillmentBuilder:
+    """Builds fulfillment parameter tuples."""
+
+    def build(self, agreement: AgreementData) -> FulfillmentData:
+        """Build fulfill_for_delegate_params and fulfill_params tuples."""
+        fulfill_for_delegate_params = (
+            agreement.ddo["owner"],  # nftHolder
+            self.sender,  # nftReceiver
+            int(self.config.subscription_credits),  # nftAmount
+            "0x" + agreement.lock_id.hex(),  # lockPaymentCondition
+            # ... other params
+        )
+
+        fulfill_params = (amounts, receivers, returnAddress, ...)
+
+        return FulfillmentData(
+            fulfill_for_delegate_params=fulfill_for_delegate_params,
+            fulfill_params=fulfill_params,
+        )
+```
+
+**Balance Checker** (`balance_checker.py`):
+```python
+class SubscriptionBalanceChecker:
+    """Validates sufficient balance before purchase."""
+
+    def check(self) -> None:
+        """
+        Check balance and raise ValueError if insufficient.
+        - Gnosis: Check native xDAI balance
+        - Base: Check USDC token balance
+        """
+        if self.config.requires_token_approval():
+            # Base: Check USDC balance
+            balance = self.token_contract.get_balance(self.sender)
+        else:
+            # Gnosis: Check native balance
+            balance = self.w3.eth.get_balance(self.sender)
+
+        required = self.config.get_total_payment_amount()
+        if balance < required:
+            raise ValueError(f"Insufficient balance: {balance} < {required}")
+```
+
+#### Service Layer (`services/subscription_service.py`)
+
+Orchestrates subscription purchase using layered architecture:
+
+```python
+class SubscriptionService:
+    """Service for managing NVM subscriptions."""
+
+    def purchase_subscription(
+        self, plan_did: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Purchase NVM subscription workflow:
+        1. Create executor (agent mode or client mode)
+        2. Create all NVM contract instances
+        3. Create domain builders and managers
+        4. Delegate to SubscriptionManager
+        """
+        # Use plan DID from config if not provided
+        if not plan_did:
+            plan_did = self.config.plan_did
+
+        # Create executor for transaction handling
+        executor = ExecutorFactory.create(
+            ledger_api=self.ledger_api,
+            agent_mode=self.agent_mode,
+            crypto=self.crypto,
+            ethereum_client=self.ethereum_client,
+            safe_address=self.safe_address,
+        )
+
+        # Create all NVM contracts
+        contracts = NVMContractFactory.create_all(self.w3)
+
+        # Create domain components
+        agreement_builder = AgreementBuilder(...)
+        fulfillment_builder = FulfillmentBuilder(...)
+        balance_checker = SubscriptionBalanceChecker(...)
+
+        # Create subscription manager
+        manager = SubscriptionManager(
+            w3=self.w3,
+            config=self.config,
+            sender=self.sender,
+            executor=executor,
+            agreement_builder=agreement_builder,
+            fulfillment_builder=fulfillment_builder,
+            balance_checker=balance_checker,
+            nft_sales=contracts["nft_sales"],
+            subscription_provider=contracts["subscription_provider"],
+            subscription_nft=contracts["nft"],
+            token_contract=contracts.get("token"),
+        )
+
+        # Execute purchase workflow
+        return manager.purchase_subscription(plan_did)
+```
+
+#### CLI Layer (`cli/commands/subscription_cmd.py`)
+
+Provides user interface for subscription purchase:
+
+```python
+@subscription.command(name="purchase")
+@click.pass_context
+def subscription_purchase(
+    ctx: click.Context,
+    chain_config: str,
+    key: Optional[str] = None,
+) -> None:
+    """Purchase Nevermined subscription."""
+    # Validate chain
+    validated_chain = validate_chain_config(chain_config)
+
+    # Validate NVM support (gnosis, base only)
+    if validated_chain not in {"gnosis", "base"}:
+        raise ClickException("NVM subscriptions only supported on gnosis, base")
+
+    # Load configuration
+    mech_config = get_mech_config(validated_chain)
+
+    # Create crypto and ledger API
+    crypto = EthereumCrypto(private_key_path=key_path, password=key_password)
+    ledger_api = EthereumApi(**asdict(mech_config.ledger_config))
+
+    # Create service
+    service = SubscriptionService(
+        chain_config=validated_chain,
+        crypto=crypto,
+        ledger_api=ledger_api,
+        agent_mode=agent_mode,
+        ethereum_client=ethereum_client,
+        safe_address=safe_address,
+    )
+
+    # Execute purchase
+    result = service.purchase_subscription()
+
+    # Display results
+    click.echo(f"✅ Subscription purchased successfully!")
+    click.echo(f"Agreement ID: {result['agreement_id']}")
+    click.echo(f"Agreement TX: {result['agreement_tx_hash']}")
+    click.echo(f"Fulfillment TX: {result['fulfillment_tx_hash']}")
+```
+
+### Subscription Purchase vs Subscription Checking
+
+The NVM module has two separate concerns handled by different components:
+
+#### 1. Subscription Purchase (`domain/subscription/`, `services/subscription_service.py`)
+
+**Purpose**: Purchase new NVM subscriptions
+
+**Use case**: User runs `mechx subscription purchase` command
+
+**Workflow**:
+1. Check balance (native for Gnosis, USDC for Base)
+2. Approve USDC token (Base only)
+3. Create agreement on-chain (payment transaction)
+4. Fulfill agreement (activate subscription)
+
+**Architecture**: Uses layered refactored architecture (infrastructure → domain → service → CLI)
+
+#### 2. Subscription Checking (`domain/payment/nvm.py`)
+
+**Purpose**: Check if user HAS valid subscription when making marketplace requests
+
+**Use case**: `MarketplaceService` validates subscription before sending request
+
+**Implementation**:
+```python
+class NVMPaymentStrategy(PaymentStrategy):
+    """Payment strategy for NVM subscription-based payments."""
+
+    def check_balance(self, payer_address: str, amount: int) -> bool:
+        """Check if payer has valid NVM subscription."""
+        # Query subscription NFT balance
+        nft_balance = subscription_nft.functions.balanceOf(
+            payer_address, subscription_id
+        ).call()
+
+        # Query prepaid balance in balance tracker
+        prepaid_balance = balance_tracker.functions.mapRequesterBalances(
+            payer_address
+        ).call()
+
+        return (nft_balance + prepaid_balance) > 0
+```
+
+**Architecture**: Payment strategy pattern (part of v0.17.0 refactor)
+
+These are **separate concerns** and both components should exist:
+- **Subscription purchase**: Buys the subscription (3-transaction workflow)
+- **Subscription checking**: Validates subscription status for marketplace requests
+
+### Data Flow: Subscription Purchase
+
+```
+User → CLI → SubscriptionService → SubscriptionManager
+                                          │
+                        ┌─────────────────┼─────────────────┐
+                        │                 │                 │
+                        ▼                 ▼                 ▼
+              AgreementBuilder   FulfillmentBuilder   BalanceChecker
+                        │                 │                 │
+                        └─────────────────┼─────────────────┘
+                                          │
+                                          ▼
+                              Infrastructure Layer
+                                          │
+                    ┌─────────────────────┼─────────────────────┐
+                    │                     │                     │
+                    ▼                     ▼                     ▼
+            NVMContractFactory    NVMConfig          Executor
+                    │                     │                     │
+            (11 contracts)      (chain settings)    (agent/client)
+```
+
+### Chain Support
+
+NVM subscriptions are supported on:
+- **Gnosis** (chain_id: 100): Native xDAI payments
+- **Base** (chain_id: 8453): USDC token payments
+
+Configuration stored in:
+- `infrastructure/nvm/resources/envs/gnosis.env`
+- `infrastructure/nvm/resources/envs/base.env`
+- `infrastructure/nvm/resources/networks.json`
+
+### Backward Compatibility
+
+The deprecated monolithic module (`nvm_subscription/__init__.py`) remains for backward compatibility:
+- Emits `DeprecationWarning` when called
+- Wraps new `SubscriptionService`
+- Will be removed in future release
+
+New code should use `SubscriptionService` directly.
+
 ## Testing Strategy
 
 ### Unit Tests

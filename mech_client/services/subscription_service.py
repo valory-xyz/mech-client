@@ -19,83 +19,199 @@
 
 """Subscription service for NVM subscription management."""
 
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 
-from mech_client.nvm_subscription import nvm_subscribe_main
+from aea_ledger_ethereum import EthereumApi, EthereumCrypto
+from safe_eth.eth import EthereumClient
+from web3 import Web3
+
+from mech_client.domain.execution.factory import ExecutorFactory
+from mech_client.domain.subscription import (
+    AgreementBuilder,
+    FulfillmentBuilder,
+    SubscriptionBalanceChecker,
+    SubscriptionManager,
+)
+from mech_client.infrastructure.nvm.config import NVMConfig
+from mech_client.infrastructure.nvm.contracts import (
+    AgreementManagerContract,
+    DIDRegistryContract,
+    EscrowPaymentContract,
+    LockPaymentContract,
+    NFTContract,
+    NFTSalesTemplateContract,
+    NVMContractFactory,
+    NeverminedConfigContract,
+    SubscriptionProviderContract,
+    TokenContract,
+    TransferNFTContract,
+)
 
 
-class SubscriptionService:
+class SubscriptionService:  # pylint: disable=too-many-instance-attributes
     """Service for managing Nevermined (NVM) subscriptions.
 
-    Provides operations for purchasing and managing NVM subscriptions
-    for subscription-based mech access.
+    Orchestrates subscription purchase workflow using the layered architecture:
+    - Infrastructure: NVM contracts and configuration
+    - Domain: Agreement building, fulfillment, balance checking
+    - Execution: Transaction signing and submission
     """
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
         chain_config: str,
+        crypto: EthereumCrypto,
+        ledger_api: EthereumApi,
         agent_mode: bool,
-        private_key_path: str,
+        ethereum_client: Optional[EthereumClient] = None,
         safe_address: Optional[str] = None,
-        private_key_password: Optional[str] = None,
     ):
         """
         Initialize subscription service.
 
         :param chain_config: Chain configuration name (gnosis, base)
+        :param crypto: Ethereum crypto object with private key
+        :param ledger_api: Ethereum API for blockchain interactions
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
-        :param private_key_path: Path to private key file
+        :param ethereum_client: Ethereum client (required for agent mode)
         :param safe_address: Safe address (required for agent mode)
-        :param private_key_password: Password for encrypted key (agent mode)
         """
         self.chain_config = chain_config
+        self.crypto = crypto
+        self.ledger_api = ledger_api
         self.agent_mode = agent_mode
-        self.private_key_path = private_key_path
+        self.ethereum_client = ethereum_client
         self.safe_address = safe_address
-        self.private_key_password = private_key_password
 
-    def purchase_subscription(self) -> None:
+        # Load NVM configuration
+        self.config = NVMConfig.from_chain(chain_config)
+
+        # Get Web3 instance from ledger API
+        self.w3: Web3 = self.ledger_api._api  # pylint: disable=protected-access
+
+        # Get sender address
+        self.sender = self.crypto.address
+
+    def purchase_subscription(  # pylint: disable=too-many-locals
+        self, plan_did: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Purchase NVM subscription for the chain.
 
-        Uses the NVM subscription module to purchase a subscription plan.
-        Currently supported on Gnosis and Base chains.
+        Executes the complete subscription workflow:
+        1. Check balance
+        2. [Base only] Approve USDC token
+        3. Create agreement transaction
+        4. Fulfill agreement transaction
 
-        :raises ValueError: If chain doesn't support NVM subscriptions
-        :raises Exception: If subscription purchase fails
+        :param plan_did: Optional plan DID (uses config default if not provided)
+        :return: Result dictionary with status and transaction details
+        :raises ValueError: If insufficient balance or invalid configuration
+        :raises RuntimeError: If transaction fails
         """
-        # Validate chain supports NVM
-        from mech_client.nvm_subscription import (  # pylint: disable=import-outside-toplevel
-            CHAIN_TO_ENVS,
-        )
+        # Use plan DID from config if not provided
+        if not plan_did:
+            plan_did = self.config.plan_did
 
-        if self.chain_config not in CHAIN_TO_ENVS:
-            supported = ", ".join(CHAIN_TO_ENVS.keys())
-            raise ValueError(
-                f"NVM subscriptions not available for {self.chain_config}. "
-                f"Supported chains: {supported}"
-            )
-
-        # Call NVM subscription main function
-        nvm_subscribe_main(
+        # Create executor
+        executor = ExecutorFactory.create(
+            ledger_api=self.ledger_api,
             agent_mode=self.agent_mode,
+            crypto=self.crypto,
+            ethereum_client=self.ethereum_client,
             safe_address=self.safe_address,
-            private_key_path=self.private_key_path,
-            private_key_password=self.private_key_password,
-            chain_config=self.chain_config,
         )
 
-        print(f"✓ NVM subscription purchased for {self.chain_config}")
+        # Create all NVM contracts
+        contracts = NVMContractFactory.create_all(self.w3)
 
-    # pylint: disable=no-self-use,unused-argument
-    def check_subscription_status(self, requester_address: str) -> bool:
+        # Cast contracts to specific types
+        did_registry = cast(DIDRegistryContract, contracts["did_registry"])
+        agreement_manager = cast(
+            AgreementManagerContract, contracts["agreement_manager"]
+        )
+        lock_payment = cast(LockPaymentContract, contracts["lock_payment"])
+        transfer_nft = cast(TransferNFTContract, contracts["transfer_nft"])
+        escrow_payment = cast(EscrowPaymentContract, contracts["escrow_payment"])
+        nevermined_config = cast(
+            NeverminedConfigContract, contracts["nevermined_config"]
+        )
+        nft_sales = cast(NFTSalesTemplateContract, contracts["nft_sales"])
+        subscription_provider = cast(
+            SubscriptionProviderContract, contracts["subscription_provider"]
+        )
+        subscription_nft = cast(NFTContract, contracts["nft"])
+
+        # Get token contract for Base chain
+        token_contract: Optional[TokenContract] = None
+        if self.config.requires_token_approval():
+            token_contract = cast(TokenContract, contracts["token"])
+
+        # Create agreement builder
+        agreement_builder = AgreementBuilder(
+            config=self.config,
+            sender=self.sender,
+            did_registry=did_registry,
+            agreement_manager=agreement_manager,
+            lock_payment=lock_payment,
+            transfer_nft=transfer_nft,
+            escrow_payment=escrow_payment,
+            nevermined_config_contract=nevermined_config,
+        )
+
+        # Create fulfillment builder
+        fulfillment_builder = FulfillmentBuilder(
+            config=self.config,
+            sender=self.sender,
+        )
+
+        # Create balance checker
+        balance_checker = SubscriptionBalanceChecker(
+            w3=self.w3,
+            config=self.config,
+            sender=self.sender,
+            token_contract=token_contract,
+        )
+
+        # Create subscription manager
+        manager = SubscriptionManager(
+            w3=self.w3,
+            config=self.config,
+            sender=self.sender,
+            executor=executor,
+            agreement_builder=agreement_builder,
+            fulfillment_builder=fulfillment_builder,
+            balance_checker=balance_checker,
+            nft_sales=nft_sales,
+            subscription_provider=subscription_provider,
+            subscription_nft=subscription_nft,
+            token_contract=token_contract,
+        )
+
+        # Execute purchase workflow
+        result = manager.purchase_subscription(plan_did)
+
+        return result
+
+    def check_subscription_status(self, requester_address: str) -> Dict[str, Any]:
         """
         Check if requester has active NVM subscription.
 
         :param requester_address: Address to check subscription for
-        :return: True if subscription is active, False otherwise
+        :return: Dictionary with subscription status and balance
         """
-        # This would query the NVM subscription NFT balance
-        # For now, return placeholder
-        # TODO: Implement actual subscription status check
-        return False
+        # Create NFT contract
+        nft_contract = cast(NFTContract, NVMContractFactory.create(self.w3, "nft"))
+
+        # Get subscription balance
+        balance = nft_contract.get_balance(
+            requester_address,
+            self.config.subscription_id,
+        )
+
+        return {
+            "address": requester_address,
+            "subscription_id": self.config.subscription_id,
+            "balance": balance,
+            "is_active": balance > 0,
+        }

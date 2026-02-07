@@ -415,31 +415,105 @@ Deposit successful!
 
 **Purpose**: Purchase Nevermined subscription for subscription-based payments using client mode (EOA)
 
+The subscription purchase involves a 3-transaction workflow:
+1. **Balance Check**: Validates sufficient funds before purchase
+2. **Token Approval** (Base only): Approves USDC for lock payment contract
+3. **Create Agreement**: On-chain agreement creation with payment
+4. **Fulfill Agreement**: Completes subscription activation
+
 **Prerequisites**:
 - Chain supports NVM (gnosis or base only)
-- Funded wallet
+- Funded wallet:
+  - **Gnosis**: Native xDAI (approximately 0.1 xDAI for subscription + gas)
+  - **Base**: USDC tokens (approximately $5-10 USDC for subscription) + native ETH for gas
 
 **Command**:
 ```bash
+# Gnosis (native xDAI payment)
 mechx --client-mode subscription purchase \
   --chain-config gnosis \
   --key ethereum_private_key.txt
+
+# Base (USDC token payment)
+mechx --client-mode subscription purchase \
+  --chain-config base \
+  --key ethereum_private_key.txt
 ```
 
-**Expected Output**:
+**Expected Output (Gnosis)**:
 ```
 Running purchase nvm subscription with agent_mode=False
-Purchasing NVM subscription...
-  - Transaction sent: https://gnosisscan.io/tx/0x...
+Checking <address> balance for purchasing subscription...
+  - Native balance: 1000000000000000000 wei (1.0 xDAI)
+  - Required: 100000000000000000 wei (0.1 xDAI)
+  - Balance check passed ✓
+Sender credits before purchase: 0
+Agreement creation transaction: 0x5187fddd...
+  - Waiting for transaction receipt...
+  - Transaction URL: https://gnosisscan.io/tx/0x5187fddd...
+Fulfillment transaction: 0xabc123...
+  - Waiting for transaction receipt...
+  - Transaction URL: https://gnosisscan.io/tx/0xabc123...
+Sender credits after purchase: 100
 Subscription purchased successfully!
+Agreement ID: 0xdef456...
+Agreement TX: 0x5187fddd...
+Fulfillment TX: 0xabc123...
+```
+
+**Expected Output (Base)**:
+```
+Running purchase nvm subscription with agent_mode=False
+Checking <address> balance for purchasing subscription...
+  - USDC balance: 10000000 (10.0 USDC)
+  - Required: 5000000 (5.0 USDC)
+  - Balance check passed ✓
+Sender credits before purchase: 0
+Approving USDC token for lock payment contract...
+  - Token approval transaction: 0x111222...
+  - Waiting for transaction receipt...
+  - Transaction URL: https://basescan.org/tx/0x111222...
+Agreement creation transaction: 0x5187fddd...
+  - Waiting for transaction receipt...
+  - Transaction URL: https://basescan.org/tx/0x5187fddd...
+Fulfillment transaction: 0xabc123...
+  - Waiting for transaction receipt...
+  - Transaction URL: https://basescan.org/tx/0xabc123...
+Sender credits after purchase: 100
+Subscription purchased successfully!
+Agreement ID: 0xdef456...
+Agreement TX: 0x5187fddd...
+Fulfillment TX: 0xabc123...
 ```
 
 **Success Criteria**:
-- ✅ Transaction succeeds
-- ✅ Subscription ID returned
+- ✅ Balance check passes before transactions
+- ✅ [Base only] Token approval transaction succeeds
+- ✅ Agreement creation transaction succeeds
+- ✅ Fulfillment transaction succeeds
+- ✅ All transaction URLs include "0x" prefix
+- ✅ Credits increased after purchase (before: 0, after: > 0)
+- ✅ Agreement ID returned (64-character hex string)
 - ✅ Can use subscription for NVM-based mech requests
 
-**Supported Chains**: gnosis, base (ONLY)
+**Verification**:
+```bash
+# Check subscription NFT balance on block explorer
+# Should see NFT balance increased for your address
+# Subscription ID and agreement ID can be used to verify on-chain
+```
+
+**Transaction Count**:
+- **Gnosis**: 2 transactions (create agreement, fulfill)
+- **Base**: 3 transactions (approve USDC, create agreement, fulfill)
+
+**Troubleshooting**:
+- If "Insufficient balance": Ensure wallet has enough native/USDC tokens
+- If approval fails (Base): Check USDC token balance and allowances
+- If timeout: Set reliable `MECHX_CHAIN_RPC` provider
+- If agreement fails: Verify plan DID is valid for the chain
+
+**Supported Chains**: gnosis (native xDAI), base (USDC) ONLY
 
 ---
 
@@ -447,34 +521,120 @@ Subscription purchased successfully!
 
 **Purpose**: Purchase Nevermined subscription via Safe multisig in agent mode
 
+Agent mode uses Safe multisig for all transactions in the 3-transaction workflow:
+1. **Balance Check**: Validates Safe has sufficient funds
+2. **Token Approval** (Base only): Safe approves USDC for lock payment contract
+3. **Create Agreement**: Safe creates on-chain agreement with payment
+4. **Fulfill Agreement**: Safe completes subscription activation
+
 **Prerequisites**:
-- Agent mode setup completed (run `setup`)
+- Agent mode setup completed (run `mechx setup --chain-config <chain>`)
 - Chain supports NVM (gnosis or base only)
-- Safe address funded
+- Safe address funded:
+  - **Gnosis**: Native xDAI (approximately 0.1 xDAI for subscription + gas)
+  - **Base**: USDC tokens (approximately $5-10 USDC for subscription) + native ETH for gas
 
 **Command**:
 ```bash
-# No --client-mode flag = uses agent mode
-mechx subscription purchase \
-  --chain-config gnosis
+# No --client-mode flag = uses agent mode (Safe)
+# Gnosis
+mechx subscription purchase --chain-config gnosis
+
+# Base
+mechx subscription purchase --chain-config base
 ```
 
-**Expected Output**:
+**Expected Output (Gnosis - Agent Mode)**:
 ```
 Agent mode enabled
 Running purchase nvm subscription with agent_mode=True
-Purchasing NVM subscription via Safe...
-  - Safe transaction sent: https://gnosisscan.io/tx/0x...
+Checking <safe_address> balance for purchasing subscription...
+  - Native balance: 1000000000000000000 wei (1.0 xDAI)
+  - Required: 100000000000000000 wei (0.1 xDAI)
+  - Balance check passed ✓
+Sender credits before purchase: 0
+Agreement creation transaction: 0x5187fddd...
+  - Safe transaction sent from: 0x<safe_address>
+  - Waiting for transaction receipt...
+  - Transaction URL: https://gnosisscan.io/tx/0x5187fddd...
+Fulfillment transaction: 0xabc123...
+  - Safe transaction sent from: 0x<safe_address>
+  - Waiting for transaction receipt...
+  - Transaction URL: https://gnosisscan.io/tx/0xabc123...
+Sender credits after purchase: 100
 Subscription purchased successfully!
+Agreement ID: 0xdef456...
+Agreement TX: 0x5187fddd...
+Fulfillment TX: 0xabc123...
+```
+
+**Expected Output (Base - Agent Mode)**:
+```
+Agent mode enabled
+Running purchase nvm subscription with agent_mode=True
+Checking <safe_address> balance for purchasing subscription...
+  - USDC balance: 10000000 (10.0 USDC)
+  - Required: 5000000 (5.0 USDC)
+  - Balance check passed ✓
+Sender credits before purchase: 0
+Approving USDC token for lock payment contract...
+  - Safe transaction sent from: 0x<safe_address>
+  - Token approval transaction: 0x111222...
+  - Waiting for transaction receipt...
+  - Transaction URL: https://basescan.org/tx/0x111222...
+Agreement creation transaction: 0x5187fddd...
+  - Safe transaction sent from: 0x<safe_address>
+  - Waiting for transaction receipt...
+  - Transaction URL: https://basescan.org/tx/0x5187fddd...
+Fulfillment transaction: 0xabc123...
+  - Safe transaction sent from: 0x<safe_address>
+  - Waiting for transaction receipt...
+  - Transaction URL: https://basescan.org/tx/0xabc123...
+Sender credits after purchase: 100
+Subscription purchased successfully!
+Agreement ID: 0xdef456...
+Agreement TX: 0x5187fddd...
+Fulfillment TX: 0xabc123...
 ```
 
 **Success Criteria**:
-- ✅ Transaction sent from Safe address (not EOA)
-- ✅ Transaction succeeds
-- ✅ Subscription ID returned for Safe address
-- ✅ Can use subscription for NVM-based mech requests
+- ✅ All transactions sent from Safe address (verify on block explorer)
+- ✅ Balance check validates Safe address funds (not EOA)
+- ✅ [Base only] Token approval transaction from Safe succeeds
+- ✅ Agreement creation transaction from Safe succeeds
+- ✅ Fulfillment transaction from Safe succeeds
+- ✅ All transaction URLs include "0x" prefix
+- ✅ Credits increased for Safe address (before: 0, after: > 0)
+- ✅ Agreement ID returned (64-character hex string)
+- ✅ Subscription NFT balance attributed to Safe address
+- ✅ Safe nonce increments correctly for each transaction
 
-**Supported Chains**: gnosis, base (ONLY)
+**Verification**:
+```bash
+# On block explorer, verify:
+# - All transactions show Safe address as sender
+# - Safe nonce sequence is correct (increments for each tx)
+# - Subscription NFT balance attributed to Safe address
+# - Agreement ID matches on-chain data
+```
+
+**Transaction Count**:
+- **Gnosis**: 2 Safe transactions (create agreement, fulfill)
+- **Base**: 3 Safe transactions (approve USDC, create agreement, fulfill)
+
+**Important Notes**:
+- All transactions must be executed by the Safe, not the EOA that owns the Safe
+- Safe must have sufficient balance for subscription payment + gas fees
+- Subscription NFT balance is tracked for the Safe address, not the EOA
+- When making requests with the subscription, use the Safe as the requester address
+
+**Troubleshooting**:
+- If "Setup required": Run `mechx setup --chain-config <chain>` first
+- If "Insufficient balance": Fund the Safe address, not the EOA
+- If Safe nonce issues: Check Safe's pending transaction queue
+- If approval fails (Base): Ensure Safe has USDC balance, not just EOA
+
+**Supported Chains**: gnosis (native xDAI), base (USDC) ONLY
 
 ---
 

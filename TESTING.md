@@ -25,9 +25,9 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 
 ### Test Statistics
 
-- **Total tests**: 245 (excluding unsupported trio backend)
-- **Test files**: 19
-- **Test classes**: 59+
+- **Total tests**: 277 (excluding unsupported trio backend)
+- **Test files**: 22
+- **Test classes**: 68+
 - **Coverage**: ~50% (target: 70%)
 
 ### Test Breakdown by Layer
@@ -35,9 +35,9 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 | Layer | Tests | Files | Coverage Focus |
 |-------|-------|-------|----------------|
 | Utils | 75 | 2 | Validators, error handling |
-| Domain | 66 | 5 | Strategies, watchers, factories, tools |
-| Services | 36 | 4 | Orchestration, workflows, deposits, setup |
-| Infrastructure | 68 | 8 | Adapters, clients, loaders, Safe |
+| Domain | 80 | 7 | Strategies, watchers, factories, tools, subscriptions |
+| Services | 41 | 5 | Orchestration, workflows, deposits, setup, subscriptions |
+| Infrastructure | 81 | 10 | Adapters, clients, loaders, Safe, NVM contracts |
 
 ## Test Structure
 
@@ -51,20 +51,23 @@ tests/
 │   │   ├── __init__.py
 │   │   ├── test_validators.py              # 45 tests
 │   │   └── test_errors.py                  # 30 tests
-│   ├── domain/                              # Domain layer tests (66 tests)
+│   ├── domain/                              # Domain layer tests (80 tests)
 │   │   ├── __init__.py
 │   │   ├── test_payment_strategies.py      # 15 tests
 │   │   ├── test_execution_strategies.py    # 4 tests
 │   │   ├── test_delivery_watchers.py       # 11 tests (asyncio)
 │   │   ├── test_offchain_watcher.py        # 14 tests (asyncio)
-│   │   └── test_tool_manager.py            # 22 tests
-│   ├── services/                            # Service layer tests (36 tests)
+│   │   ├── test_tool_manager.py            # 22 tests
+│   │   ├── test_subscription_builders.py   # 8 tests (NVM subscription)
+│   │   └── test_subscription_manager.py    # 6 tests (NVM subscription)
+│   ├── services/                            # Service layer tests (41 tests)
 │   │   ├── __init__.py
 │   │   ├── test_tool_service.py            # 10 tests
 │   │   ├── test_marketplace_service.py     # 9 tests
 │   │   ├── test_deposit_service.py         # 10 tests
-│   │   └── test_setup_service.py           # 7 tests
-│   └── infrastructure/                      # Infrastructure layer tests (68 tests)
+│   │   ├── test_setup_service.py           # 7 tests
+│   │   └── test_subscription_service.py    # 5 tests (NVM subscription)
+│   └── infrastructure/                      # Infrastructure layer tests (81 tests)
 │       ├── __init__.py
 │       ├── test_config_loader.py           # 7 tests
 │       ├── test_ipfs_client.py             # 8 tests
@@ -73,7 +76,9 @@ tests/
 │       ├── test_receipt_waiter.py          # 8 tests
 │       ├── test_subgraph_client.py         # 9 tests
 │       ├── test_subgraph_queries.py        # 15 tests
-│       └── test_safe_client.py             # 16 tests
+│       ├── test_safe_client.py             # 16 tests
+│       ├── test_nvm_config.py              # 9 tests (NVM subscription)
+│       └── test_nvm_contracts.py           # 3 tests (NVM subscription)
 └── integration/                             # Integration tests (future)
     └── test_cli_commands.py                 # End-to-end CLI tests
 ```
@@ -373,6 +378,53 @@ def test_error_message_contains_context() -> None:
     error_msg = str(exc_info.value)
     assert "Connection failed" in error_msg
     assert "https://rpc.example.com" in error_msg
+```
+
+### 9. Testing Chain-Specific Logic (NVM Subscriptions)
+
+Test chain-specific behavior separately:
+
+```python
+def test_gnosis_native_payment() -> None:
+    """Test Gnosis uses native xDAI payment."""
+    config = NVMConfig(
+        token_address="0x0000000000000000000000000000000000000000",  # nosec
+        # ... other config
+    )
+
+    assert config.requires_token_approval() is False
+    assert config.get_transaction_value() > 0  # Native value
+
+def test_base_token_payment() -> None:
+    """Test Base uses USDC token payment."""
+    config = NVMConfig(
+        token_address="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",  # USDC
+        # ... other config
+    )
+
+    assert config.requires_token_approval() is True
+    assert config.get_transaction_value() == 0  # No native value
+```
+
+### 10. Testing Infrastructure Without Real Dependencies
+
+Mock base class methods to test infrastructure without loading ABIs:
+
+```python
+@patch("mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract")
+def test_contract_factory(mock_load_contract: MagicMock) -> None:
+    """Test contract factory without loading real ABIs."""
+    from mech_client.infrastructure.nvm.contracts.factory import NVMContractFactory
+
+    # Mock contract loading
+    mock_contract = MagicMock()
+    mock_load_contract.return_value = mock_contract
+
+    # Factory creates real wrapper instances but uses mocked contract
+    result = NVMContractFactory.create(mock_w3, "lock_payment")
+
+    assert isinstance(result, LockPaymentContract)
+    mock_load_contract.assert_called_once()
 ```
 
 ## Test Fixtures
