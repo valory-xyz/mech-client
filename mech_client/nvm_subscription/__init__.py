@@ -17,21 +17,21 @@
 #
 # ------------------------------------------------------------------------------
 
-"""NVM subscription management for mech marketplace."""
+"""NVM subscription management for mech marketplace.
 
-import os
-import sys
+DEPRECATED: This module is deprecated and will be removed in a future release.
+Use mech_client.services.subscription_service.SubscriptionService instead.
+"""
+
+import warnings
 from pathlib import Path
 from typing import Dict, Optional
 
-from aea_ledger_ethereum import EthereumCrypto
-from dotenv import load_dotenv
-from web3 import Web3
+from aea_ledger_ethereum import EthereumApi, EthereumCrypto
+from safe_eth.eth import EthereumClient
 
-from mech_client.nvm_subscription.manager import NVMSubscriptionManager
-from mech_client.utils.constants import (
-    DEFAULT_PRIVATE_KEY_FILE as PRIVATE_KEY_FILE_PATH,
-)
+from mech_client.infrastructure.config import MechConfig
+from mech_client.services.subscription_service import SubscriptionService
 
 
 BASE_ENV_PATH = Path(__file__).parent / "envs"
@@ -52,6 +52,9 @@ def nvm_subscribe_main(
     """
     Main function for purchasing NVM subscriptions.
 
+    DEPRECATED: This function is deprecated and will be removed in a future release.
+    Use mech_client.services.subscription_service.SubscriptionService instead.
+
     :param agent_mode: Specifies whether agent mode is active or not.
     :type agent_mode: bool
     :param private_key_path: Path to the private key file.
@@ -63,39 +66,63 @@ def nvm_subscribe_main(
     :param safe_address: Safe address for agent mode.
     :type safe_address: Optional[str]
     """
-    chain_env = CHAIN_TO_ENVS.get(chain_config)
-    if chain_env:
-        load_dotenv(chain_env)
-    else:
-        print(f"{chain_config} network not supported")
-        sys.exit(1)
+    # Emit deprecation warning
+    warnings.warn(
+        "nvm_subscribe_main() is deprecated and will be removed in a future release. "
+        "Use mech_client.services.subscription_service.SubscriptionService instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
-    private_key_path = private_key_path or PRIVATE_KEY_FILE_PATH
+    # Validate chain support
+    if chain_config not in CHAIN_TO_ENVS:
+        print(f"{chain_config} network not supported")
+        raise ValueError(f"Network {chain_config} not supported for NVM subscriptions")
+
+    # Validate private key file exists
     if not Path(private_key_path).exists():
         raise FileNotFoundError(
             f"Private key file `{private_key_path}` does not exist!"
         )
 
+    # Create crypto object
     crypto = EthereumCrypto(
         private_key_path=private_key_path,
         password=private_key_password,
     )
-    wallet_pvt_key = crypto.private_key
-    plan_did = os.environ["PLAN_DID"]
-    network = os.environ["NETWORK_NAME"]
-    chain_id = int(os.environ["CHAIN_ID"])
-    # NVM Subscription has to be purchased for the safe and EOA pays for gas
-    # so for agent mode, sender has to be safe
-    eoa = Web3().eth.account.from_key(wallet_pvt_key).address
-    sender = safe_address or eoa
 
-    print(f"Sender address: {sender}")
+    # Load configuration
+    mech_config = MechConfig.from_chain(chain_config)
 
-    manager = NVMSubscriptionManager(network, sender, agent_mode, safe_address)
-    tx_receipt = manager.create_subscription(plan_did, wallet_pvt_key, chain_id)
+    # Create ledger API
+    ledger_api = EthereumApi(**mech_config.ledger.dict())
 
+    # Create Ethereum client for agent mode
+    ethereum_client = None
+    if agent_mode:
+        ethereum_client = EthereumClient(mech_config.chain_rpc)
+
+    # Display sender address
+    print(f"Sender address: {crypto.address}")
+
+    # Create subscription service
+    service = SubscriptionService(
+        chain_config=chain_config,
+        crypto=crypto,
+        ledger_api=ledger_api,
+        agent_mode=agent_mode,
+        ethereum_client=ethereum_client,
+        safe_address=safe_address,
+    )
+
+    # Execute subscription purchase
+    result = service.purchase_subscription()
+
+    # Display result
     print("Subscription created successfully")
-    print(tx_receipt)
+    print(f"Agreement ID: {result['agreement_id']}")
+    print(f"Agreement TX: {result['agreement_tx_hash']}")
+    print(f"Fulfillment TX: {result['fulfillment_tx_hash']}")
 
 
-__all__ = ["nvm_subscribe_main", "CHAIN_TO_ENVS", "NVMSubscriptionManager"]
+__all__ = ["nvm_subscribe_main", "CHAIN_TO_ENVS"]
