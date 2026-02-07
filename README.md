@@ -492,7 +492,7 @@ Version 0.17.0 introduced a comprehensive architectural refactoring that separat
 - ✅ **Strategy pattern**: Flexible payment, execution, and delivery strategies
 - ✅ **Dependency injection**: Better testability and modularity
 - ✅ **Type safety**: Comprehensive type hints throughout
-- ✅ **Comprehensive tests**: 164 unit tests with ~40% coverage
+- ✅ **Comprehensive tests**: 288 unit tests with ~50% coverage
 
 ### Documentation
 

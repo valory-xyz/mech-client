@@ -5,6 +5,90 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### ✨ Added
+
+#### NVM Subscription Module Refactoring
+- **Layered Architecture Alignment**: Refactored NVM subscription module to follow v0.17.0 layered architecture
+  - **Infrastructure Layer** (`infrastructure/nvm/`): Configuration, contract wrappers, and resources
+    - `NVMConfig` dataclass with `from_chain()` loader
+    - 11 refactored contract wrappers (simplified, no transaction building)
+    - `NVMContractFactory` for creating contract instances
+    - Chain-specific configuration files (gnosis.env, base.env, networks.json)
+  - **Domain Layer** (`domain/subscription/`): Business logic components
+    - `SubscriptionManager`: Orchestrates 3-transaction purchase workflow
+    - `AgreementBuilder`: Builds agreement data structure
+    - `FulfillmentBuilder`: Builds fulfillment parameters
+    - `SubscriptionBalanceChecker`: Validates sufficient balance
+  - **Service Layer** (`services/subscription_service.py`): Service orchestration
+    - Coordinates dependencies and workflow execution
+    - Uses `ExecutorFactory` for agent/client mode handling
+- **Backward Compatibility**: Deprecated monolithic `nvm_subscription/__init__.py` module
+  - Emits `DeprecationWarning` when used
+  - Wraps new `SubscriptionService` internally
+  - Will be removed in future release
+- **Comprehensive Tests**: 14 unit tests for NVM subscription components
+  - Infrastructure layer tests (config, contracts)
+  - Domain layer tests (builders, manager, balance checker)
+  - Service layer tests (subscription service)
+
+#### Documentation Organization
+- **docs/ Folder Structure**: Consolidated all documentation in `docs/` folder
+  - Moved `ARCHITECTURE.md` → `docs/ARCHITECTURE.md`
+  - Moved `TESTING.md` → `docs/TESTING.md`
+  - Moved `TOKEN_APPROVAL_AGENT_MODE_ISSUE.md` → `docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md`
+  - Created `docs/COMMANDS.md` with command dependency diagrams
+- **Optimized CLAUDE.md**: Reduced from 1,075 to 323 lines (70% reduction)
+  - Extracted command diagrams to `docs/COMMANDS.md`
+  - Removed duplicate architecture content
+  - Focused on essential development patterns and gotchas
+- **Updated Cross-References**: All documentation files reference each other correctly
+
+### 🔧 Changed
+
+- **NVM Subscription Purchase**: Now uses layered architecture with strategy patterns
+  - Supports both agent mode (Safe multisig) and client mode (EOA)
+  - Chain-specific payment handling (native xDAI for Gnosis, USDC for Base)
+  - Improved error handling and validation
+
+## [0.17.2] - 2025-02-06
+
+### ✨ Added
+
+- **Marketplace URL Display**: Setup command now displays marketplace URL for deployed services
+  - Shows direct link to service on Olas Marketplace
+  - Format: `https://marketplace.olas.network/{chain}/ai-agents/{token}`
+
+### 🔧 Changed
+
+- **ChainType Enum Handling**: Fixed Safe address retrieval to work with ChainType enum keys
+  - Iterate over enum keys and match `chain_type.value` against string chain configs
+  - Resolves issues with wallet.safes dictionary access
+
+### 🗑️ Removed
+
+- **IPFS to-png Command**: Removed `mechx ipfs to-png` command
+  - Command was not widely used and added unnecessary complexity
+  - Users can use external tools for image conversion
+
+### 🐛 Fixed
+
+- **Release Workflow**: Set `skip_existing: false` to fail explicitly on duplicate PyPI versions
+  - Prevents silent success when version already exists on PyPI
+  - Ensures deployment issues are visible
+
+## [0.17.1] - 2025-02-06
+
+### 🐛 Fixed
+
+- **Setup Command**: Fixed agent mode setup and messaging
+  - Improved error messages for setup failures
+  - Better guidance for users when setup encounters issues
+- **Agent Mode Messaging**: Fixed "Agent mode enabled" message display
+  - Only shows for wallet commands (request, deposit, subscription)
+  - Read-only commands (mech, tool) and utility commands (ipfs) work independently
+
 ## [0.17.0] - 2025-02-06
 
 ### 🏗️ Major Architectural Refactor
