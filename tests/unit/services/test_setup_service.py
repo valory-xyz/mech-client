@@ -228,6 +228,7 @@ class TestDisplayWallets:
         mock_service.agent_addresses = ["0xABCD"]
         mock_chain_data = MagicMock()
         mock_chain_data.multisig = "0xEFGH"
+        mock_chain_data.token = 2651  # Service token ID for marketplace URL
         mock_service.chain_configs = {"gnosis": MagicMock(chain_data=mock_chain_data)}
 
         # Mock service manager
