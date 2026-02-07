@@ -901,6 +901,8 @@ When refactoring CLI code, be aware of these gotchas discovered during the v0.17
 
 5. **Test Coverage for Integration Points**: Monkey-patching, context passing, and mode detection logic are integration points that should have explicit test coverage. Without tests, refactoring can silently break these behaviors.
 
+6. **Token Approval Agent Mode**: ERC20 token approvals must use the executor pattern to work in both agent and client modes. In agent mode, approvals must go through the Safe multisig (via `executor.execute_transaction()`), not directly from the EOA. If you build/sign/send the approval transaction directly, it approves the EOA address, not the Safe, causing subsequent token transfers from the Safe to fail with "insufficient allowance". Always pass the `executor` to payment strategy methods that need to execute transactions.
+
 ## Validation Helpers
 
 The CLI module now in `cli/` directory includes centralized validation functions used across all commands:
