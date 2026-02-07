@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Mech Client is a Python CLI tool and library for interacting with AI Mechs (on-chain AI agents) via the Olas (Mech) Marketplace, enabling users to send AI task requests on-chain and receive results through on-chain delivery.
 
-**Key Architecture:** Layered architecture (CLI → Service → Domain → Infrastructure) following hexagonal design principles. See [ARCHITECTURE.md](./ARCHITECTURE.md) for details.
+**Key Architecture:** Layered architecture (CLI → Service → Domain → Infrastructure) following hexagonal design principles. See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for details.
 
-**Testing:** Comprehensive unit test suite (277 tests across all layers). See [TESTING.md](./TESTING.md) for testing guidelines.
+**Testing:** Comprehensive unit test suite (277 tests across all layers). See [docs/TESTING.md](./docs/TESTING.md) for testing guidelines.
 
 **Commands:** 11 CLI commands with detailed dependency diagrams. See [docs/COMMANDS.md](./docs/COMMANDS.md) for command reference.
 
@@ -290,7 +290,7 @@ Critical bugs fixed in v0.17.1:
 4. **IPFS Pinning** (`infrastructure/ipfs/metadata.py`): Unnecessary pinning for offchain requests ✅ Fixed
 
 Known issues:
-5. **Token Approval Agent Mode** (`domain/payment/token.py`): Only implements client mode path 📋 Documented in `TOKEN_APPROVAL_AGENT_MODE_ISSUE.md`
+5. **Token Approval Agent Mode** (`domain/payment/token.py`): Only implements client mode path 📋 Documented in `docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md`
 
 ## Release Workflow
 
@@ -315,8 +315,8 @@ Version bump checklist:
 ## Documentation Structure
 
 - **[CLAUDE.md](./CLAUDE.md)** (this file): Development guidelines and patterns
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)**: System architecture, layers, and design principles
-- **[TESTING.md](./TESTING.md)**: Testing guidelines, running tests, writing tests
+- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**: System architecture, layers, and design principles
+- **[docs/TESTING.md](./docs/TESTING.md)**: Testing guidelines, running tests, writing tests
 - **[docs/COMMANDS.md](./docs/COMMANDS.md)**: Command reference with dependency diagrams
+- **[docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md](./docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md)**: Known issue documentation
 - **[README.md](./README.md)**: User documentation and examples
-- **[TOKEN_APPROVAL_AGENT_MODE_ISSUE.md](./TOKEN_APPROVAL_AGENT_MODE_ISSUE.md)**: Known issue documentation

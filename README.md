@@ -498,14 +498,14 @@ Version 0.17.0 introduced a comprehensive architectural refactoring that separat
 
 For detailed information about the architecture and development:
 
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Comprehensive architecture guide
+- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - Comprehensive architecture guide
   - Layer descriptions and responsibilities
   - Data flow diagrams
   - Key patterns (Factory, Strategy, Repository)
   - Component reference
   - Best practices
 
-- **[TESTING.md](./TESTING.md)** - Testing guide for contributors
+- **[docs/TESTING.md](./docs/TESTING.md)** - Testing guide for contributors
   - Test structure and organization
   - Running tests and coverage reports
   - Writing tests (patterns, fixtures, mocking)
@@ -530,13 +530,13 @@ For detailed information about the architecture and development:
 If you use mech-client as a library (not just the CLI), see:
 - [Programmatic usage](#programmatic-usage) - Basic usage examples
 - [MIGRATION.md](./MIGRATION.md) - Migrating from older versions
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - Understanding the architecture
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) - Understanding the architecture
 
 ### For Contributors
 
 If you want to contribute to mech-client development:
-1. Read [ARCHITECTURE.md](./ARCHITECTURE.md) to understand the structure
-2. Follow [TESTING.md](./TESTING.md) for writing tests
+1. Read [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) to understand the structure
+2. Follow [docs/TESTING.md](./docs/TESTING.md) for writing tests
 3. Review [CLAUDE.md](./CLAUDE.md) for development guidelines
 4. See [Developer installation](#developer-installation) below
 

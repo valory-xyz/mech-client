@@ -61,8 +61,8 @@ Version 0.17.0 introduces a comprehensive architectural refactoring that separat
 - **Type Safety**: Comprehensive type hints throughout codebase
 
 #### Documentation
-- **ARCHITECTURE.md**: Comprehensive architecture guide with diagrams
-- **TESTING.md**: Testing guide for contributors
+- **docs/ARCHITECTURE.md**: Comprehensive architecture guide with diagrams
+- **docs/TESTING.md**: Testing guide for contributors
 - **MIGRATION.md**: Detailed migration guide from pre-v0.17.0
 - **Updated CLAUDE.md**: Development guidelines for Claude Code
 - **Updated README.md**: New examples and command structure
@@ -157,14 +157,14 @@ Version 0.17.0 introduces a comprehensive architectural refactoring that separat
 - **Strategies**: 7 (3 payment + 2 execution + 2 delivery)
 - **Factories**: 3 (Payment, Executor, DeliveryWatcher)
 - **Custom exceptions**: 11 specific exception types
-- **Documentation files**: 5 (ARCHITECTURE.md, TESTING.md, MIGRATION.md, CLAUDE.md, README.md)
+- **Documentation files**: 5 (docs/ARCHITECTURE.md, docs/TESTING.md, MIGRATION.md, CLAUDE.md, README.md)
 
 ### 🔗 Migration Guide
 
 For detailed migration instructions, code examples, and best practices, see:
 - **[MIGRATION.md](./MIGRATION.md)** - Complete migration guide from pre-v0.17.0
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Architecture overview and patterns
-- **[TESTING.md](./TESTING.md)** - Testing guide for contributors
+- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - Architecture overview and patterns
+- **[docs/TESTING.md](./docs/TESTING.md)** - Testing guide for contributors
 
 ### ⚠️ Important Notes
 

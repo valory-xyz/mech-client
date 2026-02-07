@@ -1110,13 +1110,9 @@ When modifying code:
 - Keep infrastructure at edges
 - Avoid global state
 
-## Migration Guide
-
-See [MIGRATION.md](./MIGRATION.md) for guidance on migrating from pre-v0.17.0 code to the new architecture.
-
 ## Further Reading
 
-- [CLAUDE.md](./CLAUDE.md) - Development guidelines and patterns for Claude Code
+- [../CLAUDE.md](../CLAUDE.md) - Development guidelines and patterns for Claude Code
 - [TESTING.md](./TESTING.md) - Comprehensive testing guide
-- [docs/COMMANDS.md](./docs/COMMANDS.md) - Command reference with dependency diagrams
-- [README.md](./README.md) - User documentation and examples
+- [COMMANDS.md](./COMMANDS.md) - Command reference with dependency diagrams
+- [../README.md](../README.md) - User documentation and examples
