@@ -147,13 +147,19 @@ class TestConfigureLocalConfig:
         mock_operate = MagicMock()
         service = SetupService(chain_config, template_path)
 
+        # Mock get_mech_config to return a default RPC (which will be overridden)
+        default_rpc = "https://default-rpc.com"
+        mock_mech_config = MagicMock()
+        mock_mech_config.rpc_url = default_rpc
+        mock_get_mech_config.return_value = mock_mech_config
+
         # Execute
         result = service.configure_local_config(mock_template, mock_operate)
 
         # Verify
         assert result.rpc["gnosis"] == custom_rpc
         assert mock_template["configurations"]["gnosis"]["rpc"] == custom_rpc
-        mock_get_mech_config.assert_not_called()  # Should not fall back
+        mock_get_mech_config.assert_called_once_with("gnosis")  # Default is loaded first
         result.store.assert_called_once()
 
     @patch("operate.quickstart.run_service.load_local_config")
