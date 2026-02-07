@@ -208,22 +208,28 @@ class TestDisplayWallets:
     def test_display_wallets_success(
         self,
         mock_operate_manager: MagicMock,
+        capsys: pytest.CaptureFixture,
     ) -> None:
         """Test display_wallets successfully extracts and displays wallet info."""
         # Setup
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
 
-        # Mock wallet
+        # Mock wallet with ChainType enum key
+        # The operate library uses ChainType enum objects as keys
+        mock_chain_type = MagicMock()
+        mock_chain_type.value = "gnosis"
+
         mock_wallet = MagicMock()
         mock_wallet.address = "0x1234"
-        mock_wallet.safes = {"gnosis": "0x5678"}
+        mock_wallet.safes = {mock_chain_type: "0x5678"}
 
         # Mock service
         mock_service = MagicMock()
         mock_service.agent_addresses = ["0xABCD"]
         mock_chain_data = MagicMock()
         mock_chain_data.multisig = "0xEFGH"
+        mock_chain_data.token = 2651  # Service token ID for marketplace URL
         mock_service.chain_configs = {"gnosis": MagicMock(chain_data=mock_chain_data)}
 
         # Mock service manager
@@ -250,6 +256,66 @@ class TestDisplayWallets:
         assert result["master_safe"] == "0x5678"
         assert result["agent_eoa"] == "0xABCD"
         assert result["agent_safe"] == "0xEFGH"
+
+        # Verify marketplace URL is displayed
+        captured = capsys.readouterr()
+        assert "Marketplace: https://marketplace.olas.network/gnosis/ai-agents/2651" in captured.out
+
+    @patch("mech_client.services.setup_service.OperateManager")
+    def test_display_wallets_with_undeployed_service(
+        self,
+        mock_operate_manager: MagicMock,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """Test display_wallets shows 'URL unknown' when service token is -1."""
+        # Setup
+        chain_config = "gnosis"
+        template_path = Path("/path/to/template.json")
+
+        # Mock wallet with ChainType enum key
+        mock_chain_type = MagicMock()
+        mock_chain_type.value = "gnosis"
+
+        mock_wallet = MagicMock()
+        mock_wallet.address = "0x1234"
+        mock_wallet.safes = {mock_chain_type: "0x5678"}
+
+        # Mock service with token = -1 (not deployed on-chain yet)
+        mock_service = MagicMock()
+        mock_service.agent_addresses = ["0xABCD"]
+        mock_chain_data = MagicMock()
+        mock_chain_data.multisig = "0xEFGH"
+        mock_chain_data.token = -1  # Service not deployed on-chain
+        mock_service.chain_configs = {"gnosis": MagicMock(chain_data=mock_chain_data)}
+
+        # Mock service manager
+        mock_service_manager = MagicMock()
+        mock_service_manager.json = [
+            {"home_chain": "gnosis", "service_config_id": "test-id"}
+        ]
+        mock_service_manager.load.return_value = mock_service
+
+        # Mock operate
+        mock_operate = MagicMock()
+        mock_operate.wallet_manager.load.return_value = mock_wallet
+        mock_operate.service_manager.return_value = mock_service_manager
+        mock_operate_manager.return_value.operate = mock_operate
+
+        service = SetupService(chain_config, template_path)
+
+        # Execute
+        result = service.display_wallets()
+
+        # Verify
+        assert result is not None
+        assert result["master_eoa"] == "0x1234"
+        assert result["master_safe"] == "0x5678"
+        assert result["agent_eoa"] == "0xABCD"
+        assert result["agent_safe"] == "0xEFGH"
+
+        # Verify "URL unknown" is displayed
+        captured = capsys.readouterr()
+        assert "Marketplace: URL unknown" in captured.out
 
     @patch("mech_client.services.setup_service.OperateManager")
     def test_display_wallets_no_service_found(

@@ -163,9 +163,18 @@ class SetupService:
 
             # Load master wallet
             master_wallet = operate.wallet_manager.load("ethereum")
-            master_safe = master_wallet.safes.get(self.chain_config, "N/A")
-            if master_safe != "N/A":
-                master_safe = str(master_safe)
+
+            # The safes dict uses ChainType enum keys, not strings
+            # We need to find the safe by matching the enum's value
+            master_safe = "N/A"
+            for chain_type, safe_address in master_wallet.safes.items():
+                # ChainType enum has a 'value' attribute that contains the string (e.g., 'gnosis')
+                if (
+                    hasattr(chain_type, "value")
+                    and chain_type.value == self.chain_config
+                ):
+                    master_safe = str(safe_address)
+                    break
 
             # Load service
             service_manager = operate.service_manager()
@@ -187,6 +196,14 @@ class SetupService:
                 else "N/A"
             )
 
+            # Get service token ID for marketplace URL
+            service_token = None
+            if self.chain_config in service.chain_configs:
+                token = service.chain_configs[self.chain_config].chain_data.token
+                # Token is -1 if not yet deployed on-chain
+                if token != -1:
+                    service_token = token
+
             wallet_info = {
                 "master_eoa": master_wallet.address,
                 "master_safe": master_safe,
@@ -195,7 +212,7 @@ class SetupService:
             }
 
             # Print formatted output
-            self._print_wallet_box(wallet_info)
+            self._print_wallet_box(wallet_info, service_token)
 
             return wallet_info
 
@@ -203,11 +220,14 @@ class SetupService:
             print(f"⚠ Could not display wallet info: {e}")
             return None
 
-    def _print_wallet_box(self, wallet_info: Dict[str, str]) -> None:
+    def _print_wallet_box(
+        self, wallet_info: Dict[str, str], service_token: Optional[int] = None
+    ) -> None:
         """
         Print wallet information in a formatted box.
 
         :param wallet_info: Dictionary with wallet addresses
+        :param service_token: Optional service token ID for marketplace URL
         """
         title = f" Agent Mode Setup Complete ({self.chain_config.upper()}) "
         wallet_data = [
@@ -235,4 +255,11 @@ class SetupService:
         lines.append(f"║{' ' * (box_width - 2)}║")
         lines.append(f"╚{'═' * (box_width - 2)}╝")
 
-        print("\n" + "\n".join(lines) + "\n")
+        print("\n" + "\n".join(lines))
+
+        # Display marketplace URL if service is deployed
+        if service_token is not None:
+            marketplace_url = f"https://marketplace.olas.network/{self.chain_config}/ai-agents/{service_token}"
+            print(f"\nMarketplace: {marketplace_url}\n")
+        else:
+            print("\nMarketplace: URL unknown\n")
