@@ -63,9 +63,9 @@ def create_mock_crypto(private_key: str = "0x" + "1" * 64) -> MagicMock:
 class TestDepositServiceInitialization:
     """Tests for DepositService initialization."""
 
-    @patch("mech_client.services.deposit_service.get_mech_config")
-    @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     def test_initialization_client_mode(
         self,
         mock_executor_factory: MagicMock,
@@ -95,9 +95,9 @@ class TestDepositServiceInitialization:
         mock_config.assert_called_once_with("gnosis")
         mock_executor_factory.create.assert_called_once()
 
-    @patch("mech_client.services.deposit_service.get_mech_config")
-    @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     def test_initialization_agent_mode(
         self,
         mock_executor_factory: MagicMock,
@@ -137,10 +137,10 @@ class TestDepositNative:
     @patch("mech_client.services.deposit_service.get_contract")
     @patch("mech_client.services.deposit_service.get_abi")
     @patch("mech_client.services.deposit_service.PaymentStrategyFactory")
-    @patch("mech_client.services.deposit_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.deposit_service.EthereumCrypto")
-    @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_deposit_native_success_client_mode(
         self,
         mock_config: MagicMock,
@@ -195,10 +195,10 @@ class TestDepositNative:
         mock_wait_receipt.assert_called_once_with("0xtxhash", mock_ledger_api)
 
     @patch("mech_client.services.deposit_service.PaymentStrategyFactory")
-    @patch("mech_client.services.deposit_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.deposit_service.EthereumCrypto")
-    @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_deposit_native_insufficient_balance(
         self,
         mock_config: MagicMock,
@@ -240,10 +240,10 @@ class TestDepositToken:
     @patch("mech_client.services.deposit_service.get_contract")
     @patch("mech_client.services.deposit_service.get_abi")
     @patch("mech_client.services.deposit_service.PaymentStrategyFactory")
-    @patch("mech_client.services.deposit_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.deposit_service.EthereumCrypto")
-    @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_deposit_token_olas_success(
         self,
         mock_config: MagicMock,
@@ -307,10 +307,10 @@ class TestDepositToken:
     @patch("mech_client.services.deposit_service.get_contract")
     @patch("mech_client.services.deposit_service.get_abi")
     @patch("mech_client.services.deposit_service.PaymentStrategyFactory")
-    @patch("mech_client.services.deposit_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.deposit_service.EthereumCrypto")
-    @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_deposit_token_usdc_success(
         self,
         mock_config: MagicMock,
@@ -369,10 +369,10 @@ class TestDepositToken:
         assert mock_wait_receipt.call_count == 2  # Once for approval, once for deposit
 
     @patch("mech_client.services.deposit_service.PaymentStrategyFactory")
-    @patch("mech_client.services.deposit_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.deposit_service.EthereumCrypto")
-    @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_deposit_token_insufficient_balance(
         self,
         mock_config: MagicMock,
@@ -407,10 +407,10 @@ class TestDepositToken:
         with pytest.raises(ValueError, match="Insufficient OLAS token balance"):
             service.deposit_token(amount, token_type="olas")
 
-    @patch("mech_client.services.deposit_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.deposit_service.EthereumCrypto")
-    @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_deposit_token_invalid_token_type(
         self,
         mock_config: MagicMock,
@@ -441,10 +441,10 @@ class TestCheckBalance:
     """Tests for check_balance method."""
 
     @patch("mech_client.services.deposit_service.PaymentStrategyFactory")
-    @patch("mech_client.services.deposit_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.deposit_service.EthereumCrypto")
-    @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_check_balance_native(
         self,
         mock_config: MagicMock,
@@ -491,10 +491,10 @@ class TestCheckBalance:
         )
 
     @patch("mech_client.services.deposit_service.PaymentStrategyFactory")
-    @patch("mech_client.services.deposit_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.deposit_service.EthereumCrypto")
-    @patch("mech_client.services.deposit_service.EthereumApi")
-    @patch("mech_client.services.deposit_service.get_mech_config")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     def test_check_balance_token(
         self,
         mock_config: MagicMock,

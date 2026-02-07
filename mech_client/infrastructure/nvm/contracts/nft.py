@@ -23,7 +23,6 @@ import logging
 from typing import Union
 
 from eth_typing import ChecksumAddress
-from web3 import Web3
 from web3.types import ENS
 
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
@@ -35,15 +34,7 @@ logger = logging.getLogger(__name__)
 class NFTContract(NVMContractWrapper):
     """Wrapper for the Subscription NFT (ERC1155) smart contract."""
 
-    def __init__(self, w3: Web3):
-        """
-        Initialize the Subscription NFT instance.
-
-        :param w3: Web3 instance connected to the network
-        """
-        logger.debug("Initializing Subscription NFT")
-        super().__init__(w3, name="SubscriptionNFT")
-        logger.info("Subscription NFT initialized")
+    CONTRACT_NAME = "SubscriptionNFT"
 
     def get_balance(
         self, sender: Union[ChecksumAddress, ENS], subscription_id: str

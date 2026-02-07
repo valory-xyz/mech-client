@@ -21,7 +21,6 @@
 
 import logging
 
-from web3 import Web3
 
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
 
@@ -39,12 +38,4 @@ class NFTSalesTemplateContract(
     Use executor.execute_transaction() to call createAgreement().
     """
 
-    def __init__(self, w3: Web3):
-        """
-        Initialize the NFTSalesTemplateContract.
-
-        :param w3: Web3 instance connected to the network
-        """
-        logger.debug("Initializing NFTSalesTemplateContract")
-        super().__init__(w3, name="NFTSalesTemplate")
-        logger.info("NFTSalesTemplateContract initialized")
+    CONTRACT_NAME = "NFTSalesTemplate"

@@ -21,7 +21,6 @@
 
 import logging
 
-from web3 import Web3
 
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
 
@@ -32,15 +31,7 @@ logger = logging.getLogger(__name__)
 class AgreementManagerContract(NVMContractWrapper):
     """Wrapper for the AgreementStoreManager smart contract."""
 
-    def __init__(self, w3: Web3):
-        """
-        Initialize the AgreementStoreManager Contract.
-
-        :param w3: Web3 instance connected to the network
-        """
-        logger.debug("Initializing AgreementStoreManager")
-        super().__init__(w3, name="AgreementStoreManager")
-        logger.info("AgreementStoreManagerContract initialized")
+    CONTRACT_NAME = "AgreementStoreManager"
 
     def agreement_id(self, agreement_id_seed: str, subscriber: str) -> bytes:
         """

@@ -23,7 +23,6 @@ import logging
 from typing import List, Union
 
 from eth_typing import ChecksumAddress
-from web3 import Web3
 from web3.types import ENS
 
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
@@ -35,15 +34,7 @@ logger = logging.getLogger(__name__)
 class EscrowPaymentContract(NVMContractWrapper):
     """Wrapper for the EscrowPaymentCondition smart contract."""
 
-    def __init__(self, w3: Web3):
-        """
-        Initialize the EscrowPaymentConditionContract.
-
-        :param w3: Web3 instance connected to the network
-        """
-        logger.debug("Initializing EscrowPaymentConditionContract")
-        super().__init__(w3, name="EscrowPaymentCondition")
-        logger.info("EscrowPaymentConditionContract initialized")
+    CONTRACT_NAME = "EscrowPaymentCondition"
 
     def hash_values(  # pylint: disable=too-many-arguments
         self,

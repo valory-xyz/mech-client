@@ -19,17 +19,15 @@
 
 """Marketplace service for orchestrating mech requests."""
 
-from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import requests
-from aea_ledger_ethereum import EthereumApi, EthereumCrypto
+from aea_ledger_ethereum import EthereumCrypto
 from eth_utils import to_checksum_address
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
 
 from mech_client.domain.delivery import OffchainDeliveryWatcher, OnchainDeliveryWatcher
-from mech_client.domain.execution import ExecutorFactory, TransactionExecutor
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.domain.tools import ToolManager
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
@@ -38,11 +36,12 @@ from mech_client.infrastructure.blockchain.receipt_waiter import (
     wait_for_receipt,
     watch_for_marketplace_request_ids,
 )
-from mech_client.infrastructure.config import MechConfig, PaymentType, get_mech_config
+from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.ipfs import IPFSClient, push_metadata_to_ipfs
+from mech_client.services.base_service import BaseTransactionService
 
 
-class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-few-public-methods
+class MarketplaceService(BaseTransactionService):  # pylint: disable=too-many-instance-attributes,too-few-public-methods
     """Service for orchestrating mech marketplace requests.
 
     Composes payment strategies, execution strategies, tool management,
@@ -66,21 +65,9 @@ class MarketplaceService:  # pylint: disable=too-many-instance-attributes,too-fe
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
         """
-        self.chain_config = chain_config
-        self.agent_mode = agent_mode
-        self.crypto = crypto
-        self.private_key = crypto.private_key
-        self.safe_address = safe_address
-        self.ethereum_client = ethereum_client
-
-        # Load configuration
-        self.mech_config: MechConfig = get_mech_config(chain_config)
-        self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
-
-        # Create executor
-        self.executor: TransactionExecutor = ExecutorFactory.create(
+        super().__init__(
+            chain_config=chain_config,
             agent_mode=agent_mode,
-            ledger_api=self.ledger_api,
             crypto=crypto,
             safe_address=safe_address,
             ethereum_client=ethereum_client,

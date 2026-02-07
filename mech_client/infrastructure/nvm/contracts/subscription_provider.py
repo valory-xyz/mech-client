@@ -21,7 +21,6 @@
 
 import logging
 
-from web3 import Web3
 
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
 
@@ -39,12 +38,4 @@ class SubscriptionProviderContract(
     Use executor.execute_transaction() to call fulfill().
     """
 
-    def __init__(self, w3: Web3):
-        """
-        Initialize the SubscriptionProvider instance.
-
-        :param w3: Web3 instance connected to the network
-        """
-        logger.debug("Initializing Subscription provider")
-        super().__init__(w3, name="SubscriptionProvider")
-        logger.info("Subscription provider initialized")
+    CONTRACT_NAME = "SubscriptionProvider"

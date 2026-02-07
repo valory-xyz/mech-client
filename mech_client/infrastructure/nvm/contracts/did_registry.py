@@ -22,7 +22,6 @@
 import logging
 from typing import Any, Dict
 
-from web3 import Web3
 from web3.constants import ADDRESS_ZERO
 
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
@@ -34,15 +33,7 @@ logger = logging.getLogger(__name__)
 class DIDRegistryContract(NVMContractWrapper):
     """Wrapper for the DIDRegistry smart contract."""
 
-    def __init__(self, w3: Web3):
-        """
-        Initialize the DIDRegistryContract.
-
-        :param w3: Web3 instance connected to the network
-        """
-        logger.debug("Initializing DIDRegistryContract")
-        super().__init__(w3, name="DIDRegistry")
-        logger.info("DIDRegistryContract initialized")
+    CONTRACT_NAME = "DIDRegistry"
 
     def get_ddo(self, did: str) -> Dict[str, Any]:
         """
@@ -73,12 +64,12 @@ class DIDRegistryContract(NVMContractWrapper):
         non_zero_providers = [
             addr for addr in ddo["providers"] if addr.lower() != ADDRESS_ZERO
         ]
-        print("================ SUBSCRIBGING TO NVM OLAS PLAN =======================")
-        print(f"PLAN : {ddo['did']}")
-        print(f"OWNER: {ddo['owner']}")
-        print(f"PROVIDERS: {non_zero_providers}")
-        logger.info(f"ROYALTIES: {ddo['royalties']}")
-        logger.info(f"IMMUTABLE URL: {ddo['immutableUrl']}")
-        logger.info(f"NFT INITIALIZED: {ddo['nftInitialized']}")
+        logger.info("Subscribing to NVM OLAS plan")
+        logger.info(f"Plan: {ddo['did']}")
+        logger.info(f"Owner: {ddo['owner']}")
+        logger.info(f"Providers: {non_zero_providers}")
+        logger.info(f"Royalties: {ddo['royalties']}")
+        logger.info(f"Immutable URL: {ddo['immutableUrl']}")
+        logger.info(f"NFT Initialized: {ddo['nftInitialized']}")
         logger.info(f"DDO fetched successfully for DID: {did}")
         return ddo
