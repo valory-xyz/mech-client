@@ -846,9 +846,118 @@ All contract ABIs are in `mech_client/abis/`:
     - **PyPI Publish**: Always set `skip_existing: false` in GitHub Actions `pypa/gh-action-pypi-publish` to fail explicitly on duplicate versions. Using `skip_existing: true` causes silent success when version already exists, hiding deployment issues.
     - **Version Bump Checklist**: Update `pyproject.toml`, `mech_client/__init__.py`, and `SECURITY.md`, then run `poetry lock`
 
+13. **CLI Operating Mode Pattern**:
+    - **WALLET_COMMANDS Set**: Define commands requiring wallet operations in `main.py`:
+      ```python
+      WALLET_COMMANDS = {"request", "deposit", "subscription"}
+      ```
+    - **Mode Detection**: Only check agent mode for wallet commands:
+      ```python
+      is_wallet_command = cli_command in WALLET_COMMANDS
+      if is_wallet_command and not is_setup_called and not client_mode:
+          click.echo("Agent mode enabled")
+          # Check operate path exists
+      ```
+    - **Why This Matters**: Read-only commands (mech, tool) and utility commands (ipfs) should work without agent mode setup. Only wallet commands that sign transactions require mode validation.
+    - **Context Passing**: Wallet commands read mode from context:
+      ```python
+      @click.pass_context
+      def request(ctx: click.Context, ...):
+          agent_mode = not ctx.obj.get("client_mode", False)
+      ```
+
+14. **Setup Service Monkey-Patching Pattern** (CRITICAL):
+    - **Why Needed**: The `olas-operate-middleware` package's `run_service()` function calls `configure_local_config()` internally to set up RPC endpoints. By default, it expects chain-specific env vars (e.g., `GNOSIS_LEDGER_RPC`), but mech-client uses the standardized `MECHX_CHAIN_RPC`.
+    - **Pattern**: Monkey-patch `configure_local_config` before calling `run_service()`:
+      ```python
+      def setup(self):
+          import sys
+
+          # Create wrapper without self parameter
+          def _configure_wrapper(template, operate_instance):
+              return self.configure_local_config(template, operate_instance)
+
+          # Monkey-patch the function
+          sys.modules["operate.quickstart.run_service"].configure_local_config = _configure_wrapper
+
+          # Now call run_service - it will use our custom config
+          run_service(operate=operate, config_path=template_path, ...)
+      ```
+    - **Gotcha**: Without this monkey-patch, setup fails with "GNOSIS_LEDGER_RPC env var required in unattended mode"
+    - **Testing**: Mock the monkey-patching in tests to verify it's applied correctly before `run_service()` is called
+    - **Why Wrapper**: The method has `self` parameter but the patched function is called without it, so we need a wrapper to bind `self`
+
+## Common Refactoring Pitfalls
+
+When refactoring CLI code, be aware of these gotchas discovered during the v0.17.0 CLI restructuring:
+
+1. **Monkey-Patching Loss**: When extracting logic into service classes, ensure any monkey-patching behavior is preserved. The setup command requires monkey-patching `configure_local_config` - moving code to a class method without restoring the monkey-patch will break functionality.
+
+2. **Agent Mode Scope Creep**: When adding agent mode checks in the main CLI entry point, ensure they only apply to wallet commands (request, deposit, subscription). Read-only commands (mech, tool) and utility commands (ipfs) should work independently of agent mode setup.
+
+3. **Context Flag Propagation**: When using Click's `@click.pass_context`, ensure the context object is properly initialized and flags (like `client_mode`) are accessible to all commands via `ctx.obj.get()`.
+
+4. **ChainType Enum Handling**: The operate library uses enum objects (not strings) as dictionary keys. When iterating over `wallet.safes`, check `chain_type.value` to match against string chain configs. This pattern is easy to miss when refactoring wallet display logic.
+
+5. **Test Coverage for Integration Points**: Monkey-patching, context passing, and mode detection logic are integration points that should have explicit test coverage. Without tests, refactoring can silently break these behaviors.
+
+6. **Token Approval Agent Mode**: ERC20 token approvals must use the executor pattern to work in both agent and client modes. In agent mode, approvals must go through the Safe multisig (via `executor.execute_transaction()`), not directly from the EOA. If you build/sign/send the approval transaction directly, it approves the EOA address, not the Safe, causing subsequent token transfers from the Safe to fail with "insufficient allowance". Always pass the `executor` to payment strategy methods that need to execute transactions.
+
+7. **IPFS Pin Flag for Offchain Requests**: The `IPFSClient.upload()` method pins files to IPFS by default. For offchain mech requests, use `upload(file_path, pin=False)` to only compute the IPFS hash without actually uploading/pinning the file. Offchain mechs handle their own IPFS upload. If you forget `pin=False`, files get unnecessarily uploaded and pinned to the gateway. Example: `mech_client/infrastructure/ipfs/metadata.py:fetch_ipfs_hash()` uses `pin=False`, while `push_metadata_to_ipfs()` uses the default `pin=True`.
+
+8. **Polling Cycle Sleep Placement**: When polling for events or delivery, ensure `await asyncio.sleep()` is placed OUTSIDE the loop that iterates over request IDs, not inside. Otherwise you sleep N times per cycle (where N = number of request IDs) instead of once per cycle. Example bug: in a polling loop `while True: for request_id in request_ids: ... await asyncio.sleep(3)` sleeps 3 seconds per request ID. Correct pattern: `while True: for request_id in request_ids: ... <no sleep here>; await asyncio.sleep(3)` sleeps once per cycle. See `mech_client/domain/delivery/onchain_watcher.py:_wait_for_marketplace_delivery()` (fixed) vs `watch_for_data_urls()` (correct).
+
+9. **Blocking Async Event Loop**: Never use `time.sleep()` in async functions. Always use `await asyncio.sleep()` to avoid blocking the event loop. Blocking the event loop causes hangs, timeouts, and prevents concurrent operations. Pattern: if you see `async def` function with `time.sleep()`, replace with `await asyncio.sleep()`.
+
+## Post-v0.17.0 Refactor Bug Fixes
+
+After the v0.17.0 layered architecture refactor, several bugs were identified and fixed:
+
+### Critical Bugs (Fixed in v0.17.1)
+
+1. **Blocking Event Loop in Delivery Watcher** (`mech_client/domain/delivery/onchain_watcher.py`)
+   - **Issue**: Used `time.sleep(WAIT_SLEEP)` in async methods, blocking the entire event loop
+   - **Impact**: Delivery watching would hang, causing timeouts and failed requests
+   - **Fix**: Replaced with `await asyncio.sleep(WAIT_SLEEP)` in lines 116, 243
+   - **Status**: ✅ Fixed
+
+2. **Misleading Balance Error Message** (`mech_client/services/marketplace_service.py:189`)
+   - **Issue**: Error message showed `payment_strategy.check_balance(sender, 0)` which returns bool, not amount
+   - **Impact**: Users saw "Have: True" or "Have: False" instead of actual balance
+   - **Fix**: Removed incorrect balance display, show clear message without misleading data
+   - **Status**: ✅ Fixed
+
+3. **Polling Cycle Sleep Timing** (`mech_client/domain/delivery/onchain_watcher.py`)
+   - **Issue**: Sleep was inside `for request_id in request_ids` loop, sleeping N times per cycle
+   - **Impact**: With 3 request IDs, slept 9 seconds per cycle instead of 3 seconds
+   - **Fix**: Moved sleep and timeout check outside the request ID loop
+   - **Status**: ✅ Fixed
+
+4. **IPFS Pinning in Offchain Requests** (`mech_client/infrastructure/ipfs/metadata.py:65`)
+   - **Issue**: `fetch_ipfs_hash()` called `upload(file_name)` which pins to IPFS
+   - **Impact**: Offchain requests unnecessarily uploaded/pinned files to IPFS gateway
+   - **Fix**: Changed to `upload(file_name, pin=False)` to only compute hash locally
+   - **Status**: ✅ Fixed
+
+### Known Issues (Documented, Not Yet Fixed)
+
+5. **Token Approval Agent Mode** (`mech_client/domain/payment/token.py`)
+   - **Issue**: `approve_if_needed()` only implements client mode path, doesn't use executor pattern
+   - **Impact**: In agent mode, approval comes from EOA not Safe, causing "insufficient allowance" errors
+   - **Fix Required**: Accept `executor` parameter and use `executor.execute_transaction()`
+   - **Status**: 📋 Documented in `TOKEN_APPROVAL_AGENT_MODE_ISSUE.md`
+   - **Workaround**: Use `--client-mode` flag for token payments until fixed
+
+### Testing Coverage
+
+All fixes verified with:
+- ✅ 164 unit tests pass (asyncio)
+- ✅ Pylint 10.00/10
+- ✅ All linters pass (black, isort, flake8, mypy, bandit, darglint, vulture, liccheck)
+
 ## Validation Helpers
 
-The CLI module (`cli.py`) includes centralized validation functions used across all commands:
+The CLI module now in `cli/` directory includes centralized validation functions used across all commands:
 
 ### validate_chain_config(chain_config: Optional[str]) -> str
 
