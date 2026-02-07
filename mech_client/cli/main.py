@@ -59,7 +59,7 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
     """Command-line tool for interacting with AI Mechs on-chain.
 
     Mech Client enables you to send AI task requests to on-chain AI agents (mechs)
-    via the Olas protocol and Mech Marketplace. Supports multiple payment methods,
+    via the Olas (Mech) Marketplace. Supports multiple payment methods,
     tool discovery, and both agent mode (Safe multisig) and client mode (EOA).
     """
     load_dotenv(dotenv_path=ENV_PATH, override=False)

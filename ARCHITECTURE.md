@@ -14,7 +14,7 @@ This document provides a comprehensive overview of the mech-client architecture 
 
 ## Overview
 
-The mech-client is a Python CLI tool and library for interacting with AI Mechs (on-chain AI agents) via the Olas protocol through the Mech Marketplace. The architecture follows a layered, hexagonal-inspired design that separates business logic from infrastructure concerns.
+The mech-client is a Python CLI tool and library for interacting with AI Mechs (on-chain AI agents) via the Olas (Mech) Marketplace. The architecture follows a layered, hexagonal-inspired design that separates business logic from infrastructure concerns.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -104,7 +104,7 @@ All components are designed for easy testing:
 **Purpose**: Handle user interaction, command parsing, and basic validation.
 
 **Components**:
-- `main.py`: Click-based command definitions
+- `main.py`: Click-based command definitions and mode management
 - `validators.py`: CLI-specific input validation
 - `commands/`: Individual command implementations
 
@@ -114,6 +114,7 @@ All components are designed for easy testing:
 - Route to appropriate service methods
 - Display results to user
 - Handle CLI-level errors
+- Manage operating modes (agent mode vs client mode)
 
 **Design Principles**:
 - Thin layer - minimal logic
@@ -121,14 +122,53 @@ All components are designed for easy testing:
 - Convert CLI arguments to service method parameters
 - Handle presentation formatting
 
+#### Operating Modes
+
+The CLI supports two operating modes for wallet-based commands:
+
+**1. Agent Mode (Default)**
+- Uses Safe multisig for transactions
+- Requires `mechx setup --chain-config <chain>` first
+- Checks for `~/.operate_mech_client/` directory
+- Shows "Agent mode enabled" message
+- Applied to: `request`, `deposit`, `subscription` commands
+
+**2. Client Mode**
+- Uses EOA (Externally Owned Account) directly
+- Enabled with `--client-mode` flag
+- Requires `--key` parameter for private key
+- No setup needed
+- Applied to: `request`, `deposit`, `subscription` commands
+
+**Mode Detection Logic** (`main.py`):
+```python
+WALLET_COMMANDS = {"request", "deposit", "subscription"}
+
+if is_wallet_command and not is_setup_called and not client_mode:
+    click.echo("Agent mode enabled")
+    operate_path = Path.home() / OPERATE_FOLDER_NAME
+    if not operate_path.exists():
+        raise ClickException("Setup agent mode using 'mechx setup' command.")
+```
+
+**Command Categories**:
+- **Wallet commands** (require mode): `request`, `deposit`, `subscription`
+- **Read-only commands** (no mode): `mech list`, `tool list/describe/schema`
+- **Utility commands** (no mode): `ipfs upload/upload-prompt/to-png`
+- **Setup command** (creates agent mode setup)
+
 **Example**:
 ```python
 @main.command()
 @click.option("--priority-mech", required=True, type=str)
 @click.option("--tool", "tools", multiple=True, required=True)
 @click.option("--prompt", "prompts", multiple=True, required=True)
-def request(priority_mech: str, tools: List[str], prompts: List[str]) -> None:
+@click.pass_context
+def request(ctx: click.Context, priority_mech: str, tools: List[str], prompts: List[str]) -> None:
     """Send a request to the mech marketplace."""
+    # Extract mode from context
+    agent_mode = not ctx.obj.get("client_mode", False)
+
     # Validate inputs
     validate_ethereum_address(priority_mech, "Priority mech")
 
@@ -136,6 +176,7 @@ def request(priority_mech: str, tools: List[str], prompts: List[str]) -> None:
     service = MarketplaceService(
         chain_config=chain_config,
         ledger_api=ledger_api,
+        agent_mode=agent_mode,
         # ... other dependencies
     )
 

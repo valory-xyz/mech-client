@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Mech Client is a Python CLI tool and library for interacting with AI Mechs (on-chain AI agents) via the Olas protocol through the Mech Marketplace, enabling users to send AI task requests on-chain and receive results through on-chain delivery.
+Mech Client is a Python CLI tool and library for interacting with AI Mechs (on-chain AI agents) via the Olas (Mech) Marketplace, enabling users to send AI task requests on-chain and receive results through on-chain delivery.
 
 ## Command Dependency Diagrams
 
@@ -551,9 +551,69 @@ mechx --client-mode <command>
 
 ### Two Operating Modes
 
-1. **Agent Mode (Recommended for all chains)**: Registers on-chain interactions as an agent in the Olas protocol, using Safe multisig for transactions. Configured via `setup` command and uses the `olas-operate-middleware` package.
+The mech-client supports two operating modes for wallet-based commands. Read-only and utility commands work independently of these modes.
 
-2. **Client Mode**: Simple EOA-based interactions without agent registration. Enabled with `--client-mode` flag.
+#### 1. Agent Mode (Recommended for all chains)
+
+Registers on-chain interactions as an agent in the Olas protocol, using Safe multisig for transactions. Configured via `setup` command and uses the `olas-operate-middleware` package.
+
+**Setup:**
+```bash
+mechx setup --chain-config gnosis
+```
+
+**Usage:** Default for wallet commands (no flag needed)
+```bash
+mechx request --prompts "..." --tools tool1 --chain-config gnosis
+# → Uses agent mode automatically
+```
+
+**Requirements:**
+- Must run `mechx setup` first
+- Creates `~/.operate_mech_client/` directory
+- Uses Safe multisig for enhanced security
+
+#### 2. Client Mode
+
+Simple EOA-based interactions without agent registration. Enabled with `--client-mode` flag.
+
+**Usage:**
+```bash
+mechx --client-mode request --prompts "..." --tools tool1 --chain-config gnosis --key ./key.txt
+```
+
+**Requirements:**
+- Requires `--key` parameter pointing to private key file
+- No setup needed
+- Direct EOA transactions (no Safe)
+
+#### Operating Mode by Command Type
+
+| Command Type | Agent Mode | Client Mode | No Mode Required |
+|--------------|------------|-------------|------------------|
+| **Wallet Commands** | | | |
+| `request` | ✅ Default | ✅ With --client-mode | ❌ |
+| `deposit native` | ✅ Default | ✅ With --client-mode | ❌ |
+| `deposit token` | ✅ Default | ✅ With --client-mode | ❌ |
+| `subscription purchase` | ✅ Default | ✅ With --client-mode | ❌ |
+| **Read-Only Commands** | | | |
+| `mech list` | N/A | N/A | ✅ Works independently |
+| `tool list` | N/A | N/A | ✅ Works independently |
+| `tool describe` | N/A | N/A | ✅ Works independently |
+| `tool schema` | N/A | N/A | ✅ Works independently |
+| **Utility Commands** | | | |
+| `ipfs upload` | N/A | N/A | ✅ Works independently |
+| `ipfs upload-prompt` | N/A | N/A | ✅ Works independently |
+| `ipfs to-png` | N/A | N/A | ✅ Works independently |
+| **Setup Command** | | | |
+| `setup` | Creates setup | N/A | ✅ Works independently |
+
+**Key Points:**
+- Operating modes only apply to wallet commands (request, deposit, subscription)
+- Read-only commands (mech, tool) work without any mode setup
+- Utility commands (ipfs) work without any mode setup
+- The "Agent mode enabled" message only appears for wallet commands when not using --client-mode
+- Setup command works independently to create agent mode configuration
 
 ### Core Modules
 
