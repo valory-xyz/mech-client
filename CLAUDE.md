@@ -10,7 +10,7 @@ Mech Client is a Python CLI tool and library for interacting with AI Mechs (on-c
 
 This section provides visual diagrams showing external resource dependencies and environment variables for each CLI command. Use these during development to understand what each command needs to function.
 
-**Total commands: 12** (11 with detailed diagrams - utility commands have minimal dependencies)
+**Total commands: 11** (10 with detailed diagrams - utility commands have minimal dependencies)
 
 ### Legend
 
@@ -221,23 +221,6 @@ NOTES:
   - No RPC or WSS needed
 ```
 
-### 11. ipfs to-png
-
-```
-mechx ipfs to-png <ipfs_hash> <path> <request_id>
-└─ IPFS Gateway (https://gateway.autonolas.tech/ipfs/)
-   └─ Download diffusion model output and convert to PNG
-
-ENV VARS:
-  None (uses hardcoded IPFS gateway)
-
-NOTES:
-  - Utility command for Stability AI diffusion model outputs
-  - Converts IPFS-hosted data to PNG image file
-  - No blockchain interaction
-  - No RPC or WSS needed
-```
-
 ## Quick Reference: Environment Variables by Command
 
 | Command | MECHX_CHAIN_RPC | MECHX_SUBGRAPH_URL | MECHX_MECH_OFFCHAIN_URL | OPERATE_PASSWORD |
@@ -253,7 +236,6 @@ NOTES:
 | tool schema | ✓ | | | |
 | ipfs upload-prompt | | | | |
 | ipfs upload | | | | |
-| ipfs to-png | | | | |
 
 **Legend:**
 - ✓ = Required for command to work
@@ -604,7 +586,6 @@ mechx --client-mode request --prompts "..." --tools tool1 --chain-config gnosis 
 | **Utility Commands** | | | |
 | `ipfs upload` | N/A | N/A | ✅ Works independently |
 | `ipfs upload-prompt` | N/A | N/A | ✅ Works independently |
-| `ipfs to-png` | N/A | N/A | ✅ Works independently |
 | **Setup Command** | | | |
 | `setup` | Creates setup | N/A | ✅ Works independently |
 
@@ -710,7 +691,6 @@ Main Click-based CLI interface that routes commands to appropriate modules. Hand
 **IPFS Client (`infrastructure/ipfs/`)**
 - `IPFSClient`: Client for IPFS gateway operations
 - `metadata.py`: Functions for uploading prompt metadata
-- `converters.py`: Functions for converting responses (e.g., ipfs_to_png)
 - IPFS gateway at `https://gateway.autonolas.tech/ipfs/`
 - Prompts and metadata stored on IPFS before on-chain requests
 - Results delivered as IPFS hashes

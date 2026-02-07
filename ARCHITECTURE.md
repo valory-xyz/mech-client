@@ -154,7 +154,7 @@ if is_wallet_command and not is_setup_called and not client_mode:
 **Command Categories**:
 - **Wallet commands** (require mode): `request`, `deposit`, `subscription`
 - **Read-only commands** (no mode): `mech list`, `tool list/describe/schema`
-- **Utility commands** (no mode): `ipfs upload/upload-prompt/to-png`
+- **Utility commands** (no mode): `ipfs upload/upload-prompt`
 - **Setup command** (creates agent mode setup)
 
 **Example**:

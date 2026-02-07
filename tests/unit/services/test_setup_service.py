@@ -214,10 +214,14 @@ class TestDisplayWallets:
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
 
-        # Mock wallet
+        # Mock wallet with ChainType enum key
+        # The operate library uses ChainType enum objects as keys
+        mock_chain_type = MagicMock()
+        mock_chain_type.value = "gnosis"
+
         mock_wallet = MagicMock()
         mock_wallet.address = "0x1234"
-        mock_wallet.safes = {"gnosis": "0x5678"}
+        mock_wallet.safes = {mock_chain_type: "0x5678"}
 
         # Mock service
         mock_service = MagicMock()

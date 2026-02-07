@@ -169,7 +169,10 @@ class SetupService:
             master_safe = "N/A"
             for chain_type, safe_address in master_wallet.safes.items():
                 # ChainType enum has a 'value' attribute that contains the string (e.g., 'gnosis')
-                if hasattr(chain_type, 'value') and chain_type.value == self.chain_config:
+                if (
+                    hasattr(chain_type, "value")
+                    and chain_type.value == self.chain_config
+                ):
                     master_safe = str(safe_address)
                     break
 
