@@ -846,9 +846,64 @@ All contract ABIs are in `mech_client/abis/`:
     - **PyPI Publish**: Always set `skip_existing: false` in GitHub Actions `pypa/gh-action-pypi-publish` to fail explicitly on duplicate versions. Using `skip_existing: true` causes silent success when version already exists, hiding deployment issues.
     - **Version Bump Checklist**: Update `pyproject.toml`, `mech_client/__init__.py`, and `SECURITY.md`, then run `poetry lock`
 
+13. **CLI Operating Mode Pattern**:
+    - **WALLET_COMMANDS Set**: Define commands requiring wallet operations in `main.py`:
+      ```python
+      WALLET_COMMANDS = {"request", "deposit", "subscription"}
+      ```
+    - **Mode Detection**: Only check agent mode for wallet commands:
+      ```python
+      is_wallet_command = cli_command in WALLET_COMMANDS
+      if is_wallet_command and not is_setup_called and not client_mode:
+          click.echo("Agent mode enabled")
+          # Check operate path exists
+      ```
+    - **Why This Matters**: Read-only commands (mech, tool) and utility commands (ipfs) should work without agent mode setup. Only wallet commands that sign transactions require mode validation.
+    - **Context Passing**: Wallet commands read mode from context:
+      ```python
+      @click.pass_context
+      def request(ctx: click.Context, ...):
+          agent_mode = not ctx.obj.get("client_mode", False)
+      ```
+
+14. **Setup Service Monkey-Patching Pattern** (CRITICAL):
+    - **Why Needed**: The `olas-operate-middleware` package's `run_service()` function calls `configure_local_config()` internally to set up RPC endpoints. By default, it expects chain-specific env vars (e.g., `GNOSIS_LEDGER_RPC`), but mech-client uses the standardized `MECHX_CHAIN_RPC`.
+    - **Pattern**: Monkey-patch `configure_local_config` before calling `run_service()`:
+      ```python
+      def setup(self):
+          import sys
+
+          # Create wrapper without self parameter
+          def _configure_wrapper(template, operate_instance):
+              return self.configure_local_config(template, operate_instance)
+
+          # Monkey-patch the function
+          sys.modules["operate.quickstart.run_service"].configure_local_config = _configure_wrapper
+
+          # Now call run_service - it will use our custom config
+          run_service(operate=operate, config_path=template_path, ...)
+      ```
+    - **Gotcha**: Without this monkey-patch, setup fails with "GNOSIS_LEDGER_RPC env var required in unattended mode"
+    - **Testing**: Mock the monkey-patching in tests to verify it's applied correctly before `run_service()` is called
+    - **Why Wrapper**: The method has `self` parameter but the patched function is called without it, so we need a wrapper to bind `self`
+
+## Common Refactoring Pitfalls
+
+When refactoring CLI code, be aware of these gotchas discovered during the v0.17.0 CLI restructuring:
+
+1. **Monkey-Patching Loss**: When extracting logic into service classes, ensure any monkey-patching behavior is preserved. The setup command requires monkey-patching `configure_local_config` - moving code to a class method without restoring the monkey-patch will break functionality.
+
+2. **Agent Mode Scope Creep**: When adding agent mode checks in the main CLI entry point, ensure they only apply to wallet commands (request, deposit, subscription). Read-only commands (mech, tool) and utility commands (ipfs) should work independently of agent mode setup.
+
+3. **Context Flag Propagation**: When using Click's `@click.pass_context`, ensure the context object is properly initialized and flags (like `client_mode`) are accessible to all commands via `ctx.obj.get()`.
+
+4. **ChainType Enum Handling**: The operate library uses enum objects (not strings) as dictionary keys. When iterating over `wallet.safes`, check `chain_type.value` to match against string chain configs. This pattern is easy to miss when refactoring wallet display logic.
+
+5. **Test Coverage for Integration Points**: Monkey-patching, context passing, and mode detection logic are integration points that should have explicit test coverage. Without tests, refactoring can silently break these behaviors.
+
 ## Validation Helpers
 
-The CLI module (`cli.py`) includes centralized validation functions used across all commands:
+The CLI module now in `cli/` directory includes centralized validation functions used across all commands:
 
 ### validate_chain_config(chain_config: Optional[str]) -> str
 
