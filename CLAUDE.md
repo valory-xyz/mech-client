@@ -330,10 +330,10 @@ Critical bugs fixed in v0.17.1:
 2. **Misleading Balance Error** (`services/marketplace_service.py`): Showed bool instead of amount ✅ Fixed
 3. **Polling Cycle Sleep** (`domain/delivery/onchain_watcher.py`): Sleep inside loop instead of outside ✅ Fixed
 4. **IPFS Pinning** (`infrastructure/ipfs/metadata.py`): Unnecessary pinning for offchain requests ✅ Fixed
+5. **Agent Mode RPC Configuration** (`infrastructure/config/chain_config.py`): Commands didn't read RPC from stored operate config ✅ Fixed (v0.18.1)
 
 Known issues:
-5. **Token Approval Agent Mode** (`domain/payment/token.py`): Only implements client mode path 📋 Documented in `docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md`
-6. **Agent Mode RPC Configuration** (`infrastructure/config/chain_config.py`): Commands don't read RPC from stored operate config 📋 Documented in `docs/AGENT_MODE_RPC_CONFIGURATION_ISSUE.md`
+6. **Token Approval Agent Mode** (`domain/payment/token.py`): Only implements client mode path 📋 Documented in `docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md`
 
 ## Release Workflow
 
@@ -362,5 +362,5 @@ Version bump checklist:
 - **[docs/TESTING.md](./docs/TESTING.md)**: Testing guidelines, running tests, writing tests
 - **[docs/COMMANDS.md](./docs/COMMANDS.md)**: Command reference with dependency diagrams
 - **[docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md](./docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md)**: Known issue - token approval in agent mode
-- **[docs/AGENT_MODE_RPC_CONFIGURATION_ISSUE.md](./docs/AGENT_MODE_RPC_CONFIGURATION_ISSUE.md)**: Known issue - RPC config not loaded from operate
+- **[docs/AGENT_MODE_RPC_CONFIGURATION_ISSUE.md](./docs/AGENT_MODE_RPC_CONFIGURATION_ISSUE.md)**: Fixed issue (v0.18.1) - RPC config now loaded from operate
 - **[README.md](./README.md)**: User documentation and examples

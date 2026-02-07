@@ -19,6 +19,7 @@
 
 """Operate middleware integration for agent mode setup and key management."""
 
+from mech_client.infrastructure.operate.config_loader import load_rpc_from_operate
 from mech_client.infrastructure.operate.key_manager import fetch_agent_mode_keys
 from mech_client.infrastructure.operate.manager import OperateManager
 
@@ -26,4 +27,5 @@ from mech_client.infrastructure.operate.manager import OperateManager
 __all__ = [
     "OperateManager",
     "fetch_agent_mode_keys",
+    "load_rpc_from_operate",
 ]

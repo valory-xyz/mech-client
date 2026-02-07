@@ -99,7 +99,7 @@ class TestMarketplaceServiceInitialization:
         assert service.private_key == "0x" + "1" * 64
         assert service.safe_address is None
         assert service.ethereum_client is None
-        mock_config.assert_called_once_with("gnosis")
+        mock_config.assert_called_once_with("gnosis", agent_mode=False)
         mock_executor_factory.create.assert_called_once()
         mock_tool_manager.assert_called_once_with("gnosis")
         mock_ipfs_client.assert_called_once()

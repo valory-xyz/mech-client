@@ -1,11 +1,33 @@
 # Agent Mode RPC Configuration Issue
 
-**Status:** 🐛 Open Issue
+**Status:** ✅ Fixed (v0.18.1)
 **Severity:** Medium
 **Affects:** Agent mode (all wallet commands: request, deposit, subscription)
-**Workaround:** Set `MECHX_CHAIN_RPC` environment variable
+**Previous Workaround:** Set `MECHX_CHAIN_RPC` environment variable
 
-## Summary
+## Fix Summary (v0.18.1)
+
+The issue has been resolved by implementing **Option 1** from the proposed solutions. Now, in agent mode, the RPC configuration stored during `mechx setup` is automatically loaded and used for subsequent commands.
+
+**Changes implemented:**
+1. Created `load_rpc_from_operate()` utility function in `mech_client/infrastructure/operate/config_loader.py`
+2. Updated `LedgerConfig.__post_init__` to load RPC from operate config in agent mode (before environment variable override)
+3. Updated `MechConfig.__post_init__` similarly
+4. Modified `get_mech_config()` to accept an `agent_mode` parameter
+5. Updated all service classes (`BaseTransactionService`, `SubscriptionService`) to pass `agent_mode` when loading config
+
+**Configuration priority order (agent mode):**
+1. `MECHX_CHAIN_RPC` environment variable (highest priority - allows override)
+2. Stored operate config from `mechx setup` (new feature)
+3. Default from `mechs.json` (fallback)
+
+**Configuration priority order (client mode):**
+1. `MECHX_CHAIN_RPC` environment variable (highest priority)
+2. Default from `mechs.json` (fallback)
+
+Users no longer need to set `MECHX_CHAIN_RPC` persistently after running setup. The RPC configuration is remembered from setup and reused automatically.
+
+## Original Issue Summary
 
 When running commands in agent mode (after `mechx setup`), the RPC configuration stored during setup is **not used**. Instead, commands fall back to the default RPC from `mechs.json` or require `MECHX_CHAIN_RPC` to be set as an environment variable.
 

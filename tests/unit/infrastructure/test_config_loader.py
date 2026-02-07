@@ -19,7 +19,7 @@
 
 """Tests for configuration loader."""
 
-from unittest.mock import mock_open, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -139,3 +139,343 @@ class TestMechConfigDataclass:
 
         # __post_init__ should override with env var
         assert config.rpc_url == "https://custom.rpc.com"
+
+
+class TestLedgerConfigPriorityOrder:
+    """Tests for LedgerConfig RPC configuration priority order."""
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_client_mode_uses_default_rpc(self) -> None:
+        """Test that client mode uses default RPC when no env var set."""
+        config = LedgerConfig(
+            address="https://default.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+            agent_mode=False,
+            chain_config="gnosis",
+        )
+
+        # Should use default (no operate config loaded in client mode)
+        assert config.address == "https://default.rpc.com"
+
+    @patch.dict("os.environ", {"MECHX_CHAIN_RPC": "https://env.rpc.com"}, clear=True)
+    def test_client_mode_env_var_overrides_default(self) -> None:
+        """Test that client mode env var overrides default."""
+        config = LedgerConfig(
+            address="https://default.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+            agent_mode=False,
+            chain_config="gnosis",
+        )
+
+        # Env var should override default
+        assert config.address == "https://env.rpc.com"
+
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_agent_mode_uses_operate_config_when_available(
+        self, mock_load_rpc: MagicMock
+    ) -> None:
+        """Test that agent mode uses operate config when available."""
+        mock_load_rpc.return_value = "https://operate.rpc.com"
+
+        config = LedgerConfig(
+            address="https://default.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+            agent_mode=True,
+            chain_config="gnosis",
+        )
+
+        # Should use operate config (no env var set)
+        assert config.address == "https://operate.rpc.com"
+        mock_load_rpc.assert_called_once_with("gnosis")
+
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_agent_mode_falls_back_to_default_when_operate_unavailable(
+        self, mock_load_rpc: MagicMock
+    ) -> None:
+        """Test that agent mode falls back to default when operate config unavailable."""
+        mock_load_rpc.return_value = None
+
+        config = LedgerConfig(
+            address="https://default.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+            agent_mode=True,
+            chain_config="gnosis",
+        )
+
+        # Should fall back to default when operate config returns None
+        assert config.address == "https://default.rpc.com"
+        mock_load_rpc.assert_called_once_with("gnosis")
+
+    @patch.dict("os.environ", {"MECHX_CHAIN_RPC": "https://env.rpc.com"}, clear=True)
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_agent_mode_env_var_overrides_operate_config(
+        self, mock_load_rpc: MagicMock
+    ) -> None:
+        """Test that agent mode env var overrides operate config."""
+        mock_load_rpc.return_value = "https://operate.rpc.com"
+
+        config = LedgerConfig(
+            address="https://default.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+            agent_mode=True,
+            chain_config="gnosis",
+        )
+
+        # Env var should override operate config (highest priority)
+        assert config.address == "https://env.rpc.com"
+        mock_load_rpc.assert_called_once_with("gnosis")
+
+    @patch.dict("os.environ", {"MECHX_CHAIN_RPC": "https://env.rpc.com"}, clear=True)
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_agent_mode_env_var_overrides_all(self, mock_load_rpc: MagicMock) -> None:
+        """Test complete priority order in agent mode: env > operate > default."""
+        mock_load_rpc.return_value = "https://operate.rpc.com"
+
+        config = LedgerConfig(
+            address="https://default.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+            agent_mode=True,
+            chain_config="gnosis",
+        )
+
+        # Priority: env var (highest) > operate config > default (lowest)
+        assert config.address == "https://env.rpc.com"
+
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_agent_mode_does_not_load_operate_when_chain_config_none(
+        self, mock_load_rpc: MagicMock
+    ) -> None:
+        """Test that operate config not loaded when chain_config is None."""
+        config = LedgerConfig(
+            address="https://default.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+            agent_mode=True,
+            chain_config=None,
+        )
+
+        # Should not call load_rpc_from_operate when chain_config is None
+        mock_load_rpc.assert_not_called()
+        assert config.address == "https://default.rpc.com"
+
+
+class TestMechConfigPriorityOrder:
+    """Tests for MechConfig RPC configuration priority order."""
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_client_mode_uses_default_rpc(self) -> None:
+        """Test that client mode uses default RPC when no env var set."""
+        ledger_config = LedgerConfig(
+            address="https://ledger.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+        )
+
+        config = MechConfig(
+            service_registry_contract="0x" + "1" * 40,
+            complementary_metadata_hash_address="0x" + "2" * 40,
+            rpc_url="https://default.rpc.com",
+            wss_endpoint="wss://default.wss.com",
+            ledger_config=ledger_config,
+            gas_limit=500000,
+            transaction_url="https://explorer.com/tx/{tx_hash}",
+            subgraph_url="https://subgraph.example.com",
+            price=1000000000000000000,
+            mech_marketplace_contract="0x" + "3" * 40,
+            agent_mode=False,
+            chain_config="gnosis",
+        )
+
+        # Should use default (no operate config in client mode)
+        assert config.rpc_url == "https://default.rpc.com"
+
+    @patch.dict("os.environ", {"MECHX_CHAIN_RPC": "https://env.rpc.com"}, clear=True)
+    def test_client_mode_env_var_overrides_default(self) -> None:
+        """Test that client mode env var overrides default."""
+        ledger_config = LedgerConfig(
+            address="https://ledger.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+        )
+
+        config = MechConfig(
+            service_registry_contract="0x" + "1" * 40,
+            complementary_metadata_hash_address="0x" + "2" * 40,
+            rpc_url="https://default.rpc.com",
+            wss_endpoint="wss://default.wss.com",
+            ledger_config=ledger_config,
+            gas_limit=500000,
+            transaction_url="https://explorer.com/tx/{tx_hash}",
+            subgraph_url="https://subgraph.example.com",
+            price=1000000000000000000,
+            mech_marketplace_contract="0x" + "3" * 40,
+            agent_mode=False,
+            chain_config="gnosis",
+        )
+
+        # Env var should override default
+        assert config.rpc_url == "https://env.rpc.com"
+
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_agent_mode_uses_operate_config_when_available(
+        self, mock_load_rpc: MagicMock
+    ) -> None:
+        """Test that agent mode uses operate config when available."""
+        mock_load_rpc.return_value = "https://operate.rpc.com"
+
+        ledger_config = LedgerConfig(
+            address="https://ledger.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+        )
+
+        config = MechConfig(
+            service_registry_contract="0x" + "1" * 40,
+            complementary_metadata_hash_address="0x" + "2" * 40,
+            rpc_url="https://default.rpc.com",
+            wss_endpoint="wss://default.wss.com",
+            ledger_config=ledger_config,
+            gas_limit=500000,
+            transaction_url="https://explorer.com/tx/{tx_hash}",
+            subgraph_url="https://subgraph.example.com",
+            price=1000000000000000000,
+            mech_marketplace_contract="0x" + "3" * 40,
+            agent_mode=True,
+            chain_config="gnosis",
+        )
+
+        # Should use operate config (no env var set)
+        assert config.rpc_url == "https://operate.rpc.com"
+        # Called once for MechConfig (LedgerConfig is passed in already created)
+        mock_load_rpc.assert_called_with("gnosis")
+
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_agent_mode_falls_back_to_default_when_operate_unavailable(
+        self, mock_load_rpc: MagicMock
+    ) -> None:
+        """Test that agent mode falls back to default when operate config unavailable."""
+        mock_load_rpc.return_value = None
+
+        ledger_config = LedgerConfig(
+            address="https://ledger.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+        )
+
+        config = MechConfig(
+            service_registry_contract="0x" + "1" * 40,
+            complementary_metadata_hash_address="0x" + "2" * 40,
+            rpc_url="https://default.rpc.com",
+            wss_endpoint="wss://default.wss.com",
+            ledger_config=ledger_config,
+            gas_limit=500000,
+            transaction_url="https://explorer.com/tx/{tx_hash}",
+            subgraph_url="https://subgraph.example.com",
+            price=1000000000000000000,
+            mech_marketplace_contract="0x" + "3" * 40,
+            agent_mode=True,
+            chain_config="gnosis",
+        )
+
+        # Should fall back to default
+        assert config.rpc_url == "https://default.rpc.com"
+
+    @patch.dict("os.environ", {"MECHX_CHAIN_RPC": "https://env.rpc.com"}, clear=True)
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_agent_mode_env_var_overrides_operate_config(
+        self, mock_load_rpc: MagicMock
+    ) -> None:
+        """Test that agent mode env var overrides operate config."""
+        mock_load_rpc.return_value = "https://operate.rpc.com"
+
+        ledger_config = LedgerConfig(
+            address="https://ledger.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+        )
+
+        config = MechConfig(
+            service_registry_contract="0x" + "1" * 40,
+            complementary_metadata_hash_address="0x" + "2" * 40,
+            rpc_url="https://default.rpc.com",
+            wss_endpoint="wss://default.wss.com",
+            ledger_config=ledger_config,
+            gas_limit=500000,
+            transaction_url="https://explorer.com/tx/{tx_hash}",
+            subgraph_url="https://subgraph.example.com",
+            price=1000000000000000000,
+            mech_marketplace_contract="0x" + "3" * 40,
+            agent_mode=True,
+            chain_config="gnosis",
+        )
+
+        # Env var should override (highest priority)
+        assert config.rpc_url == "https://env.rpc.com"
+
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_agent_mode_does_not_load_operate_when_chain_config_none(
+        self, mock_load_rpc: MagicMock
+    ) -> None:
+        """Test that operate config not loaded when chain_config is None."""
+        ledger_config = LedgerConfig(
+            address="https://ledger.rpc.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="medium",
+            is_gas_estimation_enabled=True,
+        )
+
+        config = MechConfig(
+            service_registry_contract="0x" + "1" * 40,
+            complementary_metadata_hash_address="0x" + "2" * 40,
+            rpc_url="https://default.rpc.com",
+            wss_endpoint="wss://default.wss.com",
+            ledger_config=ledger_config,
+            gas_limit=500000,
+            transaction_url="https://explorer.com/tx/{tx_hash}",
+            subgraph_url="https://subgraph.example.com",
+            price=1000000000000000000,
+            mech_marketplace_contract="0x" + "3" * 40,
+            agent_mode=True,
+            chain_config=None,
+        )
+
+        # Should not load from operate when chain_config is None
+        mock_load_rpc.assert_not_called()
+        assert config.rpc_url == "https://default.rpc.com"

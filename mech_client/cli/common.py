@@ -112,8 +112,8 @@ def setup_wallet_command(
             raise ClickException("Cannot fetch safe or key data for agent mode.")
         validate_ethereum_address(safe, "Safe address")
 
-        # Create Ethereum client for agent mode
-        mech_config = get_mech_config(chain_config)
+        # Create Ethereum client for agent mode (pass agent_mode flag to load RPC from operate config)
+        mech_config = get_mech_config(chain_config, agent_mode=True)
         ethereum_client = EthereumClient(mech_config.ledger_config.address)
     else:
         # Client mode: use provided key path or default

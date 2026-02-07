@@ -92,7 +92,7 @@ class TestDepositServiceInitialization:
         assert service.private_key == "0x" + "1" * 64
         assert service.safe_address is None
         assert service.ethereum_client is None
-        mock_config.assert_called_once_with("gnosis")
+        mock_config.assert_called_once_with("gnosis", agent_mode=False)
         mock_executor_factory.create.assert_called_once()
 
     @patch("mech_client.services.base_service.get_mech_config")

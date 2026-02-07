@@ -84,7 +84,7 @@ class TestSubscriptionService:
         assert service.chain_config == "gnosis"
         assert service.agent_mode is False
         mock_config_class.from_chain.assert_called_once_with("gnosis")
-        mock_get_mech_config.assert_called_once_with("gnosis")
+        mock_get_mech_config.assert_called_once_with("gnosis", agent_mode=False)
 
     @patch("mech_client.services.subscription_service.SubscriptionManager")
     @patch("mech_client.services.subscription_service.SubscriptionBalanceChecker")

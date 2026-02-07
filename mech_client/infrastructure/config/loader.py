@@ -26,7 +26,9 @@ from mech_client.infrastructure.config.chain_config import LedgerConfig, MechCon
 from mech_client.infrastructure.config.constants import MECH_CONFIGS
 
 
-def get_mech_config(chain_config: Optional[str] = None) -> MechConfig:
+def get_mech_config(
+    chain_config: Optional[str] = None, agent_mode: bool = False
+) -> MechConfig:
     """Load mech configuration for a specific chain.
 
     Loads configuration from mechs.json and applies environment variable
@@ -34,6 +36,7 @@ def get_mech_config(chain_config: Optional[str] = None) -> MechConfig:
 
     :param chain_config: Chain name (gnosis, base, polygon, optimism).
                         If None, uses first chain in config.
+    :param agent_mode: Whether running in agent mode (uses stored operate config)
     :return: MechConfig instance with loaded configuration
     :raises FileNotFoundError: If mechs.json is not found
     :raises json.JSONDecodeError: If mechs.json is malformed
@@ -46,10 +49,17 @@ def get_mech_config(chain_config: Optional[str] = None) -> MechConfig:
             chain_config = next(iter(data))
 
         entry = data[chain_config].copy()
-        ledger_config = LedgerConfig(**entry.pop("ledger_config"))
+        ledger_config_data = entry.pop("ledger_config")
+
+        # Create LedgerConfig with agent_mode and chain_config context
+        ledger_config = LedgerConfig(
+            **ledger_config_data, agent_mode=agent_mode, chain_config=chain_config
+        )
 
         mech_config = MechConfig(
             **entry,
             ledger_config=ledger_config,
+            agent_mode=agent_mode,
+            chain_config=chain_config,
         )
         return mech_config

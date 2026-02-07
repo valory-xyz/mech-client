@@ -23,12 +23,21 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 - **Error handling**: Test both success and failure paths
 - **Async support**: Test async components with anyio
 
+### Recent Additions (v0.18.1)
+
+**29 new tests added** for agent mode RPC configuration:
+- **16 tests** for `load_rpc_from_operate()` utility (new file: `test_operate_config_loader.py`)
+- **13 tests** for configuration priority order in `LedgerConfig` and `MechConfig`
+- Tests validate: environment variable > operate config > default priority
+- Tests cover agent mode vs client mode behavior differences
+- Tests ensure graceful fallback when operate config unavailable
+
 ### Test Statistics
 
-- **Total tests**: 277 (excluding unsupported trio backend)
-- **Test files**: 22
-- **Test classes**: 68+
-- **Coverage**: ~50% (target: 70%)
+- **Total tests**: 306 (excluding unsupported trio backend)
+- **Test files**: 23
+- **Test classes**: 78+
+- **Coverage**: ~55% (target: 70%)
 
 ### Test Breakdown by Layer
 
@@ -37,7 +46,7 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 | Utils | 75 | 2 | Validators, error handling |
 | Domain | 80 | 7 | Strategies, watchers, factories, tools, subscriptions |
 | Services | 41 | 5 | Orchestration, workflows, deposits, setup, subscriptions |
-| Infrastructure | 81 | 10 | Adapters, clients, loaders, Safe, NVM contracts |
+| Infrastructure | 110 | 11 | Adapters, clients, loaders, Safe, NVM contracts, **config priority** |
 
 ## Test Structure
 
@@ -67,9 +76,10 @@ tests/
 │   │   ├── test_deposit_service.py         # 10 tests
 │   │   ├── test_setup_service.py           # 7 tests
 │   │   └── test_subscription_service.py    # 5 tests (NVM subscription)
-│   └── infrastructure/                      # Infrastructure layer tests (81 tests)
+│   └── infrastructure/                      # Infrastructure layer tests (110 tests)
 │       ├── __init__.py
-│       ├── test_config_loader.py           # 7 tests
+│       ├── test_config_loader.py           # 20 tests (13 new config priority tests)
+│       ├── test_operate_config_loader.py   # 16 tests (NEW: operate RPC loading)
 │       ├── test_ipfs_client.py             # 8 tests
 │       ├── test_abi_loader.py              # 7 tests
 │       ├── test_contracts.py               # 3 tests
@@ -427,6 +437,66 @@ def test_contract_factory(mock_load_contract: MagicMock) -> None:
     mock_load_contract.assert_called_once()
 ```
 
+### 11. Testing Configuration Priority Order
+
+Test configuration loading priority to ensure environment variables, stored config, and defaults work correctly:
+
+```python
+@patch.dict("os.environ", {}, clear=True)
+@patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+def test_agent_mode_uses_operate_config_when_available(
+    mock_load_rpc: MagicMock
+) -> None:
+    """Test that agent mode uses operate config when available."""
+    # Mock operate config returning RPC
+    mock_load_rpc.return_value = "https://operate.rpc.com"
+
+    # Create config in agent mode
+    config = LedgerConfig(
+        address="https://default.rpc.com",
+        chain_id=100,
+        poa_chain=False,
+        default_gas_price_strategy="medium",
+        is_gas_estimation_enabled=True,
+        agent_mode=True,
+        chain_config="gnosis",
+    )
+
+    # Should use operate config (no env var set)
+    assert config.address == "https://operate.rpc.com"
+    mock_load_rpc.assert_called_once_with("gnosis")
+
+@patch.dict("os.environ", {"MECHX_CHAIN_RPC": "https://env.rpc.com"}, clear=True)
+@patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+def test_agent_mode_env_var_overrides_operate_config(
+    mock_load_rpc: MagicMock
+) -> None:
+    """Test that agent mode env var overrides operate config."""
+    mock_load_rpc.return_value = "https://operate.rpc.com"
+
+    config = LedgerConfig(
+        address="https://default.rpc.com",
+        chain_id=100,
+        poa_chain=False,
+        default_gas_price_strategy="medium",
+        is_gas_estimation_enabled=True,
+        agent_mode=True,
+        chain_config="gnosis",
+    )
+
+    # Env var should override operate config (highest priority)
+    assert config.address == "https://env.rpc.com"
+    mock_load_rpc.assert_called_once_with("gnosis")
+```
+
+**Key principles for configuration priority testing:**
+- Test all priority levels: environment variable > stored config > defaults
+- Test both agent mode and client mode separately
+- Mock external config sources (operate, files) to test in isolation
+- Clear environment variables with `@patch.dict("os.environ", {}, clear=True)`
+- Verify mocks are called (or not called) as expected
+- Test edge cases: None values, missing config, unavailable sources
+
 ## Test Fixtures
 
 ### Shared Fixtures (`tests/conftest.py`)
@@ -624,6 +694,13 @@ def test_env_var_override() -> None:
     """Test environment variable override."""
     config = MechConfig(...)
     assert config.rpc_url == "https://custom.rpc.com"
+
+# Clear all environment variables for isolated testing
+@patch.dict("os.environ", {}, clear=True)
+def test_without_env_vars() -> None:
+    """Test behavior without any environment variables set."""
+    config = MechConfig(...)
+    assert config.rpc_url == "https://default.rpc.com"
 ```
 
 ### 8. Avoid Over-Mocking

@@ -34,6 +34,8 @@ class LedgerConfig:
         poa_chain: Whether the chain uses Proof of Authority
         default_gas_price_strategy: Gas price strategy name
         is_gas_estimation_enabled: Whether to estimate gas automatically
+        agent_mode: Whether running in agent mode (default: False)
+        chain_config: Chain configuration name (e.g., 'gnosis')
     """
 
     address: str
@@ -41,9 +43,29 @@ class LedgerConfig:
     poa_chain: bool
     default_gas_price_strategy: str
     is_gas_estimation_enabled: bool
+    agent_mode: bool = field(default=False)
+    chain_config: Optional[str] = field(default=None)
 
     def __post_init__(self) -> None:
-        """Post initialization to override with environment variables."""
+        """Post initialization to override with environment variables.
+
+        Priority order for RPC address:
+        1. MECHX_CHAIN_RPC environment variable (highest priority)
+        2. Stored operate config (agent mode only)
+        3. Default from mechs.json (lowest priority)
+        """
+        # In agent mode, try to load RPC from stored operate configuration first
+        if self.agent_mode and self.chain_config:
+            # Import here to avoid circular imports
+            from mech_client.infrastructure.operate import (  # pylint: disable=import-outside-toplevel
+                load_rpc_from_operate,
+            )
+
+            operate_rpc = load_rpc_from_operate(self.chain_config)
+            if operate_rpc:
+                self.address = operate_rpc
+
+        # Environment variable overrides everything (including operate config)
         address = os.getenv("MECHX_CHAIN_RPC")
         if address:
             self.address = address
@@ -104,6 +126,8 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         price: Default price for requests
         mech_marketplace_contract: Marketplace contract address
         priority_mech_address: Priority mech address (optional)
+        agent_mode: Whether running in agent mode (default: False)
+        chain_config: Chain configuration name (e.g., 'gnosis')
     """
 
     service_registry_contract: str
@@ -117,13 +141,33 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     price: int
     mech_marketplace_contract: str
     priority_mech_address: Optional[str] = field(default=None)
+    agent_mode: bool = field(default=False)
+    chain_config: Optional[str] = field(default=None)
 
     def __post_init__(self) -> None:
-        """Post initialization to override with environment variables."""
+        """Post initialization to override with environment variables.
+
+        Priority order for RPC URL:
+        1. MECHX_CHAIN_RPC environment variable (highest priority)
+        2. Stored operate config (agent mode only)
+        3. Default from mechs.json (lowest priority)
+        """
         service_registry_contract = os.getenv("MECHX_SERVICE_REGISTRY_CONTRACT")
         if service_registry_contract:
             self.service_registry_contract = service_registry_contract
 
+        # In agent mode, try to load RPC from stored operate configuration first
+        if self.agent_mode and self.chain_config:
+            # Import here to avoid circular imports
+            from mech_client.infrastructure.operate import (  # pylint: disable=import-outside-toplevel
+                load_rpc_from_operate,
+            )
+
+            operate_rpc = load_rpc_from_operate(self.chain_config)
+            if operate_rpc:
+                self.rpc_url = operate_rpc
+
+        # Environment variable overrides everything (including operate config)
         rpc_url = os.getenv("MECHX_CHAIN_RPC")
         if rpc_url:
             self.rpc_url = rpc_url

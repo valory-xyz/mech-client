@@ -67,8 +67,10 @@ class BaseTransactionService:  # pylint: disable=too-few-public-methods,too-many
         self.safe_address = safe_address
         self.ethereum_client = ethereum_client
 
-        # Load configuration
-        self.mech_config: MechConfig = get_mech_config(chain_config)
+        # Load configuration (pass agent_mode to load RPC from operate config in agent mode)
+        self.mech_config: MechConfig = get_mech_config(
+            chain_config, agent_mode=agent_mode
+        )
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
 
         # Create executor

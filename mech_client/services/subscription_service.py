@@ -82,8 +82,8 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes
         self.ethereum_client = ethereum_client
         self.safe_address = safe_address
 
-        # Load mech configuration and create ledger API
-        mech_config = get_mech_config(chain_config)
+        # Load mech configuration and create ledger API (pass agent_mode to load RPC from operate config in agent mode)
+        mech_config = get_mech_config(chain_config, agent_mode=agent_mode)
         self.ledger_api = EthereumApi(**asdict(mech_config.ledger_config))
 
         # Load NVM configuration
