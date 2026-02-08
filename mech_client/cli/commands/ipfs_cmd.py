@@ -21,7 +21,7 @@
 
 import click
 
-from mech_client.infrastructure.ipfs.client import push_to_ipfs
+from mech_client.infrastructure.ipfs.client import IPFSClient
 from mech_client.infrastructure.ipfs.metadata import push_metadata_to_ipfs
 
 
@@ -44,7 +44,8 @@ def ipfs_upload(file_path: str) -> None:
 
     Example: mechx ipfs upload ./myfile.json
     """
-    v1_file_hash, v1_file_hash_hex = push_to_ipfs(file_path)
+    client = IPFSClient()
+    v1_file_hash, v1_file_hash_hex = client.upload(file_path)
     click.echo(f"IPFS file hash v1: {v1_file_hash}")
     click.echo(f"IPFS file hash v1 hex: {v1_file_hash_hex}")
 

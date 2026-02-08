@@ -171,66 +171,18 @@ class TestTokenPaymentStrategy:
         assert call_args["tx_args"]["value"] == 0
         assert call_args["tx_args"]["gas"] == 60000
 
-    @patch("mech_client.domain.payment.token.get_contract")
-    @patch("mech_client.domain.payment.token.get_abi")
-    def test_approve_if_needed_client_mode_without_executor(
+    def test_approve_if_needed_no_executor_raises_error(
         self,
-        mock_get_abi: MagicMock,
-        mock_get_contract: MagicMock,
-        mock_ledger_api: MagicMock,
-        mock_web3_contract: MagicMock,
-    ) -> None:
-        """Test approval in client mode without executor (backward compatibility)."""
-        mock_get_contract.return_value = mock_web3_contract
-        mock_crypto = MagicMock()
-        mock_crypto.sign_transaction.return_value = {"signed": "tx"}
-
-        strategy = TokenPaymentStrategy(
-            ledger_api=mock_ledger_api,
-            payment_type=PaymentType.OLAS_TOKEN,
-            chain_id=100,
-            crypto=mock_crypto,
-        )
-
-        mock_ledger_api.build_transaction.return_value = {"raw": "tx"}
-        mock_ledger_api.send_signed_transaction.return_value = "0xtxhash"
-
-        payer_address = "0x1234567890123456789012345678901234567890"
-        spender_address = "0x" + "a" * 40
-        amount = 10**18
-
-        result = strategy.approve_if_needed(
-            payer_address=payer_address,
-            spender_address=spender_address,
-            amount=amount,
-        )
-
-        assert result == "0xtxhash"
-        mock_ledger_api.build_transaction.assert_called_once()
-        mock_crypto.sign_transaction.assert_called_once_with({"raw": "tx"})
-        mock_ledger_api.send_signed_transaction.assert_called_once_with(
-            {"signed": "tx"}, raise_on_try=True
-        )
-
-    @patch("mech_client.domain.payment.token.get_contract")
-    @patch("mech_client.domain.payment.token.get_abi")
-    def test_approve_if_needed_no_executor_no_crypto_raises_error(
-        self,
-        mock_get_abi: MagicMock,
-        mock_get_contract: MagicMock,
         strategy: TokenPaymentStrategy,
-        mock_web3_contract: MagicMock,
     ) -> None:
-        """Test that approval raises error when neither executor nor crypto provided."""
-        mock_get_contract.return_value = mock_web3_contract
-
+        """Test that approval raises error when executor not provided."""
         payer_address = "0x1234567890123456789012345678901234567890"
         spender_address = "0x" + "a" * 40
         amount = 10**18
 
         with pytest.raises(
             ValueError,
-            match="Transaction executor or crypto object/private key required for token approval",
+            match="Transaction executor required for token approval",
         ):
             strategy.approve_if_needed(
                 payer_address=payer_address,

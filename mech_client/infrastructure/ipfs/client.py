@@ -19,7 +19,6 @@
 
 """IPFS client for uploading and downloading files."""
 
-import json
 import os.path
 from tempfile import gettempdir
 from typing import Optional, Tuple
@@ -71,52 +70,3 @@ class IPFSClient:
 
         self._ipfs_tool.client.get(cid=ipfs_hash, target=target_dir)
         return os.path.join(target_dir, ipfs_hash)
-
-    def get_json(self, ipfs_hash: str, request_id: str) -> dict:
-        """
-        Download and parse JSON data from IPFS.
-
-        :param ipfs_hash: The IPFS hash of the data
-        :param request_id: The request ID (filename within IPFS directory)
-        :return: Parsed JSON data
-        :raises ValueError: If data format is invalid
-        """
-        temp_dir = gettempdir()
-        self._ipfs_tool.client.get(cid=ipfs_hash, target=temp_dir)
-        stored_data = os.path.join(temp_dir, ipfs_hash)
-
-        with open(os.path.join(stored_data, request_id), encoding="utf-8") as f:
-            data = json.loads(f.read()).get("result", {})
-
-        if not isinstance(data, dict):
-            raise ValueError("Data do not have the expected format!")
-
-        return data
-
-
-# Legacy functions for backward compatibility
-def push_to_ipfs(file_path: str) -> Tuple[str, str]:
-    """
-    Push a file to IPFS (legacy function).
-
-    Deprecated: Use IPFSClient.upload() instead.
-
-    :param file_path: Path of the file to be pushed to IPFS
-    :return: A tuple containing (v1_file_hash, v1_file_hash_hex)
-    """
-    client = IPFSClient()
-    return client.upload(file_path)
-
-
-def get_from_ipfs(ipfs_hash: str, request_id: str) -> dict:
-    """
-    Get JSON data from IPFS (legacy function).
-
-    Deprecated: Use IPFSClient.get_json() instead.
-
-    :param ipfs_hash: The IPFS hash of the data
-    :param request_id: The request ID
-    :return: Parsed JSON data
-    """
-    client = IPFSClient()
-    return client.get_json(ipfs_hash, request_id)

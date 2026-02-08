@@ -161,7 +161,6 @@ class DepositService(
             spender_address=balance_tracker_address,
             amount=amount,
             executor=self.executor,
-            private_key=self.private_key,
         )
         if approve_tx:
             wait_for_receipt(approve_tx, self.ledger_api)

@@ -183,7 +183,6 @@ class MarketplaceService(
                 spender_address=balance_tracker,
                 amount=price,
                 executor=self.executor,
-                private_key=self.private_key,
             )
 
         # Send on-chain marketplace request
