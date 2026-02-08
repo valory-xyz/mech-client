@@ -115,10 +115,8 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     """Chain-specific mech configuration with environment variable overrides.
 
     Attributes:
-        service_registry_contract: Olas service registry contract address
         complementary_metadata_hash_address: Metadata hash contract address
         rpc_url: HTTP RPC endpoint URL
-        wss_endpoint: WebSocket endpoint URL
         ledger_config: Ledger configuration
         gas_limit: Default gas limit for transactions
         transaction_url: Block explorer transaction URL template
@@ -130,10 +128,8 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         chain_config: Chain configuration name (e.g., 'gnosis')
     """
 
-    service_registry_contract: str
     complementary_metadata_hash_address: str
     rpc_url: str
-    wss_endpoint: str
     ledger_config: LedgerConfig
     gas_limit: int
     transaction_url: str
@@ -152,10 +148,6 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         2. Stored operate config (agent mode only)
         3. Default from mechs.json (lowest priority)
         """
-        service_registry_contract = os.getenv("MECHX_SERVICE_REGISTRY_CONTRACT")
-        if service_registry_contract:
-            self.service_registry_contract = service_registry_contract
-
         # In agent mode, try to load RPC from stored operate configuration first
         if self.agent_mode and self.chain_config:
             # Import here to avoid circular imports
@@ -171,10 +163,6 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         rpc_url = os.getenv("MECHX_CHAIN_RPC")
         if rpc_url:
             self.rpc_url = rpc_url
-
-        wss_endpoint = os.getenv("MECHX_WSS_ENDPOINT")
-        if wss_endpoint:
-            self.wss_endpoint = wss_endpoint
 
         gas_limit = os.getenv("MECHX_GAS_LIMIT")
         if gas_limit:

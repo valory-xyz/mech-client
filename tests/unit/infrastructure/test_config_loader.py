@@ -96,10 +96,8 @@ class TestMechConfigDataclass:
         )
 
         config = MechConfig(
-            service_registry_contract="0x" + "1" * 40,
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://rpc.gnosischain.com",
-            wss_endpoint="wss://wss.gnosischain.com",
             ledger_config=ledger_config,
             gas_limit=500000,
             transaction_url="https://explorer.com/tx/{tx_hash}",
@@ -108,7 +106,6 @@ class TestMechConfigDataclass:
             mech_marketplace_contract="0x" + "3" * 40,
         )
 
-        assert config.service_registry_contract == "0x" + "1" * 40
         assert config.mech_marketplace_contract == "0x" + "3" * 40
         assert config.ledger_config.chain_id == 100
         assert config.price == 1000000000000000000
@@ -125,10 +122,8 @@ class TestMechConfigDataclass:
         )
 
         config = MechConfig(
-            service_registry_contract="0x" + "1" * 40,
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
-            wss_endpoint="wss://default.wss.com",
             ledger_config=ledger_config,
             gas_limit=500000,
             transaction_url="https://explorer.com/tx/{tx_hash}",
@@ -297,10 +292,8 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
-            service_registry_contract="0x" + "1" * 40,
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
-            wss_endpoint="wss://default.wss.com",
             ledger_config=ledger_config,
             gas_limit=500000,
             transaction_url="https://explorer.com/tx/{tx_hash}",
@@ -326,10 +319,8 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
-            service_registry_contract="0x" + "1" * 40,
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
-            wss_endpoint="wss://default.wss.com",
             ledger_config=ledger_config,
             gas_limit=500000,
             transaction_url="https://explorer.com/tx/{tx_hash}",
@@ -360,10 +351,8 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
-            service_registry_contract="0x" + "1" * 40,
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
-            wss_endpoint="wss://default.wss.com",
             ledger_config=ledger_config,
             gas_limit=500000,
             transaction_url="https://explorer.com/tx/{tx_hash}",
@@ -396,10 +385,8 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
-            service_registry_contract="0x" + "1" * 40,
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
-            wss_endpoint="wss://default.wss.com",
             ledger_config=ledger_config,
             gas_limit=500000,
             transaction_url="https://explorer.com/tx/{tx_hash}",
@@ -430,10 +417,8 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
-            service_registry_contract="0x" + "1" * 40,
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
-            wss_endpoint="wss://default.wss.com",
             ledger_config=ledger_config,
             gas_limit=500000,
             transaction_url="https://explorer.com/tx/{tx_hash}",
@@ -462,10 +447,8 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
-            service_registry_contract="0x" + "1" * 40,
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
-            wss_endpoint="wss://default.wss.com",
             ledger_config=ledger_config,
             gas_limit=500000,
             transaction_url="https://explorer.com/tx/{tx_hash}",
