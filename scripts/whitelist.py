@@ -43,6 +43,11 @@ format_output_schema  # ToolService method - output schema formatter
 # Infrastructure utilities
 payment_data  # ChainConfig attribute - payment configuration data
 
+# Ledger Config dataclass fields (used by dataclass, marked as unused by vulture)
+poa_chain  # LedgerConfig field - Proof of Authority chain flag
+default_gas_price_strategy  # LedgerConfig field - gas price strategy name
+is_gas_estimation_enabled  # LedgerConfig field - gas estimation flag
+
 # NVM Config dataclass fields (used by dataclass, marked as unused by vulture)
 network_name  # NVMConfig field - network identifier
 receiver_plan  # NVMConfig field - plan receiver address
