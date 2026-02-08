@@ -22,13 +22,13 @@
 import os
 
 import click
-import requests
 from click import ClickException
 from tabulate import tabulate  # type: ignore
 
 from mech_client.cli.validators import validate_chain_config
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
+from mech_client.utils.errors.handlers import handle_cli_errors
 
 
 @click.group()
@@ -47,6 +47,7 @@ def mech() -> None:
     required=True,
     help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
+@handle_cli_errors
 def mech_list(chain_config: str) -> None:
     """List available mechs on the marketplace.
 
@@ -56,85 +57,49 @@ def mech_list(chain_config: str) -> None:
 
     Example: mechx mech list --chain-config gnosis
     """
-    try:
-        # Validate chain config
-        validated_chain = validate_chain_config(chain_config)
+    # Validate chain config
+    validated_chain = validate_chain_config(chain_config)
 
-        # Validate MECHX_SUBGRAPH_URL is set
-        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
-        if not subgraph_url:
-            raise ClickException(
-                "Environment variable MECHX_SUBGRAPH_URL is required for "
-                "this command.\n\n"
-                f"This command queries blockchain data via a subgraph API.\n"
-                f"Current chain: {validated_chain}\n\n"
-                f"Please set the subgraph URL:\n"
-                f"  export MECHX_SUBGRAPH_URL='https://your-subgraph-url'"
-                f"\n\n"
-                f"Note: The subgraph URL must match your --chain-config."
-            )
+    # Validate MECHX_SUBGRAPH_URL is set
+    subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
+    if not subgraph_url:
+        raise ClickException(
+            "Environment variable MECHX_SUBGRAPH_URL is required for this command.\n\n"
+            f"This command queries blockchain data via a subgraph API.\n"
+            f"Current chain: {validated_chain}\n\n"
+            f"Please set the subgraph URL:\n"
+            f"  export MECHX_SUBGRAPH_URL='https://your-subgraph-url'\n\n"
+            f"Note: The subgraph URL must match your --chain-config."
+        )
 
-        # Query subgraph for mechs
-        mech_list_data = query_mm_mechs_info(chain_config=validated_chain)
-        if mech_list_data is None:
-            click.echo("No mechs found")
-            return
+    # Query subgraph for mechs
+    mech_list_data = query_mm_mechs_info(chain_config=validated_chain)
+    if mech_list_data is None:
+        click.echo("No mechs found")
+        return
 
-        # Format and display results
-        headers = [
-            "AI Agent Id",
-            "Mech Type",
-            "Mech Address",
-            "Total Deliveries",
-            "Metadata Link",
-        ]
+    # Format and display results
+    headers = [
+        "AI Agent Id",
+        "Mech Type",
+        "Mech Address",
+        "Total Deliveries",
+        "Metadata Link",
+    ]
 
-        data = [
+    data = [
+        (
+            items["service"]["id"],
+            items["mech_type"],
+            items["address"],
+            items["service"]["totalDeliveries"],
             (
-                items["service"]["id"],
-                items["mech_type"],
-                items["address"],
-                items["service"]["totalDeliveries"],
-                (
-                    IPFS_URL_TEMPLATE.format(
-                        items["service"]["metadata"]["metadata"][2:]
-                    )
-                    if items["service"].get("metadata") is not None
-                    else None
-                ),
-            )
-            for items in mech_list_data
-        ]
+                IPFS_URL_TEMPLATE.format(items["service"]["metadata"]["metadata"][2:])
+                if items["service"].get("metadata") is not None
+                else None
+            ),
+        )
+        for items in mech_list_data
+    ]
 
-        click.echo(tabulate(data, headers=headers, tablefmt="grid"))
-
-    except requests.exceptions.HTTPError as e:
-        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL", "default")
-        raise ClickException(
-            f"Subgraph endpoint error: {e}\n\n"
-            f"Current subgraph URL: {subgraph_url}\n\n"
-            f"Possible solutions:\n"
-            f"  1. Check if the subgraph endpoint is available\n"
-            f"  2. Set a different subgraph URL: "
-            f"export MECHX_SUBGRAPH_URL='https://your-subgraph-url'\n"
-            f"  3. Check your network connection"
-        ) from e
-    except (
-        requests.exceptions.ConnectionError,
-        requests.exceptions.Timeout,
-    ) as e:
-        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL", "default")
-        raise ClickException(
-            f"Network error connecting to subgraph: {e}\n\n"
-            f"Current subgraph URL: {subgraph_url}\n\n"
-            f"Possible solutions:\n"
-            f"  1. Check your internet connection\n"
-            f"  2. Verify the subgraph URL is correct\n"
-            f"  3. Try a different subgraph provider: "
-            f"export MECHX_SUBGRAPH_URL='https://your-subgraph-url'"
-        ) from e
-    except Exception as e:
-        raise ClickException(
-            f"Error querying subgraph: {e}\n\n"
-            f"Please check your MECHX_SUBGRAPH_URL and network connection."
-        ) from e
+    click.echo(tabulate(data, headers=headers, tablefmt="grid"))
