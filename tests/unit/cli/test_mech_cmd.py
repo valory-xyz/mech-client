@@ -30,9 +30,6 @@ class TestMechListCommand:
     """Tests for mech list command."""
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
-    @patch.dict(
-        "os.environ", {"MECHX_SUBGRAPH_URL": "https://subgraph.example.com/gnosis"}
-    )
     def test_list_command_with_realistic_metadata_structure(
         self, mock_query: MagicMock
     ) -> None:
@@ -74,9 +71,6 @@ class TestMechListCommand:
         assert "4d82a931d803e2b46b0dcd53f558f8de8305fd44b36288b42287ef1450a6611f" in result.output
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
-    @patch.dict(
-        "os.environ", {"MECHX_SUBGRAPH_URL": "https://subgraph.example.com/gnosis"}
-    )
     def test_list_command_with_empty_metadata(self, mock_query: MagicMock) -> None:
         """Test mech list handles empty metadata gracefully."""
         mock_query.return_value = [
@@ -103,9 +97,6 @@ class TestMechListCommand:
         assert "253" in result.output
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
-    @patch.dict(
-        "os.environ", {"MECHX_SUBGRAPH_URL": "https://subgraph.example.com/gnosis"}
-    )
     def test_list_command_with_empty_metadata_list(
         self, mock_query: MagicMock
     ) -> None:
@@ -133,9 +124,6 @@ class TestMechListCommand:
         assert "2000" in result.output
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
-    @patch.dict(
-        "os.environ", {"MECHX_SUBGRAPH_URL": "https://subgraph.example.com/gnosis"}
-    )
     def test_list_command_with_multiple_mechs(self, mock_query: MagicMock) -> None:
         """Test mech list displays multiple mechs correctly."""
         mock_query.return_value = [
@@ -181,21 +169,34 @@ class TestMechListCommand:
         assert "781673" in result.output
         assert "1425" in result.output
 
-    @patch.dict("os.environ", {}, clear=True)
-    def test_list_command_without_subgraph_url(self) -> None:
-        """Test mech list fails gracefully when MECHX_SUBGRAPH_URL not set."""
+    @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
+    def test_list_command_uses_default_subgraph_url(
+        self, mock_query: MagicMock
+    ) -> None:
+        """Test mech list uses default subgraph URL from config."""
+        mock_query.return_value = [
+            {
+                "id": "100",
+                "address": "0x1234567890123456789012345678901234567890",
+                "mechFactory": "0x8b299c20f87e3fcbff0e1b86dc0acc06ab6993ef",
+                "totalDeliveriesTransactions": "10",
+                "service": {
+                    "id": "100",
+                    "totalDeliveries": "10",
+                    "metadata": [{"metadata": "0xabc123"}],
+                },
+                "mech_type": "Fixed Price Native",
+            }
+        ]
+
         runner = CliRunner()
         result = runner.invoke(mech, ["list", "--chain-config", "gnosis"])
 
-        # Should fail with clear error message
-        assert result.exit_code == 1
-        assert "MECHX_SUBGRAPH_URL" in result.output
-        assert "required" in result.output.lower()
+        # Should succeed using default subgraph URL from mechs.json
+        assert result.exit_code == 0
+        assert "100" in result.output
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
-    @patch.dict(
-        "os.environ", {"MECHX_SUBGRAPH_URL": "https://subgraph.example.com/gnosis"}
-    )
     def test_list_command_with_no_mechs(self, mock_query: MagicMock) -> None:
         """Test mech list displays message when no mechs found."""
         mock_query.return_value = None
@@ -208,9 +209,6 @@ class TestMechListCommand:
         assert "No mechs found" in result.output
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
-    @patch.dict(
-        "os.environ", {"MECHX_SUBGRAPH_URL": "https://subgraph.example.com/base"}
-    )
     def test_list_command_for_base_chain(self, mock_query: MagicMock) -> None:
         """Test mech list works for base chain."""
         mock_query.return_value = [
@@ -242,9 +240,6 @@ class TestMechListCommandMetadataEdgeCases:
     """Tests for edge cases in metadata structure handling."""
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
-    @patch.dict(
-        "os.environ", {"MECHX_SUBGRAPH_URL": "https://subgraph.example.com/gnosis"}
-    )
     def test_metadata_without_0x_prefix(self, mock_query: MagicMock) -> None:
         """Test handling metadata that already has correct format."""
         mock_query.return_value = [
@@ -271,9 +266,6 @@ class TestMechListCommandMetadataEdgeCases:
         assert result.exit_code == 0
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
-    @patch.dict(
-        "os.environ", {"MECHX_SUBGRAPH_URL": "https://subgraph.example.com/gnosis"}
-    )
     def test_metadata_with_multiple_entries(self, mock_query: MagicMock) -> None:
         """Test metadata list with multiple entries (uses first one)."""
         mock_query.return_value = [

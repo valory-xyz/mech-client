@@ -20,12 +20,10 @@
 """Mech command for managing and querying AI mechs on the marketplace."""
 
 import click
-from click import ClickException
 from tabulate import tabulate  # type: ignore
 
 from mech_client.cli.validators import validate_chain_config
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
-from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
 from mech_client.utils.errors.handlers import handle_cli_errors
 
@@ -52,28 +50,16 @@ def mech_list(chain_config: str) -> None:
 
     Fetches information about all mechs from the marketplace subgraph,
     including service IDs, addresses, delivery counts, and metadata links.
-    Requires MECHX_SUBGRAPH_URL environment variable to be set.
+
+    Uses default subgraph URL from configuration. Can be overridden with
+    MECHX_SUBGRAPH_URL environment variable.
 
     Example: mechx mech list --chain-config gnosis
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)
 
-    # Load environment configuration
-    env_config = EnvironmentConfig.load()
-
-    # Validate MECHX_SUBGRAPH_URL is set
-    if not env_config.mechx_subgraph_url:
-        raise ClickException(
-            "Environment variable MECHX_SUBGRAPH_URL is required for this command.\n\n"
-            f"This command queries blockchain data via a subgraph API.\n"
-            f"Current chain: {validated_chain}\n\n"
-            f"Please set the subgraph URL:\n"
-            f"  export MECHX_SUBGRAPH_URL='https://your-subgraph-url'\n\n"
-            f"Note: The subgraph URL must match your --chain-config."
-        )
-
-    # Query subgraph for mechs
+    # Query subgraph for mechs (uses default from config or MECHX_SUBGRAPH_URL override)
     mech_list_data = query_mm_mechs_info(chain_config=validated_chain)
     if mech_list_data is None:
         click.echo("No mechs found")
