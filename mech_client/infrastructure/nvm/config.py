@@ -24,8 +24,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 
 @dataclass
 class NVMConfig:  # pylint: disable=too-many-instance-attributes
@@ -80,14 +78,26 @@ class NVMConfig:  # pylint: disable=too-many-instance-attributes
                 f"Supported chains: {', '.join(sorted(supported_chains))}"
             )
 
-        # Load chain-specific .env file
-        base_path = Path(__file__).parent / "resources" / "envs"
-        env_file = base_path / f"{chain_config}.env"
+        # Load mechs.json
+        mechs_file = Path(__file__).parent.parent.parent / "configs" / "mechs.json"
+        if not mechs_file.exists():
+            raise FileNotFoundError(f"Configuration file not found: {mechs_file}")
 
-        if not env_file.exists():
-            raise FileNotFoundError(f"Configuration file not found: {env_file}")
+        with open(mechs_file, "r", encoding="utf-8") as f:
+            mechs_config = json.load(f)
 
-        load_dotenv(env_file)
+        if chain_config not in mechs_config:
+            raise ValueError(f"Chain {chain_config!r} not found in mechs.json")
+
+        chain_data = mechs_config[chain_config]
+
+        # Check if NVM subscription config exists
+        if "nvm_subscription" not in chain_data:
+            raise ValueError(
+                f"NVM subscription configuration not found for chain {chain_config!r}"
+            )
+
+        nvm_sub_config = chain_data["nvm_subscription"]
 
         # Load networks.json
         networks_file = Path(__file__).parent / "resources" / "networks.json"
@@ -99,27 +109,29 @@ class NVMConfig:  # pylint: disable=too-many-instance-attributes
         with open(networks_file, "r", encoding="utf-8") as f:
             networks = json.load(f)
 
-        # Get network config (uppercase for networks.json keys)
-        network_key = os.environ["NETWORK_NAME"]
+        # Map chain_config to network key (uppercase for networks.json)
+        network_key_map = {"gnosis": "GNOSIS", "base": "BASE"}
+        network_key = network_key_map[chain_config]
+
         if network_key not in networks:
             raise ValueError(f"Network {network_key!r} not found in networks.json")
 
         network_config = networks[network_key]
         nvm_config = network_config["nvm"]
 
-        # Build config from environment and networks.json
+        # Build config from mechs.json and networks.json
         return cls(
             chain_config=chain_config,
-            chain_id=int(os.environ["CHAIN_ID"]),
+            chain_id=chain_data["ledger_config"]["chain_id"],
             network_name=network_key,
-            plan_did=os.environ["PLAN_DID"],
-            subscription_credits=os.environ["SUBSCRIPTION_CREDITS"],
-            plan_fee_nvm=os.environ["PLAN_FEE_NVM"],
-            plan_price_mechs=os.environ["PLAN_PRICE_MECHS"],
-            subscription_nft_address=os.environ["SUBSCRIPTION_NFT_ADDRESS"],
-            olas_marketplace_address=os.environ["OLAS_MARKETPLACE_ADDRESS"],
-            receiver_plan=os.environ["RECEIVER_PLAN"],
-            token_address=os.environ["TOKEN_ADDRESS"],
+            plan_did=nvm_sub_config["plan_did"],
+            subscription_credits=nvm_sub_config["subscription_credits"],
+            plan_fee_nvm=nvm_sub_config["plan_fee_nvm"],
+            plan_price_mechs=nvm_sub_config["plan_price_mechs"],
+            subscription_nft_address=nvm_sub_config["subscription_nft_address"],
+            olas_marketplace_address=chain_data["mech_marketplace_contract"],
+            receiver_plan=nvm_sub_config["receiver_plan"],
+            token_address=nvm_sub_config["token_address"],
             web3_provider_uri=nvm_config["web3ProviderUri"],
             marketplace_uri=nvm_config["marketplaceUri"],
             nevermined_node_uri=nvm_config["neverminedNodeUri"],

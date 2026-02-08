@@ -85,13 +85,12 @@ class TokenPaymentStrategy(PaymentStrategy):
         balance = token_contract.functions.balanceOf(payer_address).call()
         return balance >= amount
 
-    def approve_if_needed(  # pylint: disable=too-many-arguments,too-many-locals
+    def approve_if_needed(  # pylint: disable=too-many-locals
         self,
         payer_address: str,
         spender_address: str,
         amount: int,
         executor: Optional["TransactionExecutor"] = None,
-        private_key: Optional[str] = None,
     ) -> Optional[str]:
         """
         Approve token spending for the spender address.
@@ -103,10 +102,12 @@ class TokenPaymentStrategy(PaymentStrategy):
         :param spender_address: Address allowed to spend tokens (balance tracker)
         :param amount: Amount to approve (in token's smallest unit)
         :param executor: Transaction executor (handles both agent and client mode)
-        :param private_key: Private key for signing (required for client mode without executor)
         :return: Transaction hash of approval transaction
-        :raises ValueError: If neither executor nor crypto is provided
+        :raises ValueError: If executor is not provided
         """
+        if not executor:
+            raise ValueError("Transaction executor required for token approval")
+
         token_address = self.get_payment_token_address()
         if not token_address:
             raise ValueError("Token address not configured for this payment type")
@@ -119,36 +120,11 @@ class TokenPaymentStrategy(PaymentStrategy):
         method_name = "approve"
         method_args = {"_to": spender_address, "_value": amount}
 
-        # Use executor if provided (handles both agent and client mode)
-        if executor:
-            return executor.execute_transaction(
-                contract=token_contract,
-                method_name=method_name,
-                method_args=method_args,
-                tx_args=tx_args,
-            )
-
-        # Fallback: client mode without executor (backward compatibility)
-        if self.crypto or private_key:
-            if not self.crypto:
-                raise ValueError("Crypto object required for token approval")
-            crypto = self.crypto
-            raw_transaction = self.ledger_api.build_transaction(
-                contract_instance=token_contract,
-                method_name=method_name,
-                method_args=method_args,
-                tx_args=tx_args,
-                raise_on_try=True,
-            )
-            signed_transaction = crypto.sign_transaction(raw_transaction)
-            transaction_digest = self.ledger_api.send_signed_transaction(
-                signed_transaction,
-                raise_on_try=True,
-            )
-            return transaction_digest
-
-        raise ValueError(
-            "Transaction executor or crypto object/private key required for token approval"
+        return executor.execute_transaction(
+            contract=token_contract,
+            method_name=method_name,
+            method_args=method_args,
+            tx_args=tx_args,
         )
 
     def get_balance_tracker_address(self) -> str:

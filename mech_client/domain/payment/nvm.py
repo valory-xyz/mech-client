@@ -63,13 +63,12 @@ class NVMPaymentStrategy(PaymentStrategy):
         )
         return subscription_balance > 0
 
-    def approve_if_needed(  # pylint: disable=too-many-arguments
+    def approve_if_needed(
         self,
         payer_address: str,
         spender_address: str,
         amount: int,
         executor: Optional["TransactionExecutor"] = None,
-        private_key: Optional[str] = None,
     ) -> Optional[str]:
         """
         No approval needed for NVM subscription payments.
@@ -80,7 +79,6 @@ class NVMPaymentStrategy(PaymentStrategy):
         :param spender_address: Address allowed to spend (ignored)
         :param amount: Amount to approve (ignored)
         :param executor: Transaction executor (ignored)
-        :param private_key: Private key for signing (ignored)
         :return: None (no approval transaction)
         """
         return None  # NVM subscriptions don't need approval

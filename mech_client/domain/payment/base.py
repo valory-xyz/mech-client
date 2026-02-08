@@ -70,13 +70,12 @@ class PaymentStrategy(ABC):
         """
 
     @abstractmethod
-    def approve_if_needed(  # pylint: disable=too-many-arguments
+    def approve_if_needed(
         self,
         payer_address: str,
         spender_address: str,
         amount: int,
         executor: Optional["TransactionExecutor"] = None,
-        private_key: Optional[str] = None,
     ) -> Optional[str]:
         """
         Approve token spending if needed (for token-based payments).
@@ -87,7 +86,6 @@ class PaymentStrategy(ABC):
         :param spender_address: Address allowed to spend tokens
         :param amount: Amount to approve (in wei/smallest unit)
         :param executor: Transaction executor (handles both agent and client mode)
-        :param private_key: Private key for signing (client mode without executor)
         :return: Transaction hash if approval was sent, None otherwise
         """
 

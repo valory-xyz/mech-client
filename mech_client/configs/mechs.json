@@ -15,7 +15,16 @@
     "gas_limit": 500000,
     "price": 10000000000000000,
     "transaction_url": "https://gnosisscan.io/tx/{transaction_digest}",
-    "subgraph_url": "https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis"
+    "subgraph_url": "https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis",
+    "nvm_subscription": {
+      "subscription_nft_address": "0x1b5DeaD7309b56ca7663b3301A503e077Be18cba",
+      "receiver_plan": "0x7D686bD1fD3CFF6E45a40165154D61043af7D67c",
+      "token_address": "0x0000000000000000000000000000000000000000",
+      "plan_did": "did:nv:b0b28402e5a7229804579d4ac55b98a1dd94660d7a7eb4add78e5ca856f2aab7",
+      "subscription_credits": "1000000",
+      "plan_fee_nvm": "10000000000000000",
+      "plan_price_mechs": "990000000000000000"
+    }
   },
   "arbitrum": {
     "service_registry_contract": "0xE3607b00E75f6405248323A9417ff6b39B244b50",
@@ -69,7 +78,16 @@
     "gas_limit": 500000,
     "price": 3000000000000,
     "transaction_url": "https://basescan.org/tx/{transaction_digest}",
-    "subgraph_url": "https://api.subgraph.autonolas.tech/api/proxy/marketplace-base"
+    "subgraph_url": "https://api.subgraph.autonolas.tech/api/proxy/marketplace-base",
+    "nvm_subscription": {
+      "subscription_nft_address": "0xd5318d1a17819f65771b6c9277534c08dd765498",
+      "receiver_plan": "0xaaFBeef195BDAb1Bb6f3Dc9cEbA875Cd72499230",
+      "token_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "plan_did": "did:nv:6f74c18fae7e5c3589b99d7cd0ba317593f00dee53c81a2ba4ac2244232f99da",
+      "subscription_credits": "1000000",
+      "plan_fee_nvm": "10000",
+      "plan_price_mechs": "990000"
+    }
   },
   "celo": {
     "service_registry_contract": "0xE3607b00E75f6405248323A9417ff6b39B244b50",

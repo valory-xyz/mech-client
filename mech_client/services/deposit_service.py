@@ -128,7 +128,7 @@ class DepositService(
         """
         # Determine payment type
         if token_type == "olas":  # nosec B105
-            payment_type = PaymentType.TOKEN
+            payment_type = PaymentType.OLAS_TOKEN
         elif token_type == "usdc":  # nosec B105
             payment_type = PaymentType.USDC_TOKEN
         else:
@@ -161,7 +161,6 @@ class DepositService(
             spender_address=balance_tracker_address,
             amount=amount,
             executor=self.executor,
-            private_key=self.private_key,
         )
         if approve_tx:
             wait_for_receipt(approve_tx, self.ledger_api)

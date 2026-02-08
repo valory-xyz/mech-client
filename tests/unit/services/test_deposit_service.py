@@ -293,7 +293,7 @@ class TestDepositToken:
         # Verify
         assert tx_hash == "0xtxhash"
         mock_payment_factory.create.assert_called_once_with(
-            payment_type=PaymentType.TOKEN,
+            payment_type=PaymentType.OLAS_TOKEN,
             ledger_api=mock_ledger_api,
             chain_id=mock_config.return_value.ledger_config.chain_id,
             crypto=ANY,
@@ -527,12 +527,12 @@ class TestCheckBalance:
 
         # Check balance
         requester_address = "0x" + "1" * 40
-        balance = service.check_balance(requester_address, PaymentType.TOKEN)
+        balance = service.check_balance(requester_address, PaymentType.OLAS_TOKEN)
 
         # Verify
         assert balance == 1000 * 10**18
         mock_payment_factory.create.assert_called_once_with(
-            payment_type=PaymentType.TOKEN,
+            payment_type=PaymentType.OLAS_TOKEN,
             ledger_api=mock_ledger_api,
             chain_id=mock_config.return_value.ledger_config.chain_id,
         )

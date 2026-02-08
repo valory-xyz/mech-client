@@ -57,7 +57,7 @@ class PaymentStrategyFactory:  # pylint: disable=too-few-public-methods
         if payment_type == PaymentType.NATIVE:
             return NativePaymentStrategy(ledger_api, payment_type, chain_id)
 
-        if payment_type in (PaymentType.TOKEN, PaymentType.USDC_TOKEN):
+        if payment_type in (PaymentType.OLAS_TOKEN, PaymentType.USDC_TOKEN):
             return TokenPaymentStrategy(ledger_api, payment_type, chain_id, crypto)
 
         if payment_type in (PaymentType.NATIVE_NVM, PaymentType.TOKEN_NVM_USDC):

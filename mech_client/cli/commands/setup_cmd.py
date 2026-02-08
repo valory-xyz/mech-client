@@ -30,10 +30,10 @@ from mech_client.services.setup_service import SetupService
 
 CURR_DIR = Path(__file__).resolve().parent.parent.parent
 CHAIN_TO_TEMPLATE = {
-    "gnosis": CURR_DIR / "config" / "mech_client_gnosis.json",
-    "base": CURR_DIR / "config" / "mech_client_base.json",
-    "polygon": CURR_DIR / "config" / "mech_client_polygon.json",
-    "optimism": CURR_DIR / "config" / "mech_client_optimism.json",
+    "gnosis": CURR_DIR / "templates" / "mech_client_gnosis.json",
+    "base": CURR_DIR / "templates" / "mech_client_base.json",
+    "polygon": CURR_DIR / "templates" / "mech_client_polygon.json",
+    "optimism": CURR_DIR / "templates" / "mech_client_optimism.json",
 }
 
 
