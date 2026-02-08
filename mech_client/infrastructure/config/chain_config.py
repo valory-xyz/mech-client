@@ -19,9 +19,10 @@
 
 """Chain configuration dataclasses."""
 
-import os
 from dataclasses import dataclass, field
 from typing import Optional
+
+from mech_client.infrastructure.config.environment import EnvironmentConfig
 
 
 @dataclass
@@ -54,6 +55,9 @@ class LedgerConfig:
         2. Stored operate config (agent mode only)
         3. Default from mechs.json (lowest priority)
         """
+        # Load environment configuration (centralized env var loading)
+        env_config = EnvironmentConfig.load()
+
         # In agent mode, try to load RPC from stored operate configuration first
         if self.agent_mode and self.chain_config:
             # Import here to avoid circular imports
@@ -66,27 +70,24 @@ class LedgerConfig:
                 self.address = operate_rpc
 
         # Environment variable overrides everything (including operate config)
-        address = os.getenv("MECHX_CHAIN_RPC")
-        if address:
-            self.address = address
+        if env_config.mechx_chain_rpc:
+            self.address = env_config.mechx_chain_rpc
 
-        chain_id = os.getenv("MECHX_LEDGER_CHAIN_ID")
-        if chain_id:
-            self.chain_id = int(chain_id)
+        if env_config.mechx_ledger_chain_id is not None:
+            self.chain_id = env_config.mechx_ledger_chain_id
 
-        poa_chain = os.getenv("MECHX_LEDGER_POA_CHAIN")
-        if poa_chain:
-            self.poa_chain = bool(poa_chain)
+        if env_config.mechx_ledger_poa_chain is not None:
+            self.poa_chain = env_config.mechx_ledger_poa_chain
 
-        default_gas_price_strategy = os.getenv(
-            "MECHX_LEDGER_DEFAULT_GAS_PRICE_STRATEGY"
-        )
-        if default_gas_price_strategy:
-            self.default_gas_price_strategy = default_gas_price_strategy
+        if env_config.mechx_ledger_default_gas_price_strategy:
+            self.default_gas_price_strategy = (
+                env_config.mechx_ledger_default_gas_price_strategy
+            )
 
-        is_gas_estimation_enabled = os.getenv("MECHX_LEDGER_IS_GAS_ESTIMATION_ENABLED")
-        if is_gas_estimation_enabled:
-            self.is_gas_estimation_enabled = bool(is_gas_estimation_enabled)
+        if env_config.mechx_ledger_is_gas_estimation_enabled is not None:
+            self.is_gas_estimation_enabled = (
+                env_config.mechx_ledger_is_gas_estimation_enabled
+            )
 
 
 @dataclass
@@ -148,6 +149,9 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         2. Stored operate config (agent mode only)
         3. Default from mechs.json (lowest priority)
         """
+        # Load environment configuration (centralized env var loading)
+        env_config = EnvironmentConfig.load()
+
         # In agent mode, try to load RPC from stored operate configuration first
         if self.agent_mode and self.chain_config:
             # Import here to avoid circular imports
@@ -160,18 +164,14 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
                 self.rpc_url = operate_rpc
 
         # Environment variable overrides everything (including operate config)
-        rpc_url = os.getenv("MECHX_CHAIN_RPC")
-        if rpc_url:
-            self.rpc_url = rpc_url
+        if env_config.mechx_chain_rpc:
+            self.rpc_url = env_config.mechx_chain_rpc
 
-        gas_limit = os.getenv("MECHX_GAS_LIMIT")
-        if gas_limit:
-            self.gas_limit = int(gas_limit)
+        if env_config.mechx_gas_limit is not None:
+            self.gas_limit = env_config.mechx_gas_limit
 
-        transaction_url = os.getenv("MECHX_TRANSACTION_URL")
-        if transaction_url:
-            self.transaction_url = transaction_url
+        if env_config.mechx_transaction_url:
+            self.transaction_url = env_config.mechx_transaction_url
 
-        subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
-        if subgraph_url:
-            self.subgraph_url = subgraph_url
+        if env_config.mechx_subgraph_url:
+            self.subgraph_url = env_config.mechx_subgraph_url

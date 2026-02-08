@@ -20,7 +20,6 @@
 """Request command for sending AI task requests to mechs."""
 
 import asyncio
-import os
 from typing import Any, Dict, List, Optional
 
 import click
@@ -28,6 +27,7 @@ from click import ClickException
 
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
+from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.services.marketplace_service import MarketplaceService
 from mech_client.utils.errors.handlers import handle_cli_errors
 from mech_client.utils.validators import (
@@ -147,9 +147,11 @@ def request(
     use_offchain = use_offchain or False
     use_prepaid = use_prepaid or use_offchain
 
+    # Load environment configuration
+    env_config = EnvironmentConfig.load()
+
     # Validate offchain URL if needed
-    mech_offchain_url = os.getenv("MECHX_MECH_OFFCHAIN_URL")
-    if use_offchain and not mech_offchain_url:
+    if use_offchain and not env_config.mechx_mech_offchain_url:
         raise ClickException(
             "MECHX_MECH_OFFCHAIN_URL is required when using "
             "--use-offchain.\n"
@@ -191,7 +193,7 @@ def request(
             priority_mech=priority_mech,
             use_prepaid=use_prepaid,
             use_offchain=use_offchain,
-            mech_offchain_url=mech_offchain_url,
+            mech_offchain_url=env_config.mechx_mech_offchain_url,
             extra_attributes=extra_attributes_dict,
             timeout=timeout,
         )

@@ -19,14 +19,13 @@
 
 """Mech command for managing and querying AI mechs on the marketplace."""
 
-import os
-
 import click
 from click import ClickException
 from tabulate import tabulate  # type: ignore
 
 from mech_client.cli.validators import validate_chain_config
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
+from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
 from mech_client.utils.errors.handlers import handle_cli_errors
 
@@ -60,9 +59,11 @@ def mech_list(chain_config: str) -> None:
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)
 
+    # Load environment configuration
+    env_config = EnvironmentConfig.load()
+
     # Validate MECHX_SUBGRAPH_URL is set
-    subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
-    if not subgraph_url:
+    if not env_config.mechx_subgraph_url:
         raise ClickException(
             "Environment variable MECHX_SUBGRAPH_URL is required for this command.\n\n"
             f"This command queries blockchain data via a subgraph API.\n"
