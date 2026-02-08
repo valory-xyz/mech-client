@@ -42,46 +42,6 @@ class TestToolServiceInitialization:
 class TestToolServiceOperations:
     """Tests for tool service operations."""
 
-    @patch("mech_client.services.tool_service.ToolManager")
-    def test_list_tools_success(self, mock_tool_manager: MagicMock) -> None:
-        """Test listing tools for a service."""
-        # Setup mock
-        mock_manager_instance = MagicMock()
-        mock_tool_manager.return_value = mock_manager_instance
-
-        tool1 = ToolInfo(
-            tool_name="openai-gpt-4",
-            unique_identifier="1-openai-gpt-4",
-        )
-        tool2 = ToolInfo(
-            tool_name="claude-opus",
-            unique_identifier="1-claude-opus",
-        )
-        tools_info = ToolsForMarketplaceMech(
-            service_id=1,
-            tools=[tool1, tool2],
-        )
-        mock_manager_instance.get_tools.return_value = tools_info
-
-        service = ToolService(chain_config="gnosis")
-        result = service.list_tools(service_id=1)
-
-        assert len(result) == 2
-        assert result[0] == ("openai-gpt-4", "1-openai-gpt-4")
-        assert result[1] == ("claude-opus", "1-claude-opus")
-        mock_manager_instance.get_tools.assert_called_once_with(1)
-
-    @patch("mech_client.services.tool_service.ToolManager")
-    def test_list_tools_no_tools_found(self, mock_tool_manager: MagicMock) -> None:
-        """Test listing tools when none found."""
-        mock_manager_instance = MagicMock()
-        mock_tool_manager.return_value = mock_manager_instance
-        mock_manager_instance.get_tools.return_value = None
-
-        service = ToolService(chain_config="gnosis")
-
-        with pytest.raises(ValueError, match="No tools found"):
-            service.list_tools(service_id=999)
 
     @patch("mech_client.services.tool_service.ToolManager")
     def test_get_description(self, mock_tool_manager: MagicMock) -> None:

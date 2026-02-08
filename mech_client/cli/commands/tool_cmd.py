@@ -22,12 +22,12 @@
 from typing import List, Tuple
 
 import click
-from click import ClickException
 from tabulate import tabulate  # type: ignore
 
 from mech_client.cli.validators import validate_chain_config, validate_tool_id
 from mech_client.services.tool_service import ToolService
 from mech_client.utils.errors.handlers import handle_cli_errors
+from mech_client.utils.validators import validate_service_id
 
 
 @click.group()
@@ -61,11 +61,7 @@ def tool_list(agent_id: int, chain_config: str) -> None:
     validated_chain = validate_chain_config(chain_config)
 
     # Validate agent ID (service ID)
-    if agent_id < 0:
-        raise ClickException(
-            f"Invalid service ID: {agent_id}\n"
-            f"Service ID must be a non-negative integer."
-        )
+    agent_id = validate_service_id(agent_id)
 
     # Fetch tools
     tool_service = ToolService(validated_chain)

@@ -50,7 +50,7 @@ from mech_client.infrastructure.nvm.contracts import (
 )
 
 
-class SubscriptionService:  # pylint: disable=too-many-instance-attributes
+class SubscriptionService:  # pylint: disable=too-many-instance-attributes,too-few-public-methods
     """Service for managing Nevermined (NVM) subscriptions.
 
     Orchestrates subscription purchase workflow using the layered architecture:
@@ -195,26 +195,3 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes
         result = manager.purchase_subscription(plan_did)
 
         return result
-
-    def check_subscription_status(self, requester_address: str) -> Dict[str, Any]:
-        """
-        Check if requester has active NVM subscription.
-
-        :param requester_address: Address to check subscription for
-        :return: Dictionary with subscription status and balance
-        """
-        # Create NFT contract
-        nft_contract = cast(NFTContract, NVMContractFactory.create(self.w3, "nft"))
-
-        # Get subscription balance
-        balance = nft_contract.get_balance(
-            requester_address,
-            self.config.subscription_id,
-        )
-
-        return {
-            "address": requester_address,
-            "subscription_id": self.config.subscription_id,
-            "balance": balance,
-            "is_active": balance > 0,
-        }

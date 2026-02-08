@@ -30,6 +30,11 @@ from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
 from mech_client.services.marketplace_service import MarketplaceService
 from mech_client.utils.errors.handlers import handle_cli_errors
+from mech_client.utils.validators import (
+    validate_batch_sizes_match,
+    validate_extra_attributes,
+    validate_timeout,
+)
 
 
 @click.command()
@@ -120,7 +125,7 @@ def request(
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)
 
-    # Parse extra attributes
+    # Validate and parse extra attributes
     extra_attributes_dict: Dict[str, Any] = {}
     if extra_attribute:
         for pair in extra_attribute:
@@ -131,6 +136,12 @@ def request(
                 )
             k, v = pair.split("=", 1)
             extra_attributes_dict[k] = v
+        # Validate extra attributes structure
+        extra_attributes_dict = validate_extra_attributes(extra_attributes_dict)
+
+    # Validate timeout if provided
+    if timeout is not None:
+        timeout = validate_timeout(timeout)
 
     # Process flags
     use_offchain = use_offchain or False
@@ -149,14 +160,11 @@ def request(
     # Validate tools
     if not tools:
         raise ClickException(
-            "Tools are required. Use --tools flag to specify one or " "more tools."
+            "Tools are required. Use --tools flag to specify one or more tools."
         )
 
-    if len(prompts) != len(tools):
-        raise ClickException(
-            f"The number of prompts ({len(prompts)}) must match the "
-            f"number of tools ({len(tools)})"
-        )
+    # Validate batch sizes match
+    validate_batch_sizes_match(list(prompts), list(tools))
 
     # Validate priority_mech address
     if priority_mech:
