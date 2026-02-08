@@ -32,19 +32,31 @@ class TestNVMConfig:
     """Tests for NVMConfig."""
 
     @pytest.fixture
-    def sample_env_content(self) -> str:
-        """Sample .env file content."""
+    def sample_mechs_content(self) -> str:
+        """Sample mechs.json content."""
         return """
-CHAIN_ID=100
-NETWORK_NAME=GNOSIS
-PLAN_DID=did:nvm:test123
-SUBSCRIPTION_CREDITS=100
-PLAN_FEE_NVM=500000
-PLAN_PRICE_MECHS=500000
-SUBSCRIPTION_NFT_ADDRESS=0x1234567890123456789012345678901234567890
-OLAS_MARKETPLACE_ADDRESS=0xabcdefabcdefabcdefabcdefabcdefabcdefabcd
-RECEIVER_PLAN=0x1111111111111111111111111111111111111111
-TOKEN_ADDRESS=0x0000000000000000000000000000000000000000
+{
+  "gnosis": {
+    "service_registry_contract": "0x9338b5153AE39BB89f50468E608eD9d764B755fD",
+    "mech_marketplace_contract": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+    "ledger_config": {
+      "address": "https://rpc.gnosischain.com",
+      "chain_id": 100,
+      "poa_chain": false,
+      "default_gas_price_strategy": "eip1559",
+      "is_gas_estimation_enabled": false
+    },
+    "nvm_subscription": {
+      "subscription_nft_address": "0x1234567890123456789012345678901234567890",
+      "receiver_plan": "0x1111111111111111111111111111111111111111",
+      "token_address": "0x0000000000000000000000000000000000000000",
+      "plan_did": "did:nv:test123",
+      "subscription_credits": "100",
+      "plan_fee_nvm": "500000",
+      "plan_price_mechs": "500000"
+    }
+  }
+}
 """
 
     @pytest.fixture
@@ -219,46 +231,33 @@ TOKEN_ADDRESS=0x0000000000000000000000000000000000000000
 
     @patch("builtins.open", new_callable=mock_open)
     @patch("pathlib.Path.exists")
-    @patch("dotenv.load_dotenv")
     def test_from_chain_gnosis(
         self,
-        mock_load_dotenv: MagicMock,
         mock_exists: MagicMock,
         mock_file: MagicMock,
-        sample_env_content: str,
+        sample_mechs_content: str,
         sample_networks_content: str,
     ) -> None:
         """Test loading configuration from chain (gnosis)."""
         mock_exists.return_value = True
 
-        # Mock file reads
+        # Mock file reads - mechs.json and networks.json
         def file_content(path, *args, **kwargs):
             if "networks.json" in str(path):
                 return mock_open(read_data=sample_networks_content)()
-            return mock_open(read_data=sample_env_content)()
+            if "mechs.json" in str(path):
+                return mock_open(read_data=sample_mechs_content)()
+            return mock_open(read_data="")()
 
         mock_file.side_effect = file_content
 
-        with patch.dict(
-            os.environ,
-            {
-                "NETWORK_NAME": "GNOSIS",
-                "CHAIN_ID": "100",
-                "PLAN_DID": "did:nvm:test123",
-                "SUBSCRIPTION_CREDITS": "100",
-                "PLAN_FEE_NVM": "500000",
-                "PLAN_PRICE_MECHS": "500000",
-                "SUBSCRIPTION_NFT_ADDRESS": "0x1234567890123456789012345678901234567890",
-                "OLAS_MARKETPLACE_ADDRESS": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
-                "RECEIVER_PLAN": "0x1111111111111111111111111111111111111111",
-                "TOKEN_ADDRESS": "0x0000000000000000000000000000000000000000",
-            },
-        ):
-            config = NVMConfig.from_chain("gnosis")
+        config = NVMConfig.from_chain("gnosis")
 
         assert config.chain_config == "gnosis"
         assert config.chain_id == 100
         assert config.network_name == "GNOSIS"
+        assert config.plan_did == "did:nv:test123"
+        assert config.subscription_nft_address == "0x1234567890123456789012345678901234567890"
 
     def test_from_chain_unsupported_chain(self) -> None:
         """Test from_chain raises ValueError for unsupported chains."""
@@ -268,8 +267,8 @@ TOKEN_ADDRESS=0x0000000000000000000000000000000000000000
             NVMConfig.from_chain("polygon")
 
     @patch("pathlib.Path.exists")
-    def test_from_chain_missing_env_file(self, mock_exists: MagicMock) -> None:
-        """Test from_chain raises FileNotFoundError if .env file missing."""
+    def test_from_chain_missing_mechs_file(self, mock_exists: MagicMock) -> None:
+        """Test from_chain raises FileNotFoundError if mechs.json missing."""
         mock_exists.return_value = False
 
         with pytest.raises(FileNotFoundError, match="Configuration file not found"):
