@@ -25,28 +25,42 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 
 ### Recent Additions (v0.18.1)
 
-**29 new tests added** for agent mode RPC configuration:
+**84 new tests added** for bug fixes, CLI commands, and test coverage improvements:
+
+**Bug Fixes & Test Coverage Improvements (30 tests)**
 - **16 tests** for `load_rpc_from_operate()` utility (new file: `test_operate_config_loader.py`)
 - **13 tests** for configuration priority order in `LedgerConfig` and `MechConfig`
+- **7 tests** for integration testing with real `mechs.json` (new file: `test_config_loader_integration.py`)
 - Tests validate: environment variable > operate config > default priority
 - Tests cover agent mode vs client mode behavior differences
-- Tests ensure graceful fallback when operate config unavailable
+
+**CLI Command Tests (55 tests in 3 new files)**
+- **9 tests** for `mech list` command (new file: `test_mech_cmd.py`)
+  - Tests realistic GraphQL response structure with nested metadata lists
+  - Tests default subgraph URL behavior and environment variable overrides
+- **21 tests** for `tool` commands (new file: `test_tool_cmd.py`)
+  - Tests tool list, describe, and schema subcommands
+  - Tests validation, error handling, and edge cases
+- **25 tests** for `ipfs` commands (new file: `test_ipfs_cmd.py`)
+  - Tests file upload and prompt metadata upload
+  - Tests unicode, special characters, and various file types
 
 ### Test Statistics
 
-- **Total tests**: 306 (excluding unsupported trio backend)
-- **Test files**: 23
-- **Test classes**: 78+
-- **Coverage**: ~55% (target: 70%)
+- **Total tests**: 360 (excluding unsupported trio backend)
+- **Test files**: 27
+- **Test classes**: 90+
+- **Coverage**: ~60% (target: 70%)
 
 ### Test Breakdown by Layer
 
 | Layer | Tests | Files | Coverage Focus |
 |-------|-------|-------|----------------|
+| CLI | 55 | 3 | Command routing, output formatting, error handling |
 | Utils | 75 | 2 | Validators, error handling |
 | Domain | 80 | 7 | Strategies, watchers, factories, tools, subscriptions |
 | Services | 41 | 5 | Orchestration, workflows, deposits, setup, subscriptions |
-| Infrastructure | 110 | 11 | Adapters, clients, loaders, Safe, NVM contracts, **config priority** |
+| Infrastructure | 110 | 12 | Adapters, clients, loaders, Safe, NVM contracts, **config priority** |
 
 ## Test Structure
 
