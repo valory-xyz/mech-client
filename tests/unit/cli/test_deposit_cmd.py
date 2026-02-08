@@ -421,27 +421,13 @@ class TestDepositTokenCommand:
     @patch("mech_client.cli.commands.deposit_cmd.DepositService")
     @patch("mech_client.cli.commands.deposit_cmd.setup_wallet_command")
     @patch("mech_client.cli.commands.deposit_cmd.get_mech_config")
-    def test_deposit_token_default_is_olas(
+    def test_deposit_token_requires_token_type(
         self,
         mock_get_config: MagicMock,
         mock_setup_wallet: MagicMock,
         mock_deposit_service: MagicMock,
     ) -> None:
-        """Test deposit token defaults to OLAS when token-type not specified."""
-        # Mock config
-        mock_config = MagicMock()
-        mock_config.mech_marketplace_contract = "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB"
-        mock_get_config.return_value = mock_config
-
-        # Mock wallet
-        mock_wallet_ctx = MagicMock()
-        mock_setup_wallet.return_value = mock_wallet_ctx
-
-        # Mock service
-        mock_service = MagicMock()
-        mock_service.deposit_token.return_value = "0xabc..."
-        mock_deposit_service.return_value = mock_service
-
+        """Test deposit token requires --token-type to be specified."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             # Create a dummy key file
@@ -453,10 +439,9 @@ class TestDepositTokenCommand:
                 ["token", "1000000", "--chain-config", "gnosis", "--key", "key.txt"],
             )
 
-        # Should use olas as default
-        assert result.exit_code == 0
-        assert "OLAS" in result.output
-        mock_service.deposit_token.assert_called_once_with(1000000, token_type="olas")
+        # Should fail - token-type is required
+        assert result.exit_code == 2  # Click usage error
+        assert "Missing option '--token-type'" in result.output
 
     @patch("mech_client.cli.commands.deposit_cmd.DepositService")
     @patch("mech_client.cli.commands.deposit_cmd.setup_wallet_command")
