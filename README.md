@@ -159,30 +159,83 @@ Additionally other options are available and their usage is listed below:
 `--use-prepaid <bool>`: use the prepaid method to send requests to a Mech via the Mech Marketplace. Defaults to False. <br>
 `--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Defaults to False.
 
-##### Prepaid Requests
+#### Understanding Payment Types
 
-In order to pay for the Mech fees, you can make a deposit before sending requests. The deposit depends on the
-payment model of the Mech. For a fixed price Mech receiving payments in native token, use the following:
+**Important:** The payment type is determined by the mech's smart contract, not by the user. When you send a request, the client automatically detects the mech's payment type and handles the appropriate payment flow.
+
+There are **5 payment types** supported:
+
+| Payment Type | Description | Payment Method |
+|--------------|-------------|----------------|
+| **NATIVE** | Per-request native token payment | Sends native tokens (xDAI, ETH, MATIC) with transaction |
+| **OLAS_TOKEN** | Per-request OLAS token payment | Approves & transfers OLAS tokens |
+| **USDC_TOKEN** | Per-request USDC token payment | Approves & transfers USDC tokens |
+| **NATIVE_NVM** | NVM subscription with native token | Validates subscription NFT (no per-request payment) |
+| **TOKEN_NVM_USDC** | NVM subscription with USDC token | Validates subscription NFT (no per-request payment) |
+
+**How it works:**
+
+1. **Request command detects mech's payment type** - The client queries the mech's contract to determine how it accepts payment
+2. **Client handles payment automatically** - Based on the payment type, the client either:
+   - Sends native tokens with the transaction (NATIVE)
+   - Approves and transfers ERC20 tokens (OLAS_TOKEN, USDC_TOKEN)
+   - Validates your subscription NFT (NATIVE_NVM, TOKEN_NVM_USDC)
+3. **You can use prepaid balance** - With `--use-prepaid` flag, the marketplace deducts from your prepaid balance instead of per-request payment (works for non-subscription mechs)
+
+**Payment flow examples:**
 
 ```bash
-mechx deposit native --chain-config <chain_config> <amount>
+# NATIVE payment mech (detected automatically)
+mechx request --prompts "test" --tools openai-gpt-4 --chain-config gnosis
+# → Sends xDAI with transaction
+
+# OLAS_TOKEN payment mech (detected automatically)
+mechx request --prompts "test" --tools openai-gpt-4 --chain-config gnosis
+# → Approves OLAS → Sends request
+
+# Using prepaid balance (any non-subscription mech)
+mechx request --prompts "test" --tools openai-gpt-4 --use-prepaid --chain-config gnosis
+# → Deducts from prepaid balance
+
+# NVM subscription mech (detected automatically)
+# First purchase subscription:
+mechx subscription purchase --chain-config gnosis
+# Then make unlimited requests:
+mechx request --prompts "test" --tools openai-gpt-4 --chain-config gnosis
+# → Validates subscription NFT
 ```
 
-For a fixed price Mech receiving payments in OLAS or USDC tokens, use the following:
+##### Prepaid Requests
+
+You can deposit funds to your prepaid balance on the marketplace, then use `--use-prepaid` flag to pay from this balance instead of per-request payments. This works for non-subscription mechs only.
+
+**Deposit native tokens (for NATIVE payment mechs):**
+
+```bash
+mechx deposit native <amount> --chain-config <chain_config>
+```
+
+**Deposit ERC20 tokens (for OLAS_TOKEN or USDC_TOKEN payment mechs):**
 
 ```bash
 # Deposit OLAS tokens (amount in wei, 18 decimals)
-mechx deposit token --chain-config <chain_config> --token-type olas <amount>
+mechx deposit token <amount> --chain-config <chain_config> --token-type olas
 
 # Deposit USDC tokens (amount in smallest unit, 6 decimals)
-mechx deposit token --chain-config <chain_config> --token-type usdc <amount>
+mechx deposit token <amount> --chain-config <chain_config> --token-type usdc
 ```
 
-For a Mech using Nevermined subscriptions, to make requests, it is necessary to buy a subscription. To do that you can use the following command:
+**Note:** The `--token-type` parameter is required and must be explicitly specified.
+
+**NVM Subscriptions (for NATIVE_NVM or TOKEN_NVM_USDC payment mechs):**
+
+For mechs using NVM subscriptions, purchase a subscription upfront to enable unlimited requests during the subscription period:
 
 ```bash
 mechx subscription purchase --chain-config <chain_config>
 ```
+
+After purchasing, you can make requests without per-request payments. The marketplace validates your subscription NFT automatically.
 
 ⚠️ To ensure optimal performance and reliability when using `subscription purchase`, it is advisable to use a custom RPC provider as public RPC endpoints may be rate-limited or unreliable under high usage. You can configure your custom RPC URL in your environment variables using
 
