@@ -22,7 +22,34 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
+import requests
+
+from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
 from mech_client.infrastructure.config.environment import EnvironmentConfig
+
+
+def get_rpc_chain_id(rpc_url: str, timeout: float = 5.0) -> Optional[int]:
+    """Query an RPC endpoint to get its chain ID.
+
+    :param rpc_url: RPC endpoint URL
+    :param timeout: Request timeout in seconds
+    :return: Chain ID as integer, or None if query fails
+    """
+    try:
+        response = requests.post(
+            rpc_url,
+            json={"jsonrpc": "2.0", "method": "eth_chainId", "params": [], "id": 1},
+            timeout=timeout,
+            headers={"Content-Type": "application/json"},
+        )
+        response.raise_for_status()
+        result = response.json()
+        chain_id_hex = result.get("result")
+        if chain_id_hex:
+            return int(chain_id_hex, 16)
+    except (requests.RequestException, ValueError, KeyError):
+        pass
+    return None
 
 
 @dataclass
@@ -72,6 +99,34 @@ class LedgerConfig:
         # Environment variable overrides everything (including operate config)
         if env_config.mechx_chain_rpc:
             self.address = env_config.mechx_chain_rpc
+
+            # Verify RPC chain ID matches expected chain ID
+            actual_chain_id = get_rpc_chain_id(self.address)
+            if actual_chain_id is not None and actual_chain_id != self.chain_id:
+                # Import logger locally to avoid circular import
+                from mech_client.utils.logger import (  # pylint: disable=import-outside-toplevel
+                    get_logger,
+                )
+
+                logger = get_logger(__name__)
+                expected_chain_name = CHAIN_ID_TO_NAME.get(
+                    self.chain_id, f"chain {self.chain_id}"
+                )
+                actual_chain_name = CHAIN_ID_TO_NAME.get(
+                    actual_chain_id, f"chain {actual_chain_id}"
+                )
+                logger.warning(
+                    "MECHX_CHAIN_RPC mismatch detected!\n"
+                    "  Expected chain: %s (ID: %d)\n"
+                    "  RPC returns:    %s (ID: %d)\n"
+                    "  RPC URL: %s\n"
+                    "This may cause contract calls to fail. Please verify your MECHX_CHAIN_RPC setting.",
+                    expected_chain_name,
+                    self.chain_id,
+                    actual_chain_name,
+                    actual_chain_id,
+                    self.address,
+                )
 
         if env_config.mechx_ledger_chain_id is not None:
             self.chain_id = env_config.mechx_ledger_chain_id
