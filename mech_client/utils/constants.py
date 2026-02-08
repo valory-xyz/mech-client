@@ -20,13 +20,11 @@
 """Shared application-level constants."""
 
 # CLI and user-facing constants
-CLI_NAME = "mechx"
 OPERATE_FOLDER_NAME = ".operate_mech_client"
 SETUP_MODE_COMMAND = "setup"
 
 # Default values
 DEFAULT_TIMEOUT = 900.0  # 15 minutes in seconds
-DEFAULT_WAIT_SLEEP = 3.0  # seconds between polling attempts
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_GAS_LIMIT = 500000
 
@@ -44,20 +42,6 @@ IPFS_HEX_PREFIX = "f01"
 DELIVERY_MECH_INDEX = 1  # Index of mech address in Deliver event
 DELIVERY_DATA_INDEX = 2  # Index of data in Deliver event
 
-# Token decimals
-DECIMALS_18 = 10**18  # For OLAS and most ERC20 tokens
-DECIMALS_6 = 10**6  # For USDC
-
-# Display formats
-ADDRESS_DISPLAY_LENGTH = 10  # Show first 10 chars of address
-IPFS_HASH_DISPLAY_LENGTH = 16  # Show first 16 chars of IPFS hash
-TX_HASH_DISPLAY_LENGTH = 10  # Show first 10 chars of tx hash
-
-# Success/error symbols for CLI output
-SUCCESS_SYMBOL = "✓"
-ERROR_SYMBOL = "✗"
-WARNING_SYMBOL = "⚠"
-INFO_SYMBOL = "ℹ"
 
 # Supported chains (marketplace enabled)
 SUPPORTED_MARKETPLACE_CHAINS = [
@@ -73,16 +57,7 @@ NVM_SUPPORTED_CHAINS = [
     "base",
 ]
 
-# Environment variable names
-ENV_CHAIN_RPC = "MECHX_CHAIN_RPC"
-ENV_SUBGRAPH_URL = "MECHX_SUBGRAPH_URL"
-ENV_MECH_OFFCHAIN_URL = "MECHX_MECH_OFFCHAIN_URL"
-ENV_GAS_LIMIT = "MECHX_GAS_LIMIT"
-ENV_OPERATE_PASSWORD = "OPERATE_PASSWORD"  # nosec B105
-
 # File paths (relative to project root)
-CONFIG_DIR_NAME = "configs"
-ABI_DIR_NAME = "abis"
 TEMPLATES_DIR_NAME = "config"
 
 # Private key file (default name)
@@ -94,19 +69,6 @@ TEMPLATE_BASE = "mech_client_base.json"
 TEMPLATE_POLYGON = "mech_client_polygon.json"
 TEMPLATE_OPTIMISM = "mech_client_optimism.json"
 
-# Validation constraints
-MIN_SERVICE_ID = 0
-MAX_TOOL_ID_LENGTH = 256
-MIN_AMOUNT = 1
-MAX_BATCH_SIZE = 100  # Maximum prompts/tools in batch request
-
-# HTTP timeouts
-HTTP_REQUEST_TIMEOUT = 30.0  # seconds
-HTTP_DOWNLOAD_TIMEOUT = 120.0  # seconds for large files
-
-# Logging
-DEFAULT_LOG_LEVEL = "INFO"
-VALID_LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 # Chain-specific constants
 GNOSIS_CHAIN_ID = 100
@@ -162,12 +124,3 @@ METADATA_FIELD_DELIVERIES = "totalDeliveries"
 EVENT_DELIVER = "Deliver"
 EVENT_REQUEST = "Request"
 EVENT_DEPOSIT = "Deposit"
-
-# Error message hints
-HINT_CHECK_RPC = "Check your RPC endpoint configuration"
-HINT_CHECK_BALANCE = "Check your account balance"
-HINT_CHECK_APPROVAL = "Check token approval"
-HINT_CHECK_NETWORK = "Check your network connection"
-HINT_CHECK_ADDRESS = "Verify the address format"
-HINT_SET_ENV_VAR = "Set the required environment variable"
-HINT_RUN_SETUP = "Run the setup command first"

@@ -28,6 +28,7 @@ from operate.operate_types import ServiceTemplate
 from operate.quickstart.run_service import QuickstartConfig, run_service
 
 from mech_client.infrastructure.config import get_mech_config
+from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.operate import OperateManager
 
 
@@ -124,8 +125,6 @@ class SetupService:
             config.rpc = {}
 
         # Configure RPC for each chain in template
-        import os  # pylint: disable=import-outside-toplevel
-
         for chain in template["configurations"]:
             # Get default RPC URL for this specific chain from mechs.json
             mech_config = get_mech_config(chain)
@@ -133,9 +132,9 @@ class SetupService:
 
             # Override with MECHX_CHAIN_RPC environment variable if set
             # This allows users to override RPC for setup, but it applies to all chains
-            env_rpc_override = os.getenv("MECHX_CHAIN_RPC")
-            if env_rpc_override is not None:
-                rpc_url = env_rpc_override
+            env_config = EnvironmentConfig.load()
+            if env_config.mechx_chain_rpc is not None:
+                rpc_url = env_config.mechx_chain_rpc
                 print(
                     f"  Using MECHX_CHAIN_RPC override for {chain}: {rpc_url[:50]}..."
                 )

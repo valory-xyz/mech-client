@@ -1134,10 +1134,10 @@ When modifying code:
 
 ### 4. Configuration
 
-- Use environment variables for deployment settings
+- **Use `EnvironmentConfig` for all environment variables** (never `os.getenv()` or `os.environ[]`)
 - Keep defaults in `configs/mechs.json`
-- Use `__post_init__` for env var overrides
-- Document all configuration options
+- Use `__post_init__` to load from `EnvironmentConfig` and apply overrides
+- Document all configuration options in `EnvironmentConfig` class
 
 ### 5. Dependencies
 

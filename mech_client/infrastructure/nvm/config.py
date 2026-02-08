@@ -20,9 +20,10 @@
 """NVM subscription configuration."""
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
+
+from mech_client.infrastructure.config.environment import EnvironmentConfig
 
 
 @dataclass
@@ -57,9 +58,12 @@ class NVMConfig:  # pylint: disable=too-many-instance-attributes
 
     def __post_init__(self) -> None:
         """Override configuration with environment variables."""
+        # Load environment configuration (centralized env var loading)
+        env_config = EnvironmentConfig.load()
+
         # Allow MECHX_CHAIN_RPC to override web3_provider_uri
-        if "MECHX_CHAIN_RPC" in os.environ:
-            self.web3_provider_uri = os.environ["MECHX_CHAIN_RPC"]
+        if env_config.mechx_chain_rpc:
+            self.web3_provider_uri = env_config.mechx_chain_rpc
 
     @classmethod
     def from_chain(cls, chain_config: str) -> "NVMConfig":

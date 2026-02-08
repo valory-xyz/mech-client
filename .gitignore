@@ -20,6 +20,8 @@ __pycache__
 .operate*
 keys.json
 .mypy_cache/
+.pytest_cache/
+.claude/
 
 .idea/
 .idea/*

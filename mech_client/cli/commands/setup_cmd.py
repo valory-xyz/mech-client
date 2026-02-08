@@ -26,6 +26,7 @@ from click import ClickException
 
 from mech_client.cli.validators import validate_chain_config
 from mech_client.services.setup_service import SetupService
+from mech_client.utils.errors.handlers import handle_cli_errors
 
 
 CURR_DIR = Path(__file__).resolve().parent.parent.parent
@@ -44,6 +45,7 @@ CHAIN_TO_TEMPLATE = {
     required=True,
     help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
+@handle_cli_errors
 def setup(chain_config: str) -> None:
     """Setup agent mode for on-chain interactions via Safe multisig.
 
@@ -68,15 +70,8 @@ def setup(chain_config: str) -> None:
     # Create setup service and run setup
     setup_service = SetupService(validated_chain, template)
 
-    try:
-        click.echo(f"Setting up agent mode for {validated_chain}...")
-        setup_service.setup()
+    click.echo(f"Setting up agent mode for {validated_chain}...")
+    setup_service.setup()
 
-        # Display wallet information
-        setup_service.display_wallets()
-
-    except Exception as e:
-        raise ClickException(
-            f"Failed to setup agent mode: {e}\n\n"
-            f"Please check the error message above for details."
-        ) from e
+    # Display wallet information
+    setup_service.display_wallets()

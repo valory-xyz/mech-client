@@ -23,6 +23,7 @@ import click
 
 from mech_client.infrastructure.ipfs.client import IPFSClient
 from mech_client.infrastructure.ipfs.metadata import push_metadata_to_ipfs
+from mech_client.utils.errors.handlers import handle_cli_errors
 
 
 @click.group()
@@ -36,6 +37,7 @@ def ipfs() -> None:
 
 @ipfs.command(name="upload")
 @click.argument("file_path", metavar="<file-path>")
+@handle_cli_errors
 def ipfs_upload(file_path: str) -> None:
     """Upload a file to IPFS.
 
@@ -53,6 +55,7 @@ def ipfs_upload(file_path: str) -> None:
 @ipfs.command(name="upload-prompt")
 @click.argument("prompt", metavar="<prompt>")
 @click.argument("tool_name", metavar="<tool>")
+@handle_cli_errors
 def ipfs_upload_prompt(prompt: str, tool_name: str) -> None:
     """Upload prompt metadata to IPFS.
 

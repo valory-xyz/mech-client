@@ -40,20 +40,6 @@ class ToolService:
         self.chain_config = chain_config
         self.tool_manager = ToolManager(chain_config)
 
-    def list_tools(self, service_id: int) -> List[Tuple[str, str]]:
-        """
-        List all tools for a mech service.
-
-        :param service_id: Service ID of the mech
-        :return: List of (tool_name, unique_identifier) tuples
-        :raises ValueError: If service not found or has no tools
-        """
-        tools_info = self.tool_manager.get_tools(service_id)
-        if not tools_info:
-            raise ValueError(f"No tools found for service {service_id}")
-
-        return [(tool.tool_name, tool.unique_identifier) for tool in tools_info.tools]
-
     def get_description(self, tool_id: str) -> str:
         """
         Get description for a specific tool.

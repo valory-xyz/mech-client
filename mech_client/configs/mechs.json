@@ -1,10 +1,8 @@
 {
   "gnosis": {
-    "service_registry_contract": "0x9338b5153AE39BB89f50468E608eD9d764B755fD",
     "mech_marketplace_contract": "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB",
     "complementary_metadata_hash_address": "0x0598081D48FB80B0A7E52FAD2905AE9beCd6fC69",
     "rpc_url": "https://rpc.eu-central-2.gateway.fm/v4/gnosis/non-archival/mainnet",
-    "wss_endpoint": "wss://rpc.gnosischain.com/wss",
     "ledger_config": {
       "address": "https://rpc.eu-central-2.gateway.fm/v4/gnosis/non-archival/mainnet",
       "chain_id": 100,
@@ -27,11 +25,9 @@
     }
   },
   "arbitrum": {
-    "service_registry_contract": "0xE3607b00E75f6405248323A9417ff6b39B244b50",
     "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
     "complementary_metadata_hash_address": "0x0000000000000000000000000000000000000000",
     "rpc_url": "https://arbitrum.llamarpc.com",
-    "wss_endpoint": "wss://arbitrum.gateway.tenderly.co",
     "ledger_config": {
       "address": "https://arbitrum.llamarpc.com",
       "chain_id": 42161,
@@ -45,11 +41,9 @@
     "subgraph_url": ""
   },
   "polygon": {
-    "service_registry_contract": "0xE3607b00E75f6405248323A9417ff6b39B244b50",
     "mech_marketplace_contract": "0x343F2B005cF6D70bA610CD9F1F1927049414B582",
     "complementary_metadata_hash_address": "0xDC175E77d11246c79B23D7088750eb59160DD6b7",
     "rpc_url": "https://polygon-bor-rpc.publicnode.com",
-    "wss_endpoint": "wss://polygon.gateway.tenderly.co",
     "ledger_config": {
       "address": "https://polygon-bor-rpc.publicnode.com",
       "chain_id": 137,
@@ -63,11 +57,9 @@
     "subgraph_url": "https://api.subgraph.autonolas.tech/api/proxy/marketplace-polygon"
   },
   "base": {
-    "service_registry_contract": "0x3C1fF68f5aa342D296d4DEe4Bb1cACCA912D95fE",
     "mech_marketplace_contract": "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020",
     "complementary_metadata_hash_address": "0x28C1edC7CEd549F7f80B732fDC19f0370160707d",
     "rpc_url": "https://base.llamarpc.com",
-    "wss_endpoint": "wss://base.gateway.tenderly.co",
     "ledger_config": {
       "address": "https://base.llamarpc.com",
       "chain_id": 8453,
@@ -90,11 +82,9 @@
     }
   },
   "celo": {
-    "service_registry_contract": "0xE3607b00E75f6405248323A9417ff6b39B244b50",
     "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
     "complementary_metadata_hash_address": "0x0000000000000000000000000000000000000000",
     "rpc_url": "https://forno.celo.org",
-    "wss_endpoint": "wss://forno.celo.org/ws",
     "ledger_config": {
       "address": "https://forno.celo.org",
       "chain_id": 42220,
@@ -108,11 +98,9 @@
     "subgraph_url": ""
   },
   "optimism": {
-    "service_registry_contract": "0x3d77596beb0f130a4415df3D2D8232B3d3D31e44",
     "mech_marketplace_contract": "0x46C0D07F55d4F9B5Eed2Fc9680B5953e5fd7b461",
     "complementary_metadata_hash_address": "0x11949cBC85d8793B360029E26b18ae759708e28b",
     "rpc_url": "https://mainnet.optimism.io",
-    "wss_endpoint": "wss://optimism.gateway.tenderly.co",
     "ledger_config": {
       "address": "https://mainnet.optimism.io",
       "chain_id": 10,

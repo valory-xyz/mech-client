@@ -20,13 +20,13 @@
 """Error handler decorators for CLI commands."""
 
 import functools
-import os
 from typing import Callable
 
 import requests
 from click import ClickException
 from web3.exceptions import ContractLogicError, Web3ValidationError
 
+from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.utils.errors.exceptions import (
     AgentModeError,
     ConfigurationError,
@@ -64,10 +64,12 @@ def handle_cli_errors(func: Callable) -> Callable:
             # Already a ClickException, re-raise as-is
             raise
         except RpcError as e:
-            rpc_url = e.rpc_url or os.getenv("MECHX_CHAIN_RPC", "default")
+            env_config = EnvironmentConfig.load()
+            rpc_url = e.rpc_url or env_config.mechx_chain_rpc or "default"
             raise ClickException(ErrorMessages.rpc_error(rpc_url, str(e))) from e
         except SubgraphError as e:
-            subgraph_url = e.subgraph_url or os.getenv("MECHX_SUBGRAPH_URL", "not set")
+            env_config = EnvironmentConfig.load()
+            subgraph_url = e.subgraph_url or env_config.mechx_subgraph_url or "not set"
             raise ClickException(
                 ErrorMessages.subgraph_error(subgraph_url, str(e))
             ) from e
@@ -95,18 +97,21 @@ def handle_cli_errors(func: Callable) -> Callable:
         except DeliveryTimeoutError as e:
             raise ClickException(str(e)) from e
         except requests.exceptions.HTTPError as e:
-            rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+            env_config = EnvironmentConfig.load()
+            rpc_url = env_config.mechx_chain_rpc or "default"
             raise ClickException(ErrorMessages.rpc_error(rpc_url, str(e))) from e
         except (
             requests.exceptions.ConnectionError,
             requests.exceptions.Timeout,
         ) as e:
-            rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+            env_config = EnvironmentConfig.load()
+            rpc_url = env_config.mechx_chain_rpc or "default"
             raise ClickException(
                 ErrorMessages.rpc_network_error(rpc_url, str(e))
             ) from e
         except TimeoutError as e:
-            rpc_url = os.getenv("MECHX_CHAIN_RPC")
+            env_config = EnvironmentConfig.load()
+            rpc_url = env_config.mechx_chain_rpc
             raise ClickException(ErrorMessages.rpc_timeout(rpc_url, str(e))) from e
         except ContractLogicError as e:
             raise ClickException(ErrorMessages.contract_logic_error(str(e))) from e
@@ -140,18 +145,21 @@ def handle_rpc_errors(func: Callable) -> Callable:
         try:
             return func(*args, **kwargs)
         except requests.exceptions.HTTPError as e:
-            rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+            env_config = EnvironmentConfig.load()
+            rpc_url = env_config.mechx_chain_rpc or "default"
             raise RpcError(f"HTTP error from RPC: {e}", rpc_url=rpc_url) from e
         except (
             requests.exceptions.ConnectionError,
             requests.exceptions.Timeout,
         ) as e:
-            rpc_url = os.getenv("MECHX_CHAIN_RPC", "default")
+            env_config = EnvironmentConfig.load()
+            rpc_url = env_config.mechx_chain_rpc or "default"
             raise RpcError(
                 f"Network error connecting to RPC: {e}", rpc_url=rpc_url
             ) from e
         except TimeoutError as e:
-            rpc_url = os.getenv("MECHX_CHAIN_RPC")
+            env_config = EnvironmentConfig.load()
+            rpc_url = env_config.mechx_chain_rpc
             raise RpcError(
                 f"Timeout waiting for RPC response: {e}", rpc_url=rpc_url
             ) from e
@@ -196,7 +204,8 @@ def handle_subgraph_errors(func: Callable) -> Callable:
         try:
             return func(*args, **kwargs)
         except requests.exceptions.HTTPError as e:
-            subgraph_url = os.getenv("MECHX_SUBGRAPH_URL", "not set")
+            env_config = EnvironmentConfig.load()
+            subgraph_url = env_config.mechx_subgraph_url or "not set"
             raise SubgraphError(
                 f"HTTP error from subgraph: {e}", subgraph_url=subgraph_url
             ) from e
@@ -204,7 +213,8 @@ def handle_subgraph_errors(func: Callable) -> Callable:
             requests.exceptions.ConnectionError,
             requests.exceptions.Timeout,
         ) as e:
-            subgraph_url = os.getenv("MECHX_SUBGRAPH_URL", "not set")
+            env_config = EnvironmentConfig.load()
+            subgraph_url = env_config.mechx_subgraph_url or "not set"
             raise SubgraphError(
                 f"Network error connecting to subgraph: {e}",
                 subgraph_url=subgraph_url,

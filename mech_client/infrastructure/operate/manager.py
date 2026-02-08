@@ -27,6 +27,8 @@ from dotenv import set_key
 from operate.cli import OperateApp
 from operate.quickstart.run_service import ask_password_if_needed
 
+from mech_client.infrastructure.config.environment import EnvironmentConfig
+
 
 OPERATE_FOLDER_NAME = ".operate_mech_client"
 
@@ -72,11 +74,12 @@ class OperateManager:
             from dotenv import load_dotenv  # pylint: disable=import-outside-toplevel
 
             load_dotenv(dotenv_path=self.env_path, override=False)
-            env_password = os.getenv("OPERATE_PASSWORD")
-            if env_password:
-                os.environ["OPERATE_PASSWORD"] = env_password
+            env_config = EnvironmentConfig.load()
+            if env_config.operate_password:
+                # Set env vars for olas-operate-middleware to consume
+                os.environ["OPERATE_PASSWORD"] = env_config.operate_password
                 os.environ["ATTENDED"] = "false"
-                return env_password
+                return env_config.operate_password
 
         # Prompt for password
         ask_password_if_needed(self.operate)
