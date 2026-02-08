@@ -50,6 +50,8 @@ def get_mech_config(
 
         entry = data[chain_config].copy()
         ledger_config_data = entry.pop("ledger_config")
+        # Remove nvm_subscription if present (used by NVMConfig, not MechConfig)
+        entry.pop("nvm_subscription", None)
 
         # Create LedgerConfig with agent_mode and chain_config context
         ledger_config = LedgerConfig(

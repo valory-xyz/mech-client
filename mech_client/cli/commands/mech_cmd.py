@@ -95,8 +95,10 @@ def mech_list(chain_config: str) -> None:
             items["address"],
             items["service"]["totalDeliveries"],
             (
-                IPFS_URL_TEMPLATE.format(items["service"]["metadata"]["metadata"][2:])
-                if items["service"].get("metadata") is not None
+                IPFS_URL_TEMPLATE.format(
+                    items["service"]["metadata"][0]["metadata"][2:]
+                )
+                if items["service"].get("metadata") and items["service"]["metadata"]
                 else None
             ),
         )
