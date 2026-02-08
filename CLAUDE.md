@@ -331,9 +331,7 @@ Critical bugs fixed in v0.17.1:
 3. **Polling Cycle Sleep** (`domain/delivery/onchain_watcher.py`): Sleep inside loop instead of outside ✅ Fixed
 4. **IPFS Pinning** (`infrastructure/ipfs/metadata.py`): Unnecessary pinning for offchain requests ✅ Fixed
 5. **Agent Mode RPC Configuration** (`infrastructure/config/chain_config.py`): Commands didn't read RPC from stored operate config ✅ Fixed (v0.18.1)
-
-Known issues:
-6. **Token Approval Agent Mode** (`domain/payment/token.py`): Only implements client mode path 📋 Documented in `docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md`
+6. **Token Approval Agent Mode** (`domain/payment/token.py`): Token approvals didn't go through Safe in agent mode ✅ Fixed (v0.18.1)
 
 ## Release Workflow
 

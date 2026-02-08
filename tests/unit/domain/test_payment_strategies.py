@@ -136,6 +136,108 @@ class TestTokenPaymentStrategy:
         result = strategy.check_balance(payer_address, amount=10**18)
         assert result is False
 
+    @patch("mech_client.domain.payment.token.get_contract")
+    @patch("mech_client.domain.payment.token.get_abi")
+    def test_approve_if_needed_with_executor(
+        self,
+        mock_get_abi: MagicMock,
+        mock_get_contract: MagicMock,
+        strategy: TokenPaymentStrategy,
+        mock_web3_contract: MagicMock,
+    ) -> None:
+        """Test approval with executor (agent mode and client mode)."""
+        mock_get_contract.return_value = mock_web3_contract
+        mock_executor = MagicMock()
+        mock_executor.execute_transaction.return_value = "0xtxhash"
+
+        payer_address = "0x1234567890123456789012345678901234567890"
+        spender_address = "0x" + "a" * 40
+        amount = 10**18
+
+        result = strategy.approve_if_needed(
+            payer_address=payer_address,
+            spender_address=spender_address,
+            amount=amount,
+            executor=mock_executor,
+        )
+
+        assert result == "0xtxhash"
+        mock_executor.execute_transaction.assert_called_once()
+        call_args = mock_executor.execute_transaction.call_args[1]
+        assert call_args["contract"] == mock_web3_contract
+        assert call_args["method_name"] == "approve"
+        assert call_args["method_args"] == {"_to": spender_address, "_value": amount}
+        assert call_args["tx_args"]["sender_address"] == payer_address
+        assert call_args["tx_args"]["value"] == 0
+        assert call_args["tx_args"]["gas"] == 60000
+
+    @patch("mech_client.domain.payment.token.get_contract")
+    @patch("mech_client.domain.payment.token.get_abi")
+    def test_approve_if_needed_client_mode_without_executor(
+        self,
+        mock_get_abi: MagicMock,
+        mock_get_contract: MagicMock,
+        mock_ledger_api: MagicMock,
+        mock_web3_contract: MagicMock,
+    ) -> None:
+        """Test approval in client mode without executor (backward compatibility)."""
+        mock_get_contract.return_value = mock_web3_contract
+        mock_crypto = MagicMock()
+        mock_crypto.sign_transaction.return_value = {"signed": "tx"}
+
+        strategy = TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.TOKEN,
+            chain_id=100,
+            crypto=mock_crypto,
+        )
+
+        mock_ledger_api.build_transaction.return_value = {"raw": "tx"}
+        mock_ledger_api.send_signed_transaction.return_value = "0xtxhash"
+
+        payer_address = "0x1234567890123456789012345678901234567890"
+        spender_address = "0x" + "a" * 40
+        amount = 10**18
+
+        result = strategy.approve_if_needed(
+            payer_address=payer_address,
+            spender_address=spender_address,
+            amount=amount,
+        )
+
+        assert result == "0xtxhash"
+        mock_ledger_api.build_transaction.assert_called_once()
+        mock_crypto.sign_transaction.assert_called_once_with({"raw": "tx"})
+        mock_ledger_api.send_signed_transaction.assert_called_once_with(
+            {"signed": "tx"}, raise_on_try=True
+        )
+
+    @patch("mech_client.domain.payment.token.get_contract")
+    @patch("mech_client.domain.payment.token.get_abi")
+    def test_approve_if_needed_no_executor_no_crypto_raises_error(
+        self,
+        mock_get_abi: MagicMock,
+        mock_get_contract: MagicMock,
+        strategy: TokenPaymentStrategy,
+        mock_web3_contract: MagicMock,
+    ) -> None:
+        """Test that approval raises error when neither executor nor crypto provided."""
+        mock_get_contract.return_value = mock_web3_contract
+
+        payer_address = "0x1234567890123456789012345678901234567890"
+        spender_address = "0x" + "a" * 40
+        amount = 10**18
+
+        with pytest.raises(
+            ValueError,
+            match="Transaction executor or crypto object/private key required for token approval",
+        ):
+            strategy.approve_if_needed(
+                payer_address=payer_address,
+                spender_address=spender_address,
+                amount=amount,
+            )
+
 
 class TestNVMPaymentStrategy:
     """Tests for NVMPaymentStrategy (NVM subscription payments)."""

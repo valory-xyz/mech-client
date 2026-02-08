@@ -19,7 +19,7 @@
 
 """ERC20 token payment strategy."""
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 
@@ -33,6 +33,10 @@ from mech_client.infrastructure.config import (
     CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
     PaymentType,
 )
+
+
+if TYPE_CHECKING:
+    from mech_client.domain.execution.base import TransactionExecutor
 
 
 class TokenPaymentStrategy(PaymentStrategy):
@@ -81,11 +85,12 @@ class TokenPaymentStrategy(PaymentStrategy):
         balance = token_contract.functions.balanceOf(payer_address).call()
         return balance >= amount
 
-    def approve_if_needed(
+    def approve_if_needed(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         payer_address: str,
         spender_address: str,
         amount: int,
+        executor: Optional["TransactionExecutor"] = None,
         private_key: Optional[str] = None,
     ) -> Optional[str]:
         """
@@ -97,13 +102,11 @@ class TokenPaymentStrategy(PaymentStrategy):
         :param payer_address: Address of the payer
         :param spender_address: Address allowed to spend tokens (balance tracker)
         :param amount: Amount to approve (in token's smallest unit)
-        :param private_key: Private key for signing (required for client mode)
+        :param executor: Transaction executor (handles both agent and client mode)
+        :param private_key: Private key for signing (required for client mode without executor)
         :return: Transaction hash of approval transaction
-        :raises ValueError: If crypto not provided for signing
+        :raises ValueError: If neither executor nor crypto is provided
         """
-        if not self.crypto and not private_key:
-            raise ValueError("Crypto object or private key required for token approval")
-
         token_address = self.get_payment_token_address()
         if not token_address:
             raise ValueError("Token address not configured for this payment type")
@@ -111,12 +114,21 @@ class TokenPaymentStrategy(PaymentStrategy):
         abi = get_abi("IToken.json")
         token_contract = get_contract(token_address, abi, self.ledger_api)
 
-        # Build approval transaction
+        # Build approval transaction arguments
         tx_args = {"sender_address": payer_address, "value": 0, "gas": 60000}
         method_name = "approve"
         method_args = {"_to": spender_address, "_value": amount}
 
-        # Client mode: build, sign, and send
+        # Use executor if provided (handles both agent and client mode)
+        if executor:
+            return executor.execute_transaction(
+                contract=token_contract,
+                method_name=method_name,
+                method_args=method_args,
+                tx_args=tx_args,
+            )
+
+        # Fallback: client mode without executor (backward compatibility)
         if self.crypto or private_key:
             if not self.crypto:
                 raise ValueError("Crypto object required for token approval")
@@ -135,7 +147,9 @@ class TokenPaymentStrategy(PaymentStrategy):
             )
             return transaction_digest
 
-        return None
+        raise ValueError(
+            "Transaction executor or crypto object/private key required for token approval"
+        )
 
     def get_balance_tracker_address(self) -> str:
         """

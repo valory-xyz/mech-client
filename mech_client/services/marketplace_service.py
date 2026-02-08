@@ -182,6 +182,7 @@ class MarketplaceService(
                 payer_address=sender,
                 spender_address=balance_tracker,
                 amount=price,
+                executor=self.executor,
                 private_key=self.private_key,
             )
 
