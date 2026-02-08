@@ -2272,29 +2272,33 @@ description = ""
 optional = false
 python-versions = "<3.12,>=3.10"
 groups = ["main"]
-files = [
-    {file = "olas_operate_middleware-0.14.9-py3-none-any.whl", hash = "sha256:8599938a3945fe41f15d2a6f6fd97f1c869ccb8f2255ff4142916c0286191c33"},
-    {file = "olas_operate_middleware-0.14.9.tar.gz", hash = "sha256:718640aeda546b3b16bc1572f3263210898955a22796a8156b5cf3cb40e6a60a"},
-]
+files = []
+develop = false
 
 [package.dependencies]
-argon2-cffi = "23.1.0"
-clea = "0.1.0rc4"
-cryptography = ">=46.0.3,<47.0.0"
-cytoolz = "0.12.3"
-deepdiff = ">=8.6.1,<9.0.0"
+argon2-cffi = "==23.1.0"
+clea = "==0.1.0rc4"
+cryptography = "^46.0.3"
+cytoolz = "==0.12.3"
+deepdiff = "^8.6.1"
 fastapi = "0.110.3"
-halo = "0.0.31"
-multiaddr = "0.0.9"
-open-aea-cli-ipfs = ">=2.0.8,<3.0.0"
-open-aea-ledger-cosmos = ">=2.0.8,<3.0.0"
-open-aea-ledger-ethereum = ">=2.0.8,<3.0.0"
-open-aea-ledger-ethereum-flashbots = ">=2.0.8,<3.0.0"
-open-autonomy = ">=0.21.8,<0.22.0"
-psutil = ">=5.9.8,<6.0.0"
-pyinstaller = ">=6.8.0,<7.0.0"
-requests-mock = ">=1.12.1,<2.0.0"
-uvicorn = "0.27.0"
+halo = "==0.0.31"
+multiaddr = "==0.0.9"
+open-aea-cli-ipfs = "^2.0.8"
+open-aea-ledger-cosmos = "^2.0.8"
+open-aea-ledger-ethereum = "^2.0.8"
+open-aea-ledger-ethereum-flashbots = "^2.0.8"
+open-autonomy = "^0.21.9"
+psutil = "^5.9.8"
+pyinstaller = "^6.8.0"
+requests-mock = "^1.12.1"
+uvicorn = "==0.27.0"
+
+[package.source]
+type = "git"
+url = "https://github.com/valory-xyz/olas-operate-middleware.git"
+reference = "580b48e8d0b2dd57815fc2a048ec7e2d12bf8245"
+resolved_reference = "580b48e8d0b2dd57815fc2a048ec7e2d12bf8245"
 
 [[package]]
 name = "open-aea"
@@ -2425,14 +2429,14 @@ open-aea-ledger-ethereum = ">=2.0.0,<2.1.0"
 
 [[package]]
 name = "open-autonomy"
-version = "0.21.8"
+version = "0.21.9"
 description = "A framework for the creation of autonomous agent services."
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "open_autonomy-0.21.8-py3-none-any.whl", hash = "sha256:763cd5cc8ee8839a995ef82a19fc3a4a58510aa8a601df36c7cf4e3bfb77d12d"},
-    {file = "open_autonomy-0.21.8.tar.gz", hash = "sha256:4b18c2579f6cf4c2518ef32579c85447cc2624629db0a105e261200eb2b540e2"},
+    {file = "open_autonomy-0.21.9-py3-none-any.whl", hash = "sha256:6657161269dd3c65b21ab0dcb3848a8a00d7d650ab4e0c8c3d8395f5a0a73060"},
+    {file = "open_autonomy-0.21.9.tar.gz", hash = "sha256:35c004d1eade03de075ec6377cc4287294f53c7c332bdf962039102a00e4c5e9"},
 ]
 
 [package.dependencies]
@@ -4339,4 +4343,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10, <3.12"
-content-hash = "1d51ec8bebf720b9715189590806c55ed7ed9ec01993c28dfb419daae5e16afc"
+content-hash = "302a898fda9ef4ac352d9d5f146b9b7998da48a6cfed87dfedfa3b80b091c8ed"
