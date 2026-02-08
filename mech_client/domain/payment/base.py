@@ -20,11 +20,15 @@
 """Base payment strategy interface."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 
 from aea_ledger_ethereum import EthereumApi
 
 from mech_client.infrastructure.config import PaymentType
+
+
+if TYPE_CHECKING:
+    from mech_client.domain.execution.base import TransactionExecutor
 
 
 class PaymentStrategy(ABC):
@@ -66,11 +70,12 @@ class PaymentStrategy(ABC):
         """
 
     @abstractmethod
-    def approve_if_needed(
+    def approve_if_needed(  # pylint: disable=too-many-arguments
         self,
         payer_address: str,
         spender_address: str,
         amount: int,
+        executor: Optional["TransactionExecutor"] = None,
         private_key: Optional[str] = None,
     ) -> Optional[str]:
         """
@@ -81,7 +86,8 @@ class PaymentStrategy(ABC):
         :param payer_address: Address of the payer
         :param spender_address: Address allowed to spend tokens
         :param amount: Amount to approve (in wei/smallest unit)
-        :param private_key: Private key for signing (client mode)
+        :param executor: Transaction executor (handles both agent and client mode)
+        :param private_key: Private key for signing (client mode without executor)
         :return: Transaction hash if approval was sent, None otherwise
         """
 

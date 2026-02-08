@@ -19,12 +19,16 @@
 
 """Native token payment strategy."""
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.config import CHAIN_TO_NATIVE_BALANCE_TRACKER
+
+
+if TYPE_CHECKING:
+    from mech_client.domain.execution.base import TransactionExecutor
 
 
 class NativePaymentStrategy(PaymentStrategy):
@@ -49,11 +53,12 @@ class NativePaymentStrategy(PaymentStrategy):
         balance = self.ledger_api.get_balance(payer_address)
         return balance >= amount
 
-    def approve_if_needed(
+    def approve_if_needed(  # pylint: disable=too-many-arguments
         self,
         payer_address: str,
         spender_address: str,
         amount: int,
+        executor: Optional["TransactionExecutor"] = None,
         private_key: Optional[str] = None,
     ) -> Optional[str]:
         """
@@ -62,6 +67,7 @@ class NativePaymentStrategy(PaymentStrategy):
         :param payer_address: Address of the payer
         :param spender_address: Address allowed to spend tokens (ignored)
         :param amount: Amount to approve (ignored)
+        :param executor: Transaction executor (ignored)
         :param private_key: Private key for signing (ignored)
         :return: None (no approval transaction)
         """

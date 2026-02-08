@@ -19,7 +19,7 @@
 
 """Nevermined (NVM) subscription payment strategy."""
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
@@ -29,6 +29,10 @@ from mech_client.infrastructure.config import (
     CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
     PaymentType,
 )
+
+
+if TYPE_CHECKING:
+    from mech_client.domain.execution.base import TransactionExecutor
 
 
 class NVMPaymentStrategy(PaymentStrategy):
@@ -59,11 +63,12 @@ class NVMPaymentStrategy(PaymentStrategy):
         )
         return subscription_balance > 0
 
-    def approve_if_needed(
+    def approve_if_needed(  # pylint: disable=too-many-arguments
         self,
         payer_address: str,
         spender_address: str,
         amount: int,
+        executor: Optional["TransactionExecutor"] = None,
         private_key: Optional[str] = None,
     ) -> Optional[str]:
         """
@@ -74,6 +79,7 @@ class NVMPaymentStrategy(PaymentStrategy):
         :param payer_address: Address of the payer
         :param spender_address: Address allowed to spend (ignored)
         :param amount: Amount to approve (ignored)
+        :param executor: Transaction executor (ignored)
         :param private_key: Private key for signing (ignored)
         :return: None (no approval transaction)
         """

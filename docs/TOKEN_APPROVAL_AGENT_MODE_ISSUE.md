@@ -1,8 +1,12 @@
 # Token Approval Agent Mode Issue
 
-## Problem
+## Status: ✅ FIXED
 
-The `TokenPaymentStrategy.approve_if_needed()` method in `mech_client/domain/payment/token.py` only implements the client mode path. In agent mode, token approvals need to go through the Safe multisig, otherwise the approval comes from the EOA instead of the Safe address, and subsequent token transfers from the Safe will fail due to insufficient allowance.
+**Fixed in:** v0.18.1 (2026-02-08)
+
+## Problem (Historical)
+
+The `TokenPaymentStrategy.approve_if_needed()` method in `mech_client/domain/payment/token.py` only implemented the client mode path. In agent mode, token approvals needed to go through the Safe multisig, otherwise the approval came from the EOA instead of the Safe address, and subsequent token transfers from the Safe would fail due to insufficient allowance.
 
 ## Current Implementation
 
@@ -165,3 +169,24 @@ After implementing the fix:
 - Similar pattern is used correctly for the main request transaction
 - See `AgentExecutor.execute_transaction()` for Safe execution pattern
 - See `ClientExecutor.execute_transaction()` for EOA execution pattern
+
+## Fix Summary
+
+The fix was implemented successfully with the following changes:
+
+1. **Updated base class** (`mech_client/domain/payment/base.py`): Added `executor` parameter to `approve_if_needed()` signature
+2. **Updated token strategy** (`mech_client/domain/payment/token.py`): Implemented executor-based approval with fallback to direct signing
+3. **Updated other strategies** (`native.py`, `nvm.py`): Updated signatures to match base class
+4. **Updated callers**:
+   - `mech_client/services/marketplace_service.py:181` - Now passes `executor=self.executor`
+   - `mech_client/services/deposit_service.py:159` - Now passes `executor=self.executor`
+5. **Added comprehensive tests** (`tests/unit/domain/test_payment_strategies.py`):
+   - Test approval with executor (agent mode)
+   - Test approval without executor (client mode, backward compatibility)
+   - Test error handling when neither executor nor crypto provided
+
+**Result:**
+- ✅ Token payments work in agent mode (Safe multisig)
+- ✅ Token payments work in client mode (EOA)
+- ✅ All 309 unit tests pass
+- ✅ All linters pass (pylint 10.00/10)

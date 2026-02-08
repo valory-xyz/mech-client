@@ -160,6 +160,7 @@ class DepositService(
             payer_address=sender,
             spender_address=balance_tracker_address,
             amount=amount,
+            executor=self.executor,
             private_key=self.private_key,
         )
         if approve_tx:
