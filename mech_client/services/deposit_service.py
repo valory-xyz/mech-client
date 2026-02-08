@@ -128,7 +128,7 @@ class DepositService(
         """
         # Determine payment type
         if token_type == "olas":  # nosec B105
-            payment_type = PaymentType.TOKEN
+            payment_type = PaymentType.OLAS_TOKEN
         elif token_type == "usdc":  # nosec B105
             payment_type = PaymentType.USDC_TOKEN
         else:

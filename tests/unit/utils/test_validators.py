@@ -151,9 +151,9 @@ class TestValidatePaymentType:
         assert result == PaymentType.NATIVE
 
     def test_valid_payment_type_token(self) -> None:
-        """Test validation of TOKEN payment type."""
-        result = validate_payment_type("TOKEN")
-        assert result == PaymentType.TOKEN
+        """Test validation of OLAS_TOKEN payment type."""
+        result = validate_payment_type("OLAS_TOKEN")
+        assert result == PaymentType.OLAS_TOKEN
 
     def test_lowercase_payment_type(self) -> None:
         """Test validation accepts lowercase payment type."""

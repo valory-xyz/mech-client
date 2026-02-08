@@ -88,13 +88,13 @@ class TestTokenPaymentStrategy:
         """Create token payment strategy instance."""
         return TokenPaymentStrategy(
             ledger_api=mock_ledger_api,
-            payment_type=PaymentType.TOKEN,
+            payment_type=PaymentType.OLAS_TOKEN,
             chain_id=100,  # Gnosis
         )
 
     def test_initialization(self, strategy: TokenPaymentStrategy) -> None:
         """Test strategy initialization."""
-        assert strategy.payment_type == PaymentType.TOKEN
+        assert strategy.payment_type == PaymentType.OLAS_TOKEN
         assert strategy.chain_id == 100
 
     @patch("mech_client.domain.payment.token.get_contract")
@@ -187,7 +187,7 @@ class TestTokenPaymentStrategy:
 
         strategy = TokenPaymentStrategy(
             ledger_api=mock_ledger_api,
-            payment_type=PaymentType.TOKEN,
+            payment_type=PaymentType.OLAS_TOKEN,
             chain_id=100,
             crypto=mock_crypto,
         )
@@ -324,13 +324,13 @@ class TestPaymentStrategyFactory:
     ) -> None:
         """Test factory creates token payment strategy."""
         strategy = PaymentStrategyFactory.create(
-            payment_type=PaymentType.TOKEN,
+            payment_type=PaymentType.OLAS_TOKEN,
             ledger_api=mock_ledger_api,
             chain_id=100,
         )
 
         assert isinstance(strategy, TokenPaymentStrategy)
-        assert strategy.payment_type == PaymentType.TOKEN
+        assert strategy.payment_type == PaymentType.OLAS_TOKEN
 
     def test_create_usdc_token_strategy(
         self,

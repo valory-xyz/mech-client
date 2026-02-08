@@ -139,7 +139,7 @@ REQUEST_TYPE_BATCH = "batch"
 # Payment method display names
 PAYMENT_METHOD_NAMES = {
     "NATIVE": "Native Token",
-    "TOKEN": "OLAS Token",
+    "OLAS_TOKEN": "OLAS Token",
     "USDC_TOKEN": "USDC Token",
     "NATIVE_NVM": "Native Token (NVM Subscription)",
     "TOKEN_NVM_USDC": "USDC Token (NVM Subscription)",

@@ -27,14 +27,16 @@ class PaymentType(Enum):
 
     Values are keccak256 hashes identifying each payment type:
     - NATIVE: Native token payment (xDAI, ETH, MATIC, etc.)
-    - TOKEN: OLAS token payment
+    - OLAS_TOKEN: OLAS token payment
     - USDC_TOKEN: USDC token payment
     - NATIVE_NVM: Native token with NVM subscription
     - TOKEN_NVM_USDC: USDC token with NVM subscription
     """
 
     NATIVE = "ba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"  # nosec
-    TOKEN = "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
+    OLAS_TOKEN = (
+        "3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9"  # nosec
+    )
     USDC_TOKEN = (
         "6406bb5f31a732f898e1ce9fdd988a80a808d36ab5d9a4a4805a8be8d197d5e3"  # nosec
     )
@@ -65,7 +67,7 @@ class PaymentType(Enum):
     def is_token(self) -> bool:
         """Check if payment type uses ERC20 tokens."""
         return self in (
-            PaymentType.TOKEN,
+            PaymentType.OLAS_TOKEN,
             PaymentType.USDC_TOKEN,
             PaymentType.TOKEN_NVM_USDC,
         )
@@ -80,4 +82,4 @@ class PaymentType(Enum):
 
     def is_olas(self) -> bool:
         """Check if payment type uses OLAS token."""
-        return self == PaymentType.TOKEN
+        return self == PaymentType.OLAS_TOKEN
