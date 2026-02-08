@@ -114,19 +114,60 @@ See [docs/COMMANDS.md](./docs/COMMANDS.md) for more common issues and their solu
 
 ## Key Patterns and Conventions
 
-### 1. Dataclasses for Configuration
+### 1. Centralized Environment Variable Configuration
 
-Use `@dataclass` with `__post_init__` for environment variable overrides:
+**CRITICAL:** All environment variable loading must go through `EnvironmentConfig` - never use `os.getenv()` or `os.environ[]` directly outside of error handlers.
+
+**Single Source of Truth:**
+```python
+from mech_client.infrastructure.config.environment import EnvironmentConfig
+
+# Load environment config once
+env_config = EnvironmentConfig.load()
+
+# Access env vars through the config object
+if env_config.mechx_chain_rpc:
+    use_custom_rpc(env_config.mechx_chain_rpc)
+```
+
+**Available Environment Variables (see `EnvironmentConfig` for full list):**
+- `MECHX_CHAIN_RPC` - Chain RPC endpoint (most critical)
+- `MECHX_SUBGRAPH_URL` - Subgraph GraphQL endpoint
+- `MECHX_MECH_OFFCHAIN_URL` - Offchain mech endpoint
+- `MECHX_GAS_LIMIT` - Gas limit override
+- `MECHX_TRANSACTION_URL` - Block explorer URL template
+- `MECHX_LEDGER_CHAIN_ID` - Override chain ID
+- `MECHX_LEDGER_POA_CHAIN` - Enable POA chain mode
+- `MECHX_LEDGER_DEFAULT_GAS_PRICE_STRATEGY` - Gas price strategy
+- `MECHX_LEDGER_IS_GAS_ESTIMATION_ENABLED` - Enable gas estimation
+- `OPERATE_PASSWORD` - Password for agent mode keyfile decryption
+
+**Dataclasses for Configuration:**
+
+Use `@dataclass` with `__post_init__` that loads from `EnvironmentConfig`:
 
 ```python
+from mech_client.infrastructure.config.environment import EnvironmentConfig
+
 @dataclass
 class MechConfig:
-    chain_rpc: str = "https://default-rpc.com"
+    rpc_url: str  # Default from mechs.json
 
     def __post_init__(self) -> None:
-        # Override from environment variable
-        self.chain_rpc = os.getenv("MECHX_CHAIN_RPC", self.chain_rpc)
+        # Load environment configuration (centralized)
+        env_config = EnvironmentConfig.load()
+
+        # Override from environment if set
+        if env_config.mechx_chain_rpc:
+            self.rpc_url = env_config.mechx_chain_rpc
 ```
+
+**Benefits:**
+- Single source of truth for all environment variables
+- Improved testability (easy to mock)
+- Self-documenting via type hints and docstrings
+- Type-safe environment variable access
+- Eliminates inconsistent patterns
 
 ### 2. Error Handling Pattern
 
@@ -241,15 +282,32 @@ All functions must have type hints. Mypy runs with `--disallow-untyped-defs`.
 
 ### 9. Configuration Override Pattern
 
-All configuration values can be overridden via `MECHX_*` environment variables:
+All configuration values can be overridden via `MECHX_*` environment variables using `EnvironmentConfig`:
 
-1. Load defaults from `mech_client/configs/mechs.json`
-2. Override in `MechConfig.__post_init__()` if environment variable is set
+**Priority order:**
+1. Environment variable (via `EnvironmentConfig`) - highest priority
+2. Stored operate config (agent mode only, for RPC)
+3. Default from `mech_client/configs/mechs.json` - lowest priority
 
-Key variables:
+**Implementation:**
+```python
+from mech_client.infrastructure.config.environment import EnvironmentConfig
+
+def __post_init__(self) -> None:
+    # Load environment configuration (centralized)
+    env_config = EnvironmentConfig.load()
+
+    # Override if env var is set
+    if env_config.mechx_chain_rpc:
+        self.rpc_url = env_config.mechx_chain_rpc
+```
+
+**Key variables:**
 - `MECHX_CHAIN_RPC`: Override RPC endpoint (most important)
 - `MECHX_SUBGRAPH_URL`: Override subgraph URL (required for `mech list`)
 - `MECHX_MECH_OFFCHAIN_URL`: Offchain mech endpoint (required for `--use-offchain`)
+
+See `EnvironmentConfig` class in `infrastructure/config/environment.py` for complete list.
 
 ### 10. User Experience Guidelines
 

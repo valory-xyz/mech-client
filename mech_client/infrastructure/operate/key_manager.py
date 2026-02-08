@@ -19,12 +19,12 @@
 
 """Key management utilities for agent mode."""
 
-import os
 from typing import Optional, Tuple
 
 from operate.cli import logger as operate_logger
 from operate.services.manage import KeysManager
 
+from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.operate.manager import OperateManager
 
 
@@ -72,4 +72,5 @@ def fetch_agent_mode_keys(chain_config: str) -> Tuple[str, str, Optional[str]]:
     key_path = keys_manager.get_private_key_file(agent_address)
     safe_address = service.chain_configs[chain_config].chain_data.multisig
 
-    return safe_address, str(key_path), os.getenv("OPERATE_PASSWORD")
+    env_config = EnvironmentConfig.load()
+    return safe_address, str(key_path), env_config.operate_password
