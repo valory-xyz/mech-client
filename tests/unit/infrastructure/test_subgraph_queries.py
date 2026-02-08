@@ -400,17 +400,22 @@ class TestQueryMmMechsInfo:
         mock_config.subgraph_url = "https://subgraph.example.com/gnosis"
         mock_get_config.return_value = mock_config
 
-        # Setup mock subgraph response with additional fields
+        # Setup mock subgraph response with realistic GraphQL structure
         mock_client = MagicMock()
         mock_client.query_mechs.return_value = {
             "meches": [
                 {
-                    "id": "0xmech1",
+                    "id": "2182",
                     "mechFactory": "0x8b299c20F87e3fcBfF0e1B86dC0acC06AB6993EF",
                     "totalDeliveriesTransactions": "5",
                     "address": "0xabcdef",
-                    "serviceId": "123",
-                    "metadata": "https://example.com/metadata",
+                    "service": {
+                        "id": "2182",
+                        "totalDeliveries": "5",
+                        "metadata": [
+                            {"metadata": "0x1234567890abcdef"}
+                        ],  # Realistic structure
+                    },
                 }
             ]
         }
@@ -422,10 +427,11 @@ class TestQueryMmMechsInfo:
         # Verify all fields preserved plus mech_type added
         assert result is not None
         assert len(result) == 1
-        assert result[0]["id"] == "0xmech1"
+        assert result[0]["id"] == "2182"
         assert result[0]["mechFactory"] == "0x8b299c20F87e3fcBfF0e1B86dC0acC06AB6993EF"
         assert result[0]["totalDeliveriesTransactions"] == "5"
         assert result[0]["address"] == "0xabcdef"
-        assert result[0]["serviceId"] == "123"
-        assert result[0]["metadata"] == "https://example.com/metadata"
+        assert result[0]["service"]["id"] == "2182"
+        assert result[0]["service"]["totalDeliveries"] == "5"
+        assert result[0]["service"]["metadata"][0]["metadata"] == "0x1234567890abcdef"
         assert result[0]["mech_type"] == "Fixed Price Native"

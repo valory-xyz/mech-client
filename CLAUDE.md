@@ -52,23 +52,20 @@ export MECHX_CHAIN_RPC='https://mainnet.base.org'  # Base
 - The `wait_for_receipt()` function polls HTTP RPC to get transaction receipt
 - If RPC is slow/down, it times out after 5 minutes (300 seconds)
 
-### Issue: "Subgraph URL not set" (mech list)
+### Issue: Custom Subgraph URL (optional)
 
-**Cause:** MECHX_SUBGRAPH_URL environment variable not set (no default in config)
+**Note:** Default subgraph URLs are provided in config. Override only if needed.
 
-**Solution:**
+**Solution (Optional):**
 ```bash
-# Gnosis
-export MECHX_SUBGRAPH_URL='https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis'
+# Override default subgraph URL if needed
+export MECHX_SUBGRAPH_URL='https://your-custom-subgraph-url'
 
-# Base
-export MECHX_SUBGRAPH_URL='https://api.subgraph.autonolas.tech/api/proxy/marketplace-base'
-
-# Polygon
-export MECHX_SUBGRAPH_URL='https://api.subgraph.autonolas.tech/api/proxy/marketplace-polygon'
-
-# Optimism
-export MECHX_SUBGRAPH_URL='https://api.subgraph.autonolas.tech/api/proxy/marketplace-optimism'
+# Default URLs (already configured):
+# Gnosis:   https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis
+# Base:     https://api.subgraph.autonolas.tech/api/proxy/marketplace-base
+# Polygon:  https://api.subgraph.autonolas.tech/api/proxy/marketplace-polygon
+# Optimism: https://api.subgraph.autonolas.tech/api/proxy/marketplace-optimism
 ```
 
 ### Issue: "Permission denied" when reading private key
@@ -132,7 +129,7 @@ if env_config.mechx_chain_rpc:
 
 **Available Environment Variables (see `EnvironmentConfig` for full list):**
 - `MECHX_CHAIN_RPC` - Chain RPC endpoint (most critical)
-- `MECHX_SUBGRAPH_URL` - Subgraph GraphQL endpoint
+- `MECHX_SUBGRAPH_URL` - Subgraph GraphQL endpoint (optional, defaults provided)
 - `MECHX_MECH_OFFCHAIN_URL` - Offchain mech endpoint
 - `MECHX_GAS_LIMIT` - Gas limit override
 - `MECHX_TRANSACTION_URL` - Block explorer URL template
@@ -304,7 +301,7 @@ def __post_init__(self) -> None:
 
 **Key variables:**
 - `MECHX_CHAIN_RPC`: Override RPC endpoint (most important)
-- `MECHX_SUBGRAPH_URL`: Override subgraph URL (required for `mech list`)
+- `MECHX_SUBGRAPH_URL`: Override subgraph URL (optional, defaults provided)
 - `MECHX_MECH_OFFCHAIN_URL`: Offchain mech endpoint (required for `--use-offchain`)
 
 See `EnvironmentConfig` class in `infrastructure/config/environment.py` for complete list.
