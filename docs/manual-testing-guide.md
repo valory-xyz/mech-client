@@ -29,7 +29,7 @@ This guide provides step-by-step instructions for manually testing all CLI comma
    ```bash
    # Create .env file or export these:
    export MECHX_CHAIN_RPC='https://rpc.gnosischain.com'
-   export MECHX_SUBGRAPH_URL='https://your-subgraph-url'  # For fetch-mm-mechs-info
+   export MECHX_SUBGRAPH_URL='https://your-subgraph-url'  # For mech list command
    export MECHX_MECH_OFFCHAIN_URL='http://localhost:8000/'  # For offchain testing
    ```
 
@@ -37,6 +37,38 @@ This guide provides step-by-step instructions for manually testing all CLI comma
    - Ensure your test wallet has native tokens (xDAI on Gnosis, ETH on other chains)
    - For token payments: ensure you have OLAS or USDC tokens
    - **Never use your main wallet for testing!**
+
+---
+
+## Understanding Payment Types
+
+**Important**: Payment types are determined by each mech's smart contract, not by the user. The client automatically detects and handles the appropriate payment flow.
+
+### Payment Types
+
+| Payment Type | Description | How Client Handles Payment |
+|--------------|-------------|----------------------------|
+| **NATIVE** | Per-request native token | Sends native tokens (xDAI, ETH, MATIC) with transaction |
+| **OLAS_TOKEN** | Per-request OLAS token | Approves & transfers OLAS tokens |
+| **USDC_TOKEN** | Per-request USDC token | Approves & transfers USDC tokens |
+| **NATIVE_NVM** | NVM subscription + native | Validates subscription NFT (requires `subscription purchase` first) |
+| **TOKEN_NVM_USDC** | NVM subscription + USDC | Validates subscription NFT (requires `subscription purchase` first) |
+
+### How It Works
+
+1. **Client detects payment type**: Queries mech's contract to determine payment method
+2. **Client handles payment automatically**:
+   - For NATIVE: Sends tokens with transaction
+   - For token payments (OLAS/USDC): Approves tokens, then sends request
+   - For NVM subscriptions: Validates your subscription NFT
+3. **Optional prepaid balance**: Use `--use-prepaid` flag to pay from prepaid balance instead of per-request (works for non-subscription mechs)
+
+### Testing Different Payment Types
+
+When testing, you'll encounter mechs with different payment types:
+- Find NATIVE mechs for native token testing
+- Find OLAS_TOKEN or USDC_TOKEN mechs for token payment testing
+- Find NATIVE_NVM or TOKEN_NVM_USDC mechs for subscription testing (Gnosis/Base only)
 
 ---
 
@@ -130,7 +162,7 @@ mechx request \
 **Expected Output**:
 ```
 Agent mode enabled
-Running interact with agent_mode=True
+Sending marketplace request...
 Fetching Mech Info...
 Native Mech detected, fetching user native balance for price payment...
 Sending Mech Marketplace request...
@@ -335,10 +367,10 @@ Deposit successful!
 
 ### 7. Deposit Token (Client Mode)
 
-**Purpose**: Deposit OLAS tokens for prepaid marketplace requests using client mode (EOA)
+**Purpose**: Deposit ERC20 tokens (OLAS or USDC) for prepaid marketplace requests using client mode (EOA)
 
 **Prerequisites**:
-- Wallet funded with OLAS tokens
+- Wallet funded with OLAS or USDC tokens
 
 **Command**:
 ```bash
@@ -346,8 +378,18 @@ Deposit successful!
 mechx --client-mode deposit token \
   1000000000000000000 \
   --chain-config gnosis \
+  --token-type olas \
+  --key ethereum_private_key.txt
+
+# OR deposit 1 USDC (6 decimals = 1000000 smallest unit)
+mechx --client-mode deposit token \
+  1000000 \
+  --chain-config base \
+  --token-type usdc \
   --key ethereum_private_key.txt
 ```
+
+**Note**: The `--token-type` parameter is **required** and must be either `olas` or `usdc`.
 
 **Expected Output**:
 ```
@@ -373,19 +415,29 @@ Deposit successful!
 
 ### 7b. Deposit Token (Agent Mode)
 
-**Purpose**: Deposit OLAS tokens via Safe multisig in agent mode
+**Purpose**: Deposit ERC20 tokens (OLAS or USDC) via Safe multisig in agent mode
 
 **Prerequisites**:
 - Agent mode setup completed (run `setup`)
-- Safe address funded with OLAS tokens
+- Safe address funded with OLAS or USDC tokens
 
 **Command**:
 ```bash
 # No --client-mode flag = uses agent mode
+# Deposit OLAS
 mechx deposit token \
   1000000000000000000 \
-  --chain-config gnosis
+  --chain-config gnosis \
+  --token-type olas
+
+# OR deposit USDC
+mechx deposit token \
+  1000000 \
+  --chain-config base \
+  --token-type usdc
 ```
+
+**Note**: The `--token-type` parameter is **required** and must be either `olas` or `usdc`.
 
 **Expected Output**:
 ```
@@ -638,9 +690,9 @@ Fulfillment TX: 0xabc123...
 
 ---
 
-### 9. Fetch Marketplace Mechs Info
+### 9. List Marketplace Mechs
 
-**Purpose**: Query subgraph for marketplace mechs with most deliveries
+**Purpose**: Query subgraph for marketplace mechs with most deliveries (top 20)
 
 **Prerequisites**:
 - `MECHX_SUBGRAPH_URL` environment variable set
@@ -1042,7 +1094,7 @@ export MECHX_CHAIN_RPC='https://rpc.ankr.com/gnosis'
 
 ### Issue: "MECHX_SUBGRAPH_URL is required"
 
-**Cause**: Subgraph URL not set for fetch-mm-mechs-info
+**Cause**: Subgraph URL not set for `mech list` command
 
 **Solution**:
 ```bash
