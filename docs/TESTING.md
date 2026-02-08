@@ -23,9 +23,16 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 - **Error handling**: Test both success and failure paths
 - **Async support**: Test async components with anyio
 
-### Recent Additions (v0.18.1)
+### Recent Additions (v0.18.2)
 
-**84 new tests added** for bug fixes, CLI commands, and test coverage improvements:
+**168 new tests added** for bug fixes, CLI commands, RPC validation, and comprehensive test coverage:
+
+**RPC Chain ID Validation (20 tests)**
+- **20 tests** for RPC chain ID validation (new file: `test_chain_config.py`)
+  - Tests `get_rpc_chain_id()` function for querying RPC endpoints
+  - Tests chain ID mismatch warnings in `LedgerConfig`
+  - Tests environment variable overrides for ledger configuration
+  - Validates MECHX_CHAIN_RPC points to correct chain and warns on mismatch
 
 **Bug Fixes & Test Coverage Improvements (30 tests)**
 - **16 tests** for `load_rpc_from_operate()` utility (new file: `test_operate_config_loader.py`)
@@ -34,7 +41,7 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 - Tests validate: environment variable > operate config > default priority
 - Tests cover agent mode vs client mode behavior differences
 
-**CLI Command Tests (55 tests in 3 new files)**
+**CLI Command Tests (139 tests in 7 new files)**
 - **9 tests** for `mech list` command (new file: `test_mech_cmd.py`)
   - Tests realistic GraphQL response structure with nested metadata lists
   - Tests default subgraph URL behavior and environment variable overrides
@@ -44,23 +51,39 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 - **25 tests** for `ipfs` commands (new file: `test_ipfs_cmd.py`)
   - Tests file upload and prompt metadata upload
   - Tests unicode, special characters, and various file types
+- **19 tests** for `setup` command (new file: `test_setup_cmd.py`)
+  - Tests all supported chains (gnosis, base, polygon, optimism)
+  - Tests unsupported chains and validation errors
+  - Tests service setup and wallet display functionality
+- **25 tests** for `deposit` commands (new file: `test_deposit_cmd.py`)
+  - Tests deposit native and deposit token commands
+  - Tests all chains and token types (OLAS, USDC)
+  - Tests validation and service failures
+- **19 tests** for `subscription` command (new file: `test_subscription_cmd.py`)
+  - Tests subscription purchase for gnosis and base chains
+  - Tests output formatting with agreement IDs and credits
+  - Tests validation and async service operations
+- **21 tests** for `request` command (new file: `test_request_cmd.py`)
+  - Tests single and batch requests with multiple tools/prompts
+  - Tests priority mech, use-prepaid, and use-offchain flags
+  - Tests extra attributes, timeout, and edge cases
 
 ### Test Statistics
 
-- **Total tests**: 360 (excluding unsupported trio backend)
-- **Test files**: 27
-- **Test classes**: 90+
-- **Coverage**: ~60% (target: 70%)
+- **Total tests**: 464 (excluding unsupported trio backend)
+- **Test files**: 31
+- **Test classes**: 110+
+- **Coverage**: ~65% (target: 70%)
 
 ### Test Breakdown by Layer
 
 | Layer | Tests | Files | Coverage Focus |
 |-------|-------|-------|----------------|
-| CLI | 55 | 3 | Command routing, output formatting, error handling |
+| CLI | 139 | 7 | Command routing, output formatting, error handling, wallet commands |
 | Utils | 75 | 2 | Validators, error handling |
 | Domain | 80 | 7 | Strategies, watchers, factories, tools, subscriptions |
 | Services | 41 | 5 | Orchestration, workflows, deposits, setup, subscriptions |
-| Infrastructure | 110 | 12 | Adapters, clients, loaders, Safe, NVM contracts, **config priority** |
+| Infrastructure | 130 | 13 | Adapters, clients, loaders, Safe, NVM contracts, **config priority, RPC validation** |
 
 ## Test Structure
 
@@ -70,6 +93,15 @@ tests/
 ├── pytest.ini                               # Pytest configuration
 ├── unit/                                    # Unit tests
 │   ├── __init__.py
+│   ├── cli/                                 # CLI layer tests (139 tests)
+│   │   ├── __init__.py
+│   │   ├── test_mech_cmd.py                # 9 tests (mech list command)
+│   │   ├── test_tool_cmd.py                # 21 tests (tool commands)
+│   │   ├── test_ipfs_cmd.py                # 25 tests (ipfs commands)
+│   │   ├── test_setup_cmd.py               # 19 tests (setup command)
+│   │   ├── test_deposit_cmd.py             # 25 tests (deposit native/token)
+│   │   ├── test_subscription_cmd.py        # 19 tests (subscription purchase)
+│   │   └── test_request_cmd.py             # 21 tests (request command)
 │   ├── utils/                               # Utils layer tests (75 tests)
 │   │   ├── __init__.py
 │   │   ├── test_validators.py              # 45 tests
@@ -90,17 +122,19 @@ tests/
 │   │   ├── test_deposit_service.py         # 10 tests
 │   │   ├── test_setup_service.py           # 7 tests
 │   │   └── test_subscription_service.py    # 5 tests (NVM subscription)
-│   └── infrastructure/                      # Infrastructure layer tests (110 tests)
+│   └── infrastructure/                      # Infrastructure layer tests (130 tests)
 │       ├── __init__.py
-│       ├── test_config_loader.py           # 20 tests (13 new config priority tests)
-│       ├── test_operate_config_loader.py   # 16 tests (NEW: operate RPC loading)
+│       ├── test_config_loader.py           # 20 tests (13 config priority tests)
+│       ├── test_config_loader_integration.py # 7 tests (integration with mechs.json)
+│       ├── test_chain_config.py            # 20 tests (RPC chain ID validation)
+│       ├── test_operate_config_loader.py   # 16 tests (operate RPC loading)
 │       ├── test_ipfs_client.py             # 8 tests
 │       ├── test_abi_loader.py              # 7 tests
 │       ├── test_contracts.py               # 3 tests
 │       ├── test_receipt_waiter.py          # 8 tests
 │       ├── test_subgraph_client.py         # 9 tests
 │       ├── test_subgraph_queries.py        # 15 tests
-│       ├── test_safe_client.py             # 16 tests
+│       ├── test_safe_client.py             # 13 tests
 │       ├── test_nvm_config.py              # 9 tests (NVM subscription)
 │       └── test_nvm_contracts.py           # 3 tests (NVM subscription)
 └── integration/                             # Integration tests (future)
@@ -510,6 +544,109 @@ def test_agent_mode_env_var_overrides_operate_config(
 - Clear environment variables with `@patch.dict("os.environ", {}, clear=True)`
 - Verify mocks are called (or not called) as expected
 - Test edge cases: None values, missing config, unavailable sources
+
+### 12. Testing CLI Commands with File Parameters
+
+CLI commands that require file parameters (like `--key`) need isolated filesystem to avoid file validation errors:
+
+```python
+from click.testing import CliRunner
+from mech_client.cli.commands.request_cmd import request
+
+def test_request_command_success() -> None:
+    """Test request command with key file parameter."""
+    runner = CliRunner()
+
+    # Use isolated filesystem to create temporary files
+    with runner.isolated_filesystem():
+        # Create a dummy key file
+        with open("key.txt", "w") as f:
+            f.write("dummy_key_content")
+
+        # Mock all chain interactions
+        with patch("mech_client.cli.commands.request_cmd.setup_wallet_command") as mock_setup, \
+             patch("mech_client.cli.commands.request_cmd.MarketplaceService") as mock_service:
+
+            # Mock setup_wallet_command return value
+            mock_crypto = MagicMock()
+            mock_setup.return_value = (mock_crypto, False, None, None)
+
+            # Mock async service method with AsyncMock
+            mock_service_instance = MagicMock()
+            mock_service_instance.send_request = AsyncMock(
+                return_value={
+                    "tx_hash": "0xabc123...",
+                    "request_ids": [1],
+                    "delivery_results": {1: "ipfs://Qm..."},
+                }
+            )
+            mock_service.return_value = mock_service_instance
+
+            # Invoke command with file parameter
+            result = runner.invoke(
+                request,
+                [
+                    "--prompt", "test prompt",
+                    "--tool", "prediction-online",
+                    "--chain-config", "gnosis",
+                    "--key", "key.txt",  # File exists in isolated filesystem
+                ],
+            )
+
+            # Verify success
+            assert result.exit_code == 0
+            assert "Request sent successfully" in result.output
+            mock_service_instance.send_request.assert_called_once()
+```
+
+**Key principles for CLI testing:**
+- Use `runner.isolated_filesystem()` for commands with `--key` parameter
+- Mock `setup_wallet_command` to avoid crypto operations
+- Mock service classes to avoid chain interactions
+- Use `AsyncMock` for async service methods (e.g., `send_request`, `purchase_subscription`)
+- Verify exit codes: 0=success, 1=handled error, 2=usage error
+- Check output contains expected success/error messages
+- Verify mocks were called with correct parameters
+- Never test against real blockchain or IPFS endpoints
+
+**Common wallet command mocking pattern:**
+```python
+@patch("mech_client.cli.commands.deposit_cmd.setup_wallet_command")
+@patch("mech_client.cli.commands.deposit_cmd.DepositService")
+def test_deposit_native_success(
+    mock_deposit_service: MagicMock,
+    mock_setup: MagicMock,
+) -> None:
+    """Test deposit native command."""
+    # Mock setup_wallet_command
+    mock_crypto = MagicMock()
+    mock_crypto.address = "0x1234..."
+    mock_setup.return_value = (mock_crypto, False, None, None)
+
+    # Mock deposit service
+    mock_service_instance = MagicMock()
+    mock_service_instance.deposit_native.return_value = "0xabc123..."
+    mock_deposit_service.return_value = mock_service_instance
+
+    # Run command with isolated filesystem
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        with open("key.txt", "w") as f:
+            f.write("dummy_key")
+
+        result = runner.invoke(
+            deposit,
+            [
+                "native",
+                "1000000000000000000",  # 1 token
+                "--chain-config", "gnosis",
+                "--key", "key.txt",
+            ],
+        )
+
+    assert result.exit_code == 0
+    mock_service_instance.deposit_native.assert_called_once()
+```
 
 ## Test Fixtures
 

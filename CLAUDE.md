@@ -414,6 +414,5 @@ Version bump checklist:
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**: System architecture, layers, and design principles
 - **[docs/TESTING.md](./docs/TESTING.md)**: Testing guidelines, running tests, writing tests
 - **[docs/COMMANDS.md](./docs/COMMANDS.md)**: Command reference with dependency diagrams
-- **[docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md](./docs/TOKEN_APPROVAL_AGENT_MODE_ISSUE.md)**: Known issue - token approval in agent mode
-- **[docs/AGENT_MODE_RPC_CONFIGURATION_ISSUE.md](./docs/AGENT_MODE_RPC_CONFIGURATION_ISSUE.md)**: Fixed issue (v0.18.1) - RPC config now loaded from operate
+- **[docs/index.md](./docs/index.md)**: User guide for interacting with Mechs
 - **[README.md](./README.md)**: User documentation and examples

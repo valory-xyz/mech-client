@@ -127,9 +127,21 @@ Replace each placeholder as follows:
 
 - `--use-offchain`: Optional flag to use the off-chain method. Omit for on-chain requests.
 
-### 1. 2. 2. Deposits
+### 1. 2. 2. Deposits and Payment Types
 
-When you send a request, you may be prompted to add funds to your EOA account to cover on-chain deposits and Mech AI agent fees. The required token (either native token or OLAS) depends on the Mech's payment model. The exact amount will be indicated at runtime.
+When you send a request, the Mech Client automatically detects the mech's payment type and handles the appropriate payment flow. You don't need to specify the payment type - the mech's smart contract declares it.
+
+**Understanding Payment Types:**
+
+There are **5 payment types** that mechs can use:
+
+| Payment Type | Description | How to Pay |
+|--------------|-------------|------------|
+| **NATIVE** | Per-request native token | Client sends native tokens (xDAI, ETH, MATIC) with transaction |
+| **OLAS_TOKEN** | Per-request OLAS token | Client approves and transfers OLAS tokens |
+| **USDC_TOKEN** | Per-request USDC token | Client approves and transfers USDC tokens |
+| **NATIVE_NVM** | NVM subscription with native token | Purchase subscription first, then unlimited requests |
+| **TOKEN_NVM_USDC** | NVM subscription with USDC token | Purchase subscription first, then unlimited requests |
 
 **Finding the price per request**
 
@@ -147,29 +159,47 @@ Note: For Mechs using the Nevermined subscription model, this value corresponds 
 
 **Making a deposit**
 
-- For fixed-price Mechs using native tokens:
+**Option 1: Prepaid balance (for NATIVE, OLAS_TOKEN, USDC_TOKEN mechs)**
 
+You can deposit funds to your prepaid balance and use `--use-prepaid` flag when making requests:
+
+- For NATIVE payment mechs:
 ```bash
-mechx deposit native --chain-config <network_name> <amount>
+mechx deposit native <amount> --chain-config <network_name>
 ```
 
-- For fixed-price Mechs using OLAS tokens (amount in ether):
-
+- For OLAS_TOKEN payment mechs:
 ```bash
-mechx deposit token --chain-config <network_name> <amount>
+mechx deposit token <amount> --chain-config <network_name> --token-type olas
 ```
 
-In both cases above, `<amount>` must be at least the Mech's price (as given by maxDeliveryRate).
+- For USDC_TOKEN payment mechs:
+```bash
+mechx deposit token <amount> --chain-config <network_name> --token-type usdc
+```
 
-- For Mechs using Nevermined subscriptions:
+**Note:** The `--token-type` parameter is required and must be explicitly specified (olas or usdc).
+
+In all cases above, `<amount>` must be at least the mech's price (as given by maxDeliveryRate).
+
+**Option 2: Per-request payment (for NATIVE, OLAS_TOKEN, USDC_TOKEN mechs)**
+
+The client handles per-request payment automatically when you don't use `--use-prepaid`:
+- NATIVE mechs: Native tokens sent with transaction
+- OLAS_TOKEN mechs: OLAS tokens approved and transferred
+- USDC_TOKEN mechs: USDC tokens approved and transferred
+
+**Option 3: NVM Subscriptions (for NATIVE_NVM, TOKEN_NVM_USDC mechs)**
+
+Purchase a subscription upfront for unlimited requests:
 
 ```bash
 mechx subscription purchase --chain-config <network_name>
 ```
 
-This command purchases a fixed-price subscription that enables multiple requests.
+This purchases a fixed-price subscription (ERC1155 NFT) that enables multiple requests during the subscription period. No per-request payment needed.
 
-Note: In order to select a custom private key file path, you can use the option --key.
+**Note:** To use a custom private key file path, add the `--key <path>` option to any command.
 
 ### 1. 2. 2. Finding the response
 

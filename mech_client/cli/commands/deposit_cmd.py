@@ -103,8 +103,8 @@ def deposit_native(
 @click.option(
     "--token-type",
     type=click.Choice(["olas", "usdc"], case_sensitive=False),
-    default="olas",
-    help="Token type to deposit (olas or usdc). Default: olas.",
+    required=True,
+    help="Token type to deposit (olas or usdc).",
 )
 @common_wallet_options
 @click.pass_context
