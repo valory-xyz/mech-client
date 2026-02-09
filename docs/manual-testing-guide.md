@@ -1224,7 +1224,7 @@ Complete testing of all features:
 
 If you encounter issues during testing:
 
-1. Check the [Common Issues](../CLAUDE.md#common-issues--solutions) section in CLAUDE.md
+1. Check the [Common Issues](https://github.com/valory-xyz/mech-client/blob/main/CLAUDE.md#common-issues--solutions) section in CLAUDE.md
 2. Review error messages for actionable solutions
 3. Verify environment variables are set correctly
 4. Check RPC provider status
