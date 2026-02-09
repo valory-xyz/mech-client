@@ -181,6 +181,19 @@ class TestSubscriptionManager:
         # Verify transactions (2 for Gnosis: create + fulfill)
         assert mock_executor.execute_transaction.call_count == 2
 
+        # Verify agreement creation uses legacy-compatible method signature
+        create_call = mock_executor.execute_transaction.call_args_list[0]
+        assert create_call[1]["method_name"] == "createAgreementAndPayEscrow"
+        assert create_call[1]["method_args"]["_accessConsumer"] == manager.sender
+
+        # Verify fulfill call uses ABI-compatible argument names
+        fulfill_call = mock_executor.execute_transaction.call_args_list[1]
+        assert fulfill_call[1]["method_name"] == "fulfill"
+        assert "agreementId" in fulfill_call[1]["method_args"]
+        assert "did" in fulfill_call[1]["method_args"]
+        assert "fulfillForDelegateParams" in fulfill_call[1]["method_args"]
+        assert "fulfillParams" in fulfill_call[1]["method_args"]
+
         # Verify receipt waiting (2 for Gnosis: create + fulfill)
         assert mock_wait_for_receipt.call_count == 2
 
@@ -242,6 +255,19 @@ class TestSubscriptionManager:
         # Verify approval was called
         approve_call = mock_executor.execute_transaction.call_args_list[0]
         assert approve_call[1]["method_name"] == "approve"
+
+        # Verify agreement creation uses legacy-compatible method signature
+        create_call = mock_executor.execute_transaction.call_args_list[1]
+        assert create_call[1]["method_name"] == "createAgreementAndPayEscrow"
+        assert create_call[1]["method_args"]["_accessConsumer"] == manager.sender
+
+        # Verify fulfill call uses ABI-compatible argument names
+        fulfill_call = mock_executor.execute_transaction.call_args_list[2]
+        assert fulfill_call[1]["method_name"] == "fulfill"
+        assert "agreementId" in fulfill_call[1]["method_args"]
+        assert "did" in fulfill_call[1]["method_args"]
+        assert "fulfillForDelegateParams" in fulfill_call[1]["method_args"]
+        assert "fulfillParams" in fulfill_call[1]["method_args"]
 
         # Verify result
         assert result["status"] == "success"
