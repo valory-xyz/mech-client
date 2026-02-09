@@ -163,7 +163,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
                 "spender": self.w3.to_checksum_address(
                     self.agreement_builder.lock_payment.address
                 ),
-                "amount": approval_amount,
+                "value": approval_amount,
             },
             tx_args={
                 "sender_address": self.sender,
