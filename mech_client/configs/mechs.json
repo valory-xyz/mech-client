@@ -72,7 +72,7 @@
     "transaction_url": "https://basescan.org/tx/{transaction_digest}",
     "subgraph_url": "https://api.subgraph.autonolas.tech/api/proxy/marketplace-base",
     "nvm_subscription": {
-      "subscription_nft_address": "0xd5318d1a17819f65771b6c9277534c08dd765498",
+      "subscription_nft_address": "0xd5318d1A17819F65771B6c9277534C08Dd765498",
       "receiver_plan": "0xaaFBeef195BDAb1Bb6f3Dc9cEbA875Cd72499230",
       "token_address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       "plan_did": "did:nv:6f74c18fae7e5c3589b99d7cd0ba317593f00dee53c81a2ba4ac2244232f99da",
