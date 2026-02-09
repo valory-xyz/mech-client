@@ -313,8 +313,12 @@ Handle transaction execution modes:
 ```python
 class TransactionExecutor(ABC):
     @abstractmethod
-    def execute(self, tx_params: Dict[str, Any]) -> str:
-        """Execute transaction. Returns tx_hash."""
+    def execute_transaction(self, contract, method_name, method_args, tx_args) -> str:
+        """Execute a contract method call. Returns tx_hash."""
+
+    @abstractmethod
+    def execute_transfer(self, to_address, amount, gas) -> str:
+        """Execute a plain native token transfer. Returns tx_hash."""
 ```
 
 #### Delivery Watchers (`domain/delivery/`)
