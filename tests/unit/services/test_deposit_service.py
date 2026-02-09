@@ -134,8 +134,6 @@ class TestDepositNative:
     """Tests for deposit_native method."""
 
     @patch("mech_client.services.deposit_service.wait_for_receipt")
-    @patch("mech_client.services.deposit_service.get_contract")
-    @patch("mech_client.services.deposit_service.get_abi")
     @patch("mech_client.services.deposit_service.PaymentStrategyFactory")
     @patch("mech_client.services.base_service.ExecutorFactory")
     @patch("mech_client.services.deposit_service.EthereumCrypto")
@@ -148,8 +146,6 @@ class TestDepositNative:
         mock_crypto: MagicMock,
         mock_executor_factory: MagicMock,
         mock_payment_factory: MagicMock,
-        mock_get_abi: MagicMock,
-        mock_get_contract: MagicMock,
         mock_wait_receipt: MagicMock,
     ) -> None:
         """Test successful native token deposit in client mode."""
@@ -161,16 +157,13 @@ class TestDepositNative:
 
         mock_executor = MagicMock()
         mock_executor.get_sender_address.return_value = "0x" + "1" * 40
-        mock_executor.execute_transaction.return_value = "0xtxhash"
+        mock_executor.execute_transfer.return_value = "0xtxhash"
         mock_executor_factory.create.return_value = mock_executor
 
         mock_payment_strategy = MagicMock()
         mock_payment_strategy.check_balance.return_value = True
         mock_payment_strategy.get_balance_tracker_address.return_value = "0x" + "2" * 40
         mock_payment_factory.create.return_value = mock_payment_strategy
-
-        mock_contract = MagicMock()
-        mock_get_contract.return_value = mock_contract
 
         # Create service
         service = DepositService(
@@ -191,7 +184,11 @@ class TestDepositNative:
             chain_id=mock_config.return_value.ledger_config.chain_id,
         )
         mock_payment_strategy.check_balance.assert_called_once_with("0x" + "1" * 40, amount)
-        mock_executor.execute_transaction.assert_called_once()
+        mock_executor.execute_transfer.assert_called_once_with(
+            to_address="0x" + "2" * 40,
+            amount=amount,
+            gas=mock_config.return_value.gas_limit,
+        )
         mock_wait_receipt.assert_called_once_with("0xtxhash", mock_ledger_api)
 
     @patch("mech_client.services.deposit_service.PaymentStrategyFactory")

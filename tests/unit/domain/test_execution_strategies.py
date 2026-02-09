@@ -89,7 +89,7 @@ class TestExecutorFactory:
     ) -> None:
         """Test factory raises error when ethereum_client missing in agent mode."""
         mock_crypto = MagicMock()
-        
+
         with pytest.raises(
             ValueError, match="Safe address and Ethereum client required"
         ):
@@ -100,3 +100,100 @@ class TestExecutorFactory:
                 safe_address="0x" + "a" * 40,
                 ethereum_client=None,
             )
+
+
+class TestClientExecutorTransfer:
+    """Tests for ClientExecutor.execute_transfer."""
+
+    def test_execute_transfer_success(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test successful native transfer in client mode."""
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "1" * 40
+        mock_crypto.private_key = "0x" + "a" * 64
+        mock_crypto.sign_transaction.return_value = "0xsigned"
+        mock_ledger_api.get_transfer_transaction.return_value = {"raw": "tx"}
+        mock_ledger_api.send_signed_transaction.return_value = "0xtxhash"
+
+        executor = ClientExecutor(mock_ledger_api, mock_crypto)
+        to_address = "0x" + "2" * 40
+        amount = 10**18
+        gas = 50000
+
+        result = executor.execute_transfer(to_address, amount, gas)
+
+        assert result == "0xtxhash"
+        mock_ledger_api.get_transfer_transaction.assert_called_once_with(
+            sender_address=mock_crypto.address,
+            destination_address=to_address,
+            amount=amount,
+            tx_fee=gas,
+            tx_nonce="0x",
+        )
+        mock_crypto.sign_transaction.assert_called_once_with({"raw": "tx"})
+        mock_ledger_api.send_signed_transaction.assert_called_once_with(
+            "0xsigned", raise_on_try=True,
+        )
+
+
+class TestAgentExecutorTransfer:
+    """Tests for AgentExecutor.execute_transfer."""
+
+    @patch("mech_client.domain.execution.agent_executor.SafeClient")
+    def test_execute_transfer_success(
+        self,
+        mock_safe_client_cls: MagicMock,
+        mock_ledger_api: MagicMock,
+        mock_ethereum_client: MagicMock,
+    ) -> None:
+        """Test successful native transfer through Safe multisig."""
+        mock_crypto = MagicMock()
+        mock_crypto.private_key = "0x" + "a" * 64
+
+        mock_safe_client = MagicMock()
+        mock_tx_hash = MagicMock()
+        mock_tx_hash.to_0x_hex.return_value = "0xtxhash"
+        mock_safe_client.send_transaction.return_value = mock_tx_hash
+        mock_safe_client_cls.return_value = mock_safe_client
+
+        safe_address = "0x" + "b" * 40
+        executor = AgentExecutor(
+            mock_ledger_api, mock_crypto, safe_address, mock_ethereum_client
+        )
+
+        to_address = "0x" + "2" * 40
+        amount = 10**18
+
+        result = executor.execute_transfer(to_address, amount, gas=50000)
+
+        assert result == "0xtxhash"
+        mock_safe_client.send_transaction.assert_called_once_with(
+            to_address=to_address,
+            tx_data="0x",
+            signer_private_key=mock_crypto.private_key,
+            value=amount,
+        )
+
+    @patch("mech_client.domain.execution.agent_executor.SafeClient")
+    def test_execute_transfer_failure(
+        self,
+        mock_safe_client_cls: MagicMock,
+        mock_ledger_api: MagicMock,
+        mock_ethereum_client: MagicMock,
+    ) -> None:
+        """Test native transfer failure through Safe raises exception."""
+        mock_crypto = MagicMock()
+        mock_crypto.private_key = "0x" + "a" * 64
+
+        mock_safe_client = MagicMock()
+        mock_safe_client.send_transaction.return_value = None
+        mock_safe_client_cls.return_value = mock_safe_client
+
+        safe_address = "0x" + "b" * 40
+        executor = AgentExecutor(
+            mock_ledger_api, mock_crypto, safe_address, mock_ethereum_client
+        )
+
+        with pytest.raises(Exception, match="Failed to execute Safe transfer"):
+            executor.execute_transfer("0x" + "2" * 40, 10**18, gas=50000)
