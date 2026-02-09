@@ -166,7 +166,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
                 "amount": approval_amount,
             },
             tx_args={
-                "from": self.sender,
+                "sender_address": self.sender,
                 "value": 0,
                 "gas": 60000,
             },
@@ -216,7 +216,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
                 "_receivers": agreement.receivers,
             },
             tx_args={
-                "from": self.sender,
+                "sender_address": self.sender,
                 "value": tx_value,
                 "gas": 600000,
             },
@@ -257,7 +257,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
                 "fulfillParams": fulfillment.fulfill_params,
             },
             tx_args={
-                "from": self.sender,
+                "sender_address": self.sender,
                 "value": 0,
                 "gas": 500000,
             },

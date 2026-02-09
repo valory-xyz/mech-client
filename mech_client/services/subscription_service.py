@@ -92,8 +92,13 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes,too-f
         # Get Web3 instance from ledger API
         self.w3: Web3 = self.ledger_api._api  # pylint: disable=protected-access
 
-        # Get sender address
-        self.sender = self.crypto.address
+        # Get sender address (EOA in client mode, Safe in agent mode)
+        if self.agent_mode:
+            if not self.safe_address:
+                raise ValueError("safe_address is required in agent mode")
+            self.sender = self.safe_address
+        else:
+            self.sender = self.crypto.address
 
     def purchase_subscription(  # pylint: disable=too-many-locals
         self, plan_did: Optional[str] = None

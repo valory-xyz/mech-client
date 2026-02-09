@@ -124,11 +124,8 @@ class AgreementBuilder:  # pylint: disable=too-few-public-methods,too-many-insta
         if not fee_receiver:
             raise ValueError("Marketplace fee receiver not found")
 
-        # Build receivers list: [fee_receiver, olas_marketplace]
-        receivers: List[str] = [
-            fee_receiver,
-            self.config.olas_marketplace_address,
-        ]
+        # Build receivers list: [fee_receiver, plan_receiver]
+        receivers: List[str] = [fee_receiver, self.config.receiver_plan]
 
         # Generate agreement ID
         agreement_id_seed = self._generate_agreement_id_seed()
