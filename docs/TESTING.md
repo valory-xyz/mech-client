@@ -12,6 +12,7 @@ This document provides comprehensive guidance on testing the mech-client codebas
 - [Test Fixtures](#test-fixtures)
 - [Mocking Guidelines](#mocking-guidelines)
 - [Coverage Goals](#coverage-goals)
+- [Manual Testing](#manual-testing)
 
 ## Overview
 
@@ -1022,10 +1023,22 @@ When contributing tests:
 5. Maintain or improve coverage
 6. Document complex test scenarios
 
+## Manual Testing
+
+For comprehensive manual testing procedures and scenarios, see the [Manual Testing Guide](./manual-testing-guide.md). This guide provides:
+- Step-by-step testing procedures for all CLI commands
+- Expected outputs and success criteria
+- Common issues and troubleshooting steps
+- Environment setup and configuration
+- Testing different chains and payment methods
+
+Manual testing is recommended before releases to verify end-to-end functionality with real blockchain interactions.
+
 ## Further Reading
 
 - [../CLAUDE.md](../CLAUDE.md) - Development guidelines and patterns
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture overview
 - [COMMANDS.md](./COMMANDS.md) - Command reference with dependency diagrams
+- [manual-testing-guide.md](./manual-testing-guide.md) - Manual testing procedures
 - [pytest documentation](https://docs.pytest.org/)
 - [unittest.mock documentation](https://docs.python.org/3/library/unittest.mock.html)

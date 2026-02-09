@@ -133,7 +133,7 @@ ENV VARS:
 
 ```
 mechx mech list --chain-config gnosis
-├─ Subgraph GraphQL API (MECHX_SUBGRAPH_URL) ← REQUIRED, NO DEFAULT
+├─ Subgraph GraphQL API (MECHX_SUBGRAPH_URL) ← Optional override
 │  └─ Query: MechsOrderedByServiceDeliveries
 │     ├─ Returns: service IDs, addresses, delivery counts
 │     └─ Filters: totalDeliveries > 0
@@ -141,13 +141,13 @@ mechx mech list --chain-config gnosis
    └─ IPFS Gateway links (metadata URLs)
 
 ENV VARS:
-  MECHX_SUBGRAPH_URL (REQUIRED - must be set manually)
+  MECHX_SUBGRAPH_URL (optional - defaults provided for all supported chains)
 
 NOTES:
   - Read-only command, no transactions
   - Does NOT use HTTP RPC
-  - Subgraph URL must match chain-config
-  - Currently all chains have empty subgraph_url in mechs.json
+  - Default subgraph URLs provided for gnosis, base, polygon, optimism
+  - Override with MECHX_SUBGRAPH_URL only if using custom subgraph
 ```
 
 ### 7. tool list
@@ -226,7 +226,7 @@ NOTES:
 | deposit native | ✓ | | | |
 | deposit token | ✓ | | | |
 | subscription purchase | ✓ | | | |
-| mech list | | ✓ | | |
+| mech list | | ○ | | |
 | tool list | ✓ | | | |
 | tool describe | ✓ | | | |
 | tool schema | ✓ | | | |
@@ -246,10 +246,10 @@ All commands require `--chain-config` with one of these four chain names. Arbitr
 
 | Chain | Chain ID | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Token | USDC Token | Subgraph |
 |-------|----------|-------------|------------|----------------|-------------------|------------|------------|----------|
-| Gnosis | 100 | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Base | 8453 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Polygon | 137 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
-| Optimism | 10 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
+| Gnosis | 100 | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Base | 8453 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Polygon | 137 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Optimism | 10 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
 | Arbitrum | 42161 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Celo | 42220 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
@@ -259,10 +259,10 @@ All commands require `--chain-config` with one of these four chain names. Arbitr
 - **Native Payment**: Supports `deposit native` command for prepaid native token deposits (Gnosis, Base, Polygon, Optimism)
 - **NVM Subscriptions**: Supports `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base)
 - **OLAS/USDC Token**: Payment token addresses configured in `infrastructure/config/contract_addresses.py`
-- **Subgraph**: Built-in subgraph URL in `mechs.json` (currently all chains have empty `subgraph_url`; must be set via `MECHX_SUBGRAPH_URL` for `mech list`)
+- **Subgraph**: Default subgraph URL provided in `mechs.json` for all supported marketplace chains (Gnosis, Base, Polygon, Optimism). Override with `MECHX_SUBGRAPH_URL` if needed.
 
 **Command Requirements:**
-- `mech list`: Requires marketplace + `MECHX_SUBGRAPH_URL` environment variable
+- `mech list`: Requires marketplace (default subgraph URLs provided; optionally override with `MECHX_SUBGRAPH_URL`)
 - `request`: Requires marketplace contract and standard Olas service registry
 - `deposit native`: Requires marketplace + native payment support (Gnosis, Base, Polygon, Optimism)
 - `deposit token`: Requires marketplace + token addresses in config (Gnosis, Base, Polygon, Optimism)
