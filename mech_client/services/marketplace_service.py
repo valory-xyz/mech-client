@@ -23,7 +23,6 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 import requests
 from aea_ledger_ethereum import EthereumCrypto
-from eth_utils import to_checksum_address
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
 
@@ -39,6 +38,7 @@ from mech_client.infrastructure.blockchain.receipt_waiter import (
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.ipfs import IPFSClient, push_metadata_to_ipfs
 from mech_client.services.base_service import BaseTransactionService
+from mech_client.utils.validators import ensure_checksummed_address
 
 
 class MarketplaceService(
@@ -270,7 +270,7 @@ class MarketplaceService(
             payment_type_hex = "0x" + payment_type.value
             nonce = current_nonce + i
             request_id_bytes = marketplace_contract.functions.getRequestId(
-                to_checksum_address(priority_mech_address),
+                ensure_checksummed_address(priority_mech_address),
                 sender,
                 data_hash,
                 max_delivery_rate,
@@ -471,7 +471,7 @@ class MarketplaceService(
         payment_data = b""
 
         # Ensure priority mech address is checksummed (required by web3.py)
-        priority_mech_checksummed = to_checksum_address(priority_mech)
+        priority_mech_checksummed = ensure_checksummed_address(priority_mech)
 
         # Build method arguments according to ABI
         if len(data_hashes) > 1:

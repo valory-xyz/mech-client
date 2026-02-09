@@ -33,6 +33,21 @@ from mech_client.infrastructure.config import PaymentType
 from mech_client.utils.errors import ValidationError
 
 
+def ensure_checksummed_address(address: str) -> str:
+    """
+    Ensure an address is in checksummed format.
+
+    This is a lightweight helper that converts any valid Ethereum address
+    to its checksummed form without performing validation. Use this when
+    you already know the address is valid (e.g., from validated input or
+    internal sources) but need to ensure it's checksummed for web3.py.
+
+    :param address: Ethereum address (checksummed or not)
+    :return: Checksummed address
+    """
+    return Web3.to_checksum_address(address)
+
+
 def validate_ethereum_address(address: str, allow_zero: bool = False) -> str:
     """
     Validate Ethereum address format and return checksummed address.
