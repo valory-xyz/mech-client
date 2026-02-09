@@ -22,12 +22,14 @@
 import logging
 from typing import Any, Dict, Optional
 
+from aea_ledger_ethereum import EthereumApi
 from web3 import Web3
 
 from mech_client.domain.execution.base import TransactionExecutor
 from mech_client.domain.subscription.agreement import AgreementBuilder, AgreementData
 from mech_client.domain.subscription.balance_checker import SubscriptionBalanceChecker
 from mech_client.domain.subscription.fulfillment import FulfillmentBuilder
+from mech_client.infrastructure.blockchain.receipt_waiter import wait_for_receipt
 from mech_client.infrastructure.nvm.config import NVMConfig
 from mech_client.infrastructure.nvm.contracts import (
     NFTContract,
@@ -46,6 +48,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
     def __init__(  # pylint: disable=too-many-arguments
         self,
         w3: Web3,
+        ledger_api: EthereumApi,
         config: NVMConfig,
         sender: str,
         executor: TransactionExecutor,
@@ -61,6 +64,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         Initialize the subscription manager.
 
         :param w3: Web3 instance
+        :param ledger_api: Ledger API instance
         :param config: NVM configuration
         :param sender: Sender address
         :param executor: Transaction executor
@@ -73,6 +77,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         :param token_contract: Token contract (required for Base)
         """
         self.w3 = w3
+        self.ledger_api = ledger_api
         self.config = config
         self.sender = sender
         self.executor = executor
@@ -100,7 +105,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         logger.info(f"Starting subscription purchase for DID: {plan_did}")
 
         # Step 1: Check balance
-        print(f"Checking {self.sender} balance for purchasing subscription...")
+        logger.info(f"Checking {self.sender} balance for purchasing subscription")
         self.balance_checker.check()
 
         # Step 2: Build agreement data
@@ -110,7 +115,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         balance_before = self.subscription_nft.get_balance(
             self.sender, self.config.subscription_id
         )
-        print(f"Sender credits before purchase: {balance_before}")
+        logger.info(f"Sender credits before purchase: {balance_before}")
 
         # Step 3: Token approval (Base only)
         if self.config.requires_token_approval():
@@ -127,7 +132,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         balance_after = self.subscription_nft.get_balance(
             self.sender, self.config.subscription_id
         )
-        print(f"Sender credits after purchase: {balance_after}")
+        logger.info(f"Sender credits after purchase: {balance_after}")
 
         logger.info("Subscription purchased successfully")
 
@@ -168,13 +173,12 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         )
 
         # Wait for receipt
-        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+        receipt = wait_for_receipt(tx_hash, self.ledger_api)
 
         if receipt["status"] != 1:
             raise RuntimeError(f"Token approval failed. Transaction hash: {tx_hash}")
 
         logger.info(f"Token approval successful. Tx hash: {tx_hash}")
-        print(f"Token approval transaction: {tx_hash}")
 
     def _create_agreement(self, agreement: AgreementData) -> str:
         """
@@ -219,7 +223,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         )
 
         # Wait for receipt
-        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+        receipt = wait_for_receipt(tx_hash, self.ledger_api)
 
         if receipt["status"] != 1:
             raise RuntimeError(
@@ -227,7 +231,6 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
             )
 
         logger.info(f"Agreement created successfully. Tx hash: {tx_hash}")
-        print(f"Agreement creation transaction: {tx_hash}")
 
         return tx_hash
 
@@ -261,7 +264,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         )
 
         # Wait for receipt
-        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+        receipt = wait_for_receipt(tx_hash, self.ledger_api)
 
         if receipt["status"] != 1:
             raise RuntimeError(
@@ -269,6 +272,5 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
             )
 
         logger.info(f"Agreement fulfilled successfully. Tx hash: {tx_hash}")
-        print(f"Fulfillment transaction: {tx_hash}")
 
         return tx_hash
