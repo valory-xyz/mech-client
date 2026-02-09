@@ -68,9 +68,8 @@ All commands require `--chain-config` with one of these four chain names.
 To send a request to a Mech that is accessible through the Mech Marketplace, first complete the [setup](#setup), then follow the [instructions](#1-2-sending-requests) below.
 
 You will need to [choose a Mech](#1-1-choosing-a-mech), and then select one of the following methods to send a request:
-- Via the [terminal](#1-2-in-terminal),
-- Using a Python [script](#1-3-script-for-automatizing-request-sending),
-- Or through the [web interface](#1-4-sending-requests-through-the-web-interface).
+- Via the [terminal](#1-2-in-terminal)
+- Using a Python [script](#1-3-script-for-automatizing-request-sending)
 
 Follow the instructions in the corresponding section.
 
@@ -211,8 +210,17 @@ For example, the following command:
 mechx request --prompts "write a short poem" --tools openai-gpt-3.5-turbo --chain-config gnosis --priority-mech <mech_address>
 ```
 
-you should receive a response as follows:
-        ![screenshot_response](./imgs/screenshot_request.png)
+You should receive a response as follows:
+
+```json
+{
+  "requestId": 123456789,
+  "prompt": "write a short poem",
+  "tool": "openai-gpt-3.5-turbo",
+  "result": "Beneath the velvet night so deep,\nWhere stars their silent vigil keep,\nA whisper of the wind goes by,\nAs moonbeams dance across the sky.",
+  "metadata": {}
+}
+```
 
 **Troubleshooting: timeout waiting for response**
 
@@ -294,27 +302,4 @@ Replace the placeholders as follows:
 **Note:** If using agent mode (`AGENT_MODE = True`), you must provide a valid `SAFE_ADDRESS`. For client mode, set `AGENT_MODE = False` and `SAFE_ADDRESS = ""`.
 
 The variable **result** contains the response of the mech.
-
-### 1. 4. Sending requests through the web interface
-
-**1.** Create a wallet (e.g., using [MetaMask](https://metamask.io/)) and connect it to the [web interface](https://marketplace.olas.network/gnosis/ai-agents) by clicking the **“Connect wallet”** button at the top of the page.
-The wallet must have some xDAI to pay for requests.
-
-**2.** On the [web interface](https://marketplace.olas.network/gnosis/ai-agents), click on the address of the Mech you want to interact with.
-
-**3.** Click on **"New Request"**. A pop-up window will appear:
-
-![screenshot](./imgs/screenshot.png)
-
-**4.** Enter your prompt and select the tool to use, then click **"Request"**.
-
-**5.** A confirmation window will appear, like the one below:
-
-![confirmation](./imgs/confirmation.png)
-
-Click **"Confirm"** to send the request.
-
-**6.** After submission, you can track your request by searching for your wallet address in the **"Sender"** column.
-
-Once the request is fulfilled, a **"Delivers Data"** link will appear in the same row under the **"Delivers data"** column. Click it to view the Mech’s response.
 
