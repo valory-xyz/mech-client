@@ -71,13 +71,13 @@ NOTES:
 ### 3. deposit native
 
 ```
-mechx deposit native --chain-config gnosis --mech-type native --amount 0.01
+mechx deposit native <amount> --chain-config gnosis
 ├─ HTTP RPC (MECHX_CHAIN_RPC)
 │  ├─ Check native balance
-│  ├─ Send transfer transaction
+│  ├─ Send native transfer to balance tracker (triggers receive())
 │  └─ Wait for receipt
 └─ Smart Contracts
-   ├─ BalanceTrackerFixedPriceNative: deposit()
+   ├─ BalanceTrackerFixedPriceNative: receive() (via native transfer)
    └─ [If Agent Mode] Safe: execTransaction()
 
 ENV VARS:

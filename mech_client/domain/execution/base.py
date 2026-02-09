@@ -67,6 +67,23 @@ class TransactionExecutor(ABC):
         """
 
     @abstractmethod
+    def execute_transfer(
+        self,
+        to_address: str,
+        amount: int,
+        gas: int,
+    ) -> str:
+        """
+        Execute a plain native token transfer.
+
+        :param to_address: Destination address
+        :param amount: Amount to transfer in wei
+        :param gas: Gas limit for the transaction
+        :return: Transaction hash
+        :raises Exception: If transaction fails
+        """
+
+    @abstractmethod
     def get_sender_address(self) -> str:
         """
         Get the address that will send transactions.

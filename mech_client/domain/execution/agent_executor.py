@@ -102,6 +102,33 @@ class AgentExecutor(TransactionExecutor):
 
         return tx_hash.to_0x_hex()
 
+    def execute_transfer(
+        self,
+        to_address: str,
+        amount: int,
+        gas: int,  # pylint: disable=unused-argument
+    ) -> str:
+        """
+        Execute a plain native token transfer through Safe multisig.
+
+        :param to_address: Destination address
+        :param amount: Amount to transfer in wei
+        :param gas: Gas limit for the transaction
+        :return: Transaction hash
+        :raises Exception: If transaction fails
+        """
+        tx_hash = self.safe_client.send_transaction(
+            to_address=to_address,
+            tx_data="0x",
+            signer_private_key=self.private_key,
+            value=amount,
+        )
+
+        if tx_hash is None:
+            raise Exception("Failed to execute Safe transfer transaction")
+
+        return tx_hash.to_0x_hex()
+
     def get_sender_address(self) -> str:
         """
         Get the Safe address that will send transactions.

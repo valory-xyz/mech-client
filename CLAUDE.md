@@ -383,6 +383,8 @@ When refactoring CLI code, be aware of these gotchas (discovered during v0.17.0 
 
 9. **Blocking Async Event Loop**: Never use `time.sleep()` in async functions.
 
+10. **Native vs Token Deposit Contracts**: `BalanceTrackerFixedPriceNative` has NO `deposit()` method - it uses `receive()` (triggered by plain native transfer) and `depositFor(address)`. Use `executor.execute_transfer()` for native deposits. `BalanceTrackerFixedPriceToken` DOES have `deposit(amount)` - use `executor.execute_transaction()` for token deposits.
+
 ## Post-v0.17.0 Refactor Bug Fixes
 
 Critical bugs fixed in v0.17.1:
@@ -393,6 +395,7 @@ Critical bugs fixed in v0.17.1:
 4. **IPFS Pinning** (`infrastructure/ipfs/metadata.py`): Unnecessary pinning for offchain requests ✅ Fixed
 5. **Agent Mode RPC Configuration** (`infrastructure/config/chain_config.py`): Commands didn't read RPC from stored operate config ✅ Fixed (v0.18.1)
 6. **Token Approval Agent Mode** (`domain/payment/token.py`): Token approvals didn't go through Safe in agent mode ✅ Fixed (v0.18.1)
+7. **Native Deposit Called Non-Existent Method** (`services/deposit_service.py`): Called `deposit()` on `BalanceTrackerFixedPriceNative` which has no such method. Fixed to use `executor.execute_transfer()` (plain native transfer) which triggers the contract's `receive()` fallback. Added `execute_transfer()` to the `TransactionExecutor` interface. ✅ Fixed
 
 ## Release Workflow
 
