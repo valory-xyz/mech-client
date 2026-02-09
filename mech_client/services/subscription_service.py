@@ -134,7 +134,9 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes,too-f
         contract_names = NVMContractFactory.subscription_contract_names(
             include_token=self.config.requires_token_approval()
         )
-        contracts = NVMContractFactory.create_all(self.w3, contract_names=contract_names)
+        contracts = NVMContractFactory.create_all(
+            self.w3, contract_names=contract_names
+        )
 
         # Cast contracts to specific types
         did_registry = cast(DIDRegistryContract, contracts["did_registry"])

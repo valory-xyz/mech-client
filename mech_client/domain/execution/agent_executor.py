@@ -89,9 +89,7 @@ class AgentExecutor(TransactionExecutor):
         if sender_address:
             build_tx_args["from"] = sender_address
 
-        transaction = function.build_transaction(
-            build_tx_args
-        )
+        transaction = function.build_transaction(build_tx_args)
 
         # Execute through Safe
         value = tx_args.get("value", 0)
