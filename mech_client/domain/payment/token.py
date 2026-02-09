@@ -22,6 +22,7 @@
 from typing import Optional, TYPE_CHECKING
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
+from web3 import Web3
 
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
@@ -182,4 +183,8 @@ class TokenPaymentStrategy(PaymentStrategy):
             abi,
             self.ledger_api,
         )
-        return balance_tracker.functions.mapRequesterBalances(requester_address).call()
+        # Ensure address is checksummed (required by web3.py)
+        checksummed_address = Web3.to_checksum_address(requester_address)
+        return balance_tracker.functions.mapRequesterBalances(
+            checksummed_address
+        ).call()

@@ -21,6 +21,8 @@
 
 from typing import Optional, TYPE_CHECKING
 
+from web3 import Web3
+
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
@@ -106,4 +108,8 @@ class NativePaymentStrategy(PaymentStrategy):
             abi,
             self.ledger_api,
         )
-        return balance_tracker.functions.mapRequesterBalances(requester_address).call()
+        # Ensure address is checksummed (required by web3.py)
+        checksummed_address = Web3.to_checksum_address(requester_address)
+        return balance_tracker.functions.mapRequesterBalances(
+            checksummed_address
+        ).call()

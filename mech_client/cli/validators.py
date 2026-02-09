@@ -24,6 +24,7 @@ from pathlib import Path
 
 from click import ClickException
 from eth_utils import is_address
+from web3 import Web3
 from web3.constants import ADDRESS_ZERO
 
 
@@ -58,26 +59,40 @@ def validate_chain_config(chain_config: str) -> str:
 
 def validate_ethereum_address(address: str, name: str = "Address") -> str:
     """
-    Validate an Ethereum address format.
+    Validate an Ethereum address format and return checksummed address.
 
-    :param address: Address to validate
+    Accepts both checksummed and non-checksummed addresses, validates them,
+    and returns the checksummed version. This ensures compatibility with
+    web3.py which requires checksummed addresses.
+
+    :param address: Address to validate (checksummed or not)
     :param name: Name of the address for error messages
-    :return: Validated address
+    :return: Validated checksummed address
     :raises ClickException: If address is invalid
     """
-    if not address or address == ADDRESS_ZERO:
+    if not address:
         raise ClickException(
-            f"{name} is not set or is zero address.\n"
-            f"Please provide a valid Ethereum address."
+            f"{name} is not set.\n" f"Please provide a valid Ethereum address."
         )
 
+    # Validate address format first (works with both checksummed and non-checksummed)
     if not is_address(address):
         raise ClickException(
             f"Invalid {name}: {address!r}\n"
             f"Please provide a valid Ethereum address (0x...)"
         )
 
-    return address
+    # Convert to checksummed address
+    checksummed_address = Web3.to_checksum_address(address)
+
+    # Check zero address after checksumming
+    if checksummed_address == ADDRESS_ZERO:
+        raise ClickException(
+            f"{name} is not set or is zero address.\n"
+            f"Please provide a valid Ethereum address."
+        )
+
+    return checksummed_address
 
 
 def validate_amount(amount: str, name: str = "Amount") -> int:

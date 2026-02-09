@@ -21,6 +21,8 @@
 
 from typing import Optional, TYPE_CHECKING
 
+from web3 import Web3
+
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
@@ -151,9 +153,12 @@ class NVMPaymentStrategy(PaymentStrategy):
             self.ledger_api,
         )
 
+        # Ensure address is checksummed (required by web3.py)
+        checksummed_address = Web3.to_checksum_address(requester_address)
+
         # Get prepaid balance
         requester_balance_tracker_balance = (
-            balance_tracker.functions.mapRequesterBalances(requester_address).call()
+            balance_tracker.functions.mapRequesterBalances(checksummed_address).call()
         )
 
         # Get subscription NFT details
@@ -168,7 +173,7 @@ class NVMPaymentStrategy(PaymentStrategy):
             self.ledger_api,
         )
         nft_balance = subscription_nft.functions.balanceOf(
-            requester_address, subscription_id
+            checksummed_address, subscription_id
         ).call()
 
         # Return combined balance

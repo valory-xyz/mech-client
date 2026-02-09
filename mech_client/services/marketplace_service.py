@@ -470,6 +470,9 @@ class MarketplaceService(
         # Payment data (empty bytes for now - can be extended for additional payment info)
         payment_data = b""
 
+        # Ensure priority mech address is checksummed (required by web3.py)
+        priority_mech_checksummed = to_checksum_address(priority_mech)
+
         # Build method arguments according to ABI
         if len(data_hashes) > 1:
             # requestBatch(bytes[] requestDatas, uint256 maxDeliveryRate, bytes32 paymentType,
@@ -478,7 +481,7 @@ class MarketplaceService(
                 "requestDatas": data_hashes,
                 "maxDeliveryRate": max_delivery_rate,
                 "paymentType": payment_type_bytes,
-                "priorityMech": priority_mech,
+                "priorityMech": priority_mech_checksummed,
                 "responseTimeout": response_timeout,
                 "paymentData": payment_data,
             }
@@ -489,7 +492,7 @@ class MarketplaceService(
                 "requestData": data_hashes[0],
                 "maxDeliveryRate": max_delivery_rate,
                 "paymentType": payment_type_bytes,
-                "priorityMech": priority_mech,
+                "priorityMech": priority_mech_checksummed,
                 "responseTimeout": response_timeout,
                 "paymentData": payment_data,
             }
