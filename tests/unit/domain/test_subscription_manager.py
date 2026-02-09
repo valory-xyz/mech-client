@@ -38,6 +38,11 @@ class TestSubscriptionManager:
         return w3
 
     @pytest.fixture
+    def mock_ledger_api(self) -> MagicMock:
+        """Create mock EthereumApi."""
+        return MagicMock()
+
+    @pytest.fixture
     def mock_config(self) -> MagicMock:
         """Create mock NVM configuration."""
         config = MagicMock()
@@ -126,6 +131,7 @@ class TestSubscriptionManager:
     def manager(
         self,
         mock_w3: MagicMock,
+        mock_ledger_api: MagicMock,
         mock_config: MagicMock,
         mock_executor: MagicMock,
         mock_agreement_builder: MagicMock,
@@ -136,6 +142,7 @@ class TestSubscriptionManager:
         """Create SubscriptionManager instance."""
         return SubscriptionManager(
             w3=mock_w3,
+            ledger_api=mock_ledger_api,
             config=mock_config,
             sender="0x1234567890123456789012345678901234567890",
             executor=mock_executor,
@@ -155,13 +162,16 @@ class TestSubscriptionManager:
         mock_agreement_builder: MagicMock,
         mock_fulfillment_builder: MagicMock,
         mock_executor: MagicMock,
-        mock_w3: MagicMock,
         mock_contracts: dict,
     ) -> None:
         """Test successful subscription purchase on Gnosis (no token approval)."""
         plan_did = "did:nvm:test123"
 
-        result = manager.purchase_subscription(plan_did)
+        with patch(
+            "mech_client.domain.subscription.manager.wait_for_receipt",
+            return_value={"status": 1},
+        ) as mock_wait_for_receipt:
+            result = manager.purchase_subscription(plan_did)
 
         # Verify workflow steps
         mock_balance_checker.check.assert_called_once()
@@ -170,6 +180,9 @@ class TestSubscriptionManager:
 
         # Verify transactions (2 for Gnosis: create + fulfill)
         assert mock_executor.execute_transaction.call_count == 2
+
+        # Verify receipt waiting (2 for Gnosis: create + fulfill)
+        assert mock_wait_for_receipt.call_count == 2
 
         # Verify NFT balance checks
         assert mock_contracts["subscription_nft"].get_balance.call_count == 2
@@ -202,6 +215,7 @@ class TestSubscriptionManager:
 
         manager = SubscriptionManager(
             w3=mock_w3,
+            ledger_api=MagicMock(),
             config=mock_config,
             sender="0x1234567890123456789012345678901234567890",
             executor=mock_executor,
@@ -215,10 +229,15 @@ class TestSubscriptionManager:
         )
 
         plan_did = "did:nvm:test456"
-        result = manager.purchase_subscription(plan_did)
+        with patch(
+            "mech_client.domain.subscription.manager.wait_for_receipt",
+            return_value={"status": 1},
+        ) as mock_wait_for_receipt:
+            result = manager.purchase_subscription(plan_did)
 
         # Verify transactions (3 for Base: approve + create + fulfill)
         assert mock_executor.execute_transaction.call_count == 3
+        assert mock_wait_for_receipt.call_count == 3
 
         # Verify approval was called
         approve_call = mock_executor.execute_transaction.call_args_list[0]
@@ -253,6 +272,7 @@ class TestSubscriptionManager:
 
         manager = SubscriptionManager(
             w3=mock_w3,
+            ledger_api=MagicMock(),
             config=mock_config,
             sender="0x1234567890123456789012345678901234567890",
             executor=mock_executor,
@@ -271,15 +291,14 @@ class TestSubscriptionManager:
     def test_purchase_subscription_agreement_creation_failure(
         self,
         manager: SubscriptionManager,
-        mock_w3: MagicMock,
     ) -> None:
         """Test subscription purchase fails if agreement creation fails."""
-        mock_w3.eth.wait_for_transaction_receipt.return_value = {
-            "status": 0
-        }  # Failed
-
-        with pytest.raises(RuntimeError, match="Agreement creation failed"):
-            manager.purchase_subscription("did:nvm:test")
+        with patch(
+            "mech_client.domain.subscription.manager.wait_for_receipt",
+            return_value={"status": 0},
+        ):
+            with pytest.raises(RuntimeError, match="Agreement creation failed"):
+                manager.purchase_subscription("did:nvm:test")
 
     def test_approve_token_gnosis_skipped(
         self,
@@ -287,7 +306,11 @@ class TestSubscriptionManager:
         mock_executor: MagicMock,
     ) -> None:
         """Test token approval is skipped on Gnosis."""
-        manager.purchase_subscription("did:nvm:test")
+        with patch(
+            "mech_client.domain.subscription.manager.wait_for_receipt",
+            return_value={"status": 1},
+        ):
+            manager.purchase_subscription("did:nvm:test")
 
         # Verify no approval transaction (only create + fulfill)
         assert mock_executor.execute_transaction.call_count == 2

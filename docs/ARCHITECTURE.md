@@ -607,7 +607,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 |-----------|-------|---------|
 | `DeliveryWatcher` | Domain | Abstract delivery interface |
 | `OnchainDeliveryWatcher` | Domain | On-chain event watching |
-| `ReceiptWaiter` | Infrastructure | Transaction receipt polling |
+| `wait_for_receipt` | Infrastructure | Transaction receipt polling |
 
 ### Tool Components
 
@@ -871,6 +871,7 @@ class SubscriptionService:
         # Create subscription manager
         manager = SubscriptionManager(
             w3=self.w3,
+            ledger_api=self.ledger_api,
             config=self.config,
             sender=self.sender,
             executor=executor,
