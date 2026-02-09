@@ -21,7 +21,7 @@ Detailed instructions for each step are provided below.
 
 ## Setup
 
-**Requirements**: [Python](https://www.python.org/) >= 3.10, [Poetry](https://github.com/python-poetry/poetry) == 1.8.4
+**Requirements**: [Python](https://www.python.org/) >=3.10, <3.12 (Python 3.10 or 3.11), [Poetry](https://github.com/python-poetry/poetry) == 1.8.4
 
 **1.** Install mech-client:
 

@@ -4,7 +4,7 @@ A client to interact with Mechs - AI agents providing services - on the [Olas Ma
 
 ## Requirements
 
-- Python >=3.10
+- Python >=3.10, <3.12 (Python 3.10 or 3.11)
 
 ## Developing, running and deploying Mechs and Mech tools
 
