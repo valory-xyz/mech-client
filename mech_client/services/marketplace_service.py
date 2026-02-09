@@ -159,10 +159,12 @@ class MarketplaceService(
         )
 
         # Prepare metadata and upload to IPFS
+        print("Uploading metadata to IPFS...")
         data_hashes = []
         for prompt, tool in zip(prompts, tools):
             data_hash, _ = push_metadata_to_ipfs(prompt, tool, extra_attributes or {})
             data_hashes.append(data_hash)
+        print(f"  Uploaded {len(data_hashes)} metadata hash(es) to IPFS")
 
         # Handle payment (approval if needed)
         if not use_prepaid and payment_type.is_token():
@@ -170,6 +172,7 @@ class MarketplaceService(
             price = self.mech_config.price * len(prompts)
 
             # Check balance
+            print(f"Checking {payment_type.name} token balance...")
             sender = self.executor.get_sender_address()
             if not payment_strategy.check_balance(sender, price):
                 raise ValueError(
@@ -178,14 +181,17 @@ class MarketplaceService(
                 )
 
             # Approve if needed
+            print("Sending token approval transaction...")
             payment_strategy.approve_if_needed(
                 payer_address=sender,
                 spender_address=balance_tracker,
                 amount=price,
                 executor=self.executor,
             )
+            print("  Token approval complete")
 
         # Send on-chain marketplace request
+        print("Submitting marketplace request transaction...")
         tx_hash = self._send_marketplace_request(
             marketplace_contract=marketplace_contract,
             data_hashes=data_hashes,
@@ -195,14 +201,18 @@ class MarketplaceService(
             response_timeout=response_timeout,
             use_prepaid=use_prepaid,
         )
+        tx_url = self.mech_config.transaction_url.format(transaction_digest=tx_hash)
+        print(f"  Transaction submitted: {tx_url}")
 
         # Wait for receipt and get request IDs
         receipt = wait_for_receipt(tx_hash, self.ledger_api)
         request_ids = watch_for_marketplace_request_ids(
             marketplace_contract, self.ledger_api, tx_hash
         )
+        print(f"✓ Transaction confirmed: {tx_url}")
 
         # Watch for on-chain delivery
+        print("Waiting for mech delivery...")
         watcher = OnchainDeliveryWatcher(marketplace_contract, self.ledger_api, timeout)
         results = await watcher.watch(request_ids)
 
