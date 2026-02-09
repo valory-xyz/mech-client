@@ -25,6 +25,12 @@ tox -e black-check,isort-check,flake8,mypy,pylint,bandit,darglint,vulture && tox
 # Run tests
 poetry run pytest tests/unit/ -k "not trio"
 
+# Test documentation locally
+tox -e mkdocs-serve  # Starts dev server at http://127.0.0.1:8000/
+
+# Build documentation
+tox -e mkdocs-build  # Builds static site to site/ directory
+
 # Build distribution
 make dist
 ```
@@ -415,4 +421,27 @@ Version bump checklist:
 - **[docs/TESTING.md](./docs/TESTING.md)**: Testing guidelines, running tests, writing tests
 - **[docs/COMMANDS.md](./docs/COMMANDS.md)**: Command reference with dependency diagrams
 - **[docs/index.md](./docs/index.md)**: User guide for interacting with Mechs
+- **[docs/manual-testing-guide.md](./docs/manual-testing-guide.md)**: Manual testing procedures (internal, not in public docs nav)
 - **[README.md](./README.md)**: User documentation and examples
+- **[mkdocs.yml](./mkdocs.yml)**: MkDocs configuration for documentation site
+
+### Testing Documentation Locally
+
+The documentation is built with MkDocs and published to https://stack.olas.network/mech-client/
+
+**Test documentation locally:**
+```bash
+# Start development server with live reload
+tox -e mkdocs-serve
+# Visit http://127.0.0.1:8000/
+
+# Build static site
+tox -e mkdocs-build
+# Output in site/ directory
+```
+
+**MkDocs Configuration:**
+- Simplified configuration (32 lines) with only essential features
+- Compatible with monorepo inclusion via `!include` directive
+- Material theme with basic markdown extensions
+- Only `docs/index.md` in public navigation (manual-testing-guide.md is internal)

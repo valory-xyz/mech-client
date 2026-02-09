@@ -5,8 +5,6 @@ repo_url: https://github.com/valory-xyz/mech-client
 site_author: developer@valory.xyz
 copyright: Copyright &copy; 2021 - 2025 Valory AG
 
-strict: true
-
 theme:
   name: material
   language: en
