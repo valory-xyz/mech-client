@@ -114,6 +114,10 @@ class TestAgreementBuilder:
         assert hasattr(result, "did")
         assert hasattr(result, "ddo")
         assert result.did == plan_did
+        assert result.receivers == [
+            "0x" + "3" * 40,  # marketplace fee receiver (NeverminedConfig)
+            builder.config.receiver_plan,  # plan receiver (NVMConfig)
+        ]
 
     def test_build_agreement_ddo_fetch_failure(
         self,

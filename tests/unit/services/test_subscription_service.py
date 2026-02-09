@@ -281,6 +281,7 @@ class TestSubscriptionService:
         assert call_kwargs["agent_mode"] is True
         assert call_kwargs["ethereum_client"] is not None
         assert call_kwargs["safe_address"] == "0x" + "a" * 40
+        assert service.sender == "0x" + "a" * 40
 
         # Verify result
         assert result["status"] == "success"

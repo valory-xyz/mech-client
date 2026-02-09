@@ -185,6 +185,7 @@ class TestSubscriptionManager:
         create_call = mock_executor.execute_transaction.call_args_list[0]
         assert create_call[1]["method_name"] == "createAgreementAndPayEscrow"
         assert create_call[1]["method_args"]["_accessConsumer"] == manager.sender
+        assert create_call[1]["tx_args"]["sender_address"] == manager.sender
 
         # Verify fulfill call uses ABI-compatible argument names
         fulfill_call = mock_executor.execute_transaction.call_args_list[1]
@@ -193,6 +194,7 @@ class TestSubscriptionManager:
         assert "did" in fulfill_call[1]["method_args"]
         assert "fulfillForDelegateParams" in fulfill_call[1]["method_args"]
         assert "fulfillParams" in fulfill_call[1]["method_args"]
+        assert fulfill_call[1]["tx_args"]["sender_address"] == manager.sender
 
         # Verify receipt waiting (2 for Gnosis: create + fulfill)
         assert mock_wait_for_receipt.call_count == 2
@@ -260,6 +262,7 @@ class TestSubscriptionManager:
         create_call = mock_executor.execute_transaction.call_args_list[1]
         assert create_call[1]["method_name"] == "createAgreementAndPayEscrow"
         assert create_call[1]["method_args"]["_accessConsumer"] == manager.sender
+        assert create_call[1]["tx_args"]["sender_address"] == manager.sender
 
         # Verify fulfill call uses ABI-compatible argument names
         fulfill_call = mock_executor.execute_transaction.call_args_list[2]
@@ -268,6 +271,7 @@ class TestSubscriptionManager:
         assert "did" in fulfill_call[1]["method_args"]
         assert "fulfillForDelegateParams" in fulfill_call[1]["method_args"]
         assert "fulfillParams" in fulfill_call[1]["method_args"]
+        assert fulfill_call[1]["tx_args"]["sender_address"] == manager.sender
 
         # Verify result
         assert result["status"] == "success"
