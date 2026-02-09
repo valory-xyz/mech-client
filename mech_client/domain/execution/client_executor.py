@@ -77,6 +77,35 @@ class ClientExecutor(TransactionExecutor):
         )
         return transaction_digest
 
+    def execute_transfer(
+        self,
+        to_address: str,
+        amount: int,
+        gas: int,
+    ) -> str:
+        """
+        Execute a plain native token transfer in client mode.
+
+        :param to_address: Destination address
+        :param amount: Amount to transfer in wei
+        :param gas: Gas limit for the transaction
+        :return: Transaction hash
+        :raises Exception: If transaction fails
+        """
+        raw_transaction = self.ledger_api.get_transfer_transaction(
+            sender_address=self.crypto.address,
+            destination_address=to_address,
+            amount=amount,
+            tx_fee=gas,
+            tx_nonce="0x",
+        )
+        signed_transaction = self.crypto.sign_transaction(raw_transaction)
+        transaction_digest = self.ledger_api.send_signed_transaction(
+            signed_transaction,
+            raise_on_try=True,
+        )
+        return transaction_digest
+
     def get_sender_address(self) -> str:
         """
         Get the EOA address that will send transactions.

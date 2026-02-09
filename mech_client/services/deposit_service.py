@@ -88,23 +88,14 @@ class DepositService(
                 f"Insufficient native token balance for deposit. Amount: {amount}"
             )
 
-        # Get balance tracker contract
+        # Get balance tracker address
         balance_tracker_address = payment_strategy.get_balance_tracker_address()
-        abi = get_abi("BalanceTrackerFixedPriceNative.json")
-        balance_tracker = get_contract(balance_tracker_address, abi, self.ledger_api)
 
-        # Execute deposit transaction
-        tx_args = {
-            "sender_address": sender,
-            "value": amount,
-            "gas": self.mech_config.gas_limit,
-        }
-
-        tx_hash = self.executor.execute_transaction(
-            contract=balance_tracker,
-            method_name="deposit",
-            method_args={},
-            tx_args=tx_args,
+        # Execute native transfer to balance tracker (triggers receive() fallback)
+        tx_hash = self.executor.execute_transfer(
+            to_address=balance_tracker_address,
+            amount=amount,
+            gas=self.mech_config.gas_limit,
         )
 
         # Wait for receipt
