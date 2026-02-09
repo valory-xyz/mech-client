@@ -201,15 +201,15 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         # Execute agreement creation transaction
         tx_hash = self.executor.execute_transaction(
             contract=self.nft_sales.contract,
-            method_name="createAgreement",
+            method_name="createAgreementAndPayEscrow",
             method_args={
-                "_agreementIdSeed": agreement.agreement_id_seed,
+                "_id": agreement.agreement_id_seed,
                 "_did": agreement.did,
-                "_conditionSeeds": agreement.condition_seeds,
+                "_conditionIds": agreement.condition_seeds,
                 "_timeLocks": agreement.timelocks,
                 "_timeOuts": agreement.timeouts,
-                "_publisher": self.sender,
-                "_serviceIndex": 0,
+                "_accessConsumer": self.sender,
+                "_idx": 0,
                 "_rewardAddress": agreement.reward_address,
                 "_tokenAddress": self.config.token_address,
                 "_amounts": amounts,
@@ -251,10 +251,10 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
             contract=self.subscription_provider.contract,
             method_name="fulfill",
             method_args={
-                "_agreementId": "0x" + agreement.agreement_id.hex(),
-                "_did": agreement.did,
-                "_fulfillForDelegateParams": fulfillment.fulfill_for_delegate_params,
-                "_fulfillParams": fulfillment.fulfill_params,
+                "agreementId": "0x" + agreement.agreement_id.hex(),
+                "did": agreement.did,
+                "fulfillForDelegateParams": fulfillment.fulfill_for_delegate_params,
+                "fulfillParams": fulfillment.fulfill_params,
             },
             tx_args={
                 "from": self.sender,
