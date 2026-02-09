@@ -105,7 +105,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         logger.info(f"Starting subscription purchase for DID: {plan_did}")
 
         # Step 1: Check balance
-        print(f"Checking {self.sender} balance for purchasing subscription...")
+        logger.info(f"Checking {self.sender} balance for purchasing subscription")
         self.balance_checker.check()
 
         # Step 2: Build agreement data
@@ -115,7 +115,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         balance_before = self.subscription_nft.get_balance(
             self.sender, self.config.subscription_id
         )
-        print(f"Sender credits before purchase: {balance_before}")
+        logger.info(f"Sender credits before purchase: {balance_before}")
 
         # Step 3: Token approval (Base only)
         if self.config.requires_token_approval():
@@ -132,7 +132,7 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
         balance_after = self.subscription_nft.get_balance(
             self.sender, self.config.subscription_id
         )
-        print(f"Sender credits after purchase: {balance_after}")
+        logger.info(f"Sender credits after purchase: {balance_after}")
 
         logger.info("Subscription purchased successfully")
 
@@ -179,7 +179,6 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
             raise RuntimeError(f"Token approval failed. Transaction hash: {tx_hash}")
 
         logger.info(f"Token approval successful. Tx hash: {tx_hash}")
-        print(f"Token approval transaction: {tx_hash}")
 
     def _create_agreement(self, agreement: AgreementData) -> str:
         """
@@ -232,7 +231,6 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
             )
 
         logger.info(f"Agreement created successfully. Tx hash: {tx_hash}")
-        print(f"Agreement creation transaction: {tx_hash}")
 
         return tx_hash
 
@@ -274,6 +272,5 @@ class SubscriptionManager:  # pylint: disable=too-few-public-methods,too-many-in
             )
 
         logger.info(f"Agreement fulfilled successfully. Tx hash: {tx_hash}")
-        print(f"Fulfillment transaction: {tx_hash}")
 
         return tx_hash
