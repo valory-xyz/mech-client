@@ -864,8 +864,10 @@ class SubscriptionService:
             safe_address=self.safe_address,
         )
 
-        # Create all NVM contracts
-        contracts = NVMContractFactory.create_all(self.w3)
+        # Create required NVM contracts for this chain
+        contracts = {
+            # ... (create wrappers via NVMContractFactory.create)
+        }
 
         # Create domain components
         agreement_builder = AgreementBuilder(...)

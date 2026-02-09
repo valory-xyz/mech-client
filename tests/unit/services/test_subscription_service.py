@@ -141,6 +141,9 @@ class TestSubscriptionService:
             "subscription_provider": MagicMock(),
             "nft": MagicMock(),
         }
+        mock_contract_factory.subscription_contract_names.return_value = tuple(
+            mock_contracts.keys()
+        )
         mock_contract_factory.create_all.return_value = mock_contracts
 
         mock_manager = MagicMock()
@@ -173,7 +176,10 @@ class TestSubscriptionService:
         assert call_kwargs["ethereum_client"] is None
         assert call_kwargs["safe_address"] is None
 
-        # Verify contract factory called
+        # Verify contract factory called (no token contract on gnosis)
+        mock_contract_factory.subscription_contract_names.assert_called_once_with(
+            include_token=False
+        )
         mock_contract_factory.create_all.assert_called_once()
 
         # Verify builders created
@@ -245,6 +251,9 @@ class TestSubscriptionService:
             "subscription_provider": MagicMock(),
             "nft": MagicMock(),
         }
+        mock_contract_factory.subscription_contract_names.return_value = tuple(
+            mock_contracts.keys()
+        )
         mock_contract_factory.create_all.return_value = mock_contracts
 
         mock_manager = MagicMock()
@@ -331,6 +340,9 @@ class TestSubscriptionService:
             "subscription_provider": MagicMock(),
             "nft": MagicMock(),
         }
+        mock_contract_factory.subscription_contract_names.return_value = tuple(
+            mock_contracts.keys()
+        )
         mock_contract_factory.create_all.return_value = mock_contracts
 
         mock_manager = MagicMock()
