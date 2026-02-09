@@ -60,7 +60,7 @@ All commands require `--chain-config` with one of these four chain names.
 - **OLAS/USDC Payments**: Chains supporting `deposit token` command with OLAS or USDC tokens.
 
 **Important Notes:**
-- The `mech list` command works on all marketplace chains (Gnosis, Base, Polygon, Optimism) but requires setting the `MECHX_SUBGRAPH_URL` environment variable.
+- The `mech list` command works on all marketplace chains (Gnosis, Base, Polygon, Optimism) with default subgraph URLs provided. The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
 - For other marketplace commands (`request`, deposits), subgraph is not required.
 
 ## 1. How to Send a request to a Mech (registered on the Mech MarketPlace)
@@ -84,9 +84,9 @@ mechx mech list --chain-config <chain-config>
 
 Replace `<chain-config>` by the chosen network. Supported marketplace chains: gnosis, base, polygon, optimism.
 
-⚠️ **Note**: This command requires a subgraph URL to be set:
+**Note**: Default subgraph URLs are provided for all supported chains. You can optionally override the default:
 ```bash
-export MECHX_SUBGRAPH_URL=<your-subgraph-url>
+export MECHX_SUBGRAPH_URL=<your-custom-subgraph-url>
 ```
 ```bash
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+

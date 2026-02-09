@@ -93,7 +93,7 @@ All commands require `--chain-config` with one of these four chain names.
 - **Native Payment**: Chains that support `deposit native` command for prepaid native token deposits.
 - **NVM Subscriptions**: Chains that support `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base only).
 - **OLAS/USDC Payments**: Chains that support `deposit token` command with OLAS or USDC tokens.
-- **Subgraph**: The `mech list` command requires setting `MECHX_SUBGRAPH_URL` environment variable for any chain.
+- **Subgraph**: Default subgraph URLs are provided for all supported chains. The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
 
 ### Set up agent mode for on-chain interactions
 
@@ -120,10 +120,10 @@ mechx setup --chain-config <chain_config>
 
 To list the top marketplace mechs based on deliveries, use the `mech list` command. You can specify the chain you want to query. Please note that only the first 20 mechs sorted by number of deliveries will be shown.
 
-⚠️ This command requires a subgraph URL to be set. Configure it with:
+**Note:** Default subgraph URLs are provided for all supported chains. You can optionally override the default by setting:
 
 ```bash
-export MECHX_SUBGRAPH_URL=<your-subgraph-url>
+export MECHX_SUBGRAPH_URL=<your-custom-subgraph-url>
 ```
 
 Supported marketplace chains: gnosis, base, polygon, optimism
@@ -399,9 +399,10 @@ Additionally, you can override any configuration parameter by exporting any of t
 
 ```bash
 MECHX_CHAIN_RPC
+MECHX_SUBGRAPH_URL
+MECHX_MECH_OFFCHAIN_URL
 MECHX_GAS_LIMIT
 MECHX_TRANSACTION_URL
-MECHX_SUBGRAPH_URL
 
 MECHX_LEDGER_CHAIN_ID
 MECHX_LEDGER_POA_CHAIN
