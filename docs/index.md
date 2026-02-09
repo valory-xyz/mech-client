@@ -65,7 +65,7 @@ All commands require `--chain-config` with one of these four chain names.
 
 ## 1. How to Send a request to a Mech (registered on the Mech MarketPlace)
 
-To send a request to a Mech that is accessible through the Mech Marketplace, first complete the [setup](#setup), then follow the instructions below.
+To send a request to a Mech that is accessible through the Mech Marketplace, first complete the [setup](#setup), then follow the [instructions](#1-2-in-terminal) below.
 
 You will need to [choose a Mech](#1-1-choosing-a-mech), and then select one of the following methods to send a request:
 - Via the [terminal](#1-2-in-terminal)
