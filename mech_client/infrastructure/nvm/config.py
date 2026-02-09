@@ -43,7 +43,6 @@ class NVMConfig:  # pylint: disable=too-many-instance-attributes
 
     # Contract addresses
     subscription_nft_address: str
-    olas_marketplace_address: str
     receiver_plan: str  # Used in agreement receivers list
     token_address: str
 
@@ -133,7 +132,6 @@ class NVMConfig:  # pylint: disable=too-many-instance-attributes
             plan_fee_nvm=nvm_sub_config["plan_fee_nvm"],
             plan_price_mechs=nvm_sub_config["plan_price_mechs"],
             subscription_nft_address=nvm_sub_config["subscription_nft_address"],
-            olas_marketplace_address=chain_data["mech_marketplace_contract"],
             receiver_plan=nvm_sub_config["receiver_plan"],
             token_address=nvm_sub_config["token_address"],
             web3_provider_uri=nvm_config["web3ProviderUri"],
