@@ -71,6 +71,22 @@ class TestValidateEthereumAddress:
         with pytest.raises(ValidationError, match="Invalid Ethereum address"):
             validate_ethereum_address("0x123")
 
+    def test_non_checksummed_address_is_converted(self) -> None:
+        """Test that non-checksummed address is converted to checksummed format."""
+        # Non-checksummed address (all lowercase)
+        non_checksummed = "0xb3c6319962484602b00d5587e965946890b82101"
+        # Expected checksummed version (correct checksum from Web3)
+        expected_checksummed = "0xB3C6319962484602b00d5587e965946890b82101"
+
+        result = validate_ethereum_address(non_checksummed)
+        assert result == expected_checksummed
+
+    def test_already_checksummed_address_unchanged(self) -> None:
+        """Test that already checksummed address is returned unchanged."""
+        checksummed = "0xB3C6319962484602b00d5587e965946890b82101"
+        result = validate_ethereum_address(checksummed)
+        assert result == checksummed
+
 
 class TestValidateAmount:
     """Tests for validate_amount function."""

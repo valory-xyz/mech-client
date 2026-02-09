@@ -23,8 +23,9 @@ import json
 from pathlib import Path
 
 from click import ClickException
-from eth_utils import is_address
-from web3.constants import ADDRESS_ZERO
+
+from mech_client.utils import validators as utils_validators
+from mech_client.utils.errors import ValidationError
 
 
 MECHX_CHAIN_CONFIGS = Path(__file__).parent.parent / "configs" / "mechs.json"
@@ -58,26 +59,36 @@ def validate_chain_config(chain_config: str) -> str:
 
 def validate_ethereum_address(address: str, name: str = "Address") -> str:
     """
-    Validate an Ethereum address format.
+    Validate an Ethereum address format and return checksummed address.
 
-    :param address: Address to validate
+    This is a CLI wrapper around the business validator that converts
+    ValidationError to ClickException with user-friendly messages.
+
+    :param address: Address to validate (checksummed or not)
     :param name: Name of the address for error messages
-    :return: Validated address
+    :return: Validated checksummed address
     :raises ClickException: If address is invalid
     """
-    if not address or address == ADDRESS_ZERO:
-        raise ClickException(
-            f"{name} is not set or is zero address.\n"
-            f"Please provide a valid Ethereum address."
-        )
-
-    if not is_address(address):
+    try:
+        # Delegate to business validator (single source of truth)
+        return utils_validators.validate_ethereum_address(address, allow_zero=False)
+    except ValidationError as e:
+        # Convert ValidationError to ClickException with context
+        error_msg = str(e)
+        if "empty" in error_msg:
+            raise ClickException(
+                f"{name} is not set.\n" f"Please provide a valid Ethereum address."
+            ) from e
+        if "zero address" in error_msg:
+            raise ClickException(
+                f"{name} is not set or is zero address.\n"
+                f"Please provide a valid Ethereum address."
+            ) from e
+        # Invalid format or other errors
         raise ClickException(
             f"Invalid {name}: {address!r}\n"
             f"Please provide a valid Ethereum address (0x...)"
-        )
-
-    return address
+        ) from e
 
 
 def validate_amount(amount: str, name: str = "Amount") -> int:

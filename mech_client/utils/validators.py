@@ -26,34 +26,59 @@ They can be used by services, domain logic, or any other component.
 from typing import List, Optional
 
 from eth_utils import is_address
+from web3 import Web3
 from web3.constants import ADDRESS_ZERO
 
 from mech_client.infrastructure.config import PaymentType
 from mech_client.utils.errors import ValidationError
 
 
+def ensure_checksummed_address(address: str) -> str:
+    """
+    Ensure an address is in checksummed format.
+
+    This is a lightweight helper that converts any valid Ethereum address
+    to its checksummed form without performing validation. Use this when
+    you already know the address is valid (e.g., from validated input or
+    internal sources) but need to ensure it's checksummed for web3.py.
+
+    :param address: Ethereum address (checksummed or not)
+    :return: Checksummed address
+    """
+    return Web3.to_checksum_address(address)
+
+
 def validate_ethereum_address(address: str, allow_zero: bool = False) -> str:
     """
-    Validate Ethereum address format.
+    Validate Ethereum address format and return checksummed address.
 
-    :param address: Address to validate
+    Accepts both checksummed and non-checksummed addresses, validates them,
+    and returns the checksummed version. This ensures compatibility with
+    web3.py which requires checksummed addresses.
+
+    :param address: Address to validate (checksummed or not)
     :param allow_zero: Whether to allow zero address
-    :return: Validated address
+    :return: Validated checksummed address
     :raises ValidationError: If address is invalid
     """
     if not address:
         raise ValidationError("Address cannot be empty")
 
-    if not allow_zero and address == ADDRESS_ZERO:
-        raise ValidationError(f"Address cannot be zero address: {ADDRESS_ZERO}")
-
+    # Validate address format first (works with both checksummed and non-checksummed)
     if not is_address(address):
         raise ValidationError(
             f"Invalid Ethereum address format: {address!r}\n"
             f"Expected format: 0x followed by 40 hexadecimal characters"
         )
 
-    return address
+    # Convert to checksummed address
+    checksummed_address = Web3.to_checksum_address(address)
+
+    # Check zero address after checksumming
+    if not allow_zero and checksummed_address == ADDRESS_ZERO:
+        raise ValidationError(f"Address cannot be zero address: {ADDRESS_ZERO}")
+
+    return checksummed_address
 
 
 def validate_amount(amount: int, min_value: int = 1) -> int:

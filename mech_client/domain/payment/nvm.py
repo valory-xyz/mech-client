@@ -29,6 +29,7 @@ from mech_client.infrastructure.config import (
     CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
     PaymentType,
 )
+from mech_client.utils.validators import ensure_checksummed_address
 
 
 if TYPE_CHECKING:
@@ -151,9 +152,12 @@ class NVMPaymentStrategy(PaymentStrategy):
             self.ledger_api,
         )
 
+        # Ensure address is checksummed (required by web3.py)
+        checksummed_address = ensure_checksummed_address(requester_address)
+
         # Get prepaid balance
         requester_balance_tracker_balance = (
-            balance_tracker.functions.mapRequesterBalances(requester_address).call()
+            balance_tracker.functions.mapRequesterBalances(checksummed_address).call()
         )
 
         # Get subscription NFT details
@@ -168,7 +172,7 @@ class NVMPaymentStrategy(PaymentStrategy):
             self.ledger_api,
         )
         nft_balance = subscription_nft.functions.balanceOf(
-            requester_address, subscription_id
+            checksummed_address, subscription_id
         ).call()
 
         # Return combined balance

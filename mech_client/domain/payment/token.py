@@ -33,6 +33,7 @@ from mech_client.infrastructure.config import (
     CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
     PaymentType,
 )
+from mech_client.utils.validators import ensure_checksummed_address
 
 
 if TYPE_CHECKING:
@@ -182,4 +183,8 @@ class TokenPaymentStrategy(PaymentStrategy):
             abi,
             self.ledger_api,
         )
-        return balance_tracker.functions.mapRequesterBalances(requester_address).call()
+        # Ensure address is checksummed (required by web3.py)
+        checksummed_address = ensure_checksummed_address(requester_address)
+        return balance_tracker.functions.mapRequesterBalances(
+            checksummed_address
+        ).call()

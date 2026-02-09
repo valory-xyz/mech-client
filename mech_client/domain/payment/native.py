@@ -25,6 +25,7 @@ from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.config import CHAIN_TO_NATIVE_BALANCE_TRACKER
+from mech_client.utils.validators import ensure_checksummed_address
 
 
 if TYPE_CHECKING:
@@ -106,4 +107,8 @@ class NativePaymentStrategy(PaymentStrategy):
             abi,
             self.ledger_api,
         )
-        return balance_tracker.functions.mapRequesterBalances(requester_address).call()
+        # Ensure address is checksummed (required by web3.py)
+        checksummed_address = ensure_checksummed_address(requester_address)
+        return balance_tracker.functions.mapRequesterBalances(
+            checksummed_address
+        ).call()
