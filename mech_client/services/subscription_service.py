@@ -179,6 +179,7 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes,too-f
         # Create subscription manager
         manager = SubscriptionManager(
             w3=self.w3,
+            ledger_api=self.ledger_api,
             config=self.config,
             sender=self.sender,
             executor=executor,
