@@ -89,7 +89,6 @@ class TestNVMConfig:
             plan_fee_nvm="500000",
             plan_price_mechs="500000",
             subscription_nft_address="0x" + "1" * 40,
-            olas_marketplace_address="0x" + "2" * 40,
             receiver_plan="0x" + "3" * 40,
             token_address="0x0000000000000000000000000000000000000000",  # nosec
             web3_provider_uri="https://rpc.gnosischain.com",
@@ -114,7 +113,6 @@ class TestNVMConfig:
             plan_fee_nvm="5000000",
             plan_price_mechs="5000000",
             subscription_nft_address="0x" + "1" * 40,
-            olas_marketplace_address="0x" + "2" * 40,
             receiver_plan="0x" + "3" * 40,
             token_address="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",  # USDC on Base
             web3_provider_uri="https://mainnet.base.org",
@@ -139,7 +137,6 @@ class TestNVMConfig:
             plan_fee_nvm="500000",
             plan_price_mechs="400000",
             subscription_nft_address="0x" + "1" * 40,
-            olas_marketplace_address="0x" + "2" * 40,
             receiver_plan="0x" + "3" * 40,
             token_address="0x0000000000000000000000000000000000000000",  # nosec
             web3_provider_uri="https://rpc.gnosischain.com",
@@ -164,7 +161,6 @@ class TestNVMConfig:
             plan_fee_nvm="5000000",
             plan_price_mechs="5000000",
             subscription_nft_address="0x" + "1" * 40,
-            olas_marketplace_address="0x" + "2" * 40,
             receiver_plan="0x" + "3" * 40,
             token_address="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",  # USDC
             web3_provider_uri="https://mainnet.base.org",
@@ -189,7 +185,6 @@ class TestNVMConfig:
             plan_fee_nvm="500000",
             plan_price_mechs="400000",
             subscription_nft_address="0x" + "1" * 40,
-            olas_marketplace_address="0x" + "2" * 40,
             receiver_plan="0x" + "3" * 40,
             token_address="0x0000000000000000000000000000000000000000",  # nosec
             web3_provider_uri="https://rpc.gnosischain.com",
@@ -215,7 +210,6 @@ class TestNVMConfig:
             plan_fee_nvm="500000",
             plan_price_mechs="500000",
             subscription_nft_address="0x" + "1" * 40,
-            olas_marketplace_address="0x" + "2" * 40,
             receiver_plan="0x" + "3" * 40,
             token_address="0x0000000000000000000000000000000000000000",  # nosec
             web3_provider_uri="https://rpc.gnosischain.com",

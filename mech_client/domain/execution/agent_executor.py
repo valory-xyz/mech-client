@@ -79,14 +79,17 @@ class AgentExecutor(TransactionExecutor):
         """
         # Build transaction data
         function = contract.functions[method_name](**method_args)
-        transaction = function.build_transaction(
-            {
-                # pylint: disable=protected-access
-                "chainId": int(self.ledger_api._chain_id),
-                "gas": 0,
-                "nonce": self.safe_client.get_nonce(),
-            }
-        )
+        sender_address = tx_args.get("sender_address") or tx_args.get("from")
+        build_tx_args: Dict[str, Any] = {
+            # pylint: disable=protected-access
+            "chainId": int(self.ledger_api._chain_id),
+            "gas": 0,
+            "nonce": self.safe_client.get_nonce(),
+        }
+        if sender_address:
+            build_tx_args["from"] = sender_address
+
+        transaction = function.build_transaction(build_tx_args)
 
         # Execute through Safe
         value = tx_args.get("value", 0)

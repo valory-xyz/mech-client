@@ -197,3 +197,49 @@ class TestAgentExecutorTransfer:
 
         with pytest.raises(Exception, match="Failed to execute Safe transfer"):
             executor.execute_transfer("0x" + "2" * 40, 10**18, gas=50000)
+
+
+class TestAgentExecutorTransaction:
+    """Tests for AgentExecutor.execute_transaction."""
+
+    @patch("mech_client.domain.execution.agent_executor.SafeClient")
+    def test_execute_transaction_maps_sender_address_to_from(
+        self,
+        mock_safe_client_cls: MagicMock,
+        mock_ledger_api: MagicMock,
+        mock_ethereum_client: MagicMock,
+    ) -> None:
+        """tx_args uses sender_address, but web3 build_transaction expects from."""
+        mock_crypto = MagicMock()
+        mock_crypto.private_key = "0x" + "a" * 64
+        mock_ledger_api._chain_id = 100  # pylint: disable=protected-access
+
+        mock_safe_client = MagicMock()
+        mock_safe_client.get_nonce.return_value = 7
+        mock_tx_hash = MagicMock()
+        mock_tx_hash.to_0x_hex.return_value = "0xtxhash"
+        mock_safe_client.send_transaction.return_value = mock_tx_hash
+        mock_safe_client_cls.return_value = mock_safe_client
+
+        executor = AgentExecutor(
+            mock_ledger_api, mock_crypto, "0x" + "b" * 40, mock_ethereum_client
+        )
+
+        # Mock contract function build_transaction
+        mock_function = MagicMock()
+        mock_function.build_transaction.return_value = {"data": "0xdeadbeef"}
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "c" * 40
+        mock_contract.functions.__getitem__.return_value.return_value = mock_function
+
+        tx_hash = executor.execute_transaction(
+            contract=mock_contract,
+            method_name="foo",
+            method_args={"x": 1},
+            tx_args={"sender_address": "0x" + "1" * 40, "value": 0, "gas": 12345},
+        )
+
+        assert tx_hash == "0xtxhash"
+        # ensure build_transaction got a `from` field
+        args, _ = mock_function.build_transaction.call_args
+        assert args[0]["from"] == "0x" + "1" * 40

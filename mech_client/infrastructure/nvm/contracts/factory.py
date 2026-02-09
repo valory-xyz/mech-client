@@ -19,7 +19,7 @@
 
 """Factory for creating NVM contract wrapper instances."""
 
-from typing import Dict, Type
+from typing import Dict, Iterable, Optional, Sequence, Tuple, Type
 
 from web3 import Web3
 
@@ -61,6 +61,19 @@ class NVMContractFactory:
         "transfer_nft": TransferNFTContract,
     }
 
+    # Standard contract set used by the NVM subscription workflow.
+    _SUBSCRIPTION_CONTRACTS: Tuple[str, ...] = (
+        "did_registry",
+        "agreement_manager",
+        "lock_payment",
+        "transfer_nft",
+        "escrow_payment",
+        "nevermined_config",
+        "nft_sales",
+        "subscription_provider",
+        "nft",
+    )
+
     @classmethod
     def create(cls, w3: Web3, contract_name: str) -> NVMContractWrapper:
         """
@@ -81,11 +94,23 @@ class NVMContractFactory:
         return contract_class(w3)  # type: ignore[call-arg]
 
     @classmethod
-    def create_all(cls, w3: Web3) -> Dict[str, NVMContractWrapper]:
+    def create_all(
+        cls, w3: Web3, contract_names: Optional[Sequence[str]] = None
+    ) -> Dict[str, NVMContractWrapper]:
         """
-        Create all NVM contract wrappers.
+        Create NVM contract wrappers.
 
         :param w3: Web3 instance
+        :param contract_names: Optional list of contract names to create. If not
+            provided, all supported contracts are created.
         :return: Dictionary mapping contract names to wrapper instances
         """
-        return {name: cls.create(w3, name) for name in cls._CONTRACT_CLASSES}
+        names: Iterable[str] = contract_names or cls._CONTRACT_CLASSES.keys()
+        return {name: cls.create(w3, name) for name in names}
+
+    @classmethod
+    def subscription_contract_names(cls, include_token: bool) -> Tuple[str, ...]:
+        """Return the contract names required by the subscription workflow."""
+        if include_token:
+            return cls._SUBSCRIPTION_CONTRACTS + ("token",)
+        return cls._SUBSCRIPTION_CONTRACTS
