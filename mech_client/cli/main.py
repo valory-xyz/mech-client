@@ -26,6 +26,10 @@ from click import ClickException
 from dotenv import load_dotenv
 
 from mech_client import __version__
+from mech_client.utils.logger import setup_logger
+
+# Initialize logging before any commands run
+setup_logger()
 
 # Import command groups
 from mech_client.cli.commands import (
