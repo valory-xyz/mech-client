@@ -218,7 +218,9 @@ class TestDisplayWallets:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets successfully extracts and displays wallet info."""
-        caplog.set_level(logging.INFO, logger="mech_client")
+        mech_logger = logging.getLogger("mech_client")
+        mech_logger.propagate = True
+        caplog.set_level(logging.INFO)
         # Setup
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
@@ -267,6 +269,7 @@ class TestDisplayWallets:
 
         # Verify marketplace URL is logged
         assert "Marketplace: https://marketplace.olas.network/gnosis/ai-agents/2651" in caplog.text
+        mech_logger.propagate = False
 
     @patch("mech_client.services.setup_service.OperateManager")
     def test_display_wallets_with_undeployed_service(
@@ -275,7 +278,9 @@ class TestDisplayWallets:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets shows 'URL unknown' when service token is -1."""
-        caplog.set_level(logging.INFO, logger="mech_client")
+        mech_logger = logging.getLogger("mech_client")
+        mech_logger.propagate = True
+        caplog.set_level(logging.INFO)
         # Setup
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
@@ -323,6 +328,7 @@ class TestDisplayWallets:
 
         # Verify "URL unknown" is logged
         assert "Marketplace: URL unknown" in caplog.text
+        mech_logger.propagate = False
 
     @patch("mech_client.services.setup_service.OperateManager")
     def test_display_wallets_no_service_found(
@@ -331,7 +337,9 @@ class TestDisplayWallets:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets returns None when service not found."""
-        caplog.set_level(logging.WARNING, logger="mech_client")
+        mech_logger = logging.getLogger("mech_client")
+        mech_logger.propagate = True
+        caplog.set_level(logging.WARNING)
         # Setup
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
@@ -361,3 +369,4 @@ class TestDisplayWallets:
         # Verify
         assert result is None
         assert "Could not find service for gnosis" in caplog.text
+        mech_logger.propagate = False
