@@ -254,9 +254,11 @@ class TestSubscriptionManager:
         assert mock_executor.execute_transaction.call_count == 3
         assert mock_wait_for_receipt.call_count == 3
 
-        # Verify approval was called
+        # Verify approval was called with ABI-compatible argument names
         approve_call = mock_executor.execute_transaction.call_args_list[0]
         assert approve_call[1]["method_name"] == "approve"
+        assert "spender" in approve_call[1]["method_args"]
+        assert "value" in approve_call[1]["method_args"]
 
         # Verify agreement creation uses legacy-compatible method signature
         create_call = mock_executor.execute_transaction.call_args_list[1]

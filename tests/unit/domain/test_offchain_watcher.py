@@ -180,7 +180,7 @@ class TestOffchainDeliveryWatcherWatch:
     ) -> None:
         """Test watching with timeout and no responses."""
         # Setup mock time to simulate timeout
-        mock_time.side_effect = [0.0, 70.0]  # Start at 0, then exceed 60s timeout
+        mock_time.side_effect = [0.0, 70.0, 70.0]  # Start, timeout check, logger record
 
         # Setup mock to always return None
         mock_response = MagicMock()
@@ -210,7 +210,7 @@ class TestOffchainDeliveryWatcherWatch:
     ) -> None:
         """Test watching with timeout and partial responses."""
         # Setup mock time to simulate timeout after first response
-        mock_time.side_effect = [0.0, 10.0, 70.0]  # Timeout on second poll
+        mock_time.side_effect = [0.0, 10.0, 10.0, 70.0, 70.0]  # Start, timeout check, logger info record, timeout check, logger warning record
 
         # Setup mock to return data for first request, None for second
         def mock_get_response(*args, **kwargs):

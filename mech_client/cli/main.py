@@ -37,7 +37,11 @@ from mech_client.cli.commands import (
     subscription,
     tool,
 )
+from mech_client.utils.logger import setup_logger
 
+
+# Initialize logging before any commands run
+setup_logger()
 
 OPERATE_FOLDER_NAME = ".operate_mech_client"
 ENV_PATH = Path.home() / OPERATE_FOLDER_NAME / ".env"

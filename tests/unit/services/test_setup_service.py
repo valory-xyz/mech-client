@@ -19,6 +19,7 @@
 
 """Tests for setup service."""
 
+import logging
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call, patch
@@ -214,9 +215,12 @@ class TestDisplayWallets:
     def test_display_wallets_success(
         self,
         mock_operate_manager: MagicMock,
-        capsys: pytest.CaptureFixture,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets successfully extracts and displays wallet info."""
+        mech_logger = logging.getLogger("mech_client")
+        mech_logger.propagate = True
+        caplog.set_level(logging.INFO)
         # Setup
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
@@ -263,17 +267,20 @@ class TestDisplayWallets:
         assert result["agent_eoa"] == "0xABCD"
         assert result["agent_safe"] == "0xEFGH"
 
-        # Verify marketplace URL is displayed
-        captured = capsys.readouterr()
-        assert "Marketplace: https://marketplace.olas.network/gnosis/ai-agents/2651" in captured.out
+        # Verify marketplace URL is logged
+        assert "Marketplace: https://marketplace.olas.network/gnosis/ai-agents/2651" in caplog.text
+        mech_logger.propagate = False
 
     @patch("mech_client.services.setup_service.OperateManager")
     def test_display_wallets_with_undeployed_service(
         self,
         mock_operate_manager: MagicMock,
-        capsys: pytest.CaptureFixture,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets shows 'URL unknown' when service token is -1."""
+        mech_logger = logging.getLogger("mech_client")
+        mech_logger.propagate = True
+        caplog.set_level(logging.INFO)
         # Setup
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
@@ -319,17 +326,20 @@ class TestDisplayWallets:
         assert result["agent_eoa"] == "0xABCD"
         assert result["agent_safe"] == "0xEFGH"
 
-        # Verify "URL unknown" is displayed
-        captured = capsys.readouterr()
-        assert "Marketplace: URL unknown" in captured.out
+        # Verify "URL unknown" is logged
+        assert "Marketplace: URL unknown" in caplog.text
+        mech_logger.propagate = False
 
     @patch("mech_client.services.setup_service.OperateManager")
     def test_display_wallets_no_service_found(
         self,
         mock_operate_manager: MagicMock,
-        capsys: pytest.CaptureFixture,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets returns None when service not found."""
+        mech_logger = logging.getLogger("mech_client")
+        mech_logger.propagate = True
+        caplog.set_level(logging.WARNING)
         # Setup
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
@@ -358,5 +368,5 @@ class TestDisplayWallets:
 
         # Verify
         assert result is None
-        captured = capsys.readouterr()
-        assert "Could not find service for gnosis" in captured.out
+        assert "Could not find service for gnosis" in caplog.text
+        mech_logger.propagate = False

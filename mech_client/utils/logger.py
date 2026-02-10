@@ -109,6 +109,7 @@ def setup_logger(
         return log
 
     log.setLevel(level)
+    log.propagate = False
 
     # Create console handler
     console_handler = logging.StreamHandler(sys.stdout)

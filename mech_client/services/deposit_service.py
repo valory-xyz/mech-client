@@ -19,6 +19,7 @@
 
 """Deposit service for managing prepaid balances."""
 
+import logging
 from typing import Optional
 
 from aea_ledger_ethereum import EthereumCrypto
@@ -30,6 +31,9 @@ from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.blockchain.receipt_waiter import wait_for_receipt
 from mech_client.infrastructure.config import PaymentType
 from mech_client.services.base_service import BaseTransactionService
+
+
+logger = logging.getLogger(__name__)
 
 
 class DepositService(
@@ -101,10 +105,10 @@ class DepositService(
         # Wait for receipt
         wait_for_receipt(tx_hash, self.ledger_api)
 
-        print(f"✓ Native deposit successful: {amount} wei")
+        logger.info(f"Native deposit successful: {amount} wei")
         # Format with the expected {transaction_digest} placeholder
         tx_url = self.mech_config.transaction_url.format(transaction_digest=tx_hash)
-        print(f"  Transaction: {tx_url}")
+        logger.info(f"Transaction: {tx_url}")
 
         return tx_hash
 
@@ -144,7 +148,7 @@ class DepositService(
         balance_tracker_address = payment_strategy.get_balance_tracker_address()
 
         # Approve tokens
-        print(f"Approving {token_type.upper()} tokens...")
+        logger.info(f"Approving {token_type.upper()} tokens...")
         # Returns None if approval not needed, tx hash otherwise
         # pylint: disable=assignment-from-none
         approve_tx = payment_strategy.approve_if_needed(
@@ -155,7 +159,7 @@ class DepositService(
         )
         if approve_tx:
             wait_for_receipt(approve_tx, self.ledger_api)
-            print("✓ Token approval successful")
+            logger.info("Token approval successful")
 
         # Deposit tokens
         abi = get_abi("BalanceTrackerFixedPriceToken.json")
@@ -181,10 +185,10 @@ class DepositService(
         # Wait for receipt
         wait_for_receipt(tx_hash, self.ledger_api)
 
-        print(f"✓ {token_type.upper()} deposit successful: {amount}")
+        logger.info(f"{token_type.upper()} deposit successful: {amount}")
         # Format with the expected {transaction_digest} placeholder
         tx_url = self.mech_config.transaction_url.format(transaction_digest=tx_hash)
-        print(f"  Transaction: {tx_url}")
+        logger.info(f"Transaction: {tx_url}")
 
         return tx_hash
 
