@@ -20,6 +20,7 @@
 """On-chain delivery watcher for marketplace mechs."""
 
 import asyncio
+import logging
 import time
 from typing import Any, Dict, List, Optional
 
@@ -34,6 +35,8 @@ from mech_client.domain.delivery.constants import DEFAULT_TIMEOUT, WAIT_SLEEP
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 
+
+logger = logging.getLogger(__name__)
 
 DELIVERY_MECH_INDEX = 1
 
@@ -122,7 +125,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
             # Check timeout once per polling cycle
             elapsed_time = time.time() - start_time
             if elapsed_time >= self.timeout:
-                print(
+                logger.warning(
                     "Timeout reached while waiting for marketplace delivery. "
                     "Returning partial data."
                 )
@@ -244,5 +247,5 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
             await asyncio.sleep(WAIT_SLEEP)
             elapsed_time = time.time() - start_time
             if elapsed_time >= self.timeout:
-                print("Timeout reached. Returning partial results.")
+                logger.warning("Timeout reached. Returning partial results.")
                 return results

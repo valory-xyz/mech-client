@@ -19,6 +19,7 @@
 
 """Setup service for agent mode configuration."""
 
+import logging
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -30,6 +31,9 @@ from operate.quickstart.run_service import QuickstartConfig, run_service
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.operate import OperateManager
+
+
+logger = logging.getLogger(__name__)
 
 
 class SetupService:
@@ -67,14 +71,14 @@ class SetupService:
 
         # Get and store password
         self.operate_manager.get_password()
-        print("✓ Password configured")
+        logger.info("Password configured")
 
         # Load service template
-        print(f"Loading service template from {self.template_path}...")
+        logger.info(f"Loading service template from {self.template_path}...")
         # This would normally load the template, but we'll use operate's run_service
 
         # Configure local config with RPC override
-        print(f"Configuring service for {self.chain_config}...")
+        logger.info(f"Configuring service for {self.chain_config}...")
 
         # Monkey-patch configure_local_config to use our custom implementation
         # This is necessary to override the RPC configuration from MECHX_CHAIN_RPC
@@ -97,9 +101,9 @@ class SetupService:
                 use_binary=True,
                 skip_dependency_check=False,
             )
-            print(f"✓ Service configured for {self.chain_config}")
+            logger.info(f"Service configured for {self.chain_config}")
         except Exception as e:
-            print(f"✗ Service setup failed: {e}")
+            logger.error(f"Service setup failed: {e}")
             raise
 
     def configure_local_config(  # pylint: disable=no-self-use
@@ -135,11 +139,11 @@ class SetupService:
             env_config = EnvironmentConfig.load()
             if env_config.mechx_chain_rpc is not None:
                 rpc_url = env_config.mechx_chain_rpc
-                print(
-                    f"  Using MECHX_CHAIN_RPC override for {chain}: {rpc_url[:50]}..."
+                logger.info(
+                    f"Using MECHX_CHAIN_RPC override for {chain}: {rpc_url[:50]}..."
                 )
             else:
-                print(f"  Using default RPC for {chain}: {rpc_url[:50]}...")
+                logger.info(f"Using default RPC for {chain}: {rpc_url[:50]}...")
 
             config.rpc[chain] = rpc_url
 
@@ -153,13 +157,13 @@ class SetupService:
                 "rpc": rpc_for_chain,
                 "cost_of_bond": 1,
             }
-            print(f"  Set template RPC for {chain}: {rpc_for_chain[:50]}...")
+            logger.info(f"Set template RPC for {chain}: {rpc_for_chain[:50]}...")
 
         if config.user_provided_args is None:
             config.user_provided_args = {}
 
         config.store()
-        print(f"  Stored configuration to: {config.path}")
+        logger.info(f"Stored configuration to: {config.path}")
         return config
 
     def display_wallets(self) -> Optional[Dict[str, str]]:
@@ -197,7 +201,7 @@ class SetupService:
                     break
 
             if not service_config_id:
-                print(f"⚠ Could not find service for {self.chain_config}")
+                logger.warning(f"Could not find service for {self.chain_config}")
                 return None
 
             service = service_manager.load(service_config_id)
@@ -229,7 +233,7 @@ class SetupService:
             return wallet_info
 
         except Exception as e:  # pylint: disable=broad-except
-            print(f"⚠ Could not display wallet info: {e}")
+            logger.warning(f"Could not display wallet info: {e}")
             return None
 
     def _print_wallet_box(
@@ -267,11 +271,12 @@ class SetupService:
         lines.append(f"║{' ' * (box_width - 2)}║")
         lines.append(f"╚{'═' * (box_width - 2)}╝")
 
-        print("\n" + "\n".join(lines))
+        wallet_box = "\n".join(lines)
+        logger.info(f"\n{wallet_box}")
 
         # Display marketplace URL if service is deployed
         if service_token is not None:
             marketplace_url = f"https://marketplace.olas.network/{self.chain_config}/ai-agents/{service_token}"
-            print(f"\nMarketplace: {marketplace_url}\n")
+            logger.info(f"Marketplace: {marketplace_url}")
         else:
-            print("\nMarketplace: URL unknown\n")
+            logger.info("Marketplace: URL unknown")

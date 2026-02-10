@@ -214,7 +214,7 @@ class TestDisplayWallets:
     def test_display_wallets_success(
         self,
         mock_operate_manager: MagicMock,
-        capsys: pytest.CaptureFixture,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets successfully extracts and displays wallet info."""
         # Setup
@@ -263,15 +263,14 @@ class TestDisplayWallets:
         assert result["agent_eoa"] == "0xABCD"
         assert result["agent_safe"] == "0xEFGH"
 
-        # Verify marketplace URL is displayed
-        captured = capsys.readouterr()
-        assert "Marketplace: https://marketplace.olas.network/gnosis/ai-agents/2651" in captured.out
+        # Verify marketplace URL is logged
+        assert "Marketplace: https://marketplace.olas.network/gnosis/ai-agents/2651" in caplog.text
 
     @patch("mech_client.services.setup_service.OperateManager")
     def test_display_wallets_with_undeployed_service(
         self,
         mock_operate_manager: MagicMock,
-        capsys: pytest.CaptureFixture,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets shows 'URL unknown' when service token is -1."""
         # Setup
@@ -319,15 +318,14 @@ class TestDisplayWallets:
         assert result["agent_eoa"] == "0xABCD"
         assert result["agent_safe"] == "0xEFGH"
 
-        # Verify "URL unknown" is displayed
-        captured = capsys.readouterr()
-        assert "Marketplace: URL unknown" in captured.out
+        # Verify "URL unknown" is logged
+        assert "Marketplace: URL unknown" in caplog.text
 
     @patch("mech_client.services.setup_service.OperateManager")
     def test_display_wallets_no_service_found(
         self,
         mock_operate_manager: MagicMock,
-        capsys: pytest.CaptureFixture,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets returns None when service not found."""
         # Setup
@@ -358,5 +356,4 @@ class TestDisplayWallets:
 
         # Verify
         assert result is None
-        captured = capsys.readouterr()
-        assert "Could not find service for gnosis" in captured.out
+        assert "Could not find service for gnosis" in caplog.text

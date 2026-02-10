@@ -19,6 +19,7 @@
 
 """Marketplace service for orchestrating mech requests."""
 
+import logging
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import requests
@@ -39,6 +40,9 @@ from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.ipfs import IPFSClient, push_metadata_to_ipfs
 from mech_client.services.base_service import BaseTransactionService
 from mech_client.utils.validators import ensure_checksummed_address
+
+
+logger = logging.getLogger(__name__)
 
 
 class MarketplaceService(
@@ -159,12 +163,12 @@ class MarketplaceService(
         )
 
         # Prepare metadata and upload to IPFS
-        print("Uploading metadata to IPFS...")
+        logger.info("Uploading metadata to IPFS...")
         data_hashes = []
         for prompt, tool in zip(prompts, tools):
             data_hash, _ = push_metadata_to_ipfs(prompt, tool, extra_attributes or {})
             data_hashes.append(data_hash)
-        print(f"  Uploaded {len(data_hashes)} metadata hash(es) to IPFS")
+        logger.info(f"Uploaded {len(data_hashes)} metadata hash(es) to IPFS")
 
         # Handle payment (approval if needed)
         if not use_prepaid and payment_type.is_token():
@@ -172,7 +176,7 @@ class MarketplaceService(
             price = self.mech_config.price * len(prompts)
 
             # Check balance
-            print(f"Checking {payment_type.name} token balance...")
+            logger.info(f"Checking {payment_type.name} token balance...")
             sender = self.executor.get_sender_address()
             if not payment_strategy.check_balance(sender, price):
                 raise ValueError(
@@ -181,17 +185,17 @@ class MarketplaceService(
                 )
 
             # Approve if needed
-            print("Sending token approval transaction...")
+            logger.info("Sending token approval transaction...")
             payment_strategy.approve_if_needed(
                 payer_address=sender,
                 spender_address=balance_tracker,
                 amount=price,
                 executor=self.executor,
             )
-            print("  Token approval complete")
+            logger.info("Token approval complete")
 
         # Send on-chain marketplace request
-        print("Submitting marketplace request transaction...")
+        logger.info("Submitting marketplace request transaction...")
         tx_hash = self._send_marketplace_request(
             marketplace_contract=marketplace_contract,
             data_hashes=data_hashes,
@@ -202,17 +206,17 @@ class MarketplaceService(
             use_prepaid=use_prepaid,
         )
         tx_url = self.mech_config.transaction_url.format(transaction_digest=tx_hash)
-        print(f"  Transaction submitted: {tx_url}")
+        logger.info(f"Transaction submitted: {tx_url}")
 
         # Wait for receipt and get request IDs
         receipt = wait_for_receipt(tx_hash, self.ledger_api)
         request_ids = watch_for_marketplace_request_ids(
             marketplace_contract, self.ledger_api, tx_hash
         )
-        print(f"✓ Transaction confirmed: {tx_url}")
+        logger.info(f"Transaction confirmed: {tx_url}")
 
         # Watch for on-chain delivery
-        print("Waiting for mech delivery...")
+        logger.info("Waiting for mech delivery...")
         watcher = OnchainDeliveryWatcher(marketplace_contract, self.ledger_api, timeout)
         results = await watcher.watch(request_ids)
 
@@ -251,7 +255,7 @@ class MarketplaceService(
         :param timeout: Delivery watching timeout
         :return: Dictionary with request results
         """
-        print("Sending offchain mech marketplace request...")
+        logger.info("Sending offchain mech marketplace request...")
 
         # Get current nonce from contract
         sender = self.crypto.address
@@ -271,8 +275,8 @@ class MarketplaceService(
             data_hash, data_hash_full, ipfs_data = fetch_ipfs_hash(
                 prompt, tool, extra_attributes or {}
             )
-            print(
-                f"  - Prompt will be uploaded to: https://gateway.autonolas.tech/ipfs/{data_hash_full}"
+            logger.info(
+                f"Prompt will be uploaded to: https://gateway.autonolas.tech/ipfs/{data_hash_full}"
             )
 
             # Calculate request ID
@@ -323,15 +327,13 @@ class MarketplaceService(
                 request_ids_hex.append(request_id_hex)
                 request_ids_int.append(str(request_id_int))
 
-                print(f"  - Created offchain request with ID {request_id_int}")
+                logger.info(f"Created offchain request with ID {request_id_int}")
 
             except requests.exceptions.RequestException as e:
                 raise ValueError(f"Failed to send offchain request: {e}") from e
 
-        print("")
-
         # Watch for offchain delivery
-        print("Waiting for offchain mech marketplace deliver...")
+        logger.info("Waiting for offchain mech marketplace deliver...")
         watcher = OffchainDeliveryWatcher(mech_offchain_url, timeout)
         results = await watcher.watch(request_ids_hex)
 
@@ -364,8 +366,8 @@ class MarketplaceService(
         except (AttributeError, KeyError, TypeError) as e:
             # If fetching fails due to unexpected metadata structure,
             # warn but allow request to proceed
-            print(
-                f"Warning: Failed to fetch tool metadata for service {service_id}: {e}. "
+            logger.warning(
+                f"Failed to fetch tool metadata for service {service_id}: {e}. "
                 f"Tool validation skipped."
             )
             return
@@ -373,8 +375,8 @@ class MarketplaceService(
         if not tools_info:
             # If we can't fetch tools, warn but don't fail
             # This allows requests to proceed even if metadata fetch fails
-            print(
-                f"Warning: Could not fetch tool metadata for service {service_id}. "
+            logger.warning(
+                f"Could not fetch tool metadata for service {service_id}. "
                 f"Tool validation skipped."
             )
             return

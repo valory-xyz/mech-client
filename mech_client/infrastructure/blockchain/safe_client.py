@@ -19,12 +19,16 @@
 
 """Gnosis Safe multisig client for agent mode transactions."""
 
+import logging
 from typing import Optional
 
 from hexbytes import HexBytes
 from safe_eth.eth import EthereumClient  # pylint:disable=import-error
 from safe_eth.safe import Safe  # pylint:disable=import-error
 from web3.constants import ADDRESS_ZERO
+
+
+logger = logging.getLogger(__name__)
 
 
 class SafeClient:
@@ -101,7 +105,7 @@ class SafeClient:
             return tx_hash
 
         except Exception as e:  # pylint: disable=broad-except
-            print(f"Exception while sending Safe transaction: {e}")
+            logger.error(f"Exception while sending Safe transaction: {e}")
             return None
 
     def get_nonce(self) -> int:

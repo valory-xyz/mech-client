@@ -20,6 +20,7 @@
 """Offchain delivery watcher for polling offchain mech endpoints."""
 
 import asyncio
+import logging
 import time
 from typing import Any, Dict, List
 
@@ -28,6 +29,8 @@ import requests
 from mech_client.domain.delivery.base import DeliveryWatcher
 from mech_client.domain.delivery.constants import WAIT_SLEEP
 
+
+logger = logging.getLogger(__name__)
 
 # Constants for offchain polling
 OFFCHAIN_DELIVER_ENDPOINT = "fetch_offchain_info"
@@ -72,8 +75,8 @@ class OffchainDeliveryWatcher(
         while len(results) < len(request_ids):
             # Check timeout
             if time.time() - start_time > self.timeout:
-                print(
-                    f"  - Timeout after {self.timeout}s. "
+                logger.warning(
+                    f"Timeout after {self.timeout}s. "
                     f"Received {len(results)}/{len(request_ids)} responses."
                 )
                 break
@@ -87,12 +90,14 @@ class OffchainDeliveryWatcher(
                     response = await self._fetch_offchain_data(request_id_int)
                     if response:
                         results[request_id] = response
-                        print(
-                            f"  - Received offchain response for request {request_id_int}"
+                        logger.info(
+                            f"Received offchain response for request {request_id_int}"
                         )
                 except Exception as e:  # pylint: disable=broad-except
                     # Log error but continue polling
-                    print(f"  - Error fetching offchain data for {request_id_int}: {e}")
+                    logger.error(
+                        f"Error fetching offchain data for {request_id_int}: {e}"
+                    )
 
             # Sleep before next poll if not all results received
             if len(results) < len(request_ids):

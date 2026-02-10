@@ -20,6 +20,7 @@
 """Tool manager for fetching and managing mech tools."""
 
 import json
+import logging
 from dataclasses import asdict
 from typing import Any, Dict, Optional
 
@@ -32,6 +33,8 @@ from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.config.loader import get_mech_config
 
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 10
 TOOLS = "tools"
@@ -81,7 +84,7 @@ class ToolManager:
             metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
             return requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
         except (json.JSONDecodeError, NotImplementedError, IOError) as e:
-            print(f"Error fetching tools for service {service_id}: {e}")
+            logger.error(f"Error fetching tools for service {service_id}: {e}")
             return None
 
     def get_tools(self, service_id: int) -> Optional[ToolsForMarketplaceMech]:
@@ -97,7 +100,7 @@ class ToolManager:
 
         tools = metadata.get(TOOLS, [])
         if not tools:
-            print(f"No tools found for service {service_id}")
+            logger.warning(f"No tools found for service {service_id}")
             return None
 
         tool_infos = [
