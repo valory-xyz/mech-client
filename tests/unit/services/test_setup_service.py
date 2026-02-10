@@ -19,6 +19,7 @@
 
 """Tests for setup service."""
 
+import logging
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call, patch
@@ -217,6 +218,7 @@ class TestDisplayWallets:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets successfully extracts and displays wallet info."""
+        caplog.set_level(logging.INFO, logger="mech_client")
         # Setup
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
@@ -273,6 +275,7 @@ class TestDisplayWallets:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets shows 'URL unknown' when service token is -1."""
+        caplog.set_level(logging.INFO, logger="mech_client")
         # Setup
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
@@ -328,6 +331,7 @@ class TestDisplayWallets:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test display_wallets returns None when service not found."""
+        caplog.set_level(logging.WARNING, logger="mech_client")
         # Setup
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
