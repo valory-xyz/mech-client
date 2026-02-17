@@ -21,10 +21,11 @@
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 
 from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.quickstart.run_service import run_service
+
 
 if TYPE_CHECKING:
     from operate.cli import OperateApp
@@ -111,8 +112,8 @@ class SetupService:
 
         :param operate: OperateApp instance with password set
         """
-        from operate.cli import (  # pylint: disable=import-outside-toplevel
-            logger as operate_logger,
+        from operate.cli import (
+            logger as operate_logger,  # pylint: disable=import-outside-toplevel
         )
         from operate.services.manage import (  # pylint: disable=import-outside-toplevel
             KeysManager,
@@ -127,9 +128,7 @@ class SetupService:
         key_files = [
             f
             for f in keys_dir.iterdir()
-            if f.is_file()
-            and f.suffix != ".bak"
-            and "_private_key" not in f.name
+            if f.is_file() and f.suffix != ".bak" and "_private_key" not in f.name
         ]
         if not key_files:
             logger.warning("No agent key found, skipping key extraction")
@@ -148,9 +147,7 @@ class SetupService:
             pk_path.write_text(data["private_key"], encoding="utf-8")
             pk_path.chmod(0o600)
 
-        logger.info(
-            "Agent key(s) stored in decrypted form for transaction signing"
-        )
+        logger.info("Agent key(s) stored in decrypted form for transaction signing")
 
     def display_wallets(self) -> Optional[Dict[str, str]]:
         """
