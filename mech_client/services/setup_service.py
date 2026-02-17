@@ -23,10 +23,8 @@ import logging
 from pathlib import Path
 from typing import Dict, Optional
 
-from operate.cli import OperateApp
 from operate.constants import NO_STAKING_PROGRAM_ID
-from operate.operate_types import ServiceTemplate
-from operate.quickstart.run_service import QuickstartConfig, run_service
+from operate.quickstart.run_service import run_service
 
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.config.environment import EnvironmentConfig
@@ -54,6 +52,23 @@ class SetupService:
         self.template_path = template_path
         self.operate_manager = OperateManager()
 
+    def _get_rpc_url(self) -> str:
+        """
+        Get RPC URL for the configured chain.
+
+        Uses MECHX_CHAIN_RPC env var if set, otherwise falls back to mechs.json default.
+
+        :return: RPC URL string
+        """
+        env_config = EnvironmentConfig.load()
+        if env_config.mechx_chain_rpc is not None:
+            logger.info(f"Using MECHX_CHAIN_RPC override for {self.chain_config}")
+            return env_config.mechx_chain_rpc
+
+        mech_config = get_mech_config(self.chain_config)
+        logger.info(f"Using default RPC for {self.chain_config}")
+        return mech_config.rpc_url
+
     def setup(self) -> None:
         """
         Setup agent mode for the chain.
@@ -63,108 +78,23 @@ class SetupService:
 
         :raises Exception: If setup fails
         """
-        import sys  # pylint: disable=import-outside-toplevel
-
         # Ensure Operate is initialized
         operate = self.operate_manager.operate
         operate.setup()
 
-        # Get and store password
-        self.operate_manager.get_password()
-        logger.info("Password configured")
-
-        # Load service template
-        logger.info(f"Loading service template from {self.template_path}...")
-        # This would normally load the template, but we'll use operate's run_service
-
-        # Configure local config with RPC override
+        # Run service setup with non-interactive params
         logger.info(f"Configuring service for {self.chain_config}...")
-
-        # Monkey-patch configure_local_config to use our custom implementation
-        # This is necessary to override the RPC configuration from MECHX_CHAIN_RPC
-        # Create a wrapper function without self parameter for monkey-patching
-        def _configure_wrapper(
-            template: ServiceTemplate, operate_instance: OperateApp
-        ) -> QuickstartConfig:
-            return self.configure_local_config(template, operate_instance)
-
-        sys.modules[
-            "operate.quickstart.run_service"
-        ].configure_local_config = _configure_wrapper  # type: ignore
-
-        # Run service setup
-        try:
-            run_service(
-                operate=operate,
-                config_path=self.template_path,
-                build_only=True,
-                use_binary=True,
-                skip_dependency_check=False,
-            )
-            logger.info(f"Service configured for {self.chain_config}")
-        except Exception as e:
-            logger.error(f"Service setup failed: {e}")
-            raise
-
-    def configure_local_config(  # pylint: disable=no-self-use
-        self, template: ServiceTemplate, operate: OperateApp
-    ) -> QuickstartConfig:
-        """
-        Configure local quickstart configuration.
-
-        Sets RPC endpoints and chain configs from environment variables
-        and mechs.json configuration.
-
-        :param template: Service template
-        :param operate: OperateApp instance
-        :return: Configured QuickstartConfig
-        """
-        from operate.quickstart.run_service import (  # pylint: disable=import-outside-toplevel
-            load_local_config,
+        rpc_url = self._get_rpc_url()
+        run_service(
+            operate=operate,
+            config_path=self.template_path,
+            build_only=True,
+            use_binary=True,
+            skip_dependency_check=False,
+            rpc_overrides={self.chain_config: rpc_url},
+            staking_program_id=NO_STAKING_PROGRAM_ID,
         )
-
-        config = load_local_config(operate=operate, service_name=template["name"])
-
-        if config.rpc is None:
-            config.rpc = {}
-
-        # Configure RPC for each chain in template
-        for chain in template["configurations"]:
-            # Get default RPC URL for this specific chain from mechs.json
-            mech_config = get_mech_config(chain)
-            rpc_url = mech_config.rpc_url
-
-            # Override with MECHX_CHAIN_RPC environment variable if set
-            # This allows users to override RPC for setup, but it applies to all chains
-            env_config = EnvironmentConfig.load()
-            if env_config.mechx_chain_rpc is not None:
-                rpc_url = env_config.mechx_chain_rpc
-                logger.info(
-                    f"Using MECHX_CHAIN_RPC override for {chain}: {rpc_url[:50]}..."
-                )
-            else:
-                logger.info(f"Using default RPC for {chain}: {rpc_url[:50]}...")
-
-            config.rpc[chain] = rpc_url
-
-        config.principal_chain = template["home_chain"]
-
-        # Set chain configs in service template
-        for chain in template["configurations"]:
-            rpc_for_chain = config.rpc[chain]
-            template["configurations"][chain] |= {
-                "staking_program_id": NO_STAKING_PROGRAM_ID,
-                "rpc": rpc_for_chain,
-                "cost_of_bond": 1,
-            }
-            logger.info(f"Set template RPC for {chain}: {rpc_for_chain[:50]}...")
-
-        if config.user_provided_args is None:
-            config.user_provided_args = {}
-
-        config.store()
-        logger.info(f"Stored configuration to: {config.path}")
-        return config
+        logger.info(f"Service configured for {self.chain_config}")
 
     def display_wallets(self) -> Optional[Dict[str, str]]:
         """

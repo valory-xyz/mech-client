@@ -238,26 +238,23 @@ if is_wallet_command and not is_setup_called and not client_mode:
 
 **Note:** Read-only commands (mech, tool) and utility commands (ipfs) work without mode setup.
 
-### 5. Setup Service Monkey-Patching Pattern (CRITICAL)
+### 5. Setup Service Non-Interactive Pattern
 
-The `olas-operate-middleware` expects chain-specific env vars (e.g., `GNOSIS_LEDGER_RPC`), but mech-client uses `MECHX_CHAIN_RPC`. Monkey-patch required:
+The `olas-operate-middleware` `run_service()` accepts `rpc_overrides` and `staking_program_id` params to skip interactive prompts:
 
 ```python
 def setup(self):
-    import sys
-
-    # Create wrapper without self parameter
-    def _configure_wrapper(template, operate_instance):
-        return self.configure_local_config(template, operate_instance)
-
-    # Monkey-patch the function
-    sys.modules["operate.quickstart.run_service"].configure_local_config = _configure_wrapper
-
-    # Now call run_service - it will use our custom config
-    run_service(operate=operate, config_path=template_path, ...)
+    rpc_url = self._get_rpc_url()  # from MECHX_CHAIN_RPC or mechs.json
+    run_service(
+        operate=operate,
+        config_path=self.template_path,
+        build_only=True,
+        use_binary=True,
+        skip_dependency_check=False,
+        rpc_overrides={self.chain_config: rpc_url},
+        staking_program_id=NO_STAKING_PROGRAM_ID,
+    )
 ```
-
-**Gotcha:** Without this monkey-patch, setup fails with "GNOSIS_LEDGER_RPC env var required in unattended mode"
 
 ### 6. Operate Library Gotchas
 
@@ -365,15 +362,13 @@ from mech_client.infrastructure.config.constants import CHAIN_ID_GNOSIS, CHAIN_I
 
 When refactoring CLI code, be aware of these gotchas (discovered during v0.17.0 refactor):
 
-1. **Monkey-Patching Loss**: Ensure monkey-patching behavior is preserved when extracting logic. Setup command requires monkey-patching `configure_local_config`.
+1. **Agent Mode Scope Creep**: Agent mode checks should only apply to wallet commands. Read-only and utility commands work independently.
 
-2. **Agent Mode Scope Creep**: Agent mode checks should only apply to wallet commands. Read-only and utility commands work independently.
+2. **Context Flag Propagation**: Ensure Click context flags (like `client_mode`) are accessible via `ctx.obj.get()`.
 
-3. **Context Flag Propagation**: Ensure Click context flags (like `client_mode`) are accessible via `ctx.obj.get()`.
+3. **ChainType Enum Handling**: Operate library uses enum objects as dictionary keys, not strings.
 
-4. **ChainType Enum Handling**: Operate library uses enum objects as dictionary keys, not strings.
-
-5. **Test Coverage for Integration Points**: Monkey-patching, context passing, and mode detection need explicit test coverage.
+4. **Test Coverage for Integration Points**: Context passing and mode detection need explicit test coverage.
 
 6. **Token Approval Agent Mode**: ERC20 approvals must use executor pattern. In agent mode, approvals go through Safe multisig via `executor.execute_transaction()`, not directly from EOA.
 
