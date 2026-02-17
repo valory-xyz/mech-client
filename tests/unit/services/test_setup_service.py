@@ -20,9 +20,8 @@
 """Tests for setup service."""
 
 import logging
-import sys
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -53,39 +52,38 @@ class TestSetupMethod:
 
     @patch("mech_client.services.setup_service.run_service")
     @patch("mech_client.services.setup_service.OperateManager")
-    def test_setup_success_with_monkey_patching(
+    def test_setup_success_with_rpc_overrides(
         self,
         mock_operate_manager: MagicMock,
         mock_run_service: MagicMock,
     ) -> None:
-        """Test setup successfully applies monkey-patching and calls run_service."""
+        """Test setup passes rpc_overrides and staking_program_id to run_service."""
         # Setup
         chain_config = "gnosis"
         template_path = Path("/path/to/template.json")
 
         mock_operate = MagicMock()
         mock_operate_manager.return_value.operate = mock_operate
-        mock_operate_manager.return_value.get_password.return_value = "password"
 
         service = SetupService(chain_config, template_path)
 
-        # Execute
-        service.setup()
+        with patch.object(
+            service, "_get_rpc_url", return_value="https://rpc.test"
+        ):
+            service.setup()
 
         # Verify operate setup was called
         mock_operate.setup.assert_called_once()
-        mock_operate_manager.return_value.get_password.assert_called_once()
 
-        # Verify monkey-patching was applied
-        assert hasattr(sys.modules.get("operate.quickstart.run_service"), "configure_local_config")
-
-        # Verify run_service was called
+        # Verify run_service was called with non-interactive params
         mock_run_service.assert_called_once_with(
             operate=mock_operate,
             config_path=template_path,
             build_only=True,
             use_binary=True,
             skip_dependency_check=False,
+            rpc_overrides={"gnosis": "https://rpc.test"},
+            staking_program_id="no_staking",
         )
 
     @patch("mech_client.services.setup_service.run_service")
@@ -102,110 +100,70 @@ class TestSetupMethod:
 
         mock_operate = MagicMock()
         mock_operate_manager.return_value.operate = mock_operate
-        mock_operate_manager.return_value.get_password.return_value = "password"
 
         mock_run_service.side_effect = Exception("RPC error")
 
         service = SetupService(chain_config, template_path)
 
-        # Execute & Verify
-        with pytest.raises(Exception, match="RPC error"):
-            service.setup()
+        with patch.object(
+            service, "_get_rpc_url", return_value="https://rpc.test"
+        ):
+            with pytest.raises(Exception, match="RPC error"):
+                service.setup()
 
 
-class TestConfigureLocalConfig:
-    """Tests for SetupService.configure_local_config method."""
+class TestGetRpcUrl:
+    """Tests for SetupService._get_rpc_url method."""
 
-    @patch("operate.quickstart.run_service.load_local_config")
     @patch("mech_client.services.setup_service.get_mech_config")
     @patch("mech_client.services.setup_service.OperateManager")
-    def test_configure_with_env_var(
+    def test_rpc_override_from_env_var(
         self,
         mock_operate_manager: MagicMock,
         mock_get_mech_config: MagicMock,
-        mock_load_config: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test configure_local_config uses MECHX_CHAIN_RPC environment variable."""
+        """Test _get_rpc_url uses MECHX_CHAIN_RPC environment variable."""
         # Setup
         chain_config = "gnosis"
-        template_path = Path("/path/to/template.json")
         custom_rpc = "https://custom-rpc.com"
-
         monkeypatch.setenv("MECHX_CHAIN_RPC", custom_rpc)
 
-        mock_config = MagicMock()
-        mock_config.rpc = None
-        mock_config.user_provided_args = None
-        mock_load_config.return_value = mock_config
-
-        mock_template = {
-            "name": "test-service",
-            "home_chain": "gnosis",
-            "configurations": {"gnosis": {}},
-        }
-
-        mock_operate = MagicMock()
-        service = SetupService(chain_config, template_path)
-
-        # Mock get_mech_config to return a default RPC (which will be overridden)
-        default_rpc = "https://default-rpc.com"
-        mock_mech_config = MagicMock()
-        mock_mech_config.rpc_url = default_rpc
-        mock_get_mech_config.return_value = mock_mech_config
+        service = SetupService(chain_config, Path("/path/to/template.json"))
 
         # Execute
-        result = service.configure_local_config(mock_template, mock_operate)
+        result = service._get_rpc_url()
 
-        # Verify
-        assert result.rpc["gnosis"] == custom_rpc
-        assert mock_template["configurations"]["gnosis"]["rpc"] == custom_rpc
-        mock_get_mech_config.assert_called_once_with("gnosis")  # Default is loaded first
-        result.store.assert_called_once()
+        # Verify - env var takes precedence
+        assert result == custom_rpc
+        mock_get_mech_config.assert_not_called()
 
-    @patch("operate.quickstart.run_service.load_local_config")
     @patch("mech_client.services.setup_service.get_mech_config")
     @patch("mech_client.services.setup_service.OperateManager")
-    def test_configure_fallback_to_mechs_json(
+    def test_rpc_fallback_to_mechs_json(
         self,
         mock_operate_manager: MagicMock,
         mock_get_mech_config: MagicMock,
-        mock_load_config: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test configure_local_config falls back to mechs.json when env var not set."""
+        """Test _get_rpc_url falls back to mechs.json when env var not set."""
         # Setup
         chain_config = "gnosis"
-        template_path = Path("/path/to/template.json")
         default_rpc = "https://default-rpc.com"
-
         monkeypatch.delenv("MECHX_CHAIN_RPC", raising=False)
 
         mock_mech_config = MagicMock()
         mock_mech_config.rpc_url = default_rpc
         mock_get_mech_config.return_value = mock_mech_config
 
-        mock_config = MagicMock()
-        mock_config.rpc = None
-        mock_config.user_provided_args = None
-        mock_load_config.return_value = mock_config
-
-        mock_template = {
-            "name": "test-service",
-            "home_chain": "gnosis",
-            "configurations": {"gnosis": {}},
-        }
-
-        mock_operate = MagicMock()
-        service = SetupService(chain_config, template_path)
+        service = SetupService(chain_config, Path("/path/to/template.json"))
 
         # Execute
-        result = service.configure_local_config(mock_template, mock_operate)
+        result = service._get_rpc_url()
 
         # Verify
-        assert result.rpc["gnosis"] == default_rpc
+        assert result == default_rpc
         mock_get_mech_config.assert_called_once_with("gnosis")
-        result.store.assert_called_once()
 
 
 class TestDisplayWallets:
