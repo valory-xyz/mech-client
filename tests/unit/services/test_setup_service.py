@@ -69,7 +69,7 @@ class TestSetupMethod:
 
         with patch.object(
             service, "_get_rpc_url", return_value="https://rpc.test"
-        ):
+        ), patch.object(service, "_store_decrypted_key"):
             service.setup()
 
         # Verify operate setup was called
@@ -327,4 +327,130 @@ class TestDisplayWallets:
         # Verify
         assert result is None
         assert "Could not find service for gnosis" in caplog.text
+        mech_logger.propagate = False
+
+
+class TestStoreDecryptedKey:
+    """Tests for SetupService._store_decrypted_key method."""
+
+    @patch("mech_client.services.setup_service.OperateManager")
+    def test_store_decrypted_key_writes_decrypted_key(
+        self,
+        mock_operate_manager: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test _store_decrypted_key writes decrypted key content to file."""
+        # Setup keys directory with a mock keystore file
+        keys_dir = tmp_path / "keys"
+        keys_dir.mkdir()
+        keystore_file = keys_dir / "0xAgent1234"
+        keystore_file.write_text('{"encrypted": "data"}')
+
+        mock_operate_manager.return_value.operate_path = tmp_path
+
+        service = SetupService("gnosis", Path("/path/to/template.json"))
+        mock_operate = MagicMock()
+
+        # Mock KeysManager.get_decrypted to return decrypted data
+        mock_keys_manager = MagicMock()
+        mock_keys_manager.get_decrypted.return_value = {
+            "private_key": "0xdeadbeef1234",
+            "address": "0xAgent1234",
+            "ledger": "ethereum",
+        }
+
+        with patch(
+            "operate.services.manage.KeysManager",
+            return_value=mock_keys_manager,
+        ):
+            service._store_decrypted_key(mock_operate)
+
+        # Verify the private key file was written
+        pk_path = keys_dir / "0xAgent1234_private_key"
+        assert pk_path.exists()
+        assert pk_path.read_text() == "0xdeadbeef1234"
+
+    @patch("mech_client.services.setup_service.OperateManager")
+    def test_store_decrypted_key_sets_permissions(
+        self,
+        mock_operate_manager: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test _store_decrypted_key sets 0o600 permissions on key file."""
+        # Setup keys directory with a mock keystore file
+        keys_dir = tmp_path / "keys"
+        keys_dir.mkdir()
+        keystore_file = keys_dir / "0xAgent1234"
+        keystore_file.write_text('{"encrypted": "data"}')
+
+        mock_operate_manager.return_value.operate_path = tmp_path
+
+        service = SetupService("gnosis", Path("/path/to/template.json"))
+        mock_operate = MagicMock()
+
+        mock_keys_manager = MagicMock()
+        mock_keys_manager.get_decrypted.return_value = {
+            "private_key": "0xdeadbeef1234",
+            "address": "0xAgent1234",
+            "ledger": "ethereum",
+        }
+
+        with patch(
+            "operate.services.manage.KeysManager",
+            return_value=mock_keys_manager,
+        ):
+            service._store_decrypted_key(mock_operate)
+
+        # Verify permissions are 0o600
+        pk_path = keys_dir / "0xAgent1234_private_key"
+        file_mode = pk_path.stat().st_mode & 0o777
+        assert file_mode == 0o600
+
+    @patch("mech_client.services.setup_service.OperateManager")
+    def test_store_decrypted_key_no_keys_dir(
+        self,
+        mock_operate_manager: MagicMock,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test _store_decrypted_key skips gracefully when keys dir missing."""
+        mech_logger = logging.getLogger("mech_client")
+        mech_logger.propagate = True
+        caplog.set_level(logging.WARNING)
+
+        mock_operate_manager.return_value.operate_path = tmp_path
+
+        service = SetupService("gnosis", Path("/path/to/template.json"))
+        mock_operate = MagicMock()
+
+        # No keys directory exists
+        service._store_decrypted_key(mock_operate)
+
+        assert "Keys directory not found" in caplog.text
+        mech_logger.propagate = False
+
+    @patch("mech_client.services.setup_service.OperateManager")
+    def test_store_decrypted_key_no_key_files(
+        self,
+        mock_operate_manager: MagicMock,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test _store_decrypted_key skips gracefully when no key files found."""
+        mech_logger = logging.getLogger("mech_client")
+        mech_logger.propagate = True
+        caplog.set_level(logging.WARNING)
+
+        # Create empty keys directory
+        keys_dir = tmp_path / "keys"
+        keys_dir.mkdir()
+
+        mock_operate_manager.return_value.operate_path = tmp_path
+
+        service = SetupService("gnosis", Path("/path/to/template.json"))
+        mock_operate = MagicMock()
+
+        service._store_decrypted_key(mock_operate)
+
+        assert "No agent key found" in caplog.text
         mech_logger.propagate = False
