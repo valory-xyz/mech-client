@@ -21,36 +21,21 @@
 
 from typing import Optional, Tuple
 
-from operate.cli import logger as operate_logger
-from operate.services.manage import KeysManager
-
-from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.operate.manager import OperateManager
 
 
 def fetch_agent_mode_keys(chain_config: str) -> Tuple[str, str, Optional[str]]:
-    """
-    Fetch agent mode Safe address, keystore path, and password.
+    """Fetch agent mode Safe address and key path.
 
-    Retrieves the Safe multisig address and private key file path for
-    agent mode operations on the specified chain.
+    The key file contains the decrypted private key (written during mechx setup).
+    No password needed.
 
     :param chain_config: Chain configuration name (gnosis, base, polygon, optimism)
-    :return: Tuple of (safe_address, key_path, password)
+    :return: Tuple of (safe_address, key_path, password) where password is None
     :raises Exception: If no deployed service found for chain
     """
     manager = OperateManager()
     operate = manager.operate
-
-    # Ensure password is loaded for key decryption
-    manager.get_password()
-
-    # Access keys manager
-    keys_manager = KeysManager(
-        path=operate._keys,  # pylint: disable=protected-access
-        logger=operate_logger,
-        password=operate.password,
-    )
 
     # Find service for this chain
     service_manager = operate.service_manager()
@@ -66,11 +51,13 @@ def fetch_agent_mode_keys(chain_config: str) -> Tuple[str, str, Optional[str]]:
             f"Setup agent mode for this chain using 'mechx setup' command."
         )
 
-    # Load service and extract keys
+    # Load service and extract addresses
     service = operate.service_manager().load(service_config_id)
     agent_address = service.agent_addresses[0]
-    key_path = keys_manager.get_private_key_file(agent_address)
     safe_address = service.chain_configs[chain_config].chain_data.multisig
 
-    env_config = EnvironmentConfig.load()
-    return safe_address, str(key_path), env_config.operate_password
+    # Key file path (decrypted during setup, no password needed)
+    keys_dir = manager.operate_path / "keys"
+    key_path = keys_dir / f"{agent_address}_private_key"
+
+    return safe_address, str(key_path), None

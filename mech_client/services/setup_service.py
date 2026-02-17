@@ -21,10 +21,13 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.quickstart.run_service import run_service
+
+if TYPE_CHECKING:
+    from operate.cli import OperateApp
 
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.config.environment import EnvironmentConfig
@@ -95,6 +98,59 @@ class SetupService:
             staking_program_id=NO_STAKING_PROGRAM_ID,
         )
         logger.info(f"Service configured for {self.chain_config}")
+
+        # Write decrypted key into existing key file
+        self._store_decrypted_key(operate)
+
+    def _store_decrypted_key(self, operate: "OperateApp") -> None:
+        """Overwrite the agent's private key file with the decrypted key.
+
+        After run_service(), operate.password is set. Uses KeysManager to
+        decrypt the key and writes the plain hex key into the existing
+        {address}_private_key file so future reads need no password.
+
+        :param operate: OperateApp instance with password set
+        """
+        from operate.cli import (  # pylint: disable=import-outside-toplevel
+            logger as operate_logger,
+        )
+        from operate.services.manage import (  # pylint: disable=import-outside-toplevel
+            KeysManager,
+        )
+
+        keys_dir = self.operate_manager.operate_path / "keys"
+        if not keys_dir.exists():
+            logger.warning("Keys directory not found, skipping key extraction")
+            return
+
+        # Find agent key files (exclude .bak and _private_key cache files)
+        key_files = [
+            f
+            for f in keys_dir.iterdir()
+            if f.is_file()
+            and f.suffix != ".bak"
+            and "_private_key" not in f.name
+        ]
+        if not key_files:
+            logger.warning("No agent key found, skipping key extraction")
+            return
+
+        keys_manager = KeysManager(
+            path=keys_dir,
+            logger=operate_logger,
+            password=operate.password,
+        )
+
+        for key_file in key_files:
+            data = keys_manager.get_decrypted(key_file.name)
+            # Overwrite {address}_private_key with decrypted hex key
+            pk_path = keys_dir / f"{data['address']}_private_key"
+            pk_path.write_text(data["private_key"], encoding="utf-8")
+            pk_path.chmod(0o600)
+
+        logger.info(
+            "Agent key(s) stored in decrypted form for transaction signing"
+        )
 
     def display_wallets(self) -> Optional[Dict[str, str]]:
         """
