@@ -81,6 +81,7 @@ class SetupService:
         # Ensure Operate is initialized
         operate = self.operate_manager.operate
         operate.setup()
+        self.operate_manager.get_password()
 
         # Run service setup with non-interactive params
         logger.info(f"Configuring service for {self.chain_config}...")
