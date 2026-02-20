@@ -21,6 +21,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from click.testing import CliRunner
 
 from mech_client.cli.commands.request_cmd import request
@@ -247,8 +248,10 @@ class TestRequestCommand:
     @patch("mech_client.cli.commands.request_cmd.EnvironmentConfig")
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    @patch("mech_client.cli.commands.request_cmd.requests.get")
     def test_request_with_use_offchain(
         self,
+        mock_requests_get: MagicMock,
         mock_setup_wallet: MagicMock,
         mock_marketplace_service: MagicMock,
         mock_env_config: MagicMock,
@@ -269,9 +272,20 @@ class TestRequestCommand:
             return_value={
                 "tx_hash": "0xoffchain123...",
                 "request_ids": [1],
+                "delivery_results": {
+                    "0xabc": {
+                        "request_id": "12345",
+                        "task_result": "a" * 64,
+                    }
+                },
             }
         )
         mock_marketplace_service.return_value = mock_service
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"result": "final mech answer"}
+        mock_requests_get.return_value = mock_response
 
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -300,6 +314,75 @@ class TestRequestCommand:
             assert call_kwargs["use_offchain"] is True
             assert call_kwargs["use_prepaid"] is True  # Auto-enabled with offchain
             assert call_kwargs["mech_offchain_url"] == "https://offchain.example.com"
+            expected_url = f"{IPFS_URL_TEMPLATE.format('a' * 64).rstrip('/')}/12345"
+            mock_requests_get.assert_called_once_with(expected_url, timeout=10)
+            assert "final mech answer" in result.output
+            assert "task_result" not in result.output
+
+    @patch("mech_client.cli.commands.request_cmd.EnvironmentConfig")
+    @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
+    @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    @patch("mech_client.cli.commands.request_cmd.requests.get")
+    def test_request_with_use_offchain_requestid_key_supported(
+        self,
+        mock_requests_get: MagicMock,
+        mock_setup_wallet: MagicMock,
+        mock_marketplace_service: MagicMock,
+        mock_env_config: MagicMock,
+    ) -> None:
+        """Test offchain result fetch supports requestId key."""
+        mock_config_instance = MagicMock()
+        mock_config_instance.mechx_mech_offchain_url = "https://offchain.example.com"
+        mock_env_config.load.return_value = mock_config_instance
+
+        mock_wallet_ctx = MagicMock()
+        mock_setup_wallet.return_value = mock_wallet_ctx
+
+        mock_service = MagicMock()
+        mock_service.send_request = AsyncMock(
+            return_value={
+                "tx_hash": None,
+                "request_ids": ["0xabc"],
+                "delivery_results": {
+                    "0xabc": {
+                        "requestId": "67890",
+                        "task_result": "b" * 64,
+                    }
+                },
+            }
+        )
+        mock_marketplace_service.return_value = mock_service
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"result": "resolved via requestId"}
+        mock_requests_get.return_value = mock_response
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("key.txt", "w") as f:
+                f.write("dummy_key")
+
+            result = runner.invoke(
+                request,
+                [
+                    "--prompts",
+                    "Test prompt",
+                    "--tools",
+                    "tool1",
+                    "--use-offchain",
+                    "true",
+                    "--chain-config",
+                    "gnosis",
+                    "--key",
+                    "key.txt",
+                ],
+            )
+
+            assert result.exit_code == 0
+            expected_url = f"{IPFS_URL_TEMPLATE.format('b' * 64).rstrip('/')}/67890"
+            mock_requests_get.assert_called_once_with(expected_url, timeout=10)
+            assert "resolved via requestId" in result.output
 
     @patch("mech_client.cli.commands.request_cmd.EnvironmentConfig")
     def test_request_offchain_without_url_fails(

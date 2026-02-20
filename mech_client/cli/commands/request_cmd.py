@@ -20,13 +20,16 @@
 """Request command for sending AI task requests to mechs."""
 
 import asyncio
+import json
 from typing import Any, Dict, List, Optional
 
 import click
+import requests
 from click import ClickException
 
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
+from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.services.marketplace_service import MarketplaceService
 from mech_client.utils.errors.handlers import handle_cli_errors
@@ -35,6 +38,63 @@ from mech_client.utils.validators import (
     validate_extra_attributes,
     validate_timeout,
 )
+
+
+def _resolve_offchain_task_result(delivery_result: Any) -> Optional[str]:
+    """
+    Resolve offchain task result file content.
+
+    The offchain result file is stored at:
+    <gateway>/<task_result_hash>/<request_id>
+
+    :param delivery_result: Raw offchain delivery metadata
+    :return: Result content as string, or None if unavailable
+    """
+    if not isinstance(delivery_result, dict):
+        return None
+
+    task_result = delivery_result.get("task_result")
+    if not isinstance(task_result, str) or not task_result:
+        return None
+
+    request_id = delivery_result.get("request_id") or delivery_result.get("requestId")
+    if request_id is None:
+        return None
+
+    result_file_url = (
+        f"{IPFS_URL_TEMPLATE.format(task_result).rstrip('/')}/{str(request_id)}"
+    )
+
+    try:
+        response = requests.get(result_file_url, timeout=10)
+        response.raise_for_status()
+        try:
+            return json.dumps(response.json(), ensure_ascii=True)
+        except ValueError:
+            return response.text
+    except requests.exceptions.RequestException:
+        return None
+
+
+def _extract_result_text(resolved_payload: str) -> str:
+    """
+    Extract only the final mech result text from resolved payload.
+
+    :param resolved_payload: JSON/string payload fetched from offchain result file
+    :return: Final result string suitable for user output
+    """
+    try:
+        payload = json.loads(resolved_payload)
+    except ValueError:
+        return resolved_payload
+
+    if isinstance(payload, dict) and "result" in payload:
+        result = payload["result"]
+        return (
+            result if isinstance(result, str) else json.dumps(result, ensure_ascii=True)
+        )
+
+    return resolved_payload
 
 
 @click.command()
@@ -204,5 +264,14 @@ def request(
     click.echo(f"✓ Request IDs: {result['request_ids']}")
     if result.get("delivery_results"):
         click.echo("\n✓ Delivery results:")
-        for request_id, data_url in result["delivery_results"].items():
-            click.echo(f"  Request {request_id}: {data_url}")
+        for request_id, delivery_data in result["delivery_results"].items():
+            full_response = _resolve_offchain_task_result(delivery_data)
+            if full_response:
+                click.echo(
+                    f"  Request {request_id}: {_extract_result_text(full_response)}"
+                )
+            else:
+                if isinstance(delivery_data, dict):
+                    click.echo(f"  Request {request_id}: Result not available.")
+                else:
+                    click.echo(f"  Request {request_id}: {delivery_data}")
