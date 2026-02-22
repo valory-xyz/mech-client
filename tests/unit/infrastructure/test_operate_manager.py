@@ -219,9 +219,8 @@ class TestFetchAgentModeKeys:
         # KeysManager mock
         mock_keys_manager = MagicMock()
         mock_keys_manager_cls.return_value = mock_keys_manager
-        mock_keys_manager.get_private_key_file.return_value = Path(
-            "/path/to/keyfile.json"
-        )
+        expected_key_path = Path("/path/to/keyfile.json")
+        mock_keys_manager.get_private_key_file.return_value = expected_key_path
 
         # Env config
         mock_env_load.return_value.operate_password = "testpassword"
@@ -229,7 +228,7 @@ class TestFetchAgentModeKeys:
         safe_address, key_path, password = fetch_agent_mode_keys("gnosis")
 
         assert safe_address == "0xSafeAddress"
-        assert key_path == "/path/to/keyfile.json"
+        assert key_path == str(expected_key_path)
         assert password == "testpassword"
 
     @patch("mech_client.infrastructure.operate.key_manager.OperateManager")
