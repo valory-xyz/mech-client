@@ -93,7 +93,3 @@ cli.add_command(tool)
 cli.add_command(deposit)
 cli.add_command(subscription)
 cli.add_command(ipfs)
-
-
-if __name__ == "__main__":
-    cli()  # pylint: disable=no-value-for-parameter
