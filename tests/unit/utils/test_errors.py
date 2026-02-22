@@ -19,7 +19,12 @@
 
 """Tests for utils.errors module."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
+import requests
+from click import ClickException
+from web3.exceptions import ContractLogicError, Web3ValidationError
 
 from mech_client.utils.errors import (
     AgentModeError,
@@ -287,3 +292,498 @@ class TestErrorMessages:
         msg = ErrorMessages.private_key_error("not_found", "File not found")
         assert "not found" in msg
         assert "--key" in msg
+
+    def test_unknown_error_type_returns_generic_message(self) -> None:
+        """Test fallback branch returns generic Private key error message."""
+        msg = ErrorMessages.private_key_error("unknown_type", "some detail")
+        assert "Private key error" in msg
+
+
+class TestHandleCliErrors:
+    """Tests for handle_cli_errors decorator."""
+
+    def _make_handler(self) -> None:
+        """Import handler inside test to avoid circular import issues at module level."""
+        from mech_client.utils.errors.handlers import (  # pylint: disable=import-outside-toplevel
+            handle_cli_errors,
+        )
+
+        return handle_cli_errors
+
+    def test_returns_value_on_success(self) -> None:
+        """Test that normal function return values pass through."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> str:
+            return "success"
+
+        assert func() == "success"
+
+    def test_reraises_click_exception(self) -> None:
+        """Test that existing ClickExceptions are re-raised unchanged."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise ClickException("Original error")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert exc_info.value.message == "Original error"
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_rpc_error_with_url(self, mock_env_load: MagicMock) -> None:
+        """Test RpcError is converted to ClickException with rpc_url."""
+        mock_env_load.return_value.mechx_chain_rpc = None
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise RpcError("Connection failed", rpc_url="https://rpc.example.com")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "https://rpc.example.com" in exc_info.value.message
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_rpc_error_falls_back_to_env(self, mock_env_load: MagicMock) -> None:
+        """Test RpcError without url falls back to env config."""
+        mock_env_load.return_value.mechx_chain_rpc = "https://env-rpc.example.com"
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise RpcError("Connection failed")  # no rpc_url
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "https://env-rpc.example.com" in exc_info.value.message
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_subgraph_error(self, mock_env_load: MagicMock) -> None:
+        """Test SubgraphError is converted to ClickException."""
+        mock_env_load.return_value.mechx_subgraph_url = None
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise SubgraphError(
+                "Query failed", subgraph_url="https://subgraph.example.com"
+            )
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "https://subgraph.example.com" in exc_info.value.message
+
+    def test_handles_contract_error(self) -> None:
+        """Test ContractError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise ContractError("Execution reverted")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "Execution reverted" in exc_info.value.message
+
+    def test_handles_validation_error(self) -> None:
+        """Test ValidationError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise ValidationError("Invalid address")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "Invalid address" in exc_info.value.message
+
+    def test_handles_transaction_error(self) -> None:
+        """Test TransactionError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise TransactionError("TX failed")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "Transaction error" in exc_info.value.message
+
+    def test_handles_payment_error(self) -> None:
+        """Test PaymentError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise PaymentError("Insufficient balance")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "Payment error" in exc_info.value.message
+
+    def test_handles_ipfs_error_upload(self) -> None:
+        """Test IPFSError with 'upload' becomes upload operation in message."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise IPFSError("IPFS upload failed: gateway unreachable")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "upload" in exc_info.value.message
+
+    def test_handles_ipfs_error_download(self) -> None:
+        """Test IPFSError with 'download' becomes download operation in message."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise IPFSError("IPFS download failed: not found")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "download" in exc_info.value.message
+
+    def test_handles_ipfs_error_generic(self) -> None:
+        """Test IPFSError with no operation keyword defaults to 'operation'."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise IPFSError("IPFS error: generic failure")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "operation" in exc_info.value.message
+
+    def test_handles_tool_error(self) -> None:
+        """Test ToolError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise ToolError("Tool not found")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "Tool error" in exc_info.value.message
+
+    def test_handles_agent_mode_error(self) -> None:
+        """Test AgentModeError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise AgentModeError("Agent not set up")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "Agent mode error" in exc_info.value.message
+
+    def test_handles_configuration_error(self) -> None:
+        """Test ConfigurationError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise ConfigurationError("Missing config")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "Configuration error" in exc_info.value.message
+
+    def test_handles_delivery_timeout_error(self) -> None:
+        """Test DeliveryTimeoutError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise DeliveryTimeoutError("Timeout after 900s")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "Timeout" in exc_info.value.message
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_http_error(self, mock_env_load: MagicMock) -> None:
+        """Test requests.HTTPError is converted to ClickException."""
+        mock_env_load.return_value.mechx_chain_rpc = "https://rpc.example.com"
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise requests.exceptions.HTTPError("HTTP 503")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "RPC" in exc_info.value.message
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_connection_error(self, mock_env_load: MagicMock) -> None:
+        """Test requests.ConnectionError is converted to ClickException."""
+        mock_env_load.return_value.mechx_chain_rpc = "https://rpc.example.com"
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise requests.exceptions.ConnectionError("Connection refused")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "Network error" in exc_info.value.message
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_timeout_error(self, mock_env_load: MagicMock) -> None:
+        """Test TimeoutError is converted to ClickException."""
+        mock_env_load.return_value.mechx_chain_rpc = "https://rpc.example.com"
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise TimeoutError("Timed out waiting for receipt")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "Timeout" in exc_info.value.message
+
+    def test_handles_contract_logic_error(self) -> None:
+        """Test web3 ContractLogicError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise ContractLogicError("execution reverted: not enough balance")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "contract" in exc_info.value.message.lower()
+
+    def test_handles_web3_validation_error(self) -> None:
+        """Test web3 Web3ValidationError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise Web3ValidationError("invalid address")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "validation" in exc_info.value.message.lower()
+
+    def test_handles_value_error(self) -> None:
+        """Test ValueError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise ValueError("bad value")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "bad value" in exc_info.value.message
+
+    def test_handles_file_not_found_error(self) -> None:
+        """Test FileNotFoundError is converted to ClickException."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise FileNotFoundError("key file missing")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "key file missing" in exc_info.value.message
+
+    def test_handles_unexpected_exception(self) -> None:
+        """Test unexpected exceptions are caught as a catch-all."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise RuntimeError("something went wrong")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert "Unexpected error" in exc_info.value.message
+
+
+class TestHandleRpcErrors:
+    """Tests for handle_rpc_errors decorator."""
+
+    def _make_handler(self) -> None:
+        """Import handler inside test to avoid circular import issues at module level."""
+        from mech_client.utils.errors.handlers import (  # pylint: disable=import-outside-toplevel
+            handle_rpc_errors,
+        )
+
+        return handle_rpc_errors
+
+    def test_returns_value_on_success(self) -> None:
+        """Test normal return values pass through."""
+        handle_rpc_errors = self._make_handler()
+
+        @handle_rpc_errors
+        def func() -> int:
+            return 42
+
+        assert func() == 42
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_http_error(self, mock_env_load: MagicMock) -> None:
+        """Test HTTP errors become RpcError."""
+        mock_env_load.return_value.mechx_chain_rpc = "https://rpc.example.com"
+        handle_rpc_errors = self._make_handler()
+
+        @handle_rpc_errors
+        def func() -> None:
+            raise requests.exceptions.HTTPError("503 Service Unavailable")
+
+        with pytest.raises(RpcError) as exc_info:
+            func()
+        assert "HTTP error" in str(exc_info.value)
+        assert exc_info.value.rpc_url == "https://rpc.example.com"
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_connection_error(self, mock_env_load: MagicMock) -> None:
+        """Test connection errors become RpcError."""
+        mock_env_load.return_value.mechx_chain_rpc = None
+        handle_rpc_errors = self._make_handler()
+
+        @handle_rpc_errors
+        def func() -> None:
+            raise requests.exceptions.ConnectionError("Connection refused")
+
+        with pytest.raises(RpcError) as exc_info:
+            func()
+        assert "Network error" in str(exc_info.value)
+        assert exc_info.value.rpc_url == "default"
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_requests_timeout(self, mock_env_load: MagicMock) -> None:
+        """Test requests.Timeout becomes RpcError."""
+        mock_env_load.return_value.mechx_chain_rpc = None
+        handle_rpc_errors = self._make_handler()
+
+        @handle_rpc_errors
+        def func() -> None:
+            raise requests.exceptions.Timeout("read timeout")
+
+        with pytest.raises(RpcError):
+            func()
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_timeout_error(self, mock_env_load: MagicMock) -> None:
+        """Test TimeoutError becomes RpcError."""
+        mock_env_load.return_value.mechx_chain_rpc = "https://rpc.example.com"
+        handle_rpc_errors = self._make_handler()
+
+        @handle_rpc_errors
+        def func() -> None:
+            raise TimeoutError("timed out")
+
+        with pytest.raises(RpcError) as exc_info:
+            func()
+        assert "Timeout" in str(exc_info.value)
+        assert exc_info.value.rpc_url == "https://rpc.example.com"
+
+
+class TestHandleContractErrors:
+    """Tests for handle_contract_errors decorator."""
+
+    def _make_handler(self) -> None:
+        """Import handler inside test to avoid circular import issues at module level."""
+        from mech_client.utils.errors.handlers import (  # pylint: disable=import-outside-toplevel
+            handle_contract_errors,
+        )
+
+        return handle_contract_errors
+
+    def test_returns_value_on_success(self) -> None:
+        """Test normal return values pass through."""
+        handle_contract_errors = self._make_handler()
+
+        @handle_contract_errors
+        def func() -> str:
+            return "tx_hash"
+
+        assert func() == "tx_hash"
+
+    def test_handles_contract_logic_error(self) -> None:
+        """Test ContractLogicError becomes ContractError."""
+        handle_contract_errors = self._make_handler()
+
+        @handle_contract_errors
+        def func() -> None:
+            raise ContractLogicError("execution reverted")
+
+        with pytest.raises(ContractError) as exc_info:
+            func()
+        assert "Contract logic error" in str(exc_info.value)
+
+    def test_handles_web3_validation_error(self) -> None:
+        """Test Web3ValidationError becomes ContractError."""
+        handle_contract_errors = self._make_handler()
+
+        @handle_contract_errors
+        def func() -> None:
+            raise Web3ValidationError("invalid checksum address")
+
+        with pytest.raises(ContractError) as exc_info:
+            func()
+        assert "Contract validation error" in str(exc_info.value)
+
+
+class TestHandleSubgraphErrors:
+    """Tests for handle_subgraph_errors decorator."""
+
+    def _make_handler(self) -> None:
+        """Import handler inside test to avoid circular import issues at module level."""
+        from mech_client.utils.errors.handlers import (  # pylint: disable=import-outside-toplevel
+            handle_subgraph_errors,
+        )
+
+        return handle_subgraph_errors
+
+    def test_returns_value_on_success(self) -> None:
+        """Test normal return values pass through."""
+        handle_subgraph_errors = self._make_handler()
+
+        @handle_subgraph_errors
+        def func() -> dict:
+            return {"data": []}
+
+        assert func() == {"data": []}
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_http_error(self, mock_env_load: MagicMock) -> None:
+        """Test HTTP errors become SubgraphError."""
+        mock_env_load.return_value.mechx_subgraph_url = "https://subgraph.example.com"
+        handle_subgraph_errors = self._make_handler()
+
+        @handle_subgraph_errors
+        def func() -> None:
+            raise requests.exceptions.HTTPError("503")
+
+        with pytest.raises(SubgraphError) as exc_info:
+            func()
+        assert "HTTP error" in str(exc_info.value)
+        assert exc_info.value.subgraph_url == "https://subgraph.example.com"
+
+    @patch("mech_client.utils.errors.handlers.EnvironmentConfig.load")
+    def test_handles_connection_error(self, mock_env_load: MagicMock) -> None:
+        """Test connection errors become SubgraphError."""
+        mock_env_load.return_value.mechx_subgraph_url = None
+        handle_subgraph_errors = self._make_handler()
+
+        @handle_subgraph_errors
+        def func() -> None:
+            raise requests.exceptions.ConnectionError("refused")
+
+        with pytest.raises(SubgraphError) as exc_info:
+            func()
+        assert "Network error" in str(exc_info.value)
+        assert exc_info.value.subgraph_url == "not set"

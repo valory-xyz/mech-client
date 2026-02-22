@@ -26,6 +26,7 @@ from mech_client.utils.errors import ValidationError
 from mech_client.utils.validators import (
     validate_amount,
     validate_batch_sizes_match,
+    validate_chain_support,
     validate_ethereum_address,
     validate_extra_attributes,
     validate_ipfs_hash,
@@ -323,3 +324,46 @@ class TestValidateExtraAttributes:
             ValidationError, match="must be a primitive type"
         ):
             validate_extra_attributes({"key": {"nested": "dict"}})
+
+
+class TestPaymentTypeClassification:
+    """Tests for PaymentType classification methods and from_value."""
+
+    def test_from_value_unknown_raises_value_error(self) -> None:
+        """Test that from_value raises ValueError for an unrecognised hash string."""
+        with pytest.raises(ValueError, match="Unknown payment type value"):
+            PaymentType.from_value("deadbeef" * 8)
+
+    def test_is_native_for_native_nvm(self) -> None:
+        """Test that NATIVE_NVM.is_native() returns True."""
+        assert PaymentType.NATIVE_NVM.is_native() is True
+
+    def test_is_nvm_for_native_nvm(self) -> None:
+        """Test that NATIVE_NVM.is_nvm() returns True."""
+        assert PaymentType.NATIVE_NVM.is_nvm() is True
+
+    def test_is_nvm_for_token_nvm_usdc(self) -> None:
+        """Test that TOKEN_NVM_USDC.is_nvm() returns True."""
+        assert PaymentType.TOKEN_NVM_USDC.is_nvm() is True
+
+    def test_is_native_for_non_native(self) -> None:
+        """Test that OLAS_TOKEN.is_native() returns False."""
+        assert PaymentType.OLAS_TOKEN.is_native() is False
+
+    def test_is_nvm_for_non_nvm(self) -> None:
+        """Test that NATIVE.is_nvm() returns False."""
+        assert PaymentType.NATIVE.is_nvm() is False
+
+
+class TestValidateChainSupport:
+    """Tests for validate_chain_support function."""
+
+    def test_chain_not_supported_raises_validation_error(self) -> None:
+        """Test that unsupported chain raises ValidationError with descriptive message."""
+        with pytest.raises(ValidationError, match="does not support"):
+            validate_chain_support("arbitrum", ["gnosis", "base"], "NVM subscriptions")
+
+    def test_chain_supported_does_not_raise(self) -> None:
+        """Test that supported chain does not raise any exception."""
+        # Should complete without raising
+        validate_chain_support("gnosis", ["gnosis", "base"], "NVM subscriptions")
