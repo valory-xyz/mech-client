@@ -64,13 +64,11 @@ class TestCliMain:
         runner = CliRunner()
 
         with patch("mech_client.cli.main.load_dotenv"):
-            with patch(
-                "mech_client.cli.main.Path",
-                wraps=Path,
-            ) as mock_path_cls:
-                # Make operate_path.exists() return False
-                mock_path_instance = mock_path_cls.home.return_value.__truediv__.return_value
-                mock_path_instance.exists.return_value = False
+            with patch("mech_client.cli.main.Path") as mock_path_cls:
+                # Build the mock chain: Path.home() / OPERATE_FOLDER_NAME
+                mock_operate = mock_path_cls.home.return_value.__truediv__.return_value
+                mock_operate.exists.return_value = False
+                mock_operate.__str__ = lambda self: "/home/user/.operate_mech_client"
 
                 result = runner.invoke(cli, ["request", "--help"])
 
