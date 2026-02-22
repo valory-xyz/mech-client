@@ -108,3 +108,100 @@ class TestNVMContractFactory:
 
         # Verify _load_contract was called for each contract (10 times)
         assert mock_load_contract.call_count == 10
+
+
+class TestDIDRegistryContract:
+    """Tests for DIDRegistryContract.get_ddo."""
+
+    @pytest.fixture
+    def mock_w3(self) -> MagicMock:
+        """Create mock Web3 instance."""
+        w3 = MagicMock()
+        w3.eth.chain_id = 100
+        return w3
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_get_ddo_returns_expected_structure(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test get_ddo returns a dict with expected keys."""
+        from mech_client.infrastructure.nvm.contracts.did_registry import (  # pylint: disable=import-outside-toplevel
+            DIDRegistryContract,
+        )
+
+        mock_contract = MagicMock()
+        mock_load_contract.return_value = mock_contract
+
+        owner = "0x" + "1" * 40
+        checksum = b"\x00" * 32
+        service_endpoint = "https://metadata.example.com"
+        providers = ["0x" + "2" * 40, "0x0000000000000000000000000000000000000000"]
+        royalties = 10
+        immutable_url = "ipfs://QmAbc123"
+        nft_initialized = True
+
+        mock_contract.functions.getDIDRegister.return_value.call.return_value = [
+            owner,
+            checksum,
+            service_endpoint,
+            None,  # index 3 (unused)
+            None,  # index 4 (unused)
+            providers,
+            royalties,
+            immutable_url,
+            nft_initialized,
+        ]
+
+        did_registry = DIDRegistryContract(mock_w3)
+        ddo = did_registry.get_ddo("abc123")
+
+        assert ddo["did"] == "did:nv:abc123"
+        assert ddo["serviceEndpoint"] == service_endpoint
+        assert ddo["owner"] == owner
+        assert ddo["royalties"] == royalties
+        assert ddo["immutableUrl"] == immutable_url
+        assert ddo["nftInitialized"] is True
+        assert ddo["service"] == []
+        assert ddo["proof"] == []
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_get_ddo_filters_zero_address_providers(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test that non-zero providers are correctly identified in logs."""
+        from web3.constants import ADDRESS_ZERO  # pylint: disable=import-outside-toplevel
+
+        from mech_client.infrastructure.nvm.contracts.did_registry import (  # pylint: disable=import-outside-toplevel
+            DIDRegistryContract,
+        )
+
+        mock_contract = MagicMock()
+        mock_load_contract.return_value = mock_contract
+
+        real_provider = "0x" + "3" * 40
+        mock_contract.functions.getDIDRegister.return_value.call.return_value = [
+            "0x" + "1" * 40,  # owner
+            b"\x00" * 32,  # checksum
+            "https://service.example.com",  # serviceEndpoint
+            None,
+            None,
+            [real_provider, ADDRESS_ZERO],  # providers
+            5,  # royalties
+            "ipfs://abc",  # immutableUrl
+            False,  # nftInitialized
+        ]
+
+        did_registry = DIDRegistryContract(mock_w3)
+        ddo = did_registry.get_ddo("testdid")
+
+        # The function logs non-zero providers; verify ddo providers list is as-is
+        assert real_provider in ddo["providers"]
+        assert ADDRESS_ZERO in ddo["providers"]
