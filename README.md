@@ -1,5 +1,18 @@
 # Mech Client
 
+[![PyPI](https://img.shields.io/pypi/v/mech-client)](https://pypi.org/project/mech-client/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mech-client)](https://pypi.org/project/mech-client/)
+[![PyPI - Wheel](https://img.shields.io/pypi/wheel/mech-client)](https://pypi.org/project/mech-client/)
+[![License](https://img.shields.io/pypi/l/mech-client)](https://github.com/valory-xyz/mech-client/blob/main/LICENSE)
+[![Downloads](https://img.shields.io/pypi/dm/mech-client)](https://pypi.org/project/mech-client/)
+
+[![Sanity checks and tests](https://github.com/valory-xyz/mech-client/workflows/main_workflow/badge.svg?branch=main)](https://github.com/valory-xyz/mech-client/actions/workflows/workflow.yml)
+[![Coverage](https://codecov.io/gh/valory-xyz/mech-client/graph/badge.svg)](https://codecov.io/gh/valory-xyz/mech-client)
+[![flake8](https://img.shields.io/badge/lint-flake8-yellow)](https://flake8.pycqa.org)
+[![mypy](https://img.shields.io/badge/static%20check-mypy-blue)](https://github.com/python/mypy)
+[![Black](https://img.shields.io/badge/code%20style-black-black)](https://github.com/psf/black)
+[![bandit](https://img.shields.io/badge/security-bandit-lightgrey)](https://github.com/PyCQA/bandit)
+
 A client to interact with Mechs - AI agents providing services - on the [Olas Marketplace](https://olas.network/mech-marketplace). It allows users to post requests for AI tasks on-chain, and get their result delivered.
 
 ## Requirements
