@@ -340,3 +340,36 @@ class TestDisplayWallets:
         assert result is None
         assert "Could not find service for gnosis" in caplog.text
         mech_logger.propagate = False
+
+
+class TestDisplayWalletsException:
+    """Tests for SetupService.display_wallets exception handling."""
+
+    @patch("mech_client.services.setup_service.OperateManager")
+    def test_display_wallets_exception_returns_none(
+        self,
+        mock_operate_manager: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test display_wallets returns None when an unexpected exception occurs."""
+        mech_logger = logging.getLogger("mech_client")
+        mech_logger.propagate = True
+        caplog.set_level(logging.WARNING)
+
+        chain_config = "gnosis"
+        template_path = Path("/path/to/template.json")
+
+        # Make wallet_manager.load raise an unexpected error
+        mock_operate = MagicMock()
+        mock_operate.wallet_manager.load.side_effect = Exception("unexpected error")
+        mock_operate_manager.return_value.operate = mock_operate
+
+        service = SetupService(chain_config, template_path)
+
+        # Execute
+        result = service.display_wallets()
+
+        # Verify the method catches the exception and returns None
+        assert result is None
+        assert "Could not display wallet info" in caplog.text
+        mech_logger.propagate = False

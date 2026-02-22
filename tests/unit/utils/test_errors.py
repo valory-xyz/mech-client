@@ -293,6 +293,11 @@ class TestErrorMessages:
         assert "not found" in msg
         assert "--key" in msg
 
+    def test_unknown_error_type_returns_generic_message(self) -> None:
+        """Test fallback branch returns generic Private key error message."""
+        msg = ErrorMessages.private_key_error("unknown_type", "some detail")
+        assert "Private key error" in msg
+
 
 class TestHandleCliErrors:
     """Tests for handle_cli_errors decorator."""

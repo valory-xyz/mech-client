@@ -391,3 +391,151 @@ class TestLedgerConfigEnvironmentOverrides:
         )
 
         assert config.is_gas_estimation_enabled is True
+
+
+class TestMechConfigEnvOverrides:
+    """Tests for MechConfig environment variable overrides (gas_limit, transaction_url, subgraph_url)."""
+
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("mech_client.infrastructure.config.chain_config.EnvironmentConfig.load")
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_gas_limit_env_override(
+        self,
+        mock_load_rpc: MagicMock,
+        mock_env_load: MagicMock,
+    ) -> None:
+        """Test that mechx_gas_limit env config overrides gas_limit on MechConfig."""
+        mock_load_rpc.return_value = None
+
+        mock_env = MagicMock()
+        mock_env.mechx_chain_rpc = None
+        mock_env.mechx_gas_limit = 999999
+        mock_env.mechx_transaction_url = None
+        mock_env.mechx_subgraph_url = None
+        mock_env.mechx_ledger_chain_id = None
+        mock_env.mechx_ledger_poa_chain = None
+        mock_env.mechx_ledger_default_gas_price_strategy = None
+        mock_env.mechx_ledger_is_gas_estimation_enabled = None
+        mock_env_load.return_value = mock_env
+
+        from mech_client.infrastructure.config.chain_config import (  # pylint: disable=import-outside-toplevel
+            LedgerConfig,
+            MechConfig,
+        )
+
+        ledger_config = LedgerConfig(
+            address="https://rpc.gnosischain.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="eip1559",
+            is_gas_estimation_enabled=False,
+        )
+
+        mech_config = MechConfig(
+            complementary_metadata_hash_address="0x" + "2" * 40,
+            rpc_url="https://rpc.gnosischain.com",
+            ledger_config=ledger_config,
+            gas_limit=500000,
+            transaction_url="https://gnosisscan.io/tx/{transaction_digest}",
+            subgraph_url="https://api.subgraph.autonolas.tech/gnosis",
+            price=10000000000000000,
+            mech_marketplace_contract="0x" + "3" * 40,
+        )
+
+        assert mech_config.gas_limit == 999999
+
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("mech_client.infrastructure.config.chain_config.EnvironmentConfig.load")
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_transaction_url_env_override(
+        self,
+        mock_load_rpc: MagicMock,
+        mock_env_load: MagicMock,
+    ) -> None:
+        """Test that mechx_transaction_url env config overrides transaction_url on MechConfig."""
+        mock_load_rpc.return_value = None
+
+        mock_env = MagicMock()
+        mock_env.mechx_chain_rpc = None
+        mock_env.mechx_gas_limit = None
+        mock_env.mechx_transaction_url = "https://custom-explorer/{transaction_digest}"
+        mock_env.mechx_subgraph_url = None
+        mock_env.mechx_ledger_chain_id = None
+        mock_env.mechx_ledger_poa_chain = None
+        mock_env.mechx_ledger_default_gas_price_strategy = None
+        mock_env.mechx_ledger_is_gas_estimation_enabled = None
+        mock_env_load.return_value = mock_env
+
+        from mech_client.infrastructure.config.chain_config import (  # pylint: disable=import-outside-toplevel
+            LedgerConfig,
+            MechConfig,
+        )
+
+        ledger_config = LedgerConfig(
+            address="https://rpc.gnosischain.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="eip1559",
+            is_gas_estimation_enabled=False,
+        )
+
+        mech_config = MechConfig(
+            complementary_metadata_hash_address="0x" + "2" * 40,
+            rpc_url="https://rpc.gnosischain.com",
+            ledger_config=ledger_config,
+            gas_limit=500000,
+            transaction_url="https://gnosisscan.io/tx/{transaction_digest}",
+            subgraph_url="https://api.subgraph.autonolas.tech/gnosis",
+            price=10000000000000000,
+            mech_marketplace_contract="0x" + "3" * 40,
+        )
+
+        assert mech_config.transaction_url == "https://custom-explorer/{transaction_digest}"
+
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("mech_client.infrastructure.config.chain_config.EnvironmentConfig.load")
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_subgraph_url_env_override(
+        self,
+        mock_load_rpc: MagicMock,
+        mock_env_load: MagicMock,
+    ) -> None:
+        """Test that mechx_subgraph_url env config overrides subgraph_url on MechConfig."""
+        mock_load_rpc.return_value = None
+
+        mock_env = MagicMock()
+        mock_env.mechx_chain_rpc = None
+        mock_env.mechx_gas_limit = None
+        mock_env.mechx_transaction_url = None
+        mock_env.mechx_subgraph_url = "https://custom-subgraph/"
+        mock_env.mechx_ledger_chain_id = None
+        mock_env.mechx_ledger_poa_chain = None
+        mock_env.mechx_ledger_default_gas_price_strategy = None
+        mock_env.mechx_ledger_is_gas_estimation_enabled = None
+        mock_env_load.return_value = mock_env
+
+        from mech_client.infrastructure.config.chain_config import (  # pylint: disable=import-outside-toplevel
+            LedgerConfig,
+            MechConfig,
+        )
+
+        ledger_config = LedgerConfig(
+            address="https://rpc.gnosischain.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="eip1559",
+            is_gas_estimation_enabled=False,
+        )
+
+        mech_config = MechConfig(
+            complementary_metadata_hash_address="0x" + "2" * 40,
+            rpc_url="https://rpc.gnosischain.com",
+            ledger_config=ledger_config,
+            gas_limit=500000,
+            transaction_url="https://gnosisscan.io/tx/{transaction_digest}",
+            subgraph_url="https://api.subgraph.autonolas.tech/gnosis",
+            price=10000000000000000,
+            mech_marketplace_contract="0x" + "3" * 40,
+        )
+
+        assert mech_config.subgraph_url == "https://custom-subgraph/"

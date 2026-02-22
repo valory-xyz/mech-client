@@ -348,3 +348,190 @@ class TestSubscriptionManager:
         assert mock_executor.execute_transaction.call_count == 2
         for call in mock_executor.execute_transaction.call_args_list:
             assert call[1]["method_name"] != "approve"
+
+
+class TestSubscriptionManagerFailedReceipts:
+    """Tests for SubscriptionManager failed transaction receipt paths."""
+
+    @pytest.fixture
+    def mock_w3(self) -> MagicMock:
+        """Create mock Web3 instance."""
+        return MagicMock()
+
+    @pytest.fixture
+    def mock_ledger_api(self) -> MagicMock:
+        """Create mock EthereumApi."""
+        return MagicMock()
+
+    @pytest.fixture
+    def mock_config_token_approval(self) -> MagicMock:
+        """Create mock NVM configuration requiring token approval (Base)."""
+        config = MagicMock()
+        config.requires_token_approval.return_value = True
+        config.get_transaction_value.return_value = 0
+        config.get_total_payment_amount.return_value = 5 * 10**6
+        config.plan_fee_nvm = "250000"
+        config.plan_price_mechs = "250000"
+        config.token_address = "0x" + "a" * 40
+        config.subscription_id = "1"
+        return config
+
+    @pytest.fixture
+    def mock_config_no_approval(self) -> MagicMock:
+        """Create mock NVM configuration without token approval (Gnosis)."""
+        config = MagicMock()
+        config.requires_token_approval.return_value = False
+        config.get_transaction_value.return_value = 1000000
+        config.get_total_payment_amount.return_value = 1000000
+        config.plan_fee_nvm = "500000"
+        config.plan_price_mechs = "500000"
+        config.token_address = "0x0000000000000000000000000000000000000000"  # nosec
+        config.subscription_id = "1"
+        return config
+
+    @pytest.fixture
+    def mock_executor(self) -> MagicMock:
+        """Create mock transaction executor."""
+        executor = MagicMock()
+        executor.execute_transaction.return_value = "0xabcd1234"
+        return executor
+
+    @pytest.fixture
+    def mock_agreement_builder(self) -> MagicMock:
+        """Create mock agreement builder."""
+        builder = MagicMock()
+        agreement_data = MagicMock(spec=AgreementData)
+        agreement_data.agreement_id = bytes.fromhex("a" * 64)
+        agreement_data.agreement_id_seed = bytes.fromhex("b" * 64)
+        agreement_data.did = "did:nvm:test"
+        agreement_data.condition_seeds = [bytes.fromhex("c" * 64)] * 3
+        agreement_data.timelocks = [0, 0, 0]
+        agreement_data.timeouts = [0, 0, 0]
+        agreement_data.reward_address = "0x" + "1" * 40
+        agreement_data.receivers = ["0x" + "2" * 40]
+        builder.build.return_value = agreement_data
+        builder.lock_payment.address = "0x" + "3" * 40
+        return builder
+
+    @pytest.fixture
+    def mock_fulfillment_builder(self) -> MagicMock:
+        """Create mock fulfillment builder."""
+        builder = MagicMock()
+        fulfillment_data = MagicMock()
+        fulfillment_data.fulfill_for_delegate_params = (
+            "0x" + "4" * 40,
+            "0x" + "5" * 40,
+            100,
+            "0x" + "c" * 64,
+            "0x" + "6" * 40,
+            False,
+            0,
+        )
+        fulfillment_data.fulfill_params = (
+            [500000, 500000],
+            ["0x" + "2" * 40],
+            "0x" + "7" * 40,
+            "0x" + "8" * 40,
+        )
+        builder.build.return_value = fulfillment_data
+        return builder
+
+    @pytest.fixture
+    def mock_balance_checker(self) -> MagicMock:
+        """Create mock balance checker."""
+        checker = MagicMock()
+        checker.check.return_value = None
+        return checker
+
+    @pytest.fixture
+    def mock_contracts(self) -> dict:
+        """Create mock NVM contracts."""
+        nft_sales = MagicMock()
+        nft_sales.contract = MagicMock()
+
+        subscription_provider = MagicMock()
+        subscription_provider.contract = MagicMock()
+
+        subscription_nft = MagicMock()
+        subscription_nft.get_balance.side_effect = [0, 100]
+
+        token_contract = MagicMock()
+        token_contract.contract = MagicMock()
+
+        return {
+            "nft_sales": nft_sales,
+            "subscription_provider": subscription_provider,
+            "subscription_nft": subscription_nft,
+            "token_contract": token_contract,
+        }
+
+    def test_token_approval_failed_receipt_raises_runtime_error(
+        self,
+        mock_w3: MagicMock,
+        mock_ledger_api: MagicMock,
+        mock_config_token_approval: MagicMock,
+        mock_executor: MagicMock,
+        mock_agreement_builder: MagicMock,
+        mock_fulfillment_builder: MagicMock,
+        mock_balance_checker: MagicMock,
+        mock_contracts: dict,
+    ) -> None:
+        """Test RuntimeError raised when token approval receipt status is 0."""
+        manager = SubscriptionManager(
+            w3=mock_w3,
+            ledger_api=mock_ledger_api,
+            config=mock_config_token_approval,
+            sender="0x1234567890123456789012345678901234567890",
+            executor=mock_executor,
+            agreement_builder=mock_agreement_builder,
+            fulfillment_builder=mock_fulfillment_builder,
+            balance_checker=mock_balance_checker,
+            nft_sales=mock_contracts["nft_sales"],
+            subscription_provider=mock_contracts["subscription_provider"],
+            subscription_nft=mock_contracts["subscription_nft"],
+            token_contract=mock_contracts["token_contract"],
+        )
+
+        with patch(
+            "mech_client.domain.subscription.manager.wait_for_receipt",
+            return_value={"status": 0},
+        ):
+            with pytest.raises(RuntimeError, match="Token approval failed"):
+                manager.purchase_subscription("did:nvm:test")
+
+    def test_agreement_fulfillment_failed_receipt_raises_runtime_error(
+        self,
+        mock_w3: MagicMock,
+        mock_ledger_api: MagicMock,
+        mock_config_no_approval: MagicMock,
+        mock_executor: MagicMock,
+        mock_agreement_builder: MagicMock,
+        mock_fulfillment_builder: MagicMock,
+        mock_balance_checker: MagicMock,
+        mock_contracts: dict,
+    ) -> None:
+        """Test RuntimeError raised when agreement fulfillment receipt status is 0."""
+        manager = SubscriptionManager(
+            w3=mock_w3,
+            ledger_api=mock_ledger_api,
+            config=mock_config_no_approval,
+            sender="0x1234567890123456789012345678901234567890",
+            executor=mock_executor,
+            agreement_builder=mock_agreement_builder,
+            fulfillment_builder=mock_fulfillment_builder,
+            balance_checker=mock_balance_checker,
+            nft_sales=mock_contracts["nft_sales"],
+            subscription_provider=mock_contracts["subscription_provider"],
+            subscription_nft=mock_contracts["subscription_nft"],
+            token_contract=None,
+        )
+
+        # The first wait_for_receipt (agreement creation) succeeds,
+        # the second (fulfillment) fails
+        receipt_responses = [{"status": 1}, {"status": 0}]
+        with patch(
+            "mech_client.domain.subscription.manager.wait_for_receipt",
+            side_effect=receipt_responses,
+        ):
+            with pytest.raises(RuntimeError, match="Agreement fulfillment failed"):
+                manager.purchase_subscription("did:nvm:test")

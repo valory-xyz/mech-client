@@ -776,3 +776,82 @@ class TestTokenPaymentStrategyMethods:
             mock_web3_contract.functions.mapRequesterBalances.call_args[0][0]
         )
         assert called_address == called_address  # checksummed form passes web3.py
+
+
+class TestPaymentStrategyBase:
+    """Tests for PaymentStrategy base class default implementations."""
+
+    def test_check_prepaid_balance_default_returns_zero(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test that base check_prepaid_balance returns 0 by default."""
+        from mech_client.domain.payment.base import PaymentStrategy  # pylint: disable=import-outside-toplevel
+
+        class _ConcreteStrategy(PaymentStrategy):  # pylint: disable=too-few-public-methods
+            """Concrete strategy to test base class default methods."""
+
+            def check_balance(self, payer_address: str, amount: int) -> bool:
+                """Stub."""
+                return True
+
+            def approve_if_needed(  # type: ignore[override]
+                self, payer_address: str, spender_address: str, amount: int, executor=None
+            ):
+                """Stub."""
+                return None
+
+            def get_balance_tracker_address(self) -> str:
+                """Stub."""
+                return "0x" + "a" * 40
+
+            def get_payment_token_address(self):  # type: ignore[override]
+                """Stub."""
+                return None
+
+        strategy = _ConcreteStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE,
+            chain_id=100,
+        )
+        result = strategy.check_prepaid_balance(
+            "0x1234567890123456789012345678901234567890",
+            "0x" + "b" * 40,
+        )
+        assert result == 0
+
+    def test_lookup_balance_tracker_raises_for_missing_chain(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test _lookup_balance_tracker raises ValueError when chain not in map."""
+        from mech_client.domain.payment.base import PaymentStrategy  # pylint: disable=import-outside-toplevel
+
+        class _ConcreteStrategy(PaymentStrategy):  # pylint: disable=too-few-public-methods
+            """Concrete strategy to test base class default methods."""
+
+            def check_balance(self, payer_address: str, amount: int) -> bool:
+                """Stub."""
+                return True
+
+            def approve_if_needed(  # type: ignore[override]
+                self, payer_address: str, spender_address: str, amount: int, executor=None
+            ):
+                """Stub."""
+                return None
+
+            def get_balance_tracker_address(self) -> str:
+                """Stub."""
+                return "0x" + "a" * 40
+
+            def get_payment_token_address(self):  # type: ignore[override]
+                """Stub."""
+                return None
+
+        strategy = _ConcreteStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE,
+            chain_id=100,
+        )
+        with pytest.raises(ValueError, match="balance tracker not available"):
+            strategy._lookup_balance_tracker(  # pylint: disable=protected-access
+                {}, "Native"
+            )

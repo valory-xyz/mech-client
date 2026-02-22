@@ -393,3 +393,445 @@ class TestNVMContractWrapperBase:
             address=expected_address, abi=artifact_info["abi"]
         )
         assert result is expected_contract
+
+
+class TestAgreementManagerContract:
+    """Tests for AgreementManagerContract.agreement_id."""
+
+    @pytest.fixture
+    def mock_w3(self) -> MagicMock:
+        """Create mock Web3 instance."""
+        w3 = MagicMock()
+        w3.eth.chain_id = 100
+        return w3
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_agreement_id_calls_contract_function(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test that agreement_id returns bytes from the contract function."""
+        from mech_client.infrastructure.nvm.contracts.agreement_manager import (  # pylint: disable=import-outside-toplevel
+            AgreementManagerContract,
+        )
+
+        expected_bytes = b"\x01" * 32
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "a" * 40
+        mock_contract.functions.agreementId.return_value.call.return_value = (
+            expected_bytes
+        )
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = AgreementManagerContract(mock_w3)
+        result = wrapper.agreement_id("seed-value", "0x" + "a" * 40)
+
+        assert result == expected_bytes
+        mock_contract.functions.agreementId.assert_called_once_with(
+            "seed-value", "0x" + "a" * 40
+        )
+
+
+class TestEscrowPaymentContract:
+    """Tests for EscrowPaymentContract methods."""
+
+    @pytest.fixture
+    def mock_w3(self) -> MagicMock:
+        """Create mock Web3 instance."""
+        w3 = MagicMock()
+        w3.eth.chain_id = 100
+        return w3
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_hash_values_returns_bytes(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test that hash_values returns bytes from the contract function."""
+        from mech_client.infrastructure.nvm.contracts.escrow_payment import (  # pylint: disable=import-outside-toplevel
+            EscrowPaymentContract,
+        )
+
+        expected_bytes = b"\x02" * 32
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "b" * 40
+        mock_contract.functions.hashValues.return_value.call.return_value = (
+            expected_bytes
+        )
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = EscrowPaymentContract(mock_w3)
+        receiver = "0x" + "c" * 40
+        result = wrapper.hash_values(
+            did="did:nv:test",
+            amounts=[100, 200],
+            receivers=[receiver],
+            sender=receiver,
+            receiver=receiver,
+            token_address="0x" + "0" * 40,
+            lock_condition_id=b"\x00" * 32,
+            release_condition_id=b"\x01" * 32,
+        )
+
+        assert result == expected_bytes
+        mock_contract.functions.hashValues.assert_called_once()
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_generate_id_returns_bytes(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test that generate_id returns bytes from the contract function."""
+        from mech_client.infrastructure.nvm.contracts.escrow_payment import (  # pylint: disable=import-outside-toplevel
+            EscrowPaymentContract,
+        )
+
+        expected_bytes = b"\x03" * 32
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "b" * 40
+        mock_contract.functions.generateId.return_value.call.return_value = (
+            expected_bytes
+        )
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = EscrowPaymentContract(mock_w3)
+        result = wrapper.generate_id(b"\x00" * 32, b"\x01" * 32)
+
+        assert result == expected_bytes
+        mock_contract.functions.generateId.assert_called_once_with(
+            b"\x00" * 32, b"\x01" * 32
+        )
+
+
+class TestLockPaymentContract:
+    """Tests for LockPaymentContract methods."""
+
+    @pytest.fixture
+    def mock_w3(self) -> MagicMock:
+        """Create mock Web3 instance."""
+        w3 = MagicMock()
+        w3.eth.chain_id = 100
+        return w3
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_hash_values_returns_bytes(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test that hash_values returns bytes from the contract function."""
+        from mech_client.infrastructure.nvm.contracts.lock_payment import (  # pylint: disable=import-outside-toplevel
+            LockPaymentContract,
+        )
+
+        expected_bytes = b"\x04" * 32
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "d" * 40
+        mock_contract.functions.hashValues.return_value.call.return_value = (
+            expected_bytes
+        )
+        mock_load_contract.return_value = mock_contract
+
+        reward_addr = "0x" + "e" * 40
+        token_addr = "0x" + "0" * 40
+        wrapper = LockPaymentContract(mock_w3)
+        result = wrapper.hash_values(
+            did="did:nv:lock-test",
+            reward_address=reward_addr,
+            token_address=token_addr,
+            amounts=[500],
+            receivers=[reward_addr],
+        )
+
+        assert result == expected_bytes
+        mock_contract.functions.hashValues.assert_called_once_with(
+            "did:nv:lock-test", reward_addr, token_addr, [500], [reward_addr]
+        )
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_generate_id_returns_bytes(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test that generate_id returns bytes from the contract function."""
+        from mech_client.infrastructure.nvm.contracts.lock_payment import (  # pylint: disable=import-outside-toplevel
+            LockPaymentContract,
+        )
+
+        expected_bytes = b"\x05" * 32
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "d" * 40
+        mock_contract.functions.generateId.return_value.call.return_value = (
+            expected_bytes
+        )
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = LockPaymentContract(mock_w3)
+        result = wrapper.generate_id(b"\x00" * 32, b"\x01" * 32)
+
+        assert result == expected_bytes
+        mock_contract.functions.generateId.assert_called_once_with(
+            b"\x00" * 32, b"\x01" * 32
+        )
+
+
+class TestNeverminedConfigContract:
+    """Tests for NeverminedConfigContract methods."""
+
+    @pytest.fixture
+    def mock_w3(self) -> MagicMock:
+        """Create mock Web3 instance."""
+        w3 = MagicMock()
+        w3.eth.chain_id = 100
+        return w3
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_get_fee_receiver_returns_address(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test that get_fee_receiver returns the address from the contract function."""
+        from mech_client.infrastructure.nvm.contracts.nevermined_config import (  # pylint: disable=import-outside-toplevel
+            NeverminedConfigContract,
+        )
+
+        expected_address = "0x" + "f" * 40
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "1" * 40
+        mock_contract.functions.getFeeReceiver.return_value.call.return_value = (
+            expected_address
+        )
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = NeverminedConfigContract(mock_w3)
+        result = wrapper.get_fee_receiver()
+
+        assert result == expected_address
+        mock_contract.functions.getFeeReceiver.assert_called_once()
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_get_marketplace_fee_returns_int(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test that get_marketplace_fee returns an integer from the contract function."""
+        from mech_client.infrastructure.nvm.contracts.nevermined_config import (  # pylint: disable=import-outside-toplevel
+            NeverminedConfigContract,
+        )
+
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "1" * 40
+        mock_contract.functions.getMarketplaceFee.return_value.call.return_value = 1000
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = NeverminedConfigContract(mock_w3)
+        result = wrapper.get_marketplace_fee()
+
+        assert result == 1000
+        mock_contract.functions.getMarketplaceFee.assert_called_once()
+
+
+class TestNFTContract:
+    """Tests for NFTContract.get_balance."""
+
+    @pytest.fixture
+    def mock_w3(self) -> MagicMock:
+        """Create mock Web3 instance."""
+        w3 = MagicMock()
+        w3.eth.chain_id = 100
+        return w3
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_get_balance_calls_balance_of_with_checksummed_address(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test get_balance checksums the address and returns the balance."""
+        from mech_client.infrastructure.nvm.contracts.nft import (  # pylint: disable=import-outside-toplevel
+            NFTContract,
+        )
+
+        raw_address = "0x" + "1" * 40
+        checksummed_address = "0x" + "1" * 40  # already checksummed for this test
+        mock_w3.to_checksum_address.return_value = checksummed_address
+
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "2" * 40
+        mock_contract.functions.balanceOf.return_value.call.return_value = 5
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = NFTContract(mock_w3)
+        result = wrapper.get_balance(raw_address, "42")
+
+        assert result == 5
+        mock_w3.to_checksum_address.assert_called_with(raw_address)
+        mock_contract.functions.balanceOf.assert_called_once_with(
+            checksummed_address, 42
+        )
+
+
+class TestTokenContract:
+    """Tests for TokenContract.get_balance."""
+
+    @pytest.fixture
+    def mock_w3(self) -> MagicMock:
+        """Create mock Web3 instance."""
+        w3 = MagicMock()
+        w3.eth.chain_id = 100
+        return w3
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_get_balance_calls_balance_of_with_checksummed_address(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test get_balance checksums the address and returns the token balance."""
+        from mech_client.infrastructure.nvm.contracts.token import (  # pylint: disable=import-outside-toplevel
+            TokenContract,
+        )
+
+        raw_address = "0x" + "1" * 40
+        checksummed_address = "0x" + "1" * 40
+        mock_w3.to_checksum_address.return_value = checksummed_address
+
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "3" * 40
+        mock_contract.functions.balanceOf.return_value.call.return_value = 750
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = TokenContract(mock_w3)
+        result = wrapper.get_balance(raw_address)
+
+        assert result == 750
+        mock_w3.to_checksum_address.assert_called_with(raw_address)
+        mock_contract.functions.balanceOf.assert_called_once_with(checksummed_address)
+
+
+class TestNVMContractFactorySubscriptionNames:
+    """Tests for NVMContractFactory.subscription_contract_names method."""
+
+    def test_subscription_contract_names_with_token(self) -> None:
+        """Test that include_token=True appends 'token' to the contract names tuple."""
+        from mech_client.infrastructure.nvm.contracts.factory import (  # pylint: disable=import-outside-toplevel
+            NVMContractFactory,
+        )
+
+        names = NVMContractFactory.subscription_contract_names(include_token=True)
+
+        assert "token" in names
+
+    def test_subscription_contract_names_without_token(self) -> None:
+        """Test that include_token=False does not include 'token' in the contract names tuple."""
+        from mech_client.infrastructure.nvm.contracts.factory import (  # pylint: disable=import-outside-toplevel
+            NVMContractFactory,
+        )
+
+        names = NVMContractFactory.subscription_contract_names(include_token=False)
+
+        assert "token" not in names
+
+
+class TestTransferNFTContract:
+    """Tests for TransferNFTContract methods."""
+
+    @pytest.fixture
+    def mock_w3(self) -> MagicMock:
+        """Create mock Web3 instance."""
+        w3 = MagicMock()
+        w3.eth.chain_id = 100
+        return w3
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_hash_values_returns_bytes(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test that hash_values returns bytes from the contract function."""
+        from mech_client.infrastructure.nvm.contracts.transfer_nft import (  # pylint: disable=import-outside-toplevel
+            TransferNFTContract,
+        )
+
+        expected_bytes = b"\x06" * 32
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "e" * 40
+        mock_contract.functions.hashValues.return_value.call.return_value = (
+            expected_bytes
+        )
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = TransferNFTContract(mock_w3)
+        from_addr = "0x" + "1" * 40
+        to_addr = "0x" + "2" * 40
+        nft_addr = "0x" + "3" * 40
+        result = wrapper.hash_values(
+            did="did:nv:test",
+            from_address=from_addr,
+            to_address=to_addr,
+            amount=1,
+            lock_condition_id=b"\x00" * 32,
+            nft_contract_address=nft_addr,
+            is_transfer=True,
+        )
+
+        assert result == expected_bytes
+        mock_contract.functions.hashValues.assert_called_once_with(
+            "did:nv:test", from_addr, to_addr, 1, b"\x00" * 32, nft_addr, True
+        )
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_generate_id_returns_bytes(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3: MagicMock,
+    ) -> None:
+        """Test that generate_id returns bytes from the contract function."""
+        from mech_client.infrastructure.nvm.contracts.transfer_nft import (  # pylint: disable=import-outside-toplevel
+            TransferNFTContract,
+        )
+
+        expected_bytes = b"\x07" * 32
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "e" * 40
+        mock_contract.functions.generateId.return_value.call.return_value = (
+            expected_bytes
+        )
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = TransferNFTContract(mock_w3)
+        result = wrapper.generate_id(b"\x00" * 32, b"\x01" * 32)
+
+        assert result == expected_bytes
+        mock_contract.functions.generateId.assert_called_once_with(
+            b"\x00" * 32, b"\x01" * 32
+        )

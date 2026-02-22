@@ -316,3 +316,73 @@ class TestSubscriptionBalanceChecker:
 
         with pytest.raises(ValueError, match="Token contract required"):
             checker.check()
+
+
+class TestAgreementBuilderFeeReceiverError:
+    """Tests for AgreementBuilder fee receiver error path."""
+
+    @pytest.fixture
+    def mock_config(self) -> MagicMock:
+        """Create mock NVM configuration."""
+        config = MagicMock()
+        config.receiver_plan = "0x" + "1" * 40
+        return config
+
+    @pytest.fixture
+    def mock_contracts(self) -> dict:
+        """Create mock NVM contracts with empty fee receiver."""
+        did_registry = MagicMock()
+        did_registry.get_ddo.return_value = {
+            "owner": "0x" + "2" * 40,
+            "metadata": "test",
+        }
+
+        agreement_manager = MagicMock()
+        agreement_manager.agreement_id.return_value = bytes.fromhex("a" * 64)
+
+        lock_payment = MagicMock()
+        lock_payment.generate_id.return_value = bytes.fromhex("b" * 64)
+        lock_payment.hash_values.return_value = bytes.fromhex("c" * 64)
+
+        transfer_nft = MagicMock()
+        transfer_nft.generate_id.return_value = bytes.fromhex("d" * 64)
+        transfer_nft.hash_values.return_value = bytes.fromhex("e" * 64)
+
+        escrow_payment = MagicMock()
+        escrow_payment.generate_id.return_value = bytes.fromhex("f" * 64)
+        escrow_payment.hash_values.return_value = bytes.fromhex("1" * 64)
+
+        # Return empty string for fee receiver to trigger the error
+        nevermined_config = MagicMock()
+        nevermined_config.get_fee_receiver.return_value = ""
+
+        return {
+            "did_registry": did_registry,
+            "agreement_manager": agreement_manager,
+            "lock_payment": lock_payment,
+            "transfer_nft": transfer_nft,
+            "escrow_payment": escrow_payment,
+            "nevermined_config": nevermined_config,
+        }
+
+    @pytest.fixture
+    def builder(self, mock_config: MagicMock, mock_contracts: dict) -> AgreementBuilder:
+        """Create AgreementBuilder instance."""
+        return AgreementBuilder(
+            config=mock_config,
+            sender="0x1234567890123456789012345678901234567890",
+            did_registry=mock_contracts["did_registry"],
+            agreement_manager=mock_contracts["agreement_manager"],
+            lock_payment=mock_contracts["lock_payment"],
+            transfer_nft=mock_contracts["transfer_nft"],
+            escrow_payment=mock_contracts["escrow_payment"],
+            nevermined_config_contract=mock_contracts["nevermined_config"],
+        )
+
+    def test_empty_fee_receiver_raises_value_error(
+        self,
+        builder: AgreementBuilder,
+    ) -> None:
+        """Test agreement building fails with empty fee receiver."""
+        with pytest.raises(ValueError, match="Marketplace fee receiver not found"):
+            builder.build("did:nvm:test123")

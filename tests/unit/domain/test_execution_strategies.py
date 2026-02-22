@@ -243,3 +243,160 @@ class TestAgentExecutorTransaction:
         # ensure build_transaction got a `from` field
         args, _ = mock_function.build_transaction.call_args
         assert args[0]["from"] == "0x" + "1" * 40
+
+
+class TestClientExecutorTransaction:
+    """Tests for ClientExecutor.execute_transaction."""
+
+    def test_execute_transaction_success(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test successful contract transaction in client mode."""
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "1" * 40
+        mock_crypto.private_key = "0x" + "a" * 64
+        mock_crypto.sign_transaction.return_value = "0xsigned"
+        mock_ledger_api.build_transaction.return_value = {"raw": "tx"}
+        mock_ledger_api.send_signed_transaction.return_value = "0xtxhash"
+
+        executor = ClientExecutor(mock_ledger_api, mock_crypto)
+
+        mock_contract = MagicMock()
+        sender = "0x" + "1" * 40
+        method_args = {"param": "value"}
+        tx_args = {"sender_address": sender, "gas": 500000}
+
+        result = executor.execute_transaction(
+            contract=mock_contract,
+            method_name="request",
+            method_args=method_args,
+            tx_args=tx_args,
+        )
+
+        assert result == "0xtxhash"
+        mock_ledger_api.build_transaction.assert_called_once_with(
+            contract_instance=mock_contract,
+            method_name="request",
+            method_args=method_args,
+            tx_args=tx_args,
+            raise_on_try=True,
+        )
+        mock_crypto.sign_transaction.assert_called_once_with({"raw": "tx"})
+        mock_ledger_api.send_signed_transaction.assert_called_once_with(
+            "0xsigned", raise_on_try=True
+        )
+
+
+class TestClientExecutorGetters:
+    """Tests for ClientExecutor getter methods."""
+
+    def test_get_sender_address_returns_crypto_address(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test get_sender_address returns the EOA crypto address."""
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "2" * 40
+        mock_crypto.private_key = "0x" + "a" * 64
+
+        executor = ClientExecutor(mock_ledger_api, mock_crypto)
+
+        assert executor.get_sender_address() == mock_crypto.address
+
+    def test_get_nonce_returns_transaction_count(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test get_nonce returns the on-chain transaction count."""
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "3" * 40
+        mock_crypto.private_key = "0x" + "a" * 64
+        mock_ledger_api.api.eth.get_transaction_count.return_value = 5
+
+        executor = ClientExecutor(mock_ledger_api, mock_crypto)
+
+        assert executor.get_nonce() == 5
+        mock_ledger_api.api.eth.get_transaction_count.assert_called_once_with(
+            mock_crypto.address
+        )
+
+
+class TestAgentExecutorTransactionNoneHash:
+    """Tests for AgentExecutor.execute_transaction failure path."""
+
+    @patch("mech_client.domain.execution.agent_executor.SafeClient")
+    def test_execute_transaction_none_hash_raises(
+        self,
+        mock_safe_client_cls: MagicMock,
+        mock_ledger_api: MagicMock,
+        mock_ethereum_client: MagicMock,
+    ) -> None:
+        """Test execute_transaction raises when Safe returns None tx_hash."""
+        mock_crypto = MagicMock()
+        mock_crypto.private_key = "0x" + "a" * 64
+        mock_ledger_api._chain_id = 100  # pylint: disable=protected-access
+
+        mock_safe_client = MagicMock()
+        mock_safe_client.get_nonce.return_value = 0
+        mock_safe_client.send_transaction.return_value = None
+        mock_safe_client_cls.return_value = mock_safe_client
+
+        executor = AgentExecutor(
+            mock_ledger_api, mock_crypto, "0x" + "b" * 40, mock_ethereum_client
+        )
+
+        mock_function = MagicMock()
+        mock_function.build_transaction.return_value = {"data": "0xdeadbeef"}
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "c" * 40
+        mock_contract.functions.__getitem__.return_value.return_value = mock_function
+
+        with pytest.raises(Exception, match="Failed to execute Safe transaction"):
+            executor.execute_transaction(
+                contract=mock_contract,
+                method_name="foo",
+                method_args={"x": 1},
+                tx_args={"sender_address": "0x" + "1" * 40, "value": 0, "gas": 12345},
+            )
+
+
+class TestAgentExecutorGetters:
+    """Tests for AgentExecutor getter methods."""
+
+    @patch("mech_client.domain.execution.agent_executor.SafeClient")
+    def test_get_sender_address_returns_safe_address(
+        self,
+        mock_safe_client_cls: MagicMock,
+        mock_ledger_api: MagicMock,
+        mock_ethereum_client: MagicMock,
+    ) -> None:
+        """Test get_sender_address returns the Safe multisig address."""
+        mock_crypto = MagicMock()
+        mock_crypto.private_key = "0x" + "a" * 64
+        safe_address = "0x" + "b" * 40
+
+        executor = AgentExecutor(
+            mock_ledger_api, mock_crypto, safe_address, mock_ethereum_client
+        )
+
+        assert executor.get_sender_address() == safe_address
+
+    @patch("mech_client.domain.execution.agent_executor.SafeClient")
+    def test_get_nonce_returns_safe_nonce(
+        self,
+        mock_safe_client_cls: MagicMock,
+        mock_ledger_api: MagicMock,
+        mock_ethereum_client: MagicMock,
+    ) -> None:
+        """Test get_nonce returns the Safe nonce."""
+        mock_crypto = MagicMock()
+        mock_crypto.private_key = "0x" + "a" * 64
+
+        mock_safe_client = MagicMock()
+        mock_safe_client.get_nonce.return_value = 3
+        mock_safe_client_cls.return_value = mock_safe_client
+
+        executor = AgentExecutor(
+            mock_ledger_api, mock_crypto, "0x" + "b" * 40, mock_ethereum_client
+        )
+
+        assert executor.get_nonce() == 3
+        mock_safe_client.get_nonce.assert_called_with()
