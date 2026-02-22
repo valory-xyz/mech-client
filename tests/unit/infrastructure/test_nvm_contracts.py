@@ -205,3 +205,191 @@ class TestDIDRegistryContract:
         # The function logs non-zero providers; verify ddo providers list is as-is
         assert real_provider in ddo["providers"]
         assert ADDRESS_ZERO in ddo["providers"]
+
+
+class TestNVMContractWrapperBase:
+    """Tests for NVMContractWrapper base class (missing line coverage)."""
+
+    @pytest.fixture
+    def mock_w3_gnosis(self) -> MagicMock:
+        """Create mock Web3 instance for Gnosis (chain_id=100)."""
+        w3 = MagicMock()
+        w3.eth.chain_id = 100  # Gnosis - supported chain
+        return w3
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_init_with_explicit_name_logs_wrapper_message(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3_gnosis: MagicMock,
+    ) -> None:
+        """Test that providing an explicit name triggers the else log branch."""
+        from mech_client.infrastructure.nvm.contracts.base import (  # pylint: disable=import-outside-toplevel
+            NVMContractWrapper,
+        )
+
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "1" * 40
+        mock_load_contract.return_value = mock_contract
+
+        # Providing an explicit name hits the `else` branch (line 69)
+        wrapper = NVMContractWrapper(mock_w3_gnosis, name="MyCustomContract")
+
+        assert wrapper.name == "MyCustomContract"
+        assert wrapper.chain_name == "gnosis"
+        mock_load_contract.assert_called_once()
+
+    def test_init_unsupported_chain_id_raises_value_error(self) -> None:
+        """Test that an unsupported chain ID raises ValueError (line 74)."""
+        from mech_client.infrastructure.nvm.contracts.base import (  # pylint: disable=import-outside-toplevel
+            NVMContractWrapper,
+        )
+
+        w3 = MagicMock()
+        w3.eth.chain_id = 99999  # Not in CHAIN_ID_TO_NAME
+
+        with pytest.raises(ValueError, match="Unsupported chain ID 99999"):
+            NVMContractWrapper(w3, name="AnyContract")
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_init_with_explicit_name_logs_loaded_at_address(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3_gnosis: MagicMock,
+    ) -> None:
+        """Test that explicit name triggers completion log showing address (line 87)."""
+        from mech_client.infrastructure.nvm.contracts.base import (  # pylint: disable=import-outside-toplevel
+            NVMContractWrapper,
+        )
+
+        expected_address = "0x" + "2" * 40
+        mock_contract = MagicMock()
+        mock_contract.address = expected_address
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = NVMContractWrapper(mock_w3_gnosis, name="ExplicitName")
+
+        # address attribute is set from contract.address
+        assert wrapper.address == expected_address
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_load_contract_info_file_not_found(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3_gnosis: MagicMock,
+    ) -> None:
+        """Test _load_contract_info raises FileNotFoundError when artifact missing."""
+        from mech_client.infrastructure.nvm.contracts.base import (  # pylint: disable=import-outside-toplevel
+            NVMContractWrapper,
+        )
+
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "3" * 40
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = NVMContractWrapper(mock_w3_gnosis, name="MissingArtifact")
+
+        # Now test _load_contract_info directly with Path.exists() returning False
+        with patch(
+            "mech_client.infrastructure.nvm.contracts.base.Path.exists",
+            return_value=False,
+        ):
+            with pytest.raises(FileNotFoundError, match="Contract artifact not found"):
+                wrapper._load_contract_info()  # pylint: disable=protected-access
+
+    @patch(
+        "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract"
+    )
+    def test_load_contract_info_success(
+        self,
+        mock_load_contract: MagicMock,
+        mock_w3_gnosis: MagicMock,
+    ) -> None:
+        """Test _load_contract_info returns dict when artifact file is found."""
+        import json  # pylint: disable=import-outside-toplevel
+
+        from mech_client.infrastructure.nvm.contracts.base import (  # pylint: disable=import-outside-toplevel
+            NVMContractWrapper,
+        )
+
+        mock_contract = MagicMock()
+        mock_contract.address = "0x" + "4" * 40
+        mock_load_contract.return_value = mock_contract
+
+        wrapper = NVMContractWrapper(mock_w3_gnosis, name="SomeContract")
+
+        artifact_content = {
+            "address": "0x" + "5" * 40,
+            "abi": [{"name": "someFunction", "type": "function"}],
+        }
+
+        with patch(
+            "mech_client.infrastructure.nvm.contracts.base.Path.exists",
+            return_value=True,
+        ):
+            with patch(
+                "builtins.open",
+                MagicMock(
+                    return_value=MagicMock(
+                        __enter__=MagicMock(
+                            return_value=MagicMock(
+                                read=MagicMock(
+                                    return_value=json.dumps(artifact_content)
+                                )
+                            )
+                        ),
+                        __exit__=MagicMock(return_value=False),
+                    )
+                ),
+            ):
+                with patch("json.load", return_value=artifact_content):
+                    info = wrapper._load_contract_info()  # pylint: disable=protected-access
+
+        assert info["address"] == artifact_content["address"]
+        assert info["abi"] == artifact_content["abi"]
+
+    def test_load_contract_uses_load_contract_info(
+        self,
+        mock_w3_gnosis: MagicMock,
+    ) -> None:
+        """Test _load_contract calls _load_contract_info and creates contract instance."""
+        from mech_client.infrastructure.nvm.contracts.base import (  # pylint: disable=import-outside-toplevel
+            NVMContractWrapper,
+        )
+
+        # Patch _load_contract only during __init__ so we can call the real method later
+        init_contract = MagicMock()
+        init_contract.address = "0x" + "6" * 40
+
+        with patch(
+            "mech_client.infrastructure.nvm.contracts.base.NVMContractWrapper._load_contract",
+            return_value=init_contract,
+        ):
+            wrapper = NVMContractWrapper(mock_w3_gnosis, name="ContractForLoadTest")
+
+        # Now _load_contract is restored to its real implementation.
+        # Test it by mocking _load_contract_info.
+        artifact_info = {
+            "address": "0xAbCdEf1234567890abcdef1234567890abcdef12",
+            "abi": [],
+        }
+        expected_contract = MagicMock()
+        mock_w3_gnosis.eth.contract.return_value = expected_contract
+
+        with patch.object(
+            wrapper, "_load_contract_info", return_value=artifact_info
+        ):
+            result = wrapper._load_contract()  # pylint: disable=protected-access
+
+        mock_w3_gnosis.to_checksum_address.assert_called_with(artifact_info["address"])
+        expected_address = mock_w3_gnosis.to_checksum_address.return_value
+        mock_w3_gnosis.eth.contract.assert_called_with(
+            address=expected_address, abi=artifact_info["abi"]
+        )
+        assert result is expected_contract

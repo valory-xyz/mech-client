@@ -22,6 +22,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import requests
 
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
@@ -479,3 +480,710 @@ class TestSendMarketplaceRequest:
         # Should call requestBatch() for multiple requests
         call_args = mock_executor.execute_transaction.call_args
         assert call_args[1]["method_name"] == "requestBatch"
+
+
+# ---------------------------------------------------------------------------
+# Additional tests for missing coverage lines
+# ---------------------------------------------------------------------------
+
+
+COMMON_PATCHES = [
+    "mech_client.services.marketplace_service.IPFSClient",
+    "mech_client.services.marketplace_service.ToolManager",
+    "mech_client.services.base_service.ExecutorFactory",
+    "mech_client.services.marketplace_service.EthereumCrypto",
+    "mech_client.services.base_service.EthereumApi",
+    "mech_client.services.base_service.get_mech_config",
+]
+
+
+def _apply_patches(test_func):  # type: ignore
+    """Helper to stack common @patch decorators bottom-up."""
+    import functools  # pylint: disable=import-outside-toplevel
+
+    for target in reversed(COMMON_PATCHES):
+        test_func = patch(target)(test_func)
+    return test_func
+
+
+def _build_service(
+    mock_config_return: MagicMock,
+    mock_ledger_api_cls: MagicMock,
+    mock_executor_factory: MagicMock,
+) -> MarketplaceService:
+    """
+    Create a MarketplaceService with common mocks pre-configured.
+
+    :param mock_config_return: Return value for get_mech_config
+    :param mock_ledger_api_cls: Mocked EthereumApi class
+    :param mock_executor_factory: Mocked ExecutorFactory class
+    :return: Configured MarketplaceService instance
+    """
+    mock_ledger_api_cls.return_value = MagicMock()
+    mock_executor_factory.create.return_value = MagicMock()
+    return MarketplaceService(
+        chain_config="gnosis",
+        agent_mode=False,
+        crypto=create_mock_crypto(),
+    )
+
+
+class TestGetMarketplaceContractError:
+    """Test _get_marketplace_contract when contract is not configured."""
+
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    def test_raises_when_no_marketplace_contract(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+    ) -> None:
+        """Test ValueError when marketplace contract is not set (line 403)."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.mech_marketplace_contract = None  # Not configured
+        mock_config.return_value = mock_mech_config
+        service = _build_service(mock_mech_config, mock_ledger_api_cls, mock_executor_factory)
+
+        with pytest.raises(ValueError, match="Marketplace contract not available"):
+            service._get_marketplace_contract()  # pylint: disable=protected-access
+
+
+class TestFetchMechInfoError:
+    """Test _fetch_mech_info when no mech address is specified."""
+
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    def test_raises_when_no_mech_address(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+    ) -> None:
+        """Test ValueError when no mech address available (line 426)."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.priority_mech_address = None  # No default address
+        mock_config.return_value = mock_mech_config
+        service = _build_service(mock_mech_config, mock_ledger_api_cls, mock_executor_factory)
+
+        with pytest.raises(ValueError, match="No mech address specified"):
+            service._fetch_mech_info(None)  # pylint: disable=protected-access
+
+
+class TestValidateToolsEdgeCases:
+    """Tests for edge cases in _validate_tools (lines 361, 366-382)."""
+
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    def test_empty_tool_identifier_raises(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager_cls: MagicMock,
+        mock_ipfs_client: MagicMock,
+    ) -> None:
+        """Test that empty string tool raises ValueError (line 361)."""
+        mock_config.return_value = create_mock_mech_config()
+        service = _build_service(
+            mock_config.return_value, mock_ledger_api_cls, mock_executor_factory
+        )
+
+        with pytest.raises(ValueError, match="Empty tool identifier"):
+            service._validate_tools(("",), 1)  # pylint: disable=protected-access
+
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    def test_get_tools_exception_logs_warning_and_returns(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager_cls: MagicMock,
+        mock_ipfs_client: MagicMock,
+    ) -> None:
+        """Test exception in get_tools is caught and logged (lines 366-373)."""
+        mock_config.return_value = create_mock_mech_config()
+
+        mock_tool_manager = MagicMock()
+        mock_tool_manager.get_tools.side_effect = AttributeError("metadata missing")
+        mock_tool_manager_cls.return_value = mock_tool_manager
+
+        service = _build_service(
+            mock_config.return_value, mock_ledger_api_cls, mock_executor_factory
+        )
+
+        # Should NOT raise — logs warning and returns silently
+        service._validate_tools(("some-tool",), 1)  # pylint: disable=protected-access
+
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    def test_empty_tools_info_logs_warning_and_returns(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager_cls: MagicMock,
+        mock_ipfs_client: MagicMock,
+    ) -> None:
+        """Test empty tools_info is handled gracefully (lines 375-382)."""
+        mock_config.return_value = create_mock_mech_config()
+
+        mock_tool_manager = MagicMock()
+        mock_tool_manager.get_tools.return_value = None  # Falsy tools_info
+        mock_tool_manager_cls.return_value = mock_tool_manager
+
+        service = _build_service(
+            mock_config.return_value, mock_ledger_api_cls, mock_executor_factory
+        )
+
+        # Should NOT raise — logs warning and returns silently
+        service._validate_tools(("some-tool",), 1)  # pylint: disable=protected-access
+
+
+class TestSendMarketplaceRequestInvalidPaymentType:
+    """Test invalid payment type bytes handling (lines 477-478)."""
+
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    def test_invalid_payment_type_hex_raises(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+    ) -> None:
+        """Test ValueError when payment_type.value is not valid hex (lines 477-478)."""
+        mock_config.return_value = create_mock_mech_config()
+        service = _build_service(
+            mock_config.return_value, mock_ledger_api_cls, mock_executor_factory
+        )
+
+        # Create a payment_type mock whose value is invalid hex
+        bad_payment_type = MagicMock()
+        bad_payment_type.value = "ZZZZZZ"  # Invalid hex
+        bad_payment_type.is_token.return_value = False
+
+        with pytest.raises(ValueError, match="Invalid payment type value"):
+            service._send_marketplace_request(  # pylint: disable=protected-access
+                marketplace_contract=MagicMock(),
+                data_hashes=["0x" + "a" * 64],
+                max_delivery_rate=10**17,
+                payment_type=bad_payment_type,
+                priority_mech="0x" + "9" * 40,
+                response_timeout=300,
+                use_prepaid=False,
+            )
+
+
+class TestSendRequestNoPriorityMech:
+    """Test send_request raises when no priority mech is configured."""
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_raises_when_no_priority_mech(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+    ) -> None:
+        """Test ValueError when no priority mech address (line 135)."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.priority_mech_address = None  # No default
+        mock_config.return_value = mock_mech_config
+        service = _build_service(mock_mech_config, mock_ledger_api_cls, mock_executor_factory)
+
+        # Patch the internal helpers that run before the priority mech check
+        with patch.object(
+            service,
+            "_get_marketplace_contract",
+            return_value=MagicMock(),
+        ):
+            with patch.object(
+                service,
+                "_fetch_mech_info",
+                return_value=(PaymentType.NATIVE, 1, 10**17),
+            ):
+                with patch.object(service, "_validate_tools"):
+                    with pytest.raises(ValueError, match="No priority mech address"):
+                        await service.send_request(
+                            prompts=("hello",),
+                            tools=("tool",),
+                            priority_mech=None,  # No override either
+                        )
+
+
+class TestSendRequestOnchainFlow:
+    """Test send_request on-chain flow (lines 122-228)."""
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OnchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.watch_for_marketplace_request_ids")
+    @patch("mech_client.services.marketplace_service.wait_for_receipt")
+    @patch("mech_client.services.marketplace_service.push_metadata_to_ipfs")
+    @patch("mech_client.services.marketplace_service.PaymentStrategyFactory")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_onchain_native_payment_flow(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_payment_factory: MagicMock,
+        mock_push_metadata: MagicMock,
+        mock_wait_receipt: MagicMock,
+        mock_watch_request_ids: MagicMock,
+        mock_onchain_watcher_cls: MagicMock,
+    ) -> None:
+        """Test full on-chain native payment flow (lines 122-228)."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.mech_marketplace_contract = "0x" + "2" * 40
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+
+        mock_executor = MagicMock()
+        mock_executor.execute_transaction.return_value = "0xtxhash"
+        mock_executor.get_sender_address.return_value = "0x" + "a" * 40
+        mock_executor_factory.create.return_value = mock_executor
+
+        service = _build_service(mock_mech_config, mock_ledger_api_cls, mock_executor_factory)
+
+        # Patch internal service methods
+        mock_contract = MagicMock()
+        mock_push_metadata.return_value = ("0x" + "b" * 64, "ipfs://hash")
+        mock_wait_receipt.return_value = {"status": 1}
+        mock_watch_request_ids.return_value = ["req-1"]
+
+        mock_watcher = AsyncMock()
+        mock_watcher.watch.return_value = {"req-1": "result"}
+        mock_onchain_watcher_cls.return_value = mock_watcher
+
+        # Mock payment strategy (NATIVE — not token, so no approval needed)
+        mock_strategy = MagicMock()
+        mock_strategy.get_balance_tracker_address.return_value = "0x" + "c" * 40
+        mock_payment_factory.create.return_value = mock_strategy
+
+        with patch.object(
+            service, "_get_marketplace_contract", return_value=mock_contract
+        ):
+            with patch.object(
+                service,
+                "_fetch_mech_info",
+                return_value=(PaymentType.NATIVE, 1, 10**17),
+            ):
+                with patch.object(service, "_validate_tools"):
+                    with patch.object(
+                        service,
+                        "_send_marketplace_request",
+                        return_value="0xtxhash",
+                    ):
+                        result = await service.send_request(
+                            prompts=("hello",),
+                            tools=("some-tool",),
+                        )
+
+        assert result["tx_hash"] == "0xtxhash"
+        assert result["request_ids"] == ["req-1"]
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OnchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.watch_for_marketplace_request_ids")
+    @patch("mech_client.services.marketplace_service.wait_for_receipt")
+    @patch("mech_client.services.marketplace_service.push_metadata_to_ipfs")
+    @patch("mech_client.services.marketplace_service.PaymentStrategyFactory")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_onchain_token_payment_flow(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_payment_factory: MagicMock,
+        mock_push_metadata: MagicMock,
+        mock_wait_receipt: MagicMock,
+        mock_watch_request_ids: MagicMock,
+        mock_onchain_watcher_cls: MagicMock,
+    ) -> None:
+        """Test on-chain token payment flow including approval (lines 174-195)."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.mech_marketplace_contract = "0x" + "2" * 40
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_mech_config.price = 10**18
+        mock_config.return_value = mock_mech_config
+
+        mock_executor = MagicMock()
+        mock_executor.execute_transaction.return_value = "0xtxhash"
+        mock_executor.get_sender_address.return_value = "0x" + "a" * 40
+        mock_executor_factory.create.return_value = mock_executor
+
+        service = _build_service(mock_mech_config, mock_ledger_api_cls, mock_executor_factory)
+
+        # Mock payment strategy with is_token() = True, sufficient balance
+        mock_strategy = MagicMock()
+        mock_strategy.get_balance_tracker_address.return_value = "0x" + "c" * 40
+        mock_strategy.check_balance.return_value = True  # Sufficient balance
+        mock_payment_factory.create.return_value = mock_strategy
+
+        mock_contract = MagicMock()
+        mock_push_metadata.return_value = ("0x" + "b" * 64, "ipfs://hash")
+        mock_wait_receipt.return_value = {"status": 1}
+        mock_watch_request_ids.return_value = ["req-1"]
+
+        mock_watcher = AsyncMock()
+        mock_watcher.watch.return_value = {"req-1": "result"}
+        mock_onchain_watcher_cls.return_value = mock_watcher
+
+        # Use TOKEN payment type (is_token() returns True)
+        token_payment_type = PaymentType.USDC_TOKEN
+
+        with patch.object(
+            service, "_get_marketplace_contract", return_value=mock_contract
+        ):
+            with patch.object(
+                service,
+                "_fetch_mech_info",
+                return_value=(token_payment_type, 1, 10**17),
+            ):
+                with patch.object(service, "_validate_tools"):
+                    with patch.object(
+                        service,
+                        "_send_marketplace_request",
+                        return_value="0xtxhash",
+                    ):
+                        result = await service.send_request(
+                            prompts=("hello",),
+                            tools=("some-tool",),
+                            use_prepaid=False,
+                        )
+
+        # Verify approval was triggered
+        mock_strategy.approve_if_needed.assert_called_once()
+        assert result["tx_hash"] == "0xtxhash"
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OnchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.watch_for_marketplace_request_ids")
+    @patch("mech_client.services.marketplace_service.wait_for_receipt")
+    @patch("mech_client.services.marketplace_service.push_metadata_to_ipfs")
+    @patch("mech_client.services.marketplace_service.PaymentStrategyFactory")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_onchain_token_insufficient_balance_raises(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_payment_factory: MagicMock,
+        mock_push_metadata: MagicMock,
+        mock_wait_receipt: MagicMock,
+        mock_watch_request_ids: MagicMock,
+        mock_onchain_watcher_cls: MagicMock,
+    ) -> None:
+        """Test that insufficient token balance raises ValueError (lines 182-185)."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.mech_marketplace_contract = "0x" + "2" * 40
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_mech_config.price = 10**18
+        mock_config.return_value = mock_mech_config
+
+        mock_executor = MagicMock()
+        mock_executor.get_sender_address.return_value = "0x" + "a" * 40
+        mock_executor_factory.create.return_value = mock_executor
+
+        service = _build_service(mock_mech_config, mock_ledger_api_cls, mock_executor_factory)
+
+        # Mock payment strategy with insufficient balance
+        mock_strategy = MagicMock()
+        mock_strategy.get_balance_tracker_address.return_value = "0x" + "c" * 40
+        mock_strategy.check_balance.return_value = False  # Insufficient
+        mock_payment_factory.create.return_value = mock_strategy
+
+        mock_push_metadata.return_value = ("0x" + "b" * 64, "ipfs://hash")
+
+        with patch.object(service, "_get_marketplace_contract", return_value=MagicMock()):
+            with patch.object(
+                service,
+                "_fetch_mech_info",
+                return_value=(PaymentType.USDC_TOKEN, 1, 10**17),
+            ):
+                with patch.object(service, "_validate_tools"):
+                    with pytest.raises(ValueError, match="Insufficient balance"):
+                        await service.send_request(
+                            prompts=("hello",),
+                            tools=("some-tool",),
+                            use_prepaid=False,
+                        )
+
+
+class TestSendOffchainRequest:
+    """Tests for _send_offchain_request method (lines 258-345)."""
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OffchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_offchain_request_success(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_offchain_watcher_cls: MagicMock,
+    ) -> None:
+        """Test successful offchain request (lines 258-344)."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+
+        mock_executor_factory.create.return_value = MagicMock()
+        mock_ledger_api_cls.return_value = MagicMock()
+
+        service = MarketplaceService(
+            chain_config="gnosis",
+            agent_mode=False,
+            crypto=create_mock_crypto(),
+        )
+
+        # Mock crypto address and signing
+        service.crypto = MagicMock()
+        service.crypto.address = "0x" + "a" * 40
+        service.crypto.sign_message.return_value = "0xsignature"
+
+        # Mock marketplace contract
+        mock_contract = MagicMock()
+        mock_contract.functions.mapNonces.return_value.call.return_value = 0
+        request_id_bytes = b"\x00" * 32
+        mock_contract.functions.getRequestId.return_value.call.return_value = (
+            request_id_bytes
+        )
+
+        # Mock watcher
+        mock_watcher = AsyncMock()
+        mock_watcher.watch.return_value = {"0" * 64: "offchain-result"}
+        mock_offchain_watcher_cls.return_value = mock_watcher
+
+        # Patch fetch_ipfs_hash and requests.post
+        with patch(
+            "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash",
+            return_value=("0x" + "b" * 64, "full-hash", '{"prompt":"hello"}'),
+        ):
+            with patch("mech_client.services.marketplace_service.requests") as mock_requests:
+                mock_response = MagicMock()
+                mock_response.json.return_value = {"status": "ok"}
+                mock_requests.post.return_value = mock_response
+                mock_requests.exceptions.RequestException = Exception
+
+                result = await service._send_offchain_request(  # pylint: disable=protected-access
+                    marketplace_contract=mock_contract,
+                    prompts=("hello",),
+                    tools=("some-tool",),
+                    priority_mech_address="0x" + "9" * 40,
+                    max_delivery_rate=10**17,
+                    payment_type=PaymentType.NATIVE,
+                    response_timeout=300,
+                    mech_offchain_url="https://mech.example.com",
+                    extra_attributes=None,
+                    timeout=30.0,
+                )
+
+        assert result["tx_hash"] is None
+        assert result["receipt"] is None
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OffchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_offchain_request_http_error_raises(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_offchain_watcher_cls: MagicMock,
+    ) -> None:
+        """Test that HTTP error from offchain endpoint raises ValueError (lines 332-333)."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+
+        mock_executor_factory.create.return_value = MagicMock()
+        mock_ledger_api_cls.return_value = MagicMock()
+
+        service = MarketplaceService(
+            chain_config="gnosis",
+            agent_mode=False,
+            crypto=create_mock_crypto(),
+        )
+
+        service.crypto = MagicMock()
+        service.crypto.address = "0x" + "a" * 40
+        service.crypto.sign_message.return_value = "0xsignature"
+
+        mock_contract = MagicMock()
+        mock_contract.functions.mapNonces.return_value.call.return_value = 0
+        mock_contract.functions.getRequestId.return_value.call.return_value = b"\x00" * 32
+
+        with patch(
+            "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash",
+            return_value=("0x" + "b" * 64, "full-hash", '{"prompt":"hello"}'),
+        ):
+            with patch("mech_client.services.marketplace_service.requests") as mock_requests:
+                # Simulate HTTP error
+                mock_requests.exceptions.RequestException = requests.exceptions.RequestException
+                mock_requests.post.side_effect = requests.exceptions.RequestException(
+                    "connection refused"
+                )
+
+                with pytest.raises(ValueError, match="Failed to send offchain request"):
+                    await service._send_offchain_request(  # pylint: disable=protected-access
+                        marketplace_contract=mock_contract,
+                        prompts=("hello",),
+                        tools=("some-tool",),
+                        priority_mech_address="0x" + "9" * 40,
+                        max_delivery_rate=10**17,
+                        payment_type=PaymentType.NATIVE,
+                        response_timeout=300,
+                        mech_offchain_url="https://mech.example.com",
+                        extra_attributes=None,
+                        timeout=30.0,
+                    )
+
+
+class TestSendRequestOffchainBranch:
+    """Test send_request routing to _send_offchain_request (lines 141-154)."""
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_send_request_routes_to_offchain(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+    ) -> None:
+        """Test that use_offchain=True calls _send_offchain_request (line 141-154)."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+
+        mock_executor_factory.create.return_value = MagicMock()
+        mock_ledger_api_cls.return_value = MagicMock()
+
+        service = MarketplaceService(
+            chain_config="gnosis",
+            agent_mode=False,
+            crypto=create_mock_crypto(),
+        )
+
+        offchain_result = {
+            "tx_hash": None,
+            "request_ids": ["hex-id"],
+            "delivery_results": {},
+            "receipt": None,
+        }
+
+        with patch.object(service, "_get_marketplace_contract", return_value=MagicMock()):
+            with patch.object(
+                service,
+                "_fetch_mech_info",
+                return_value=(PaymentType.NATIVE, 1, 10**17),
+            ):
+                with patch.object(service, "_validate_tools"):
+                    with patch.object(
+                        service,
+                        "_send_offchain_request",
+                        new_callable=AsyncMock,
+                        return_value=offchain_result,
+                    ) as mock_offchain:
+                        result = await service.send_request(
+                            prompts=("hello",),
+                            tools=("tool",),
+                            use_offchain=True,
+                            mech_offchain_url="https://mech.example.com",
+                        )
+
+        mock_offchain.assert_called_once()
+        assert result["tx_hash"] is None
