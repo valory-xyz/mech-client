@@ -24,67 +24,21 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 - **Error handling**: Test both success and failure paths
 - **Async support**: Test async components with anyio
 
-### Recent Additions (v0.18.2)
-
-**168 new tests added** for bug fixes, CLI commands, RPC validation, and comprehensive test coverage:
-
-**RPC Chain ID Validation (20 tests)**
-- **20 tests** for RPC chain ID validation (new file: `test_chain_config.py`)
-  - Tests `get_rpc_chain_id()` function for querying RPC endpoints
-  - Tests chain ID mismatch warnings in `LedgerConfig`
-  - Tests environment variable overrides for ledger configuration
-  - Validates MECHX_CHAIN_RPC points to correct chain and warns on mismatch
-
-**Bug Fixes & Test Coverage Improvements (30 tests)**
-- **16 tests** for `load_rpc_from_operate()` utility (new file: `test_operate_config_loader.py`)
-- **13 tests** for configuration priority order in `LedgerConfig` and `MechConfig`
-- **7 tests** for integration testing with real `mechs.json` (new file: `test_config_loader_integration.py`)
-- Tests validate: environment variable > operate config > default priority
-- Tests cover agent mode vs client mode behavior differences
-
-**CLI Command Tests (139 tests in 7 new files)**
-- **9 tests** for `mech list` command (new file: `test_mech_cmd.py`)
-  - Tests realistic GraphQL response structure with nested metadata lists
-  - Tests default subgraph URL behavior and environment variable overrides
-- **21 tests** for `tool` commands (new file: `test_tool_cmd.py`)
-  - Tests tool list, describe, and schema subcommands
-  - Tests validation, error handling, and edge cases
-- **25 tests** for `ipfs` commands (new file: `test_ipfs_cmd.py`)
-  - Tests file upload and prompt metadata upload
-  - Tests unicode, special characters, and various file types
-- **19 tests** for `setup` command (new file: `test_setup_cmd.py`)
-  - Tests all supported chains (gnosis, base, polygon, optimism)
-  - Tests unsupported chains and validation errors
-  - Tests service setup and wallet display functionality
-- **25 tests** for `deposit` commands (new file: `test_deposit_cmd.py`)
-  - Tests deposit native and deposit token commands
-  - Tests all chains and token types (OLAS, USDC)
-  - Tests validation and service failures
-- **19 tests** for `subscription` command (new file: `test_subscription_cmd.py`)
-  - Tests subscription purchase for gnosis and base chains
-  - Tests output formatting with agreement IDs and credits
-  - Tests validation and async service operations
-- **21 tests** for `request` command (new file: `test_request_cmd.py`)
-  - Tests single and batch requests with multiple tools/prompts
-  - Tests priority mech, use-prepaid, and use-offchain flags
-  - Tests extra attributes, timeout, and edge cases
-
 ### Test Statistics
 
-- **Total tests**: 464 (excluding unsupported trio backend)
-- **Test files**: 31
-- **Test classes**: 110+
-- **Coverage**: ~65% (target: 70%)
+- **Total tests**: 689 (excluding unsupported trio backend)
+- **Test files**: 41
+- **Coverage**: 100%
 
 ### Test Breakdown by Layer
 
 | Layer | Tests | Files | Coverage Focus |
 |-------|-------|-------|----------------|
-| CLI | 139 | 7 | Command routing, output formatting, error handling, wallet commands |
-| Utils | 75 | 2 | Validators, error handling |
-| Domain | 80 | 7 | Strategies, watchers, factories, tools, subscriptions |
-| Services | 41 | 5 | Orchestration, workflows, deposits, setup, subscriptions |
-| Infrastructure | 130 | 13 | Adapters, clients, loaders, Safe, NVM contracts, **config priority, RPC validation** |
+| CLI | 159 | 10 | Command routing, output formatting, error handling, wallet commands |
+| Utils | 143 | 3 | Validators, error handling, logger |
+| Domain | 135 | 7 | Strategies, watchers, factories, tools, subscriptions |
+| Services | 55 | 5 | Orchestration, workflows, deposits, setup, subscriptions |
+| Infrastructure | 197 | 16 | Adapters, clients, loaders, Safe, NVM contracts, config priority, RPC validation |
 
 ## Test Structure
 
@@ -92,52 +46,59 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 tests/
 ├── conftest.py                              # Shared fixtures for all tests
 ├── pytest.ini                               # Pytest configuration
-├── unit/                                    # Unit tests
+├── unit/                                    # Unit tests (689 tests, 100% coverage)
 │   ├── __init__.py
-│   ├── cli/                                 # CLI layer tests (139 tests)
+│   ├── cli/                                 # CLI layer tests (159 tests)
 │   │   ├── __init__.py
-│   │   ├── test_mech_cmd.py                # 9 tests (mech list command)
-│   │   ├── test_tool_cmd.py                # 21 tests (tool commands)
-│   │   ├── test_ipfs_cmd.py                # 25 tests (ipfs commands)
-│   │   ├── test_setup_cmd.py               # 19 tests (setup command)
-│   │   ├── test_deposit_cmd.py             # 25 tests (deposit native/token)
-│   │   ├── test_subscription_cmd.py        # 19 tests (subscription purchase)
-│   │   └── test_request_cmd.py             # 21 tests (request command)
-│   ├── utils/                               # Utils layer tests (75 tests)
+│   │   ├── test_mech_cmd.py
+│   │   ├── test_tool_cmd.py
+│   │   ├── test_ipfs_cmd.py
+│   │   ├── test_setup_cmd.py
+│   │   ├── test_deposit_cmd.py
+│   │   ├── test_subscription_cmd.py
+│   │   ├── test_request_cmd.py
+│   │   ├── test_validators.py
+│   │   ├── test_common.py
+│   │   └── test_main.py
+│   ├── utils/                               # Utils layer tests (143 tests)
 │   │   ├── __init__.py
-│   │   ├── test_validators.py              # 45 tests
-│   │   └── test_errors.py                  # 30 tests
-│   ├── domain/                              # Domain layer tests (80 tests)
+│   │   ├── test_validators.py
+│   │   ├── test_errors.py
+│   │   └── test_logger.py
+│   ├── domain/                              # Domain layer tests (135 tests)
 │   │   ├── __init__.py
-│   │   ├── test_payment_strategies.py      # 15 tests
-│   │   ├── test_execution_strategies.py    # 4 tests
-│   │   ├── test_delivery_watchers.py       # 11 tests (asyncio)
-│   │   ├── test_offchain_watcher.py        # 14 tests (asyncio)
-│   │   ├── test_tool_manager.py            # 22 tests
-│   │   ├── test_subscription_builders.py   # 8 tests (NVM subscription)
-│   │   └── test_subscription_manager.py    # 6 tests (NVM subscription)
-│   ├── services/                            # Service layer tests (41 tests)
+│   │   ├── test_payment_strategies.py
+│   │   ├── test_execution_strategies.py
+│   │   ├── test_delivery_watchers.py       # asyncio
+│   │   ├── test_offchain_watcher.py        # asyncio
+│   │   ├── test_tool_manager.py
+│   │   ├── test_subscription_builders.py
+│   │   └── test_subscription_manager.py
+│   ├── services/                            # Service layer tests (55 tests)
 │   │   ├── __init__.py
-│   │   ├── test_tool_service.py            # 10 tests
-│   │   ├── test_marketplace_service.py     # 9 tests
-│   │   ├── test_deposit_service.py         # 10 tests
-│   │   ├── test_setup_service.py           # 7 tests
-│   │   └── test_subscription_service.py    # 5 tests (NVM subscription)
-│   └── infrastructure/                      # Infrastructure layer tests (130 tests)
+│   │   ├── test_tool_service.py
+│   │   ├── test_marketplace_service.py
+│   │   ├── test_deposit_service.py
+│   │   ├── test_setup_service.py
+│   │   └── test_subscription_service.py
+│   └── infrastructure/                      # Infrastructure layer tests (197 tests)
 │       ├── __init__.py
-│       ├── test_config_loader.py           # 20 tests (13 config priority tests)
-│       ├── test_config_loader_integration.py # 7 tests (integration with mechs.json)
-│       ├── test_chain_config.py            # 20 tests (RPC chain ID validation)
-│       ├── test_operate_config_loader.py   # 16 tests (operate RPC loading)
-│       ├── test_ipfs_client.py             # 8 tests
-│       ├── test_abi_loader.py              # 7 tests
-│       ├── test_contracts.py               # 3 tests
-│       ├── test_receipt_waiter.py          # 8 tests
-│       ├── test_subgraph_client.py         # 9 tests
-│       ├── test_subgraph_queries.py        # 15 tests
-│       ├── test_safe_client.py             # 13 tests
-│       ├── test_nvm_config.py              # 9 tests (NVM subscription)
-│       └── test_nvm_contracts.py           # 3 tests (NVM subscription)
+│       ├── test_abi_loader.py
+│       ├── test_chain_config.py
+│       ├── test_config_loader.py
+│       ├── test_config_loader_integration.py
+│       ├── test_contracts.py
+│       ├── test_environment_config.py
+│       ├── test_ipfs_client.py
+│       ├── test_ipfs_metadata.py
+│       ├── test_nvm_config.py
+│       ├── test_nvm_contracts.py
+│       ├── test_operate_config_loader.py
+│       ├── test_operate_manager.py
+│       ├── test_receipt_waiter.py
+│       ├── test_safe_client.py
+│       ├── test_subgraph_client.py
+│       └── test_subgraph_queries.py
 └── integration/                             # Integration tests (future)
     └── test_cli_commands.py                 # End-to-end CLI tests
 ```
@@ -390,10 +351,10 @@ def test_with_fixture(mock_ledger_api: MagicMock) -> None:
 
 ### 6. Async Testing
 
-Use `@pytest.mark.anyio` for async tests:
+Use `@pytest.mark.asyncio` for async tests (configured with `asyncio_mode = strict` in `pytest.ini`):
 
 ```python
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_delivery_watcher_success(
     mock_contract: MagicMock,
     mock_ledger_api: MagicMock,
@@ -877,18 +838,12 @@ def test_payment_strategy_good(mock_ledger_api: MagicMock) -> None:
 
 ### Current Coverage
 
-- **Overall**: ~40%
-- **Utils**: ~90% (high priority, well-tested)
-- **Domain**: ~70% (strategies and watchers covered)
-- **Services**: ~40% (core flows covered)
-- **Infrastructure**: ~50% (adapters covered)
+- **Overall**: 100% (2648 lines)
+- **All layers**: 100%
 
 ### Target Coverage
 
-- **Overall**: 70%
-- **Critical paths**: 90%+ (payment, execution, validation)
-- **Infrastructure adapters**: 60%+ (focus on error handling)
-- **CLI**: 50%+ (focus on command routing)
+- **Overall**: 100% — maintain this as a hard requirement
 
 ### Measuring Coverage
 
@@ -906,7 +861,7 @@ poetry run pytest tests/unit/ --cov=mech_client --cov-report=term
 poetry run pytest tests/unit/ --cov=mech_client --cov-report=term-missing
 
 # Fail if coverage below threshold
-poetry run pytest tests/unit/ --cov=mech_client --cov-fail-under=40
+poetry run pytest tests/unit/ --cov=mech_client --cov-fail-under=100
 ```
 
 ### Coverage Exclusions
@@ -955,7 +910,7 @@ Tests run automatically on:
 CI Requirements:
 - ✅ All tests pass
 - ✅ All linters pass (pylint must be 10.00/10)
-- ✅ Coverage doesn't decrease
+- ✅ Coverage remains at 100%
 
 ## Troubleshooting
 
