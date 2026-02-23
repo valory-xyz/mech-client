@@ -5,6 +5,8 @@ on:
       - develop
       - main
   pull_request:
+permissions:
+  contents: read
 jobs:
   linter_checks:
     continue-on-error: False
