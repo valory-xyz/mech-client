@@ -68,7 +68,13 @@ jobs:
           poetry install
       - name: Run unit tests
         run: |
-          poetry run pytest tests/unit -v --tb=short -k "not trio" --cov=mech_client --cov-report=term-missing --cov-fail-under=100
+          poetry run pytest tests/unit -v --tb=short -k "not trio" --cov=mech_client --cov-report=term-missing --cov-report=xml --cov-fail-under=100
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
       # Integration tests disabled - no tests in tests/integration directory yet
       # - name: Run integration tests
       #   run: |

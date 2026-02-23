@@ -6,8 +6,8 @@
 [![License](https://img.shields.io/pypi/l/mech-client)](https://github.com/valory-xyz/mech-client/blob/main/LICENSE)
 [![Downloads](https://img.shields.io/pypi/dm/mech-client)](https://pypi.org/project/mech-client/)
 
-[![Sanity checks and tests](https://github.com/valory-xyz/mech-client/workflows/main_workflow/badge.svg?branch=main)](https://github.com/valory-xyz/mech-client/actions/workflows/workflow.yml)
-[![Coverage](https://codecov.io/gh/valory-xyz/mech-client/graph/badge.svg)](https://codecov.io/gh/valory-xyz/mech-client)
+[![Sanity checks and tests](https://github.com/valory-xyz/mech-client/actions/workflows/workflow.yml/badge.svg?branch=main)](https://github.com/valory-xyz/mech-client/actions/workflows/workflow.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/valory-xyz/mech-client)](https://codecov.io/gh/valory-xyz/mech-client)
 [![flake8](https://img.shields.io/badge/lint-flake8-yellow)](https://flake8.pycqa.org)
 [![mypy](https://img.shields.io/badge/static%20check-mypy-blue)](https://github.com/python/mypy)
 [![Black](https://img.shields.io/badge/code%20style-black-black)](https://github.com/psf/black)
