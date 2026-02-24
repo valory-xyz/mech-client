@@ -311,7 +311,7 @@ Off-chain requests bypass the on-chain transaction for sending the request and i
 
 When you use the `--use-offchain` flag:
 
-1. The client computes the IPFS hash of your prompt metadata locally (without uploading to IPFS).
+1. The client computes the IPFS hash of your request metadata locally (without uploading to IPFS).
 2. The client signs the request ID with your private key.
 3. The signed request is sent via HTTP POST to the Mech's off-chain endpoint (`/send_signed_requests`).
 4. The Mech processes the request and delivers the result.
