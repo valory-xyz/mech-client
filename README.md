@@ -270,6 +270,8 @@ If you want to use a Valory mech for offchain requests, below is the list of mec
 | :---------: | :----------------------------------------: | :---------------------------------------------------: |
 |    2182     | 0xB3C6319962484602b00d5587e965946890b82101 | https://d19715222af5b940.agent.propel.autonolas.tech/ |
 
+For detailed documentation on the off-chain flow, endpoint configuration, and usage examples, see [docs/index.md - Off-Chain Requests](./docs/index.md#2-off-chain-requests).
+
 ### List tools available for a mech
 
 To list the tools available for a specific marketplace mech, use the `tool list` command. You can specify an AI Agent ID to get tools for a specific mech.

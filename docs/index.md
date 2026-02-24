@@ -303,3 +303,49 @@ Replace the placeholders as follows:
 
 The variable **result** contains the response of the mech.
 
+## 2. Off-Chain Requests
+
+Off-chain requests bypass the on-chain transaction for sending the request and instead send it directly to the Mech's HTTP endpoint. The Mech still delivers the result on-chain via the Mech Marketplace, but the initial request is transmitted off-chain, which can be faster and avoids gas costs for the request transaction itself.
+
+### 2. 1. How it works
+
+When you use the `--use-offchain` flag:
+
+1. The client computes the IPFS hash of your prompt metadata locally (without uploading to IPFS).
+2. The client signs the request ID with your private key.
+3. The signed request is sent via HTTP POST to the Mech's off-chain endpoint (`/send_signed_requests`).
+4. The Mech processes the request and delivers the result.
+5. The client polls the Mech's delivery endpoint (`/fetch_offchain_info`) to retrieve the response.
+
+No on-chain transaction is submitted for the request itself, so there is no `tx_hash` in the result.
+
+### 2. 2. Configuring the off-chain endpoint
+
+The off-chain endpoint is configured via the `MECHX_MECH_OFFCHAIN_URL` environment variable. This must point to the base URL of the Mech's HTTP server.
+
+```bash
+export MECHX_MECH_OFFCHAIN_URL='http://localhost:8000/'
+```
+
+You can also set this in your `.env` file:
+
+```bash
+# .env
+export MECHX_MECH_OFFCHAIN_URL='http://localhost:8000/'
+```
+
+### 2. 3. Sending an off-chain request
+
+#### Via the terminal
+
+```bash
+mechx request \
+  --prompts "Write a short poem" \
+  --priority-mech 0xB3C6319962484602b00d5587e965946890b82101 \
+  --tools openai-gpt-4o-2024-05-13 \
+  --chain-config gnosis \
+  --use-offchain true \
+  --key ethereum_private_key.txt
+```
+
+**Note:** The `--use-offchain` flag automatically implies `--use-prepaid` (prepaid balance is used). Ensure you have made a deposit before sending off-chain requests.
