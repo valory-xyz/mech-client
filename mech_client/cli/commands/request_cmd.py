@@ -24,7 +24,6 @@ import json
 from typing import Any, Dict, List, Optional
 
 import click
-import requests
 from click import ClickException
 
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
@@ -40,61 +39,14 @@ from mech_client.utils.validators import (
 )
 
 
-def _resolve_offchain_task_result(delivery_result: Any) -> Optional[str]:
-    """
-    Resolve offchain task result file content.
-
-    The offchain result file is stored at:
-    <gateway>/<task_result_hash>/<request_id>
-
-    :param delivery_result: Raw offchain delivery metadata
-    :return: Result content as string, or None if unavailable
-    """
-    if not isinstance(delivery_result, dict):
-        return None
-
-    task_result = delivery_result.get("task_result")
-    if not isinstance(task_result, str) or not task_result:
-        return None
-
-    request_id = delivery_result.get("request_id") or delivery_result.get("requestId")
-    if request_id is None:
-        return None
-
-    result_file_url = (
-        f"{IPFS_URL_TEMPLATE.format(task_result).rstrip('/')}/{str(request_id)}"
-    )
-
-    try:
-        response = requests.get(result_file_url, timeout=10)
-        response.raise_for_status()
-        try:
-            return json.dumps(response.json(), ensure_ascii=True)
-        except ValueError:
-            return response.text
-    except requests.exceptions.RequestException:
-        return None
-
-
-def _extract_result_text(resolved_payload: str) -> str:
-    """
-    Extract only the final mech result text from resolved payload.
-
-    :param resolved_payload: JSON/string payload fetched from offchain result file
-    :return: Final result string suitable for user output
-    """
-    try:
-        payload = json.loads(resolved_payload)
-    except ValueError:
-        return resolved_payload
-
-    if isinstance(payload, dict) and "result" in payload:
-        result = payload["result"]
-        return (
-            result if isinstance(result, str) else json.dumps(result, ensure_ascii=True)
-        )
-
-    return resolved_payload
+def _format_delivery_output(delivery_data: Any) -> str:
+    """Format delivery data for CLI output with parity across delivery modes."""
+    if isinstance(delivery_data, dict):
+        task_result = delivery_data.get("task_result")
+        if isinstance(task_result, str) and task_result:
+            return IPFS_URL_TEMPLATE.format(task_result)
+        return json.dumps(delivery_data, ensure_ascii=True, indent=2, sort_keys=True)
+    return str(delivery_data)
 
 
 @click.command()
@@ -265,13 +217,4 @@ def request(
     if result.get("delivery_results"):
         click.echo("\n✓ Delivery results:")
         for request_id, delivery_data in result["delivery_results"].items():
-            full_response = _resolve_offchain_task_result(delivery_data)
-            if full_response:
-                click.echo(
-                    f"  Request {request_id}: {_extract_result_text(full_response)}"
-                )
-            else:
-                if isinstance(delivery_data, dict):
-                    click.echo(f"  Request {request_id}: Result not available.")
-                else:
-                    click.echo(f"  Request {request_id}: {delivery_data}")
+            click.echo(f"  Request {request_id}: {_format_delivery_output(delivery_data)}")
