@@ -217,4 +217,6 @@ def request(
     if result.get("delivery_results"):
         click.echo("\n✓ Delivery results:")
         for request_id, delivery_data in result["delivery_results"].items():
-            click.echo(f"  Request {request_id}: {_format_delivery_output(delivery_data)}")
+            click.echo(
+                f"  Request {request_id}: {_format_delivery_output(delivery_data)}"
+            )
