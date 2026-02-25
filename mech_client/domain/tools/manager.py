@@ -87,6 +87,33 @@ class ToolManager:
             logger.error(f"Error fetching tools for service {service_id}: {e}")
             return None
 
+    def get_offchain_url(self, service_id: int) -> str:
+        """
+        Get the offchain URL from the mech's on-chain metadata.
+
+        Queries the complementary metadata hash contract and extracts the
+        ``url`` field published by the mech operator.
+
+        :param service_id: The service ID of the mech
+        :return: The offchain URL string
+        :raises ValueError: If metadata cannot be fetched or has no URL
+        """
+        metadata = self.fetch_tools_metadata(service_id)
+        if not metadata:
+            raise ValueError(
+                f"Could not fetch metadata for service {service_id}. "
+                f"Cannot discover offchain URL."
+            )
+
+        url = (metadata.get("url") or "").strip()
+        if not url:
+            raise ValueError(
+                f"Metadata for service {service_id} does not contain an offchain URL. "
+                f"The mech operator must publish a 'url' field in the metadata."
+            )
+
+        return url
+
     def get_tools(self, service_id: int) -> Optional[ToolsForMarketplaceMech]:
         """
         Get list of tools for a marketplace mech.
