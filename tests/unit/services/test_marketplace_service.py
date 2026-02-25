@@ -129,24 +129,6 @@ class TestMarketplaceServiceValidation:
                 )
             )
 
-    def test_send_request_validates_offchain_url_required(self) -> None:
-        """Test that use_offchain without URL raises ValueError."""
-        service = MagicMock(spec=MarketplaceService)
-        service.send_request = MarketplaceService.send_request.__get__(
-            service, MarketplaceService
-        )
-
-        with pytest.raises(ValueError, match="mech_offchain_url required"):
-            import asyncio
-
-            asyncio.run(
-                service.send_request(
-                    prompts=("prompt1",),
-                    tools=("tool1",),
-                    use_offchain=True,
-                    # Missing mech_offchain_url
-                )
-            )
 
 
 class TestGetMarketplaceContract:
@@ -1178,11 +1160,16 @@ class TestSendRequestOffchainBranch:
                         new_callable=AsyncMock,
                         return_value=offchain_result,
                     ) as mock_offchain:
+                        # Mock tool_manager.get_offchain_url for auto-discovery
+                        service.tool_manager = MagicMock()
+                        service.tool_manager.get_offchain_url.return_value = (
+                            "https://mech.example.com"
+                        )
+
                         result = await service.send_request(
                             prompts=("hello",),
                             tools=("tool",),
                             use_offchain=True,
-                            mech_offchain_url="https://mech.example.com",
                         )
 
         mock_offchain.assert_called_once()

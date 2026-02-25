@@ -40,19 +40,6 @@ class TestEnvironmentConfigLoading:
 
     @patch.dict(
         "os.environ",
-        {"MECHX_MECH_OFFCHAIN_URL": "https://offchain-mech.example.com/"},
-        clear=True,
-    )
-    def test_offchain_url_loaded_from_env(self) -> None:
-        """Test that MECHX_MECH_OFFCHAIN_URL is loaded and stored in mechx_mech_offchain_url."""
-        env_config = EnvironmentConfig.load()
-
-        assert (
-            env_config.mechx_mech_offchain_url == "https://offchain-mech.example.com/"
-        )
-
-    @patch.dict(
-        "os.environ",
         {"MECHX_GAS_LIMIT": "800000"},
         clear=True,
     )
@@ -84,7 +71,6 @@ class TestEnvironmentConfigLoading:
 
         assert env_config.mechx_chain_rpc is None
         assert env_config.mechx_subgraph_url is None
-        assert env_config.mechx_mech_offchain_url is None
         assert env_config.mechx_gas_limit is None
         assert env_config.mechx_transaction_url is None
 
@@ -93,7 +79,6 @@ class TestEnvironmentConfigLoading:
         {
             "MECHX_SUBGRAPH_URL": "https://sg.example.com/",
             "MECHX_GAS_LIMIT": "1000000",
-            "MECHX_MECH_OFFCHAIN_URL": "https://offchain.example.com/",
             "MECHX_TRANSACTION_URL": "https://tx.example.com/{transaction_digest}",
         },
         clear=True,
@@ -104,7 +89,6 @@ class TestEnvironmentConfigLoading:
 
         assert env_config.mechx_subgraph_url == "https://sg.example.com/"
         assert env_config.mechx_gas_limit == 1000000
-        assert env_config.mechx_mech_offchain_url == "https://offchain.example.com/"
         assert (
             env_config.mechx_transaction_url
             == "https://tx.example.com/{transaction_digest}"
