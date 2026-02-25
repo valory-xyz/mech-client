@@ -27,7 +27,6 @@ from click import ClickException
 
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
-from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.services.marketplace_service import MarketplaceService
 from mech_client.utils.errors.handlers import handle_cli_errors
 from mech_client.utils.validators import (
@@ -58,7 +57,7 @@ from mech_client.utils.validators import (
 @click.option(
     "--use-offchain",
     type=bool,
-    help="Use offchain mech (requires MECHX_MECH_OFFCHAIN_URL).",
+    help="Use offchain mech (URL discovered from on-chain metadata).",
 )
 @click.option(
     "--tools",
@@ -147,18 +146,6 @@ def request(
     use_offchain = use_offchain or False
     use_prepaid = use_prepaid or use_offchain
 
-    # Load environment configuration
-    env_config = EnvironmentConfig.load()
-
-    # Validate offchain URL if needed
-    if use_offchain and not env_config.mechx_mech_offchain_url:
-        raise ClickException(
-            "MECHX_MECH_OFFCHAIN_URL is required when using "
-            "--use-offchain.\n"
-            "Set it to your offchain mech HTTP endpoint:\n"
-            "  export MECHX_MECH_OFFCHAIN_URL='https://your-url'"
-        )
-
     # Validate tools
     if not tools:
         raise ClickException(
@@ -193,7 +180,6 @@ def request(
             priority_mech=priority_mech,
             use_prepaid=use_prepaid,
             use_offchain=use_offchain,
-            mech_offchain_url=env_config.mechx_mech_offchain_url,
             extra_attributes=extra_attributes_dict,
             timeout=timeout,
         )

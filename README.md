@@ -258,17 +258,13 @@ export MECHX_CHAIN_RPC=
 
 ##### Offchain Requests
 
-To use offchain requests using `--use-offchain` flag, export the `MECHX_MECH_OFFCHAIN_URL` env variable before sending requests. For example if you want to connect to a mech running locally, you can do the following
+The offchain URL is automatically discovered from the mech's on-chain metadata. No additional configuration is required — simply use the `--use-offchain` flag:
 
 ```bash
-export MECHX_MECH_OFFCHAIN_URL="http://localhost:8000/"
+mechx request --prompts "test" --tools openai-gpt-4 --use-offchain true --chain-config gnosis
 ```
 
-If you want to use a Valory mech for offchain requests, below is the list of mechs and their address and offchain urls.
-
-| AI Agent ID |           Priority Mech Address            |                     Offchain URL                      |
-| :---------: | :----------------------------------------: | :---------------------------------------------------: |
-|    2182     | 0xB3C6319962484602b00d5587e965946890b82101 | https://d19715222af5b940.agent.propel.autonolas.tech/ |
+The client queries the mech's `ComplementaryServiceMetadata` contract to find the `url` field published by the mech operator, then sends requests to that endpoint.
 
 ### List tools available for a mech
 
@@ -413,7 +409,6 @@ Additionally, you can override any configuration parameter by exporting any of t
 ```bash
 MECHX_CHAIN_RPC
 MECHX_SUBGRAPH_URL
-MECHX_MECH_OFFCHAIN_URL
 MECHX_GAS_LIMIT
 MECHX_TRANSACTION_URL
 
