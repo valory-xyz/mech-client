@@ -20,7 +20,7 @@
 """Marketplace service for orchestrating mech requests."""
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from aea_ledger_ethereum import EthereumCrypto
