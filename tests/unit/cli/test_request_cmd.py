@@ -21,6 +21,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from click.testing import CliRunner
 
 from mech_client.cli.commands.request_cmd import request
@@ -262,6 +263,12 @@ class TestRequestCommand:
             return_value={
                 "tx_hash": "0xoffchain123...",
                 "request_ids": [1],
+                "delivery_results": {
+                    "0xabc": {
+                        "request_id": "12345",
+                        "task_result": "a" * 64,
+                    }
+                },
             }
         )
         mock_marketplace_service.return_value = mock_service
@@ -292,6 +299,159 @@ class TestRequestCommand:
             call_kwargs = mock_service.send_request.call_args[1]
             assert call_kwargs["use_offchain"] is True
             assert call_kwargs["use_prepaid"] is True  # Auto-enabled with offchain
+            assert IPFS_URL_TEMPLATE.format("a" * 64) in result.output
+            assert '"task_result": "' not in result.output
+
+    @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
+    @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    def test_request_with_use_offchain_pretty_prints_metadata(
+        self,
+        mock_setup_wallet: MagicMock,
+        mock_marketplace_service: MagicMock,
+    ) -> None:
+        """Test offchain result pretty-prints nested JSON values."""
+        mock_wallet_ctx = MagicMock()
+        mock_setup_wallet.return_value = mock_wallet_ctx
+
+        mock_service = MagicMock()
+        mock_service.send_request = AsyncMock(
+            return_value={
+                "tx_hash": "0xoffchain123...",
+                "request_ids": [1],
+                "delivery_results": {
+                    "0xabc": {
+                        "request_id": "12345",
+                        "task_result": "a" * 64,
+                    }
+                },
+            }
+        )
+        mock_marketplace_service.return_value = mock_service
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("key.txt", "w") as f:
+                f.write("dummy_key")
+
+            result = runner.invoke(
+                request,
+                [
+                    "--prompts",
+                    "Test prompt",
+                    "--tools",
+                    "tool1",
+                    "--use-offchain",
+                    "true",
+                    "--chain-config",
+                    "gnosis",
+                    "--key",
+                    "key.txt",
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert IPFS_URL_TEMPLATE.format("a" * 64) in result.output
+            assert '"task_result": "' not in result.output
+
+    @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
+    @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    def test_request_with_use_offchain_requestid_key_supported(
+        self,
+        mock_setup_wallet: MagicMock,
+        mock_marketplace_service: MagicMock,
+    ) -> None:
+        """Test offchain result fetch supports requestId key."""
+        mock_wallet_ctx = MagicMock()
+        mock_setup_wallet.return_value = mock_wallet_ctx
+
+        mock_service = MagicMock()
+        mock_service.send_request = AsyncMock(
+            return_value={
+                "tx_hash": None,
+                "request_ids": ["0xabc"],
+                "delivery_results": {
+                    "0xabc": {
+                        "requestId": "67890",
+                        "task_result": "b" * 64,
+                    }
+                },
+            }
+        )
+        mock_marketplace_service.return_value = mock_service
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("key.txt", "w") as f:
+                f.write("dummy_key")
+
+            result = runner.invoke(
+                request,
+                [
+                    "--prompts",
+                    "Test prompt",
+                    "--tools",
+                    "tool1",
+                    "--use-offchain",
+                    "true",
+                    "--chain-config",
+                    "gnosis",
+                    "--key",
+                    "key.txt",
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert IPFS_URL_TEMPLATE.format("b" * 64) in result.output
+            assert '"task_result": "' not in result.output
+
+    @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
+    @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    def test_request_with_onchain_dict_delivery_result(
+        self,
+        mock_setup_wallet: MagicMock,
+        mock_marketplace_service: MagicMock,
+    ) -> None:
+        """Test on-chain dict delivery output does not trigger offchain fetch."""
+        mock_wallet_ctx = MagicMock()
+        mock_setup_wallet.return_value = mock_wallet_ctx
+
+        mock_service = MagicMock()
+        mock_service.send_request = AsyncMock(
+            return_value={
+                "tx_hash": "0xonchain123...",
+                "request_ids": [1],
+                "delivery_results": {
+                    1: {
+                        "status": "done",
+                        "result": "on-chain answer",
+                    }
+                },
+            }
+        )
+        mock_marketplace_service.return_value = mock_service
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("key.txt", "w") as f:
+                f.write("dummy_key")
+
+            result = runner.invoke(
+                request,
+                [
+                    "--prompts",
+                    "Test prompt",
+                    "--tools",
+                    "tool1",
+                    "--chain-config",
+                    "gnosis",
+                    "--key",
+                    "key.txt",
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert '"status": "done"' in result.output
+            assert '"result": "on-chain answer"' in result.output
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")

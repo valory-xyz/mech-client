@@ -20,6 +20,7 @@
 """Request command for sending AI task requests to mechs."""
 
 import asyncio
+import json
 from typing import Any, Dict, List, Optional
 
 import click
@@ -27,6 +28,7 @@ from click import ClickException
 
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
+from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from mech_client.services.marketplace_service import MarketplaceService
 from mech_client.utils.errors.handlers import handle_cli_errors
 from mech_client.utils.validators import (
@@ -34,6 +36,16 @@ from mech_client.utils.validators import (
     validate_extra_attributes,
     validate_timeout,
 )
+
+
+def _format_delivery_output(delivery_data: Any) -> str:
+    """Format delivery data for CLI output with parity across delivery modes."""
+    if isinstance(delivery_data, dict):
+        task_result = delivery_data.get("task_result")
+        if isinstance(task_result, str) and task_result:
+            return IPFS_URL_TEMPLATE.format(task_result)
+        return json.dumps(delivery_data, ensure_ascii=True, indent=2, sort_keys=True)
+    return str(delivery_data)
 
 
 @click.command()
@@ -190,5 +202,7 @@ def request(
     click.echo(f"✓ Request IDs: {result['request_ids']}")
     if result.get("delivery_results"):
         click.echo("\n✓ Delivery results:")
-        for request_id, data_url in result["delivery_results"].items():
-            click.echo(f"  Request {request_id}: {data_url}")
+        for request_id, delivery_data in result["delivery_results"].items():
+            click.echo(
+                f"  Request {request_id}: {_format_delivery_output(delivery_data)}"
+            )
