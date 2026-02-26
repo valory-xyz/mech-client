@@ -29,7 +29,6 @@ from click import ClickException
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
-from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.services.marketplace_service import MarketplaceService
 from mech_client.utils.errors.handlers import handle_cli_errors
 from mech_client.utils.validators import (

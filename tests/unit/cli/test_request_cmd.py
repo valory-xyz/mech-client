@@ -299,24 +299,17 @@ class TestRequestCommand:
             call_kwargs = mock_service.send_request.call_args[1]
             assert call_kwargs["use_offchain"] is True
             assert call_kwargs["use_prepaid"] is True  # Auto-enabled with offchain
-            assert call_kwargs["mech_offchain_url"] == "https://offchain.example.com"
             assert IPFS_URL_TEMPLATE.format("a" * 64) in result.output
             assert '"task_result": "' not in result.output
 
-    @patch("mech_client.cli.commands.request_cmd.EnvironmentConfig")
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
     def test_request_with_use_offchain_pretty_prints_metadata(
         self,
         mock_setup_wallet: MagicMock,
         mock_marketplace_service: MagicMock,
-        mock_env_config: MagicMock,
     ) -> None:
         """Test offchain result pretty-prints nested JSON values."""
-        mock_config_instance = MagicMock()
-        mock_config_instance.mechx_mech_offchain_url = "https://offchain.example.com"
-        mock_env_config.load.return_value = mock_config_instance
-
         mock_wallet_ctx = MagicMock()
         mock_setup_wallet.return_value = mock_wallet_ctx
 
@@ -360,20 +353,14 @@ class TestRequestCommand:
             assert IPFS_URL_TEMPLATE.format("a" * 64) in result.output
             assert '"task_result": "' not in result.output
 
-    @patch("mech_client.cli.commands.request_cmd.EnvironmentConfig")
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
     def test_request_with_use_offchain_requestid_key_supported(
         self,
         mock_setup_wallet: MagicMock,
         mock_marketplace_service: MagicMock,
-        mock_env_config: MagicMock,
     ) -> None:
         """Test offchain result fetch supports requestId key."""
-        mock_config_instance = MagicMock()
-        mock_config_instance.mechx_mech_offchain_url = "https://offchain.example.com"
-        mock_env_config.load.return_value = mock_config_instance
-
         mock_wallet_ctx = MagicMock()
         mock_setup_wallet.return_value = mock_wallet_ctx
 
@@ -465,40 +452,6 @@ class TestRequestCommand:
             assert result.exit_code == 0
             assert '"status": "done"' in result.output
             assert '"result": "on-chain answer"' in result.output
-
-    @patch("mech_client.cli.commands.request_cmd.EnvironmentConfig")
-    def test_request_offchain_without_url_fails(
-        self, mock_env_config: MagicMock
-    ) -> None:
-        """Test request fails when offchain URL not set."""
-        # Mock environment config without offchain URL
-        mock_config_instance = MagicMock()
-        mock_config_instance.mechx_mech_offchain_url = None
-        mock_env_config.load.return_value = mock_config_instance
-
-        runner = CliRunner()
-        with runner.isolated_filesystem():
-            with open("key.txt", "w") as f:
-                f.write("dummy_key")
-
-            result = runner.invoke(
-                request,
-                [
-                    "--prompts",
-                    "Test prompt",
-                    "--tools",
-                    "tool1",
-                    "--use-offchain",
-                    "true",
-                    "--chain-config",
-                    "gnosis",
-                    "--key",
-                    "key.txt",
-                ],
-            )
-
-            assert result.exit_code == 1
-            assert "MECHX_MECH_OFFCHAIN_URL is required" in result.output
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
