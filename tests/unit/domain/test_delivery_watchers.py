@@ -25,6 +25,7 @@ import pytest
 from web3.constants import ADDRESS_ZERO
 
 from mech_client.domain.delivery.base import DeliveryWatcher
+from mech_client.domain.delivery.offchain_watcher import OffchainDeliveryWatcher
 from mech_client.domain.delivery.onchain_watcher import OnchainDeliveryWatcher
 
 # Configure tests to use asyncio only for async functions
@@ -487,3 +488,257 @@ class TestOnchainDeliveryWatcherDataUrls:
         assert len(result) == 1
         # Verify the next call would use block 1006 (latest + 1)
         # This is implicit in the implementation
+
+
+class TestWaitForMarketplaceDeliveryDirect:
+    """Direct tests for _wait_for_marketplace_delivery covering lines 115-120."""
+
+    @pytest.mark.asyncio
+    async def test_non_zero_delivery_mech_assigned_and_early_return(
+        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test that non-zero delivery mech is stored and early return fires when all delivered."""
+        request_id = "a" * 64  # 64-char hex — valid for bytes.fromhex()
+        delivery_mech = "0x" + "1" * 40
+
+        mock_web3_contract.functions.mapRequestIdInfos.return_value.call.return_value = [
+            "data",
+            delivery_mech,
+        ]
+
+        watcher = OnchainDeliveryWatcher(
+            marketplace_contract=mock_web3_contract,
+            ledger_api=mock_ledger_api,
+            timeout=10.0,
+        )
+
+        # Call the real internal method directly
+        result = await watcher._wait_for_marketplace_delivery(  # pylint: disable=protected-access
+            [request_id]
+        )
+
+        # Lines 115-116: non-zero mech → stored in dict
+        # Line 119-120: all delivered → early return
+        assert result == {request_id: delivery_mech}
+
+
+class TestFetchDataUrlsFromMechsDirect:
+    """Direct tests for _fetch_data_urls_from_mechs covering lines 148-171."""
+
+    @pytest.mark.asyncio
+    async def test_groups_requests_by_mech_and_returns_urls(
+        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test _fetch_data_urls_from_mechs groups requests and calls watch_for_data_urls."""
+        request_id = "a" * 64
+        mech_addr = "0x" + "1" * 40
+        request_id_to_mech = {request_id: mech_addr}
+        expected_url = "https://gateway.autonolas.tech/ipfs/f01701220" + "b" * 64
+
+        mock_ledger_api.api.eth.block_number = 1000
+
+        watcher = OnchainDeliveryWatcher(
+            marketplace_contract=mock_web3_contract,
+            ledger_api=mock_ledger_api,
+            timeout=10.0,
+        )
+
+        # Mock internal helpers
+        watcher._get_deliver_event_signature = MagicMock(  # pylint: disable=protected-access
+            return_value="c" * 64
+        )
+
+        async def mock_watch_for_data_urls(
+            request_ids, from_block, mech_contract_address, mech_deliver_signature
+        ):
+            return {request_id: expected_url}
+
+        watcher.watch_for_data_urls = mock_watch_for_data_urls
+
+        result = await watcher._fetch_data_urls_from_mechs(  # pylint: disable=protected-access
+            [request_id], request_id_to_mech
+        )
+
+        assert result == {request_id: expected_url}
+
+    @pytest.mark.asyncio
+    async def test_request_without_mech_skipped(
+        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test that a request_id with no mech mapping is skipped gracefully."""
+        request_id = "a" * 64
+        # No entry for request_id in the mech map
+        request_id_to_mech: dict = {}
+
+        mock_ledger_api.api.eth.block_number = 1000
+
+        watcher = OnchainDeliveryWatcher(
+            marketplace_contract=mock_web3_contract,
+            ledger_api=mock_ledger_api,
+            timeout=10.0,
+        )
+
+        watcher._get_deliver_event_signature = MagicMock(  # pylint: disable=protected-access
+            return_value="d" * 64
+        )
+
+        result = await watcher._fetch_data_urls_from_mechs(  # pylint: disable=protected-access
+            [request_id], request_id_to_mech
+        )
+
+        assert result == {}
+
+
+class TestGetDeliverEventSignature:
+    """Direct tests for _get_deliver_event_signature covering lines 179-188."""
+
+    @patch("mech_client.domain.delivery.onchain_watcher.get_abi")
+    def test_returns_keccak_hex_for_deliver_event(
+        self,
+        mock_get_abi: MagicMock,
+        mock_web3_contract: MagicMock,
+        mock_ledger_api: MagicMock,
+    ) -> None:
+        """Test that _get_deliver_event_signature returns 64-char hex keccak256."""
+        mock_get_abi.return_value = [
+            {
+                "type": "event",
+                "name": "Deliver",
+                "inputs": [
+                    {"type": "uint256"},
+                    {"type": "bytes32"},
+                    {"type": "bytes"},
+                ],
+            }
+        ]
+
+        watcher = OnchainDeliveryWatcher(
+            marketplace_contract=mock_web3_contract,
+            ledger_api=mock_ledger_api,
+            timeout=10.0,
+        )
+
+        sig = watcher._get_deliver_event_signature()  # pylint: disable=protected-access
+
+        assert isinstance(sig, str)
+        assert len(sig) == 64  # keccak256 hex without 0x prefix
+
+    @patch("mech_client.domain.delivery.onchain_watcher.get_abi")
+    def test_raises_when_deliver_event_not_in_abi(
+        self,
+        mock_get_abi: MagicMock,
+        mock_web3_contract: MagicMock,
+        mock_ledger_api: MagicMock,
+    ) -> None:
+        """Test ValueError raised when Deliver event is not found in ABI."""
+        mock_get_abi.return_value = [
+            {"type": "function", "name": "someFunction", "inputs": []}
+        ]
+
+        watcher = OnchainDeliveryWatcher(
+            marketplace_contract=mock_web3_contract,
+            ledger_api=mock_ledger_api,
+            timeout=10.0,
+        )
+
+        with pytest.raises(ValueError, match="Deliver event not found in IMech ABI"):
+            watcher._get_deliver_event_signature()  # pylint: disable=protected-access
+
+
+class TestWatchForDataUrlsDuplicateLogContinue:
+    """Test that duplicate request_id in logs hits the continue branch (line 238)."""
+
+    @pytest.mark.asyncio
+    @patch("mech_client.domain.delivery.onchain_watcher.decode")
+    async def test_duplicate_log_hits_continue_branch(
+        self,
+        mock_decode: MagicMock,
+        mock_web3_contract: MagicMock,
+        mock_ledger_api: MagicMock,
+    ) -> None:
+        """Test continue executed when a log for an already-seen request_id arrives."""
+        req1 = "a" * 64
+        req2 = "b" * 64
+        data1 = "c" * 64
+        data2 = "d" * 64
+
+        req1_bytes = bytes.fromhex(req1)
+        req2_bytes = bytes.fromhex(req2)
+        data1_bytes = bytes.fromhex(data1)
+        data2_bytes = bytes.fromhex(data2)
+
+        # Three logs: req1, req1 duplicate (triggers continue), req2
+        mock_decode.side_effect = [
+            (req1_bytes, 0, data1_bytes),
+            (req1_bytes, 0, data1_bytes),  # duplicate → continue at line 238
+            (req2_bytes, 0, data2_bytes),
+        ]
+
+        mock_logs = [
+            {"blockNumber": 1001, "data": b"log1"},
+            {"blockNumber": 1002, "data": b"log2"},
+            {"blockNumber": 1003, "data": b"log3"},
+        ]
+        mock_ledger_api.api.eth.get_logs.return_value = mock_logs
+
+        watcher = OnchainDeliveryWatcher(
+            marketplace_contract=mock_web3_contract,
+            ledger_api=mock_ledger_api,
+            timeout=0.5,
+        )
+
+        result = await watcher.watch_for_data_urls(
+            request_ids=[req1, req2],
+            from_block=1000,
+            mech_contract_address="0x" + "1" * 40,
+            mech_deliver_signature="e" * 64,
+        )
+
+        # Both requests resolved; duplicate was skipped via continue
+        assert len(result) == 2
+        assert req1 in result
+        assert req2 in result
+        assert data1 in result[req1]
+        assert data2 in result[req2]
+
+
+class TestOffchainDeliveryWatcherContinueBranch:
+    """Test that already-resolved requests hit the continue branch (line 87)."""
+
+    @pytest.mark.asyncio
+    async def test_already_received_request_skips_fetch_on_second_poll(
+        self,
+    ) -> None:
+        """Test continue branch hit when a request_id already has a result."""
+        req1 = "ff" * 32  # 64-char hex
+        req2 = "ee" * 32  # 64-char hex
+
+        watcher = OffchainDeliveryWatcher(
+            mech_offchain_url="http://example.com",
+            timeout=10.0,
+        )
+
+        # Track how many times req2 was fetched
+        req2_call_count = [0]
+
+        async def mock_fetch_offchain_data(request_id_int: str):  # type: ignore[override]
+            """Return data for req1 always; data for req2 only on second call."""
+            if request_id_int == str(int(req1, 16)):
+                return {"result": "data1"}
+            # req2: first call returns None, second call returns data
+            count = req2_call_count[0]
+            req2_call_count[0] += 1
+            if count == 0:
+                return None
+            return {"result": "data2"}
+
+        watcher._fetch_offchain_data = mock_fetch_offchain_data  # type: ignore[method-assign]  # pylint: disable=protected-access
+
+        result = await watcher.watch([req1, req2])
+
+        # Both results received; req1 hit continue on second poll iteration
+        assert len(result) == 2
+        assert result[req1] == {"result": "data1"}
+        assert result[req2] == {"result": "data2"}
+        # req2 was fetched twice (once returning None, once returning data)
+        assert req2_call_count[0] == 2

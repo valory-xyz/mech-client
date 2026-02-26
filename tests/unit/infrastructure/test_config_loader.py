@@ -35,6 +35,19 @@ class TestGetMechConfig:
         with pytest.raises(FileNotFoundError):
             get_mech_config("gnosis")
 
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_none_chain_config_uses_first_chain(
+        self, mock_load_rpc: MagicMock
+    ) -> None:
+        """Test that passing chain_config=None uses the first chain in mechs.json."""
+        mock_load_rpc.return_value = None
+
+        # Should not raise; result must be a valid MechConfig
+        config = get_mech_config(chain_config=None)
+
+        assert config.rpc_url is not None and len(config.rpc_url) > 0
+
     @patch("builtins.open", new_callable=mock_open, read_data='invalid json')
     def test_invalid_json_raises_error(self, mock_file: mock_open) -> None:
         """Test that malformed JSON raises JSONDecodeError."""

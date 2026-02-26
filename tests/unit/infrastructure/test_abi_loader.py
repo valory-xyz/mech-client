@@ -84,7 +84,7 @@ class TestGetAbiPath:
         result = get_abi_path("MechMarketplace.json")
 
         assert isinstance(result, Path)
-        assert str(result) == "/mock/abi/path/MechMarketplace.json"
+        assert result == Path("/mock/abi/path") / "MechMarketplace.json"
 
     @patch("mech_client.infrastructure.blockchain.abi_loader.ABI_DIR_PATH", Path("/another/path"))
     def test_get_abi_path_with_different_contract(self) -> None:
@@ -92,4 +92,4 @@ class TestGetAbiPath:
         result = get_abi_path("IToken.json")
 
         assert isinstance(result, Path)
-        assert str(result) == "/another/path/IToken.json"
+        assert result == Path("/another/path") / "IToken.json"

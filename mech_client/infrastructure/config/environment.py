@@ -46,7 +46,6 @@ class EnvironmentConfig:  # pylint: disable=too-many-instance-attributes
     **MECHX_* Variables (User Configuration):**
     - MECHX_CHAIN_RPC: Chain RPC endpoint URL
     - MECHX_SUBGRAPH_URL: Subgraph GraphQL endpoint URL
-    - MECHX_MECH_OFFCHAIN_URL: Offchain mech endpoint URL
     - MECHX_GAS_LIMIT: Gas limit for transactions
     - MECHX_TRANSACTION_URL: Block explorer transaction URL template
     - MECHX_LEDGER_CHAIN_ID: Override chain ID
@@ -71,7 +70,6 @@ class EnvironmentConfig:  # pylint: disable=too-many-instance-attributes
     # MECHX_* user configuration variables
     mechx_chain_rpc: Optional[str] = None
     mechx_subgraph_url: Optional[str] = None
-    mechx_mech_offchain_url: Optional[str] = None
     mechx_gas_limit: Optional[int] = None
     mechx_transaction_url: Optional[str] = None
     mechx_ledger_chain_id: Optional[int] = None
@@ -93,11 +91,6 @@ class EnvironmentConfig:  # pylint: disable=too-many-instance-attributes
         subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
         if subgraph_url:
             self.mechx_subgraph_url = subgraph_url
-
-        # MECHX_MECH_OFFCHAIN_URL - Offchain mech endpoint
-        offchain_url = os.getenv("MECHX_MECH_OFFCHAIN_URL")
-        if offchain_url:
-            self.mechx_mech_offchain_url = offchain_url
 
         # MECHX_GAS_LIMIT - Gas limit override
         gas_limit_str = os.getenv("MECHX_GAS_LIMIT")

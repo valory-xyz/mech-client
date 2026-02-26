@@ -456,6 +456,104 @@ class TestGetToolDescription:
             manager.get_tool_description("1-non-existent-tool")
 
 
+class TestGetOffchainUrl:
+    """Tests for get_offchain_url method."""
+
+    @patch("mech_client.domain.tools.manager.EthereumApi")
+    @patch("mech_client.domain.tools.manager.get_mech_config")
+    def test_get_offchain_url_returns_url_from_metadata(
+        self, mock_config: MagicMock, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test that get_offchain_url returns the URL from metadata."""
+        # Setup mocks
+        mock_config.return_value = create_mock_mech_config()
+
+        # Create manager
+        manager = ToolManager(chain_config="gnosis")
+
+        # Mock fetch_tools_metadata to return metadata with url
+        manager.fetch_tools_metadata = MagicMock(  # type: ignore
+            return_value={
+                "url": "https://mech.example.com/",
+                "tools": ["openai-gpt-4"],
+            }
+        )
+
+        # Get offchain URL
+        url = manager.get_offchain_url(service_id=42)
+
+        # Verify
+        assert url == "https://mech.example.com/"
+        manager.fetch_tools_metadata.assert_called_once_with(42)
+
+    @patch("mech_client.domain.tools.manager.EthereumApi")
+    @patch("mech_client.domain.tools.manager.get_mech_config")
+    def test_get_offchain_url_raises_when_no_url(
+        self, mock_config: MagicMock, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test that get_offchain_url raises ValueError when url key is missing."""
+        # Setup mocks
+        mock_config.return_value = create_mock_mech_config()
+
+        # Create manager
+        manager = ToolManager(chain_config="gnosis")
+
+        # Mock fetch_tools_metadata to return metadata without url
+        manager.fetch_tools_metadata = MagicMock(  # type: ignore
+            return_value={
+                "tools": ["openai-gpt-4"],
+                "toolMetadata": {},
+            }
+        )
+
+        # Should raise ValueError
+        with pytest.raises(ValueError, match="does not contain an offchain URL"):
+            manager.get_offchain_url(service_id=42)
+
+    @patch("mech_client.domain.tools.manager.EthereumApi")
+    @patch("mech_client.domain.tools.manager.get_mech_config")
+    def test_get_offchain_url_raises_when_metadata_none(
+        self, mock_config: MagicMock, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test that get_offchain_url raises ValueError when metadata is None."""
+        # Setup mocks
+        mock_config.return_value = create_mock_mech_config()
+
+        # Create manager
+        manager = ToolManager(chain_config="gnosis")
+
+        # Mock fetch_tools_metadata to return None
+        manager.fetch_tools_metadata = MagicMock(return_value=None)  # type: ignore
+
+        # Should raise ValueError
+        with pytest.raises(ValueError, match="Could not fetch metadata"):
+            manager.get_offchain_url(service_id=42)
+
+    @patch("mech_client.domain.tools.manager.EthereumApi")
+    @patch("mech_client.domain.tools.manager.get_mech_config")
+    def test_get_offchain_url_raises_when_url_empty(
+        self, mock_config: MagicMock, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test that get_offchain_url raises ValueError when url is empty string."""
+        # Setup mocks
+        mock_config.return_value = create_mock_mech_config()
+
+        # Create manager
+        manager = ToolManager(chain_config="gnosis")
+
+        # Mock fetch_tools_metadata to return metadata with empty url
+        manager.fetch_tools_metadata = MagicMock(  # type: ignore
+            return_value={
+                "url": "  ",
+                "tools": ["openai-gpt-4"],
+            }
+        )
+
+        # Should raise ValueError
+        with pytest.raises(ValueError, match="does not contain an offchain URL"):
+            manager.get_offchain_url(service_id=42)
+
+
 class TestGetToolSchema:
     """Tests for get_tool_schema method."""
 

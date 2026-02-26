@@ -286,6 +286,41 @@ class TestSubscriptionService:
         # Verify result
         assert result["status"] == "success"
 
+    @patch("mech_client.services.subscription_service.asdict")
+    @patch("mech_client.services.subscription_service.EthereumApi")
+    @patch("mech_client.services.subscription_service.get_mech_config")
+    @patch("mech_client.services.subscription_service.NVMConfig")
+    def test_agent_mode_without_safe_address_raises(
+        self,
+        mock_config_class: MagicMock,
+        mock_get_mech_config: MagicMock,
+        mock_ethereum_api_class: MagicMock,
+        mock_asdict: MagicMock,
+        mock_crypto: MagicMock,
+        mock_ledger_api: MagicMock,
+    ) -> None:
+        """Test agent mode raises ValueError when safe_address is None."""
+        from mech_client.services.subscription_service import SubscriptionService
+
+        mock_config = MagicMock()
+        mock_config_class.from_chain.return_value = mock_config
+
+        mock_mech_config = MagicMock()
+        mock_mech_config.ledger_config = MagicMock()
+        mock_get_mech_config.return_value = mock_mech_config
+
+        mock_asdict.return_value = {}
+        mock_ethereum_api_class.return_value = mock_ledger_api
+
+        with pytest.raises(ValueError, match="safe_address is required in agent mode"):
+            SubscriptionService(
+                chain_config="gnosis",
+                crypto=mock_crypto,
+                agent_mode=True,
+                ethereum_client=None,
+                safe_address=None,
+            )
+
     @patch("mech_client.services.subscription_service.SubscriptionManager")
     @patch("mech_client.services.subscription_service.SubscriptionBalanceChecker")
     @patch("mech_client.services.subscription_service.FulfillmentBuilder")
@@ -365,3 +400,87 @@ class TestSubscriptionService:
 
         # Verify manager called with custom plan DID
         mock_manager.purchase_subscription.assert_called_once_with(custom_plan)
+
+    @patch("mech_client.services.subscription_service.SubscriptionManager")
+    @patch("mech_client.services.subscription_service.SubscriptionBalanceChecker")
+    @patch("mech_client.services.subscription_service.FulfillmentBuilder")
+    @patch("mech_client.services.subscription_service.AgreementBuilder")
+    @patch("mech_client.services.subscription_service.NVMContractFactory")
+    @patch("mech_client.services.subscription_service.ExecutorFactory")
+    @patch("mech_client.services.subscription_service.asdict")
+    @patch("mech_client.services.subscription_service.EthereumApi")
+    @patch("mech_client.services.subscription_service.get_mech_config")
+    @patch("mech_client.services.subscription_service.NVMConfig")
+    def test_purchase_subscription_with_token_approval(
+        self,
+        mock_config_class: MagicMock,
+        mock_get_mech_config: MagicMock,
+        mock_ethereum_api_class: MagicMock,
+        mock_asdict: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_contract_factory: MagicMock,
+        mock_agreement_builder_class: MagicMock,
+        mock_fulfillment_builder_class: MagicMock,
+        mock_balance_checker_class: MagicMock,
+        mock_manager_class: MagicMock,
+        mock_crypto: MagicMock,
+        mock_ledger_api: MagicMock,
+    ) -> None:
+        """Test subscription purchase when token approval is required (Base chain path)."""
+        from mech_client.services.subscription_service import SubscriptionService
+
+        # Setup mocks — token approval required (Base chain)
+        mock_config = MagicMock()
+        mock_config.plan_did = "did:nvm:base"
+        mock_config.requires_token_approval.return_value = True  # triggers line 161
+        mock_config_class.from_chain.return_value = mock_config
+
+        mock_mech_config = MagicMock()
+        mock_mech_config.ledger_config = MagicMock()
+        mock_get_mech_config.return_value = mock_mech_config
+
+        mock_asdict.return_value = {}
+        mock_ethereum_api_class.return_value = mock_ledger_api
+
+        mock_executor = MagicMock()
+        mock_executor_factory.create.return_value = mock_executor
+
+        # Include the "token" contract (required when requires_token_approval=True)
+        mock_token_contract = MagicMock()
+        mock_contracts = {
+            "did_registry": MagicMock(),
+            "agreement_manager": MagicMock(),
+            "lock_payment": MagicMock(),
+            "transfer_nft": MagicMock(),
+            "escrow_payment": MagicMock(),
+            "nevermined_config": MagicMock(),
+            "nft_sales": MagicMock(),
+            "subscription_provider": MagicMock(),
+            "nft": MagicMock(),
+            "token": mock_token_contract,
+        }
+        mock_contract_factory.subscription_contract_names.return_value = tuple(
+            mock_contracts.keys()
+        )
+        mock_contract_factory.create_all.return_value = mock_contracts
+
+        mock_manager = MagicMock()
+        mock_manager.purchase_subscription.return_value = {"status": "success"}
+        mock_manager_class.return_value = mock_manager
+
+        service = SubscriptionService(
+            chain_config="base",
+            crypto=mock_crypto,
+            agent_mode=False,
+            ethereum_client=None,
+            safe_address=None,
+        )
+
+        result = service.purchase_subscription()
+
+        # Verify contract factory called with include_token=True
+        mock_contract_factory.subscription_contract_names.assert_called_once_with(
+            include_token=True
+        )
+        # Verify result
+        assert result["status"] == "success"

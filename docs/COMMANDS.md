@@ -55,12 +55,11 @@ mechx request --priority-mech 0x... --tools tool1 --prompts "..."
    └─ Olas Operate Middleware (fetch safe address)
 
 OPTIONAL:
-├─ Offchain Mech HTTP (MECHX_MECH_OFFCHAIN_URL)
+├─ Offchain Mech HTTP (auto-discovered from on-chain metadata)
 │  └─ If --use-offchain flag set
 
 ENV VARS:
   MECHX_CHAIN_RPC (required for reliable operation) ← SET THIS
-  MECHX_MECH_OFFCHAIN_URL (required if --use-offchain)
 
 NOTES:
   - NO WebSocket (WSS) used for marketplace mechs
@@ -219,19 +218,19 @@ NOTES:
 
 ## Quick Reference: Environment Variables by Command
 
-| Command | MECHX_CHAIN_RPC | MECHX_SUBGRAPH_URL | MECHX_MECH_OFFCHAIN_URL | OPERATE_PASSWORD |
-|---------|----------------|--------------------|-----------------------|------------------|
-| setup | ○ | | | ✓ |
-| request | ✓ | | ○ | |
-| deposit native | ✓ | | | |
-| deposit token | ✓ | | | |
-| subscription purchase | ✓ | | | |
-| mech list | | ○ | | |
-| tool list | ✓ | | | |
-| tool describe | ✓ | | | |
-| tool schema | ✓ | | | |
-| ipfs upload-prompt | | | | |
-| ipfs upload | | | | |
+| Command | MECHX_CHAIN_RPC | MECHX_SUBGRAPH_URL | OPERATE_PASSWORD |
+|---------|----------------|--------------------| ------------------|
+| setup | ○ | | ✓ |
+| request | ✓ | | |
+| deposit native | ✓ | | |
+| deposit token | ✓ | | |
+| subscription purchase | ✓ | | |
+| mech list | | ○ | |
+| tool list | ✓ | | |
+| tool describe | ✓ | | |
+| tool schema | ✓ | | |
+| ipfs upload-prompt | | | |
+| ipfs upload | | | |
 
 **Legend:**
 - ✓ = Required for command to work

@@ -23,6 +23,7 @@ keys.json
 .mypy_cache/
 .pytest_cache/
 .claude/
+.coverage
 
 .idea/
 .idea/*

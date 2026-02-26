@@ -121,9 +121,7 @@ def validate_tool_id(tool_id: str) -> str:
     service_id_str = parts[0]
 
     try:
-        service_id = int(service_id_str)
-        if service_id < 0:
-            raise ValueError
+        int(service_id_str)
     except ValueError as e:
         raise ValidationError(
             f"Invalid service ID in tool ID: {service_id_str!r}\n"

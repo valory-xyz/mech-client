@@ -2,7 +2,8 @@ name: Release Flow
 on:
   release:
     types: [published]
-
+permissions:
+  contents: read
 jobs:
   publish-pip-packages:
     name: Release framework

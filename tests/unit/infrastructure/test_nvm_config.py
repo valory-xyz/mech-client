@@ -267,3 +267,130 @@ class TestNVMConfig:
 
         with pytest.raises(FileNotFoundError, match="Configuration file not found"):
             NVMConfig.from_chain("gnosis")
+
+
+class TestNVMConfigFromChainErrors:
+    """Tests for NVMConfig.from_chain error branches."""
+
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("builtins.open", new_callable=mock_open)
+    def test_chain_not_in_mechs_raises_value_error(
+        self,
+        mock_file: MagicMock,
+        mock_exists: MagicMock,
+    ) -> None:
+        """Test that ValueError is raised when chain is absent from mechs.json."""
+        import json  # pylint: disable=import-outside-toplevel
+
+        # mechs.json contains only 'other_chain', not 'gnosis'
+        mock_file.return_value.read.return_value = json.dumps({"other_chain": {}})
+
+        with patch("json.load", return_value={"other_chain": {}}):
+            with pytest.raises(ValueError, match="not found in mechs.json"):
+                NVMConfig.from_chain("gnosis")
+
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("builtins.open", new_callable=mock_open)
+    def test_missing_nvm_subscription_key_raises_value_error(
+        self,
+        mock_file: MagicMock,
+        mock_exists: MagicMock,
+    ) -> None:
+        """Test that ValueError is raised when nvm_subscription key is absent from chain data."""
+        mechs_data = {
+            "gnosis": {
+                "ledger_config": {
+                    "address": "https://rpc.gnosischain.com",
+                    "chain_id": 100,
+                    "poa_chain": False,
+                    "default_gas_price_strategy": "eip1559",
+                    "is_gas_estimation_enabled": False,
+                },
+                "other_key": "val",
+                # 'nvm_subscription' is deliberately absent
+            }
+        }
+
+        with patch("json.load", return_value=mechs_data):
+            with pytest.raises(
+                ValueError, match="NVM subscription configuration not found"
+            ):
+                NVMConfig.from_chain("gnosis")
+
+    @patch("builtins.open", new_callable=mock_open)
+    def test_networks_file_not_found_raises_file_not_found_error(
+        self,
+        mock_file: MagicMock,
+    ) -> None:
+        """Test that FileNotFoundError is raised when networks.json is missing."""
+        mechs_data = {
+            "gnosis": {
+                "ledger_config": {
+                    "address": "https://rpc.gnosischain.com",
+                    "chain_id": 100,
+                    "poa_chain": False,
+                    "default_gas_price_strategy": "eip1559",
+                    "is_gas_estimation_enabled": False,
+                },
+                "nvm_subscription": {
+                    "subscription_nft_address": "0x" + "1" * 40,
+                    "receiver_plan": "0x" + "2" * 40,
+                    "token_address": "0x0000000000000000000000000000000000000000",
+                    "plan_did": "did:nv:test",
+                    "subscription_credits": "100",
+                    "plan_fee_nvm": "500000",
+                    "plan_price_mechs": "500000",
+                },
+            }
+        }
+
+        # First call to Path.exists() is mechs.json (True), second is networks.json (False)
+        exists_side_effects = [True, False]
+        with patch(
+            "pathlib.Path.exists", side_effect=exists_side_effects
+        ) as mock_exists:
+            with patch("json.load", return_value=mechs_data):
+                with pytest.raises(
+                    FileNotFoundError, match="Networks configuration file not found"
+                ):
+                    NVMConfig.from_chain("gnosis")
+                _ = mock_exists  # silence unused variable warning
+
+    @patch("builtins.open", new_callable=mock_open)
+    def test_network_key_not_in_networks_raises_value_error(
+        self,
+        mock_file: MagicMock,
+    ) -> None:
+        """Test that ValueError is raised when network key is absent from networks.json."""
+        import json  # pylint: disable=import-outside-toplevel
+
+        mechs_data = {
+            "gnosis": {
+                "ledger_config": {
+                    "address": "https://rpc.gnosischain.com",
+                    "chain_id": 100,
+                    "poa_chain": False,
+                    "default_gas_price_strategy": "eip1559",
+                    "is_gas_estimation_enabled": False,
+                },
+                "nvm_subscription": {
+                    "subscription_nft_address": "0x" + "1" * 40,
+                    "receiver_plan": "0x" + "2" * 40,
+                    "token_address": "0x0000000000000000000000000000000000000000",
+                    "plan_did": "did:nv:test",
+                    "subscription_credits": "100",
+                    "plan_fee_nvm": "500000",
+                    "plan_price_mechs": "500000",
+                },
+            }
+        }
+
+        # Both files exist; mechs.json loads mechs_data, networks.json loads empty {}
+        with patch("pathlib.Path.exists", return_value=True):
+            json_load_calls = [mechs_data, {}]
+            with patch("json.load", side_effect=json_load_calls):
+                with pytest.raises(
+                    ValueError, match="not found in networks.json"
+                ):
+                    NVMConfig.from_chain("gnosis")
+            _ = json  # silence unused import warning

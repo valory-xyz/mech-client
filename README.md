@@ -1,5 +1,18 @@
 # Mech Client
 
+[![PyPI](https://img.shields.io/pypi/v/mech-client)](https://pypi.org/project/mech-client/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mech-client)](https://pypi.org/project/mech-client/)
+[![PyPI - Wheel](https://img.shields.io/pypi/wheel/mech-client)](https://pypi.org/project/mech-client/)
+[![License](https://img.shields.io/pypi/l/mech-client)](https://github.com/valory-xyz/mech-client/blob/main/LICENSE)
+[![Downloads](https://img.shields.io/pypi/dm/mech-client)](https://pypi.org/project/mech-client/)
+
+[![Sanity checks and tests](https://github.com/valory-xyz/mech-client/actions/workflows/workflow.yml/badge.svg?branch=main)](https://github.com/valory-xyz/mech-client/actions/workflows/workflow.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/valory-xyz/mech-client)](https://codecov.io/gh/valory-xyz/mech-client)
+[![flake8](https://img.shields.io/badge/lint-flake8-yellow)](https://flake8.pycqa.org)
+[![mypy](https://img.shields.io/badge/static%20check-mypy-blue)](https://github.com/python/mypy)
+[![Black](https://img.shields.io/badge/code%20style-black-black)](https://github.com/psf/black)
+[![bandit](https://img.shields.io/badge/security-bandit-lightgrey)](https://github.com/PyCQA/bandit)
+
 A client to interact with Mechs - AI agents providing services - on the [Olas Marketplace](https://olas.network/mech-marketplace). It allows users to post requests for AI tasks on-chain, and get their result delivered.
 
 ## Requirements
@@ -245,17 +258,13 @@ export MECHX_CHAIN_RPC=
 
 ##### Offchain Requests
 
-To use offchain requests using `--use-offchain` flag, export the `MECHX_MECH_OFFCHAIN_URL` env variable before sending requests. For example if you want to connect to a mech running locally, you can do the following
+The offchain URL is automatically discovered from the mech's on-chain metadata. No additional configuration is required — simply use the `--use-offchain` flag:
 
 ```bash
-export MECHX_MECH_OFFCHAIN_URL="http://localhost:8000/"
+mechx request --prompts "test" --tools openai-gpt-4 --use-offchain true --chain-config gnosis
 ```
 
-If you want to use a Valory mech for offchain requests, below is the list of mechs and their address and offchain urls.
-
-| AI Agent ID |           Priority Mech Address            |                     Offchain URL                      |
-| :---------: | :----------------------------------------: | :---------------------------------------------------: |
-|    2182     | 0xB3C6319962484602b00d5587e965946890b82101 | https://d19715222af5b940.agent.propel.autonolas.tech/ |
+The client queries the mech's `ComplementaryServiceMetadata` contract to find the `url` field published by the mech operator, then sends requests to that endpoint.
 
 ### List tools available for a mech
 
@@ -400,7 +409,6 @@ Additionally, you can override any configuration parameter by exporting any of t
 ```bash
 MECHX_CHAIN_RPC
 MECHX_SUBGRAPH_URL
-MECHX_MECH_OFFCHAIN_URL
 MECHX_GAS_LIMIT
 MECHX_TRANSACTION_URL
 

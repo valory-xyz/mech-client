@@ -245,21 +245,14 @@ class TestRequestCommand:
             call_kwargs = mock_service.send_request.call_args[1]
             assert call_kwargs["use_prepaid"] is True
 
-    @patch("mech_client.cli.commands.request_cmd.EnvironmentConfig")
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
     def test_request_with_use_offchain(
         self,
         mock_setup_wallet: MagicMock,
         mock_marketplace_service: MagicMock,
-        mock_env_config: MagicMock,
     ) -> None:
-        """Test request with offchain mech."""
-        # Mock environment config with offchain URL
-        mock_config_instance = MagicMock()
-        mock_config_instance.mechx_mech_offchain_url = "https://offchain.example.com"
-        mock_env_config.load.return_value = mock_config_instance
-
+        """Test request with offchain mech (URL auto-discovered from metadata)."""
         # Mock wallet
         mock_wallet_ctx = MagicMock()
         mock_setup_wallet.return_value = mock_wallet_ctx

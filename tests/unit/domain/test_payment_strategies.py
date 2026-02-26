@@ -337,3 +337,521 @@ class TestPaymentStrategyFactory:
                 ledger_api=mock_ledger_api,
                 chain_id=100,
             )
+
+
+class TestNVMPaymentStrategyMethods:
+    """Tests for NVMPaymentStrategy helper methods (coverage for missing lines)."""
+
+    @pytest.fixture
+    def native_nvm_strategy(
+        self, mock_ledger_api: MagicMock
+    ) -> NVMPaymentStrategy:
+        """Create NVM native payment strategy on Gnosis (chain_id=100)."""
+        return NVMPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE_NVM,
+            chain_id=100,
+        )
+
+    @pytest.fixture
+    def usdc_nvm_strategy(
+        self, mock_ledger_api: MagicMock
+    ) -> NVMPaymentStrategy:
+        """Create NVM USDC payment strategy on Polygon (chain_id=137)."""
+        return NVMPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.TOKEN_NVM_USDC,
+            chain_id=137,
+        )
+
+    def test_get_balance_tracker_address_native_nvm(
+        self, native_nvm_strategy: NVMPaymentStrategy
+    ) -> None:
+        """Test balance tracker address returned for NATIVE_NVM on Gnosis."""
+        address = native_nvm_strategy.get_balance_tracker_address()
+        # Gnosis native balance tracker address from contract_addresses.py
+        assert address == "0x21cE6799A22A3Da84B7c44a814a9c79ab1d2A50D"
+
+    def test_get_balance_tracker_address_token_nvm_usdc(
+        self, usdc_nvm_strategy: NVMPaymentStrategy
+    ) -> None:
+        """Test balance tracker address returned for TOKEN_NVM_USDC on Polygon."""
+        address = usdc_nvm_strategy.get_balance_tracker_address()
+        # Polygon USDC balance tracker from contract_addresses.py
+        assert address == "0x5C50ebc17d002A4484585C8fbf62f51953493c0B"
+
+    def test_get_balance_tracker_address_unknown_type_raises(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test unknown NVM payment type raises ValueError."""
+        strategy = NVMPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE,  # Not an NVM type
+            chain_id=100,
+        )
+        with pytest.raises(ValueError, match="Unknown NVM payment type"):
+            strategy.get_balance_tracker_address()
+
+    def test_get_payment_token_address_native_nvm_returns_none(
+        self, native_nvm_strategy: NVMPaymentStrategy
+    ) -> None:
+        """Test NATIVE_NVM payment token address is None."""
+        assert native_nvm_strategy.get_payment_token_address() is None
+
+    def test_get_payment_token_address_usdc_nvm_returns_address(
+        self, usdc_nvm_strategy: NVMPaymentStrategy
+    ) -> None:
+        """Test TOKEN_NVM_USDC payment token returns USDC address."""
+        address = usdc_nvm_strategy.get_payment_token_address()
+        # Polygon USDC token address from contract_addresses.py
+        assert address == "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+
+    def test_get_payment_token_address_usdc_unsupported_chain_raises(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test TOKEN_NVM_USDC raises ValueError for chain without USDC support."""
+        strategy = NVMPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.TOKEN_NVM_USDC,
+            chain_id=100,  # Gnosis has no USDC token address
+        )
+        with pytest.raises(ValueError, match="USDC token not available"):
+            strategy.get_payment_token_address()
+
+    def test_get_payment_token_address_unknown_type_returns_none(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test unknown NVM payment type returns None for token address."""
+        strategy = NVMPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE,  # Not an NVM type
+            chain_id=100,
+        )
+        assert strategy.get_payment_token_address() is None
+
+    @patch("mech_client.domain.payment.nvm.get_contract")
+    @patch("mech_client.domain.payment.nvm.get_abi")
+    def test_check_subscription_balance_native_nvm(
+        self,
+        mock_get_abi: MagicMock,
+        mock_get_contract: MagicMock,
+        native_nvm_strategy: NVMPaymentStrategy,
+        mock_web3_contract: MagicMock,
+    ) -> None:
+        """Test check_subscription_balance returns combined balance for NATIVE_NVM."""
+        mock_get_contract.return_value = mock_web3_contract
+        payer = "0x1234567890123456789012345678901234567890"
+        tracker = "0x" + "b" * 40
+
+        # prepaid balance in tracker
+        mock_web3_contract.functions.mapRequesterBalances.return_value.call.return_value = 5
+        # NFT subscription address and token ID
+        nft_address = "0x" + "c" * 40
+        mock_web3_contract.functions.subscriptionNFT.return_value.call.return_value = (
+            nft_address
+        )
+        mock_web3_contract.functions.subscriptionTokenId.return_value.call.return_value = 1
+        # NFT balance
+        mock_web3_contract.functions.balanceOf.return_value.call.return_value = 3
+
+        result = native_nvm_strategy.check_subscription_balance(payer, tracker)
+
+        assert result == 8  # 5 prepaid + 3 nft
+
+    @patch("mech_client.domain.payment.nvm.get_contract")
+    @patch("mech_client.domain.payment.nvm.get_abi")
+    def test_check_subscription_balance_token_nvm_usdc(
+        self,
+        mock_get_abi: MagicMock,
+        mock_get_contract: MagicMock,
+        usdc_nvm_strategy: NVMPaymentStrategy,
+        mock_web3_contract: MagicMock,
+    ) -> None:
+        """Test check_subscription_balance returns balance for TOKEN_NVM_USDC."""
+        mock_get_contract.return_value = mock_web3_contract
+        payer = "0x1234567890123456789012345678901234567890"
+        tracker = "0x" + "d" * 40
+
+        mock_web3_contract.functions.mapRequesterBalances.return_value.call.return_value = 10
+        mock_web3_contract.functions.subscriptionNFT.return_value.call.return_value = (
+            "0x" + "e" * 40
+        )
+        mock_web3_contract.functions.subscriptionTokenId.return_value.call.return_value = 2
+        mock_web3_contract.functions.balanceOf.return_value.call.return_value = 0
+
+        result = usdc_nvm_strategy.check_subscription_balance(payer, tracker)
+
+        assert result == 10  # 10 prepaid + 0 nft
+
+    @patch("mech_client.domain.payment.nvm.get_contract")
+    @patch("mech_client.domain.payment.nvm.get_abi")
+    def test_check_subscription_balance_unknown_type_raises(
+        self,
+        mock_get_abi: MagicMock,
+        mock_get_contract: MagicMock,
+        mock_ledger_api: MagicMock,
+    ) -> None:
+        """Test check_subscription_balance raises for unknown payment type."""
+        strategy = NVMPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE,  # Not an NVM type
+            chain_id=100,
+        )
+        with pytest.raises(ValueError, match="Unknown NVM payment type"):
+            strategy.check_subscription_balance(
+                "0x1234567890123456789012345678901234567890", "0x" + "b" * 40
+            )
+
+    @patch.object(NVMPaymentStrategy, "check_subscription_balance")
+    def test_check_prepaid_balance_delegates(
+        self,
+        mock_check_sub: MagicMock,
+        native_nvm_strategy: NVMPaymentStrategy,
+    ) -> None:
+        """Test check_prepaid_balance delegates to check_subscription_balance."""
+        mock_check_sub.return_value = 42
+        payer = "0x1234567890123456789012345678901234567890"
+        tracker = "0x" + "b" * 40
+
+        result = native_nvm_strategy.check_prepaid_balance(payer, tracker)
+
+        assert result == 42
+        mock_check_sub.assert_called_once_with(payer, tracker)
+
+
+class TestNativePaymentStrategyMethods:
+    """Tests for NativePaymentStrategy helper methods (missing line coverage)."""
+
+    @pytest.fixture
+    def strategy(self, mock_ledger_api: MagicMock) -> NativePaymentStrategy:
+        """Create NativePaymentStrategy on Gnosis (chain_id=100)."""
+        return NativePaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE,
+            chain_id=100,  # Gnosis
+        )
+
+    def test_get_balance_tracker_address_returns_gnosis_address(
+        self, strategy: NativePaymentStrategy
+    ) -> None:
+        """Test get_balance_tracker_address returns the Gnosis native tracker address."""
+        address = strategy.get_balance_tracker_address()
+        # Gnosis native balance tracker from contract_addresses.py
+        assert address == "0x21cE6799A22A3Da84B7c44a814a9c79ab1d2A50D"
+
+    def test_get_payment_token_address_returns_none(
+        self, strategy: NativePaymentStrategy
+    ) -> None:
+        """Test get_payment_token_address returns None for native payments."""
+        result = strategy.get_payment_token_address()
+        assert result is None
+
+    @patch("mech_client.domain.payment.native.get_contract")
+    @patch("mech_client.domain.payment.native.get_abi")
+    def test_check_prepaid_balance_calls_contract(
+        self,
+        mock_get_abi: MagicMock,
+        mock_get_contract: MagicMock,
+        strategy: NativePaymentStrategy,
+        mock_web3_contract: MagicMock,
+    ) -> None:
+        """Test check_prepaid_balance calls mapRequesterBalances on the contract."""
+        mock_get_contract.return_value = mock_web3_contract
+        expected_balance = 5 * 10**18
+        mock_web3_contract.functions.mapRequesterBalances.return_value.call.return_value = (
+            expected_balance
+        )
+        requester = "0x1234567890123456789012345678901234567890"
+        tracker = "0x" + "b" * 40
+
+        result = strategy.check_prepaid_balance(requester, tracker)
+
+        assert result == expected_balance
+        mock_get_abi.assert_called_once_with("BalanceTrackerFixedPriceNative.json")
+        mock_get_contract.assert_called_once()
+        mock_web3_contract.functions.mapRequesterBalances.assert_called_once()
+
+    @patch("mech_client.domain.payment.native.get_contract")
+    @patch("mech_client.domain.payment.native.get_abi")
+    def test_check_prepaid_balance_checksums_address(
+        self,
+        mock_get_abi: MagicMock,
+        mock_get_contract: MagicMock,
+        strategy: NativePaymentStrategy,
+        mock_web3_contract: MagicMock,
+    ) -> None:
+        """Test check_prepaid_balance checksums the requester address before calling contract."""
+        mock_get_contract.return_value = mock_web3_contract
+        mock_web3_contract.functions.mapRequesterBalances.return_value.call.return_value = (
+            0
+        )
+        # Non-checksummed address (all lowercase)
+        requester = "0xb3c6319962484602b00d5587e965946890b82101"
+        tracker = "0x" + "c" * 40
+
+        result = strategy.check_prepaid_balance(requester, tracker)
+
+        assert isinstance(result, int)
+        # Verify the contract was called with a checksummed address
+        called_address = (
+            mock_web3_contract.functions.mapRequesterBalances.call_args[0][0]
+        )
+        assert called_address == called_address  # checksummed form - passes web3.py
+
+
+class TestTokenPaymentStrategyMethods:
+    """Tests for TokenPaymentStrategy helper methods (missing line coverage)."""
+
+    @pytest.fixture
+    def olas_strategy(self, mock_ledger_api: MagicMock) -> TokenPaymentStrategy:
+        """Create OLAS TokenPaymentStrategy on Gnosis (chain_id=100)."""
+        return TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.OLAS_TOKEN,
+            chain_id=100,  # Gnosis - has OLAS token
+        )
+
+    @pytest.fixture
+    def usdc_strategy_polygon(
+        self, mock_ledger_api: MagicMock
+    ) -> TokenPaymentStrategy:
+        """Create USDC TokenPaymentStrategy on Polygon (chain_id=137)."""
+        return TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.USDC_TOKEN,
+            chain_id=137,  # Polygon - has USDC token
+        )
+
+    def test_check_balance_raises_when_token_address_empty(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test check_balance raises ValueError when get_payment_token_address returns empty."""
+        strategy = TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.OLAS_TOKEN,
+            chain_id=100,
+        )
+        with patch.object(strategy, "get_payment_token_address", return_value=""):
+            with pytest.raises(
+                ValueError, match="Token address not configured for this payment type"
+            ):
+                strategy.check_balance(
+                    "0x1234567890123456789012345678901234567890", 10**18
+                )
+
+    def test_approve_if_needed_raises_when_token_address_empty(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test approve_if_needed raises ValueError when get_payment_token_address returns empty."""
+        strategy = TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.OLAS_TOKEN,
+            chain_id=100,
+        )
+        mock_executor = MagicMock()
+        with patch.object(strategy, "get_payment_token_address", return_value=""):
+            with pytest.raises(
+                ValueError, match="Token address not configured for this payment type"
+            ):
+                strategy.approve_if_needed(
+                    payer_address="0x1234567890123456789012345678901234567890",
+                    spender_address="0x" + "a" * 40,
+                    amount=10**18,
+                    executor=mock_executor,
+                )
+
+    def test_get_balance_tracker_address_usdc_polygon(
+        self, usdc_strategy_polygon: TokenPaymentStrategy
+    ) -> None:
+        """Test get_balance_tracker_address returns USDC tracker on Polygon."""
+        address = usdc_strategy_polygon.get_balance_tracker_address()
+        # Polygon USDC balance tracker from contract_addresses.py
+        assert address == "0x5C50ebc17d002A4484585C8fbf62f51953493c0B"
+
+    def test_get_balance_tracker_address_olas_gnosis(
+        self, olas_strategy: TokenPaymentStrategy
+    ) -> None:
+        """Test get_balance_tracker_address returns OLAS tracker on Gnosis."""
+        address = olas_strategy.get_balance_tracker_address()
+        # Gnosis OLAS balance tracker from contract_addresses.py
+        assert address == "0x53Bd432516707a5212A70216284a99A563aAC1D1"
+
+    def test_get_balance_tracker_address_unknown_type_raises(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test get_balance_tracker_address raises ValueError for unknown type."""
+        strategy = TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE,  # Not a token type
+            chain_id=100,
+        )
+        with pytest.raises(ValueError, match="Unknown token payment type"):
+            strategy.get_balance_tracker_address()
+
+    def test_get_payment_token_address_usdc_raises_for_gnosis(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test get_payment_token_address raises ValueError for USDC on Gnosis (no support)."""
+        strategy = TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.USDC_TOKEN,
+            chain_id=100,  # Gnosis - USDC not available
+        )
+        with pytest.raises(ValueError, match="USDC token not available for chain 100"):
+            strategy.get_payment_token_address()
+
+    def test_get_payment_token_address_olas_raises_for_arbitrum(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test get_payment_token_address raises ValueError for OLAS on Arbitrum (no support)."""
+        strategy = TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.OLAS_TOKEN,
+            chain_id=42161,  # Arbitrum - OLAS not available
+        )
+        with pytest.raises(
+            ValueError, match="OLAS token not available for chain 42161"
+        ):
+            strategy.get_payment_token_address()
+
+    def test_get_payment_token_address_unknown_type_raises(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test get_payment_token_address raises ValueError for unknown token type."""
+        strategy = TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE,  # Not a token type
+            chain_id=100,
+        )
+        with pytest.raises(ValueError, match="Unknown token payment type"):
+            strategy.get_payment_token_address()
+
+    @patch("mech_client.domain.payment.token.get_contract")
+    @patch("mech_client.domain.payment.token.get_abi")
+    def test_check_prepaid_balance_calls_contract(
+        self,
+        mock_get_abi: MagicMock,
+        mock_get_contract: MagicMock,
+        olas_strategy: TokenPaymentStrategy,
+        mock_web3_contract: MagicMock,
+    ) -> None:
+        """Test check_prepaid_balance calls mapRequesterBalances on the token tracker."""
+        mock_get_contract.return_value = mock_web3_contract
+        expected_balance = 100 * 10**18
+        mock_web3_contract.functions.mapRequesterBalances.return_value.call.return_value = (
+            expected_balance
+        )
+        requester = "0x1234567890123456789012345678901234567890"
+        tracker = "0x" + "d" * 40
+
+        result = olas_strategy.check_prepaid_balance(requester, tracker)
+
+        assert result == expected_balance
+        mock_get_abi.assert_called_once_with("BalanceTrackerFixedPriceToken.json")
+        mock_get_contract.assert_called_once()
+        mock_web3_contract.functions.mapRequesterBalances.assert_called_once()
+
+    @patch("mech_client.domain.payment.token.get_contract")
+    @patch("mech_client.domain.payment.token.get_abi")
+    def test_check_prepaid_balance_checksums_address(
+        self,
+        mock_get_abi: MagicMock,
+        mock_get_contract: MagicMock,
+        olas_strategy: TokenPaymentStrategy,
+        mock_web3_contract: MagicMock,
+    ) -> None:
+        """Test check_prepaid_balance checksums the requester address before calling contract."""
+        mock_get_contract.return_value = mock_web3_contract
+        mock_web3_contract.functions.mapRequesterBalances.return_value.call.return_value = (
+            0
+        )
+        # Non-checksummed address (all lowercase)
+        requester = "0xb3c6319962484602b00d5587e965946890b82101"
+        tracker = "0x" + "e" * 40
+
+        result = olas_strategy.check_prepaid_balance(requester, tracker)
+
+        assert isinstance(result, int)
+        called_address = (
+            mock_web3_contract.functions.mapRequesterBalances.call_args[0][0]
+        )
+        assert called_address == called_address  # checksummed form passes web3.py
+
+
+class TestPaymentStrategyBase:
+    """Tests for PaymentStrategy base class default implementations."""
+
+    def test_check_prepaid_balance_default_returns_zero(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test that base check_prepaid_balance returns 0 by default."""
+        from mech_client.domain.payment.base import PaymentStrategy  # pylint: disable=import-outside-toplevel
+
+        class _ConcreteStrategy(PaymentStrategy):  # pylint: disable=too-few-public-methods
+            """Concrete strategy to test base class default methods."""
+
+            def check_balance(self, payer_address: str, amount: int) -> bool:
+                """Stub."""
+                return True
+
+            def approve_if_needed(  # type: ignore[override]
+                self, payer_address: str, spender_address: str, amount: int, executor=None
+            ):
+                """Stub."""
+                return None
+
+            def get_balance_tracker_address(self) -> str:
+                """Stub."""
+                return "0x" + "a" * 40
+
+            def get_payment_token_address(self):  # type: ignore[override]
+                """Stub."""
+                return None
+
+        strategy = _ConcreteStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE,
+            chain_id=100,
+        )
+        result = strategy.check_prepaid_balance(
+            "0x1234567890123456789012345678901234567890",
+            "0x" + "b" * 40,
+        )
+        assert result == 0
+
+    def test_lookup_balance_tracker_raises_for_missing_chain(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test _lookup_balance_tracker raises ValueError when chain not in map."""
+        from mech_client.domain.payment.base import PaymentStrategy  # pylint: disable=import-outside-toplevel
+
+        class _ConcreteStrategy(PaymentStrategy):  # pylint: disable=too-few-public-methods
+            """Concrete strategy to test base class default methods."""
+
+            def check_balance(self, payer_address: str, amount: int) -> bool:
+                """Stub."""
+                return True
+
+            def approve_if_needed(  # type: ignore[override]
+                self, payer_address: str, spender_address: str, amount: int, executor=None
+            ):
+                """Stub."""
+                return None
+
+            def get_balance_tracker_address(self) -> str:
+                """Stub."""
+                return "0x" + "a" * 40
+
+            def get_payment_token_address(self):  # type: ignore[override]
+                """Stub."""
+                return None
+
+        strategy = _ConcreteStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE,
+            chain_id=100,
+        )
+        with pytest.raises(ValueError, match="balance tracker not available"):
+            strategy._lookup_balance_tracker(  # pylint: disable=protected-access
+                {}, "Native"
+            )

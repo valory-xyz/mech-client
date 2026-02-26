@@ -20,7 +20,7 @@
 """Marketplace service for orchestrating mech requests."""
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from aea_ledger_ethereum import EthereumCrypto
@@ -92,7 +92,6 @@ class MarketplaceService(
         priority_mech: Optional[str] = None,
         use_prepaid: bool = False,
         use_offchain: bool = False,
-        mech_offchain_url: Optional[str] = None,
         extra_attributes: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
@@ -103,8 +102,7 @@ class MarketplaceService(
         :param tools: Tuple of tool identifiers
         :param priority_mech: Priority mech address (optional)
         :param use_prepaid: Use prepaid balance instead of per-request payment
-        :param use_offchain: Use offchain mech (requires mech_offchain_url)
-        :param mech_offchain_url: URL for offchain mech
+        :param use_offchain: Use offchain mech (URL discovered from metadata)
         :param extra_attributes: Extra attributes for metadata
         :param timeout: Timeout for delivery watching
         :return: Dictionary with request results
@@ -114,9 +112,6 @@ class MarketplaceService(
             raise ValueError(
                 f"Number of prompts ({len(prompts)}) must match number of tools ({len(tools)})"
             )
-
-        if use_offchain and not mech_offchain_url:
-            raise ValueError("mech_offchain_url required when use_offchain=True")
 
         # Get marketplace contract
         marketplace_contract = self._get_marketplace_contract()
@@ -139,7 +134,10 @@ class MarketplaceService(
 
         # Branch between on-chain and off-chain flows
         if use_offchain:
-            # mech_offchain_url and timeout are validated above
+            # Auto-discover offchain URL from on-chain metadata
+            offchain_url = self.tool_manager.get_offchain_url(service_id)
+            logger.info(f"Discovered offchain URL for the mech: {offchain_url}")
+
             return await self._send_offchain_request(
                 marketplace_contract=marketplace_contract,
                 prompts=prompts,
@@ -148,7 +146,7 @@ class MarketplaceService(
                 max_delivery_rate=max_delivery_rate,
                 payment_type=payment_type,
                 response_timeout=response_timeout,
-                mech_offchain_url=cast(str, mech_offchain_url),
+                mech_offchain_url=offchain_url,
                 extra_attributes=extra_attributes,
                 timeout=timeout or 300.0,
             )
