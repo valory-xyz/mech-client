@@ -318,9 +318,16 @@ class MarketplaceService(
                     headers={"Content-Type": "application/json"},
                     timeout=30,
                 )
-                response.raise_for_status()
-                # Response contains request confirmation but we don't need to use it
-                _ = response.json()
+                if not response.ok:
+                    reason = ""
+                    try:
+                        reason = response.json().get("reason", "")
+                    except Exception:  # pylint: disable=broad-except  # nosec B110
+                        reason = ""
+                    raise ValueError(
+                        f"Offchain request rejected: {reason or response.reason} "
+                        f"(HTTP {response.status_code})"
+                    )
 
                 request_ids_hex.append(request_id_hex)
                 request_ids_int.append(str(request_id_int))
