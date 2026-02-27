@@ -322,8 +322,8 @@ class MarketplaceService(
                     reason = ""
                     try:
                         reason = response.json().get("reason", "")
-                    except Exception:  # pylint: disable=broad-except
-                        pass
+                    except Exception:  # pylint: disable=broad-except  # nosec B110
+                        reason = ""
                     raise ValueError(
                         f"Offchain request rejected: {reason or response.reason} "
                         f"(HTTP {response.status_code})"
