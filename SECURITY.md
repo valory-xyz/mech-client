@@ -8,8 +8,8 @@ The following table shows which versions of `mech-client` are currently being su
 
 | Version    | Supported          |
 |------------| ------------------ |
-| `v0.19.0`   | :white_check_mark: |
-| `< v0.19.0` | :x:                |
+| `v0.19.1`   | :white_check_mark: |
+| `< v0.19.1` | :x:                |
 
 ## Reporting a Vulnerability
 
