@@ -1021,6 +1021,7 @@ class TestSendOffchainRequest:
         ):
             with patch("mech_client.services.marketplace_service.requests") as mock_requests:
                 mock_response = MagicMock()
+                mock_response.ok = True
                 mock_response.json.return_value = {"status": "ok"}
                 mock_requests.post.return_value = mock_response
                 mock_requests.exceptions.RequestException = Exception
@@ -1093,6 +1094,144 @@ class TestSendOffchainRequest:
                 )
 
                 with pytest.raises(ValueError, match="Failed to send offchain request"):
+                    await service._send_offchain_request(  # pylint: disable=protected-access
+                        marketplace_contract=mock_contract,
+                        prompts=("hello",),
+                        tools=("some-tool",),
+                        priority_mech_address="0x" + "9" * 40,
+                        max_delivery_rate=10**17,
+                        payment_type=PaymentType.NATIVE,
+                        response_timeout=300,
+                        mech_offchain_url="https://mech.example.com",
+                        extra_attributes=None,
+                        timeout=30.0,
+                    )
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OffchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_offchain_request_rejected_with_json_reason(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_offchain_watcher_cls: MagicMock,
+    ) -> None:
+        """Test non-2xx response with JSON reason raises ValueError."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+
+        mock_executor_factory.create.return_value = MagicMock()
+        mock_ledger_api_cls.return_value = MagicMock()
+
+        service = MarketplaceService(
+            chain_config="gnosis",
+            agent_mode=False,
+            crypto=create_mock_crypto(),
+        )
+
+        service.crypto = MagicMock()
+        service.crypto.address = "0x" + "a" * 40
+        service.crypto.sign_message.return_value = "0xsignature"
+
+        mock_contract = MagicMock()
+        mock_contract.functions.mapNonces.return_value.call.return_value = 0
+        mock_contract.functions.getRequestId.return_value.call.return_value = b"\x00" * 32
+
+        with patch(
+            "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash",
+            return_value=("0x" + "b" * 64, "full-hash", '{"prompt":"hello"}'),
+        ):
+            with patch("mech_client.services.marketplace_service.requests") as mock_requests:
+                mock_response = MagicMock()
+                mock_response.ok = False
+                mock_response.status_code = 400
+                mock_response.reason = "Bad Request"
+                mock_response.json.return_value = {"reason": "invalid signature"}
+                mock_requests.post.return_value = mock_response
+                mock_requests.exceptions.RequestException = requests.exceptions.RequestException
+
+                with pytest.raises(
+                    ValueError, match="Offchain request rejected: invalid signature"
+                ):
+                    await service._send_offchain_request(  # pylint: disable=protected-access
+                        marketplace_contract=mock_contract,
+                        prompts=("hello",),
+                        tools=("some-tool",),
+                        priority_mech_address="0x" + "9" * 40,
+                        max_delivery_rate=10**17,
+                        payment_type=PaymentType.NATIVE,
+                        response_timeout=300,
+                        mech_offchain_url="https://mech.example.com",
+                        extra_attributes=None,
+                        timeout=30.0,
+                    )
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OffchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_offchain_request_rejected_no_json_body(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_offchain_watcher_cls: MagicMock,
+    ) -> None:
+        """Test non-2xx response with no JSON body falls back to response.reason."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+
+        mock_executor_factory.create.return_value = MagicMock()
+        mock_ledger_api_cls.return_value = MagicMock()
+
+        service = MarketplaceService(
+            chain_config="gnosis",
+            agent_mode=False,
+            crypto=create_mock_crypto(),
+        )
+
+        service.crypto = MagicMock()
+        service.crypto.address = "0x" + "a" * 40
+        service.crypto.sign_message.return_value = "0xsignature"
+
+        mock_contract = MagicMock()
+        mock_contract.functions.mapNonces.return_value.call.return_value = 0
+        mock_contract.functions.getRequestId.return_value.call.return_value = b"\x00" * 32
+
+        with patch(
+            "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash",
+            return_value=("0x" + "b" * 64, "full-hash", '{"prompt":"hello"}'),
+        ):
+            with patch("mech_client.services.marketplace_service.requests") as mock_requests:
+                mock_response = MagicMock()
+                mock_response.ok = False
+                mock_response.status_code = 502
+                mock_response.reason = "Bad Gateway"
+                mock_response.json.side_effect = ValueError("No JSON")
+                mock_requests.post.return_value = mock_response
+                mock_requests.exceptions.RequestException = requests.exceptions.RequestException
+
+                with pytest.raises(
+                    ValueError, match="Offchain request rejected: Bad Gateway"
+                ):
                     await service._send_offchain_request(  # pylint: disable=protected-access
                         marketplace_contract=mock_contract,
                         prompts=("hello",),
