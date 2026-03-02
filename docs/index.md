@@ -222,7 +222,7 @@ This purchases a fixed-price subscription (ERC1155 NFT) that enables multiple re
 
 **Note:** To use a custom private key file path, add the `--key <path>` option to any command.
 
-### 1. 2. 2. Finding the response
+### 1. 2. 3. Finding the response
 
 After sending a request, a JSON response will appear below the line `"Data for agent"`. The key `"result"` in this JSON object contains the Mech's response to your request.
 
