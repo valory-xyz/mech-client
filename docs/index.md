@@ -39,6 +39,28 @@ pip install mech-client
 
 **d.** Copy this key in the file `ethereum_private_key.txt` in your project folder. Make sure the file contains only the private key, with no leading or trailing spaces, tabs, or newlines.
 
+## Agent Mode and Client Mode
+
+There are two modes for on-chain interactions:
+
+-   **Agent mode** (default, recommended): Registers your on-chain interactions as an agent on the Olas protocol via a Safe multisig. This allows agent-to-agent (A2A) activity to be reflected on the client.
+
+-   **Client mode**: Simple on-chain interactions using an EOA (Externally Owned Account). Use `--client-mode` flag before commands:
+
+    ```bash
+    mechx --client-mode <rest of the cli command>
+    ```
+
+### Setting up agent mode
+
+For better reliability, it is recommended to use a stable third-party RPC provider.
+
+```bash
+mechx setup --chain-config <chain_config>
+```
+
+Run `setup` for each chain you interact with, and ensure your `.env` file has the correct RPC endpoint.
+
 ## Supported Chains
 
 **Supported chains:** `gnosis`, `base`, `polygon`, `optimism`
@@ -200,7 +222,7 @@ This purchases a fixed-price subscription (ERC1155 NFT) that enables multiple re
 
 **Note:** To use a custom private key file path, add the `--key <path>` option to any command.
 
-### 1. 2. 2. Finding the response
+### 1. 2. 3. Finding the response
 
 After sending a request, a JSON response will appear below the line `"Data for agent"`. The key `"result"` in this JSON object contains the Mech's response to your request.
 
@@ -302,4 +324,176 @@ Replace the placeholders as follows:
 **Note:** If using agent mode (`AGENT_MODE = True`), you must provide a valid `SAFE_ADDRESS`. For client mode, set `AGENT_MODE = False` and `SAFE_ADDRESS = ""`.
 
 The variable **result** contains the response of the mech.
+
+
+## 2. Tool Management
+
+### List tools available for a mech
+
+To list the tools available for a specific marketplace mech, use the `tool list` command with an AI Agent ID:
+
+```bash
+mechx tool list 1722 --chain-config gnosis
+```
+
+```bash
++---------------------------------------------+-----------------------------------------------+
+| Tool Name                                   | Unique Identifier                             |
++=============================================+===============================================+
+| claude-prediction-offline                   | 1722-claude-prediction-offline                |
++---------------------------------------------+-----------------------------------------------+
+| claude-prediction-online                    | 1722-claude-prediction-online                 |
++---------------------------------------------+-----------------------------------------------+
+| deepmind-optimization                       | 1722-deepmind-optimization                    |
++---------------------------------------------+-----------------------------------------------+
+```
+
+### Get tool description
+
+To get the description of a specific tool, use the `tool describe` command with the tool's unique identifier:
+
+```bash
+mechx tool describe 1722-openai-gpt-4 --chain-config gnosis
+```
+
+```bash
+Description for tool 1722-openai-gpt-4: Performs a request to OpenAI's GPT-4 model.
+```
+
+### Get tool input/output schema
+
+To get the input/output schema of a specific tool, use the `tool schema` command:
+
+```bash
+mechx tool schema 1722-openai-gpt-4 --chain-config gnosis
+```
+
+```bash
+Tool Details:
++------------------------+---------------------------------------------+
+| Tool Name              | Tool Description                            |
++========================+=============================================+
+| OpenAI Request (GPT-4) | Performs a request to OpenAI's GPT-4 model. |
++------------------------+---------------------------------------------+
+Input Schema:
++-------------+-----------------------------------------------+
+| Field       | Value                                         |
++=============+===============================================+
+| type        | text                                          |
++-------------+-----------------------------------------------+
+| description | The request to relay to OpenAI's GPT-4 model. |
++-------------+-----------------------------------------------+
+Output Schema:
++-----------+---------+-----------------------------------+
+| Field     | Type    | Description                       |
++===========+=========+===================================+
+| requestId | integer | Unique identifier for the request |
++-----------+---------+-----------------------------------+
+| result    | string  | Response from OpenAI              |
++-----------+---------+-----------------------------------+
+| prompt    | string  | User prompt to send to OpenAI     |
++-----------+---------+-----------------------------------+
+```
+
+
+## 3. Offchain Requests
+
+The offchain URL is automatically discovered from the mech's on-chain metadata. No additional configuration is required — simply use the `--use-offchain` flag:
+
+```bash
+mechx request --prompts "test" --tools openai-gpt-4 --use-offchain --chain-config gnosis
+```
+
+The client queries the mech's `ComplementaryServiceMetadata` contract to find the `url` field published by the mech operator, then sends requests to that endpoint.
+
+
+## 4. Programmatic Usage
+
+You can use the Mech Client as a library in your Python project:
+
+```python
+from mech_client.services import MarketplaceService
+from mech_client.domain.payment import PaymentType
+from mech_client.infrastructure.config import get_mech_config
+from aea_ledger_ethereum import EthereumApi, EthereumCrypto
+
+# Configuration
+PRIORITY_MECH_ADDRESS = "0x77af31De935740567Cf4fF1986D04B2c964A786a"
+PROMPT_TEXT = "Will Gnosis pay reach 100k cards in 2024?"
+TOOL_NAME = "openai-gpt-4o-2024-05-13"
+CHAIN_CONFIG = "gnosis"
+MODE = "client"  # Use "agent" for agent mode (Safe multisig)
+SAFE_ADDRESS = ""  # Required if MODE is "agent"
+
+# Setup ledger and crypto
+config = get_mech_config(CHAIN_CONFIG)
+crypto = EthereumCrypto("ethereum_private_key.txt")
+ledger_api = EthereumApi(**config.ledger_config.__dict__)
+
+# Create service
+service = MarketplaceService(
+    chain_config=CHAIN_CONFIG,
+    ledger_api=ledger_api,
+    payer_address=crypto.address,
+    mode=MODE,
+    safe_address=SAFE_ADDRESS if MODE == "agent" else None,
+)
+
+# Send request
+result = service.send_request(
+    priority_mech=PRIORITY_MECH_ADDRESS,
+    tools=[TOOL_NAME],
+    prompts=[PROMPT_TEXT],
+    payment_type=PaymentType.NATIVE,  # or PaymentType.TOKEN, PaymentType.NATIVE_NVM
+)
+
+print(f"Transaction hash: {result['tx_hash']}")
+print(f"Request ID: {result['request_ids'][0]}")
+print(f"Result: {result.get('result')}")
+```
+
+You can also programmatically fetch tools for marketplace mechs:
+
+```python
+from mech_client.services import ToolService
+from mech_client.infrastructure.config import get_mech_config
+from aea_ledger_ethereum import EthereumApi
+
+# Configuration
+service_id = 1722
+chain_config = "gnosis"
+
+# Setup ledger API
+config = get_mech_config(chain_config)
+ledger_api = EthereumApi(**config.ledger_config.__dict__)
+
+# Create tool service
+tool_service = ToolService(
+    chain_config=chain_config,
+    ledger_api=ledger_api,
+)
+
+# Fetch tools for a specific marketplace mech
+tools = tool_service.list_tools(service_id=service_id)
+print(f"Tools for marketplace mech {service_id}:")
+for tool_name, tool_id in tools:
+    print(f"  {tool_name}: {tool_id}")
+```
+
+
+## 5. Chain Configuration
+
+Default configurations for different chains are stored in `mech_client/configs/mechs.json`. You can override any configuration parameter by exporting the following environment variables:
+
+```bash
+MECHX_CHAIN_RPC           # Custom RPC endpoint
+MECHX_SUBGRAPH_URL        # Custom subgraph URL (optional, defaults provided)
+MECHX_GAS_LIMIT           # Custom gas limit
+MECHX_TRANSACTION_URL     # Custom transaction explorer URL
+
+MECHX_LEDGER_CHAIN_ID
+MECHX_LEDGER_POA_CHAIN
+MECHX_LEDGER_DEFAULT_GAS_PRICE_STRATEGY
+MECHX_LEDGER_IS_GAS_ESTIMATION_ENABLED
+```
 
