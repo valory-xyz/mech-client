@@ -9,13 +9,13 @@ fingerprint:
   __init__.py: bafybeihsqhvkxixnofpz4bcwqdgydgqxcdlliikszucwvfquooygqxkle4
 fingerprint_ignore_patterns: []
 connections:
-- valory/abci:0.1.0:bafybeie3wmdmyr756lqevu5xspzsubxzty3sqbnwjtf4cks44wkdsr4oym
+- valory/abci:0.1.0:bafybeibgawlwyrdcghcrq5lbgmwmyyx2o7hn4lffyp5thxm3q3u5haybm4
 contracts: []
 protocols:
 - open_aea/signing:1.0.0:bafybeifsjmldwyki3beqyvdt5lzenrg6wyrqaar5plc5rpnvtc4zlentye
-- valory/abci:0.1.0:bafybeidlqcfibwa7c4mao2ggdg45sug2r47rpoqwjpktrsjuxbaoq655zm
+- valory/abci:0.1.0:bafybeiak4pwac3pwjtd7weskxdhkrcopckr32vtazfbuteu6yqjkwarpte
 skills:
-- valory/abstract_abci:0.1.0:bafybeiax4eettq6cmmkc4qqchjx3umx7rvcgfauguvihj4kaiek63ycqru
+- valory/abstract_abci:0.1.0:bafybeie7omzycvazfg6edexn2k3fteuey3alopfmlwye6e44exfcxv5apa
 default_ledger: ethereum
 required_ledgers:
 - ethereum
