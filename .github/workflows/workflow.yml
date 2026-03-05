@@ -96,9 +96,8 @@ jobs:
           sudo apt-get autoremove
           sudo apt-get autoclean
           python -m pip install --upgrade pip
-          pip install twine poetry==1.4.2
+          pip install twine poetry==1.8.3
           poetry install
-          poetry run pip install --upgrade setuptools
           poetry run autonomy packages sync --update-packages
 
       - name: Build wheels and source tarball
