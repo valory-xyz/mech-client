@@ -105,7 +105,7 @@ class PaymentStrategy(ABC):
         :return: Token address, or None for native payments
         """
 
-    def check_prepaid_balance(  # pylint: disable=no-self-use,unused-argument
+    def check_prepaid_balance(  # pylint: disable=unused-argument
         self,
         requester_address: str,
         balance_tracker_address: str,
