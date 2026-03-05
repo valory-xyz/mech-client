@@ -73,9 +73,7 @@ class ToolService:
             raise ValueError(f"No tools found for service {service_id}")
         return tools_info
 
-    def format_input_schema(
-        self, schema: Dict[str, Any]
-    ) -> List[Tuple[str, str]]:
+    def format_input_schema(self, schema: Dict[str, Any]) -> List[Tuple[str, str]]:
         """
         Format input schema for display.
 
