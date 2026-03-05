@@ -169,7 +169,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 
         return all_results
 
-    def _get_deliver_event_signature(self) -> str:  # pylint: disable=no-self-use
+    def _get_deliver_event_signature(self) -> str:
         """
         Calculate Deliver event signature from IMech ABI.
 
