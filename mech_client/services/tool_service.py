@@ -73,7 +73,7 @@ class ToolService:
             raise ValueError(f"No tools found for service {service_id}")
         return tools_info
 
-    def format_input_schema(  # pylint: disable=no-self-use
+    def format_input_schema(
         self, schema: Dict[str, Any]
     ) -> List[Tuple[str, str]]:
         """
@@ -90,7 +90,7 @@ class ToolService:
                 formatted.append((key, str(value)))
         return formatted
 
-    def format_output_schema(  # pylint: disable=no-self-use
+    def format_output_schema(
         self, schema: Dict[str, Any]
     ) -> List[Tuple[str, str, str]]:
         """
