@@ -32,7 +32,6 @@ from mech_client.infrastructure.blockchain.receipt_waiter import wait_for_receip
 from mech_client.infrastructure.config import PaymentType
 from mech_client.services.base_service import BaseTransactionService
 
-
 logger = logging.getLogger(__name__)
 
 

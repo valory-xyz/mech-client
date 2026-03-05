@@ -43,7 +43,6 @@ from mech_client.infrastructure.config.contract_addresses import (
 from mech_client.infrastructure.config.loader import get_mech_config
 from mech_client.infrastructure.config.payment_config import PaymentType
 
-
 __all__ = [
     # Dataclasses
     "LedgerConfig",

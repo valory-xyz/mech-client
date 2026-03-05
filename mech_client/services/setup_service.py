@@ -30,7 +30,6 @@ from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.operate import OperateManager
 
-
 logger = logging.getLogger(__name__)
 
 

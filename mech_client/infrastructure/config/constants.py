@@ -21,7 +21,6 @@
 
 from pathlib import Path
 
-
 # File paths
 PRIVATE_KEY_FILE_PATH = "ethereum_private_key.txt"
 MECH_CONFIGS = Path(__file__).parent.parent.parent / "configs" / "mechs.json"

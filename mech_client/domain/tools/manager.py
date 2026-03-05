@@ -33,7 +33,6 @@ from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.config.loader import get_mech_config
 
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 10

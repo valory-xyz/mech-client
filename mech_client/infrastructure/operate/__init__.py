@@ -23,7 +23,6 @@ from mech_client.infrastructure.operate.config_loader import load_rpc_from_opera
 from mech_client.infrastructure.operate.key_manager import fetch_agent_mode_keys
 from mech_client.infrastructure.operate.manager import OperateManager
 
-
 __all__ = [
     "OperateManager",
     "fetch_agent_mode_keys",

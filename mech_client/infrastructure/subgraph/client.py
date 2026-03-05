@@ -24,7 +24,6 @@ from typing import Any, Dict
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
-
 DEFAULT_TIMEOUT = 600.0
 
 

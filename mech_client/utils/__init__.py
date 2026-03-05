@@ -21,7 +21,6 @@
 
 from mech_client.utils import constants, errors, logger, validators
 
-
 __all__ = [
     "constants",
     "errors",

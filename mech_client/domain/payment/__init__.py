@@ -25,7 +25,6 @@ from mech_client.domain.payment.native import NativePaymentStrategy
 from mech_client.domain.payment.nvm import NVMPaymentStrategy
 from mech_client.domain.payment.token import TokenPaymentStrategy
 
-
 __all__ = [
     "PaymentStrategy",
     "PaymentStrategyFactory",

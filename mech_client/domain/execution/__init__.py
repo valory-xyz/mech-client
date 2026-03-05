@@ -24,7 +24,6 @@ from mech_client.domain.execution.base import TransactionExecutor
 from mech_client.domain.execution.client_executor import ClientExecutor
 from mech_client.domain.execution.factory import ExecutorFactory
 
-
 __all__ = [
     "TransactionExecutor",
     "ClientExecutor",

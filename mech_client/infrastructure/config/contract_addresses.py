@@ -34,7 +34,6 @@ Chain IDs:
 
 from typing import Dict
 
-
 # Balance tracker contracts for native token payments
 CHAIN_TO_NATIVE_BALANCE_TRACKER: Dict[int, str] = {
     100: "0x21cE6799A22A3Da84B7c44a814a9c79ab1d2A50D",  # Gnosis

@@ -29,7 +29,6 @@ import requests
 from mech_client.domain.delivery.base import DeliveryWatcher
 from mech_client.domain.delivery.constants import WAIT_SLEEP
 
-
 logger = logging.getLogger(__name__)
 
 # Constants for offchain polling

@@ -35,7 +35,6 @@ from mech_client.infrastructure.config import (
 )
 from mech_client.utils.validators import ensure_checksummed_address
 
-
 if TYPE_CHECKING:
     from mech_client.domain.execution.base import TransactionExecutor
 

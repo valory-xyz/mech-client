@@ -21,7 +21,6 @@
 
 from mech_client.infrastructure.blockchain.contracts.base import get_contract
 
-
 __all__ = [
     "get_contract",
 ]

@@ -26,7 +26,6 @@ from aea_ledger_ethereum import EthereumApi
 
 from mech_client.infrastructure.config import PaymentType
 
-
 if TYPE_CHECKING:
     from mech_client.domain.execution.base import TransactionExecutor
 

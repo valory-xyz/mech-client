@@ -27,7 +27,6 @@ from mech_client.cli.commands.setup_cmd import setup
 from mech_client.cli.commands.subscription_cmd import subscription
 from mech_client.cli.commands.tool_cmd import tool
 
-
 __all__ = [
     "setup",
     "request",

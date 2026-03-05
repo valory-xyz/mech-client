@@ -22,7 +22,6 @@
 from mech_client.services.marketplace_service import MarketplaceService
 from mech_client.services.tool_service import ToolService
 
-
 __all__ = [
     "MarketplaceService",
     "ToolService",

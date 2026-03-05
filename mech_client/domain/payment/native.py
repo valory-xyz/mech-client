@@ -27,7 +27,6 @@ from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.config import CHAIN_TO_NATIVE_BALANCE_TRACKER
 from mech_client.utils.validators import ensure_checksummed_address
 
-
 if TYPE_CHECKING:
     from mech_client.domain.execution.base import TransactionExecutor
 

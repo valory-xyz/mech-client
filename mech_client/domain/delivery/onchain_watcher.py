@@ -35,7 +35,6 @@ from mech_client.domain.delivery.constants import DEFAULT_TIMEOUT, WAIT_SLEEP
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 
-
 logger = logging.getLogger(__name__)
 
 DELIVERY_MECH_INDEX = 1

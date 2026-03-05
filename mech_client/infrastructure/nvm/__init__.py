@@ -21,5 +21,4 @@
 
 from mech_client.infrastructure.nvm.config import NVMConfig
 
-
 __all__ = ["NVMConfig"]

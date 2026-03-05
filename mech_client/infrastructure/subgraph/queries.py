@@ -24,7 +24,6 @@ from typing import List, Optional
 from mech_client.infrastructure.config.loader import get_mech_config
 from mech_client.infrastructure.subgraph.client import SubgraphClient
 
-
 # Mapping of mech factory addresses to mech types per chain
 CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE = {
     "gnosis": {
