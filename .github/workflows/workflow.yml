@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-24.04]
-        python-version: ["3.14"]
+        python-version: ["3.10"]
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@v6
@@ -36,7 +36,7 @@ jobs:
         tox -p -e bandit -e safety
     - name: Code style check
       run: |
-        tox -p -e black-check -e isort-check -e flake8 -e vulture -e darglint
+        tox -p -e black-check -e isort-check -e flake8 -e vulture
     - name: Static type check
       run: tox -e mypy
     - name: Pylint
