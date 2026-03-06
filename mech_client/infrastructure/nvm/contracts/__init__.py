@@ -40,7 +40,6 @@ from mech_client.infrastructure.nvm.contracts.subscription_provider import (
 from mech_client.infrastructure.nvm.contracts.token import TokenContract
 from mech_client.infrastructure.nvm.contracts.transfer_nft import TransferNFTContract
 
-
 __all__ = [
     "NVMContractWrapper",
     "NVMContractFactory",

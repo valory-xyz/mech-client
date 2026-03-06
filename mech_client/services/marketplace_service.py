@@ -41,7 +41,6 @@ from mech_client.infrastructure.ipfs import IPFSClient, push_metadata_to_ipfs
 from mech_client.services.base_service import BaseTransactionService
 from mech_client.utils.validators import ensure_checksummed_address
 
-
 logger = logging.getLogger(__name__)
 
 

@@ -28,7 +28,6 @@ from mech_client.cli.validators import validate_chain_config
 from mech_client.services.setup_service import SetupService
 from mech_client.utils.errors.handlers import handle_cli_errors
 
-
 CURR_DIR = Path(__file__).resolve().parent.parent.parent
 CHAIN_TO_TEMPLATE = {
     "gnosis": CURR_DIR / "templates" / "mech_client_gnosis.json",

@@ -38,7 +38,6 @@ from mech_client.infrastructure.nvm.contracts import (
     TokenContract,
 )
 
-
 logger = logging.getLogger(__name__)
 
 

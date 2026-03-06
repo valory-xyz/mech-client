@@ -26,7 +26,6 @@ from mech_client.infrastructure.blockchain.receipt_waiter import (
 )
 from mech_client.infrastructure.blockchain.safe_client import SafeClient
 
-
 __all__ = [
     "get_abi",
     "wait_for_receipt",

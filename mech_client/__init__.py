@@ -58,7 +58,6 @@ from mech_client.utils.errors.exceptions import (
     ValidationError,
 )
 
-
 __all__ = [
     # Version
     "__version__",

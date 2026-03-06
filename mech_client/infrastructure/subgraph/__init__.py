@@ -22,7 +22,6 @@
 from mech_client.infrastructure.subgraph.client import SubgraphClient
 from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
 
-
 __all__ = [
     "SubgraphClient",
     "query_mm_mechs_info",

@@ -39,7 +39,6 @@ from mech_client.cli.commands import (
 )
 from mech_client.utils.logger import setup_logger
 
-
 # Initialize logging before any commands run
 setup_logger()
 

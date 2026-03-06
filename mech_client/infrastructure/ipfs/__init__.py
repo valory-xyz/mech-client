@@ -22,7 +22,6 @@
 from mech_client.infrastructure.ipfs.client import IPFSClient
 from mech_client.infrastructure.ipfs.metadata import push_metadata_to_ipfs
 
-
 __all__ = [
     "IPFSClient",
     "push_metadata_to_ipfs",

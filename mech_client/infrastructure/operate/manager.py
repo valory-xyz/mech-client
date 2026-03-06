@@ -29,7 +29,6 @@ from operate.quickstart.run_service import ask_password_if_needed
 
 from mech_client.infrastructure.config.environment import EnvironmentConfig
 
-
 OPERATE_FOLDER_NAME = ".operate_mech_client"
 
 

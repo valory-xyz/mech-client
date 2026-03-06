@@ -23,7 +23,6 @@ import logging
 
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
 
-
 logger = logging.getLogger(__name__)
 
 

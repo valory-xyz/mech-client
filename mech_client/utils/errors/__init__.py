@@ -41,7 +41,6 @@ from mech_client.utils.errors.handlers import (
 )
 from mech_client.utils.errors.messages import ErrorMessages
 
-
 __all__ = [
     # Base exception
     "MechClientError",

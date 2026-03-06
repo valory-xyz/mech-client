@@ -22,7 +22,6 @@
 from mech_client.domain.tools.manager import ToolManager
 from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
 
-
 __all__ = [
     "ToolManager",
     "ToolInfo",

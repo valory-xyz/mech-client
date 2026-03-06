@@ -21,5 +21,4 @@
 
 from mech_client.cli.main import cli
 
-
 __all__ = ["cli"]

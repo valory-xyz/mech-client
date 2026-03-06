@@ -1,12 +1,12 @@
 {
     "dev": {
-        "agent/valory/mech_client/0.1.0": "bafybeifxorv7uf5qzsr52bztkucaqa7ljflp6kotr4cwagb2rsn6en6dtm",
-        "service/valory/mech_client/0.1.0": "bafybeicrsrqajrzgweh7q4grfsbkkadovyqzfouqgb5lmxyqulqv7mjaye"
+        "agent/valory/mech_client/0.1.0": "bafybeidohgrzl2n6wrcbjm5kdqjc3a3ve4exf4zmq2t7qnbaunuwup5orq",
+        "service/valory/mech_client/0.1.0": "bafybeifft3caa4a4l7krmsxsxfg4mnsz6ervle3heenfl4tjqvxb3pyuoy"
     },
     "third_party": {
-        "protocol/valory/abci/0.1.0": "bafybeiatodhboj6a3p35x4f4b342lzk6ckxpud23awnqbxwjeon3k5y36u",
-        "protocol/open_aea/signing/1.0.0": "bafybeig2d36zxy65vd7fwhs7scotuktydcarm74aprmrb5nioiymr3yixm",
-        "connection/valory/abci/0.1.0": "bafybeiba4qrqp27533v7modv7mgbu7ucy5p5xncl3uqbhf3mprimt6jqpy",
-        "skill/valory/abstract_abci/0.1.0": "bafybeiabbhwj6nw2rhgr3hwoeeebqfhctshcby6wiz23ufylle2exavb7q"
+        "protocol/valory/abci/0.1.0": "bafybeiak4pwac3pwjtd7weskxdhkrcopckr32vtazfbuteu6yqjkwarpte",
+        "protocol/open_aea/signing/1.0.0": "bafybeifsjmldwyki3beqyvdt5lzenrg6wyrqaar5plc5rpnvtc4zlentye",
+        "connection/valory/abci/0.1.0": "bafybeibgawlwyrdcghcrq5lbgmwmyyx2o7hn4lffyp5thxm3q3u5haybm4",
+        "skill/valory/abstract_abci/0.1.0": "bafybeie7omzycvazfg6edexn2k3fteuey3alopfmlwye6e44exfcxv5apa"
     }
 }

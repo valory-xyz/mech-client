@@ -35,7 +35,6 @@ from mech_client.domain.delivery.constants import DEFAULT_TIMEOUT, WAIT_SLEEP
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 
-
 logger = logging.getLogger(__name__)
 
 DELIVERY_MECH_INDEX = 1
@@ -170,7 +169,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 
         return all_results
 
-    def _get_deliver_event_signature(self) -> str:  # pylint: disable=no-self-use
+    def _get_deliver_event_signature(self) -> str:
         """
         Calculate Deliver event signature from IMech ABI.
 

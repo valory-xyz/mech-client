@@ -27,7 +27,6 @@ from web3 import Web3
 from mech_client.infrastructure.nvm.config import NVMConfig
 from mech_client.infrastructure.nvm.contracts import TokenContract
 
-
 logger = logging.getLogger(__name__)
 
 

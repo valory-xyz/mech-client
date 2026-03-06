@@ -34,7 +34,6 @@ from mech_client.infrastructure.nvm.contracts import (
     TransferNFTContract,
 )
 
-
 logger = logging.getLogger(__name__)
 
 

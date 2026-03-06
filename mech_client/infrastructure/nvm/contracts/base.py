@@ -29,7 +29,6 @@ from web3.contract import Contract
 
 from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
 
-
 logger = logging.getLogger(__name__)
 
 

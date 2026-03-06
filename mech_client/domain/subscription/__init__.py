@@ -24,7 +24,6 @@ from mech_client.domain.subscription.balance_checker import SubscriptionBalanceC
 from mech_client.domain.subscription.fulfillment import FulfillmentBuilder
 from mech_client.domain.subscription.manager import SubscriptionManager
 
-
 __all__ = [
     "SubscriptionManager",
     "AgreementBuilder",

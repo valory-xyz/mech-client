@@ -26,7 +26,6 @@ from typing import List, Tuple
 from mech_client.domain.subscription.agreement import AgreementData
 from mech_client.infrastructure.nvm.config import NVMConfig
 
-
 logger = logging.getLogger(__name__)
 
 
