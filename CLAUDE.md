@@ -20,7 +20,7 @@ poetry install
 poetry shell
 
 # Run all linters (REQUIRED before committing)
-tox -e black-check,isort-check,flake8,mypy,pylint,bandit,darglint,vulture && tox -e liccheck
+tox -e black-check,isort-check,flake8,mypy,pylint,bandit,vulture && tox -e liccheck
 
 # Run tests
 poetry run pytest tests/unit/ -k "not trio"
@@ -196,7 +196,7 @@ All CLI commands follow this error handling pattern:
 
 ```bash
 # Run all linters (REQUIRED before committing)
-tox -e black-check,isort-check,flake8,mypy,pylint,bandit,darglint,vulture && tox -e liccheck
+tox -e black-check,isort-check,flake8,mypy,pylint,bandit,vulture && tox -e liccheck
 ```
 
 **Pylint disable comments** acceptable only with justification:

@@ -22,7 +22,7 @@ Example usage:
     ... )
 """
 
-__version__ = "v0.19.2"
+__version__ = "v0.19.3"
 
 # Domain models
 from mech_client.domain.tools.models import (
