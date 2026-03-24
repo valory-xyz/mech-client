@@ -20,7 +20,7 @@
 """Transaction receipt waiting and event polling utilities."""
 
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from aea_ledger_ethereum import EthereumApi
 from web3.contract import Contract as Web3Contract
@@ -79,20 +79,23 @@ def watch_for_marketplace_request_ids(
     marketplace_contract: Web3Contract,
     ledger_api: EthereumApi,
     tx_hash: str,
+    tx_receipt: Optional[Dict] = None,
 ) -> List[str]:
     """
-    Wait for marketplace request transaction and extract request IDs from logs.
+    Extract request IDs from marketplace request transaction logs.
 
-    Waits for transaction receipt and parses MarketplaceRequest event logs
-    to extract request IDs.
+    Parses MarketplaceRequest event logs to extract request IDs.
+    If tx_receipt is not provided, fetches it via wait_for_receipt.
 
     :param marketplace_contract: The marketplace contract instance
     :param ledger_api: The Ethereum API used for interacting with the ledger
     :param tx_hash: Transaction hash to wait for
-    :return: List of request IDs as hex strings
+    :param tx_receipt: Pre-fetched transaction receipt (avoids duplicate RPC call)
+    :return: List of request IDs as hex strings (without 0x prefix)
     :raises TimeoutError: If timeout waiting for receipt
     """
-    tx_receipt = wait_for_receipt(tx_hash=tx_hash, ledger_api=ledger_api)
+    if tx_receipt is None:
+        tx_receipt = wait_for_receipt(tx_hash=tx_hash, ledger_api=ledger_api)
 
     rich_logs = marketplace_contract.events.MarketplaceRequest().process_receipt(
         tx_receipt
@@ -103,7 +106,10 @@ def watch_for_marketplace_request_ids(
             f"The transaction may have reverted."
         )
 
-    # Collect request IDs from ALL log entries (batch txs may emit multiple events)
+    # Collect request IDs from ALL log entries (batch txs may emit multiple events).
+    # bytes.hex() returns hex without 0x prefix, which is the canonical format
+    # used by the delivery watchers. The 0x prefix stripping in watchers is
+    # defensive for external callers passing prefixed IDs.
     request_ids_hex: List[str] = []
     for log_entry in rich_logs:
         for request_id in log_entry["args"]["requestIds"]:

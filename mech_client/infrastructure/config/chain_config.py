@@ -174,7 +174,9 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         complementary_metadata_hash_address: Metadata hash contract address
         rpc_url: HTTP RPC endpoint URL
         ledger_config: Ledger configuration
-        gas_limit: Default gas limit for transactions
+        gas_limit: Default gas limit for transactions (fallback when gas estimation
+            is disabled; overridden by eth_estimateGas when is_gas_estimation_enabled
+            is true in ledger_config)
         transaction_url: Block explorer transaction URL template
         subgraph_url: Subgraph GraphQL endpoint URL
         price: Default price for requests

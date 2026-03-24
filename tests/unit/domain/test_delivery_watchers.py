@@ -550,7 +550,8 @@ class TestWaitForMarketplaceDeliveryDirect:
             [request_id_with_prefix]
         )
 
-        assert result == {request_id_with_prefix: delivery_mech}
+        # Key should be normalized (no 0x prefix)
+        assert result == {request_id_hex: delivery_mech}
         # Verify bytes.fromhex was called with stripped prefix
         mock_web3_contract.functions.mapRequestIdInfos.assert_called_once_with(
             bytes.fromhex(request_id_hex)

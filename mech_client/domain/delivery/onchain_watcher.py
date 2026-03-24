@@ -93,16 +93,18 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         """
         Wait for marketplace to register delivery from mechs.
 
-        :param request_ids: List of request IDs to watch for
+        :param request_ids: List of request IDs to watch for (with or without 0x prefix)
         :return: Dictionary mapping request ID to delivery mech address
         """
+        # Normalize request IDs to consistent format (no 0x prefix)
+        request_ids = [rid.removeprefix("0x") for rid in request_ids]
         request_ids_data: Dict[str, str] = {}
         start_time = time.time()
 
         while True:
             for request_id in request_ids:
                 request_id_info = self.marketplace_contract.functions.mapRequestIdInfos(
-                    bytes.fromhex(request_id.removeprefix("0x"))
+                    bytes.fromhex(request_id)
                 ).call()
 
                 # Return empty data if structure is unexpected

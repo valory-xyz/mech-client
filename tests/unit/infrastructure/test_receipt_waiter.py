@@ -233,6 +233,32 @@ class TestWatchForMarketplaceRequestIds:
         assert result[0] == request_id_1.hex()
         assert result[1] == request_id_2.hex()
 
+    def test_pre_fetched_receipt_skips_rpc_call(
+        self, mock_ledger_api: MagicMock, mock_web3_contract: MagicMock
+    ) -> None:
+        """Test that passing tx_receipt skips wait_for_receipt call."""
+        tx_hash = "0x1234567890abcdef"
+        request_id_bytes = b"\x00\x01\x02\x03"
+
+        # Pre-fetched receipt
+        tx_receipt = {"transactionHash": tx_hash, "status": 1}
+
+        # Mock event logs
+        mock_event = MagicMock()
+        mock_web3_contract.events.MarketplaceRequest.return_value = mock_event
+        mock_event.process_receipt.return_value = [
+            {"args": {"requestIds": [request_id_bytes]}}
+        ]
+
+        result = watch_for_marketplace_request_ids(
+            mock_web3_contract, mock_ledger_api, tx_hash, tx_receipt=tx_receipt
+        )
+
+        assert len(result) == 1
+        assert result[0] == request_id_bytes.hex()
+        # Should NOT call get_transaction_receipt since receipt was provided
+        mock_ledger_api._api.eth.get_transaction_receipt.assert_not_called()
+
     @patch(
         "mech_client.infrastructure.blockchain.receipt_waiter.wait_for_receipt"
     )
