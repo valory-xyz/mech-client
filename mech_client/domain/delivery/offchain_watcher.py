@@ -100,6 +100,11 @@ class OffchainDeliveryWatcher(
 
             # Sleep before next poll if not all results received
             if len(results) < len(request_ids):
+                logger.info(
+                    "Waiting for offchain delivery: %d/%d received",
+                    len(results),
+                    len(request_ids),
+                )
                 await asyncio.sleep(WAIT_SLEEP)
 
         return results

@@ -291,12 +291,13 @@ class TestOnchainDeliveryWatcherDataUrls:
         delivery_data_bytes = bytes.fromhex(ipfs_hash)
         mock_decode.return_value = (request_id_bytes, 0, delivery_data_bytes)
 
-        # Mock eth.get_logs
+        # Mock eth.get_logs and block_number
         mock_log = {
             "blockNumber": 1001,
             "data": b"mock_data",  # Actual data doesn't matter since decode is mocked
         }
         mock_ledger_api.api.eth.get_logs.return_value = [mock_log]
+        mock_ledger_api.api.eth.block_number = 1100
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -345,10 +346,11 @@ class TestOnchainDeliveryWatcherDataUrls:
             (request_id_2_bytes, 0, delivery_data_2_bytes),
         ]
 
-        # Mock two log entries
+        # Mock two log entries and block_number
         mock_log_1 = {"blockNumber": 1001, "data": b"mock_data_1"}
         mock_log_2 = {"blockNumber": 1002, "data": b"mock_data_2"}
         mock_ledger_api.api.eth.get_logs.return_value = [mock_log_1, mock_log_2]
+        mock_ledger_api.api.eth.block_number = 1100
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -381,6 +383,7 @@ class TestOnchainDeliveryWatcherDataUrls:
 
         # Mock no logs returned
         mock_ledger_api.api.eth.get_logs.return_value = []
+        mock_ledger_api.api.eth.block_number = 1100
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -428,6 +431,7 @@ class TestOnchainDeliveryWatcherDataUrls:
         mock_log_1 = {"blockNumber": 1001, "data": b"mock_data_1"}
         mock_log_2 = {"blockNumber": 1002, "data": b"mock_data_2"}
         mock_ledger_api.api.eth.get_logs.return_value = [mock_log_1, mock_log_2]
+        mock_ledger_api.api.eth.block_number = 1100
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -471,6 +475,7 @@ class TestOnchainDeliveryWatcherDataUrls:
         # First call returns log at block 1005
         mock_log = {"blockNumber": 1005, "data": b"mock_data"}
         mock_ledger_api.api.eth.get_logs.return_value = [mock_log]
+        mock_ledger_api.api.eth.block_number = 1100
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -710,6 +715,7 @@ class TestWatchForDataUrlsDuplicateLogContinue:
             {"blockNumber": 1003, "data": b"log3"},
         ]
         mock_ledger_api.api.eth.get_logs.return_value = mock_logs
+        mock_ledger_api.api.eth.block_number = 1100
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,

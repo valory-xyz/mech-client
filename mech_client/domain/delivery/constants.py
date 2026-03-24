@@ -22,3 +22,4 @@
 # Timeout and polling constants shared across delivery watchers
 DEFAULT_TIMEOUT = 900.0  # 15 minutes
 WAIT_SLEEP = 3.0  # 3 seconds between polling attempts
+MAX_BLOCK_RANGE = 500  # Max blocks per eth_getLogs query (public RPCs cap at ~200-10k)

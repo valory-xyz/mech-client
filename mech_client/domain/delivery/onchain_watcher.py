@@ -31,7 +31,11 @@ from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
 
 from mech_client.domain.delivery.base import DeliveryWatcher
-from mech_client.domain.delivery.constants import DEFAULT_TIMEOUT, WAIT_SLEEP
+from mech_client.domain.delivery.constants import (
+    DEFAULT_TIMEOUT,
+    MAX_BLOCK_RANGE,
+    WAIT_SLEEP,
+)
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 
@@ -116,7 +120,18 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 
             # All requests delivered
             if len(request_ids_data) == len(request_ids):
+                logger.info(
+                    "Marketplace delivery complete: %d/%d",
+                    len(request_ids_data),
+                    len(request_ids),
+                )
                 return request_ids_data
+
+            logger.info(
+                "Waiting for marketplace delivery: %d/%d received",
+                len(request_ids_data),
+                len(request_ids),
+            )
 
             # Sleep once per polling cycle, not per request ID
             await asyncio.sleep(WAIT_SLEEP)
@@ -126,7 +141,9 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
             if elapsed_time >= self.timeout:
                 logger.warning(
                     "Timeout reached while waiting for marketplace delivery. "
-                    "Returning partial data."
+                    "Received %d/%d.",
+                    len(request_ids_data),
+                    len(request_ids),
                 )
                 return request_ids_data
 
@@ -208,11 +225,11 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         results = {}
         start_time = time.time()
 
-        def get_logs(from_block_: int) -> List:
+        def get_logs(from_block_: int, to_block_: int) -> List:
             logs = self.ledger_api.api.eth.get_logs(
                 {
                     "fromBlock": from_block_,
-                    "toBlock": "latest",
+                    "toBlock": to_block_,
                     "address": mech_contract_address,
                     "topics": ["0x" + mech_deliver_signature],
                 }
@@ -226,25 +243,46 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
             return request_id_bytes, delivery_data_bytes
 
         while True:
-            logs = get_logs(from_block)
-            latest_block = from_block
-            for log in logs:
-                latest_block = max(latest_block, log["blockNumber"])
-                event_data = get_event_data(log)
-                request_id, delivery_data = (data.hex() for data in event_data)
+            latest_block = self.ledger_api.api.eth.block_number
 
-                if request_id in results:
-                    continue
+            # Paginate through blocks in capped chunks to avoid RPC limits
+            scan_from = from_block
+            while scan_from <= latest_block:
+                scan_to = min(scan_from + MAX_BLOCK_RANGE - 1, latest_block)
+                logs = get_logs(scan_from, scan_to)
+                for log in logs:
+                    event_data = get_event_data(log)
+                    request_id, delivery_data = (data.hex() for data in event_data)
 
-                if request_id in request_ids:
-                    results[request_id] = IPFS_URL_TEMPLATE.format(delivery_data)
+                    if request_id in results:
+                        continue
 
-                if len(results) == len(request_ids):
-                    return results
+                    if request_id in request_ids:
+                        results[request_id] = IPFS_URL_TEMPLATE.format(delivery_data)
+
+                    if len(results) == len(request_ids):
+                        logger.info(
+                            "All delivery events found: %d/%d",
+                            len(results),
+                            len(request_ids),
+                        )
+                        return results
+
+                scan_from = scan_to + 1
+
+            logger.info(
+                "Waiting for delivery events: %d/%d received",
+                len(results),
+                len(request_ids),
+            )
 
             from_block = latest_block + 1
             await asyncio.sleep(WAIT_SLEEP)
             elapsed_time = time.time() - start_time
             if elapsed_time >= self.timeout:
-                logger.warning("Timeout reached. Returning partial results.")
+                logger.warning(
+                    "Timeout reached. Received %d/%d delivery events.",
+                    len(results),
+                    len(request_ids),
+                )
                 return results
