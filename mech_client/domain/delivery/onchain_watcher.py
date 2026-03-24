@@ -98,7 +98,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         while True:
             for request_id in request_ids:
                 request_id_info = self.marketplace_contract.functions.mapRequestIdInfos(
-                    bytes.fromhex(request_id)
+                    bytes.fromhex(request_id.removeprefix("0x"))
                 ).call()
 
                 # Return empty data if structure is unexpected

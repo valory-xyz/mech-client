@@ -8,7 +8,7 @@
       "chain_id": 100,
       "poa_chain": false,
       "default_gas_price_strategy": "eip1559",
-      "is_gas_estimation_enabled": false
+      "is_gas_estimation_enabled": true
     },
     "gas_limit": 500000,
     "price": 10000000000000000,
@@ -33,7 +33,7 @@
       "chain_id": 42161,
       "poa_chain": false,
       "default_gas_price_strategy": "eip1559",
-      "is_gas_estimation_enabled": false
+      "is_gas_estimation_enabled": true
     },
     "gas_limit": 100000,
     "price": 3000000000000,
@@ -49,7 +49,7 @@
       "chain_id": 137,
       "poa_chain": true,
       "default_gas_price_strategy": "eip1559",
-      "is_gas_estimation_enabled": false
+      "is_gas_estimation_enabled": true
     },
     "gas_limit": 3000000,
     "price": 10000,
@@ -65,7 +65,7 @@
       "chain_id": 8453,
       "poa_chain": false,
       "default_gas_price_strategy": "eip1559",
-      "is_gas_estimation_enabled": false
+      "is_gas_estimation_enabled": true
     },
     "gas_limit": 500000,
     "price": 3000000000000,
@@ -90,7 +90,7 @@
       "chain_id": 42220,
       "poa_chain": true,
       "default_gas_price_strategy": "eip1559",
-      "is_gas_estimation_enabled": false
+      "is_gas_estimation_enabled": true
     },
     "gas_limit": 250000,
     "price": 10000000000000000,
@@ -106,7 +106,7 @@
       "chain_id": 10,
       "poa_chain": false,
       "default_gas_price_strategy": "eip1559",
-      "is_gas_estimation_enabled": false
+      "is_gas_estimation_enabled": true
     },
     "gas_limit": 100000,
     "price": 3000000000000,

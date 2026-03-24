@@ -98,8 +98,14 @@ def watch_for_marketplace_request_ids(
         tx_receipt
     )
     if len(rich_logs) == 0:
-        return ["Empty Logs"]
+        raise ValueError(
+            f"No MarketplaceRequest events found in transaction {tx_hash}. "
+            f"The transaction may have reverted."
+        )
 
-    request_ids = rich_logs[0]["args"]["requestIds"]
-    request_ids_hex = [request_id.hex() for request_id in request_ids]
+    # Collect request IDs from ALL log entries (batch txs may emit multiple events)
+    request_ids_hex: List[str] = []
+    for log_entry in rich_logs:
+        for request_id in log_entry["args"]["requestIds"]:
+            request_ids_hex.append(request_id.hex())
     return request_ids_hex

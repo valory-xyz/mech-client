@@ -521,6 +521,36 @@ class TestWaitForMarketplaceDeliveryDirect:
         # Line 119-120: all delivered → early return
         assert result == {request_id: delivery_mech}
 
+    @pytest.mark.asyncio
+    async def test_wait_for_marketplace_delivery_strips_0x_prefix(
+        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test that request IDs with 0x prefix are handled correctly."""
+        request_id_hex = "a" * 64
+        request_id_with_prefix = "0x" + request_id_hex
+        delivery_mech = "0x" + "1" * 40
+
+        mock_web3_contract.functions.mapRequestIdInfos.return_value.call.return_value = [
+            "data",
+            delivery_mech,
+        ]
+
+        watcher = OnchainDeliveryWatcher(
+            marketplace_contract=mock_web3_contract,
+            ledger_api=mock_ledger_api,
+            timeout=10.0,
+        )
+
+        result = await watcher._wait_for_marketplace_delivery(  # pylint: disable=protected-access
+            [request_id_with_prefix]
+        )
+
+        assert result == {request_id_with_prefix: delivery_mech}
+        # Verify bytes.fromhex was called with stripped prefix
+        mock_web3_contract.functions.mapRequestIdInfos.assert_called_once_with(
+            bytes.fromhex(request_id_hex)
+        )
+
 
 class TestFetchDataUrlsFromMechsDirect:
     """Direct tests for _fetch_data_urls_from_mechs covering lines 148-171."""

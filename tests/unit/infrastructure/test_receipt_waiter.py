@@ -181,10 +181,10 @@ class TestWatchForMarketplaceRequestIds:
         assert result[1] == request_id_2.hex()
         assert result[2] == request_id_3.hex()
 
-    def test_empty_logs_returns_placeholder(
+    def test_empty_logs_raises_value_error(
         self, mock_ledger_api: MagicMock, mock_web3_contract: MagicMock
     ) -> None:
-        """Test that empty logs return 'Empty Logs' placeholder."""
+        """Test that empty logs raise ValueError instead of returning sentinel."""
         tx_hash = "0x1234567890abcdef"
 
         # Mock receipt
@@ -198,11 +198,40 @@ class TestWatchForMarketplaceRequestIds:
         mock_web3_contract.events.MarketplaceRequest.return_value = mock_event
         mock_event.process_receipt.return_value = []
 
+        with pytest.raises(ValueError, match="No MarketplaceRequest events found"):
+            watch_for_marketplace_request_ids(
+                mock_web3_contract, mock_ledger_api, tx_hash
+            )
+
+    def test_extract_request_ids_from_multiple_log_entries(
+        self, mock_ledger_api: MagicMock, mock_web3_contract: MagicMock
+    ) -> None:
+        """Test collecting request IDs from multiple MarketplaceRequest events."""
+        tx_hash = "0x1234567890abcdef"
+        request_id_1 = b"\x00\x01\x02\x03"
+        request_id_2 = b"\x04\x05\x06\x07"
+
+        # Mock receipt
+        tx_receipt = {"transactionHash": tx_hash, "status": 1}
+        mock_ledger_api._api.eth.get_transaction_receipt.return_value = (
+            tx_receipt
+        )
+
+        # Mock TWO log entries (batch tx may emit multiple events)
+        mock_event = MagicMock()
+        mock_web3_contract.events.MarketplaceRequest.return_value = mock_event
+        mock_event.process_receipt.return_value = [
+            {"args": {"requestIds": [request_id_1]}},
+            {"args": {"requestIds": [request_id_2]}},
+        ]
+
         result = watch_for_marketplace_request_ids(
             mock_web3_contract, mock_ledger_api, tx_hash
         )
 
-        assert result == ["Empty Logs"]
+        assert len(result) == 2
+        assert result[0] == request_id_1.hex()
+        assert result[1] == request_id_2.hex()
 
     @patch(
         "mech_client.infrastructure.blockchain.receipt_waiter.wait_for_receipt"
