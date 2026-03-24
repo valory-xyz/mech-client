@@ -99,6 +99,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         # Normalize request IDs to consistent format (no 0x prefix)
         request_ids = [rid.removeprefix("0x") for rid in request_ids]
         request_ids_data: Dict[str, str] = {}
+        prev_count = -1
         start_time = time.time()
 
         while True:
@@ -129,11 +130,15 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
                 )
                 return request_ids_data
 
-            logger.info(
-                "Waiting for marketplace delivery: %d/%d received",
-                len(request_ids_data),
-                len(request_ids),
-            )
+            # Only log when progress changes to avoid spamming
+            current_count = len(request_ids_data)
+            if current_count != prev_count:
+                logger.info(
+                    "Waiting for marketplace delivery: %d/%d received",
+                    current_count,
+                    len(request_ids),
+                )
+                prev_count = current_count
 
             # Sleep once per polling cycle, not per request ID
             await asyncio.sleep(WAIT_SLEEP)
@@ -225,6 +230,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         :return: Dictionary mapping request ID to IPFS URL
         """
         results = {}
+        prev_count = -1
         start_time = time.time()
 
         def get_logs(from_block_: int, to_block_: int) -> List:
@@ -272,11 +278,14 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 
                 scan_from = scan_to + 1
 
-            logger.info(
-                "Waiting for delivery events: %d/%d received",
-                len(results),
-                len(request_ids),
-            )
+            current_count = len(results)
+            if current_count != prev_count:
+                logger.info(
+                    "Waiting for delivery events: %d/%d received",
+                    current_count,
+                    len(request_ids),
+                )
+                prev_count = current_count
 
             from_block = latest_block + 1
             await asyncio.sleep(WAIT_SLEEP)

@@ -66,6 +66,7 @@ class OffchainDeliveryWatcher(
         :return: Dictionary mapping request ID to delivery data
         """
         results: Dict[str, Any] = {}
+        prev_count = -1
         start_time = time.time()
 
         # Convert request IDs to integers for offchain API
@@ -100,11 +101,14 @@ class OffchainDeliveryWatcher(
 
             # Sleep before next poll if not all results received
             if len(results) < len(request_ids):
-                logger.info(
-                    "Waiting for offchain delivery: %d/%d received",
-                    len(results),
-                    len(request_ids),
-                )
+                current_count = len(results)
+                if current_count != prev_count:
+                    logger.info(
+                        "Waiting for offchain delivery: %d/%d received",
+                        current_count,
+                        len(request_ids),
+                    )
+                    prev_count = current_count
                 await asyncio.sleep(WAIT_SLEEP)
 
         return results
