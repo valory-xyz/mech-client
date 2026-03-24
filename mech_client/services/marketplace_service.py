@@ -219,10 +219,11 @@ class MarketplaceService(
         )
         logger.info(f"Transaction confirmed: {tx_url}")
 
-        # Watch for on-chain delivery
+        # Watch for on-chain delivery (scan from tx block to catch all Deliver events)
         logger.info("Waiting for mech delivery...")
         watcher = OnchainDeliveryWatcher(marketplace_contract, self.ledger_api, timeout)
-        results = await watcher.watch(request_ids)
+        tx_block = receipt.get("blockNumber")
+        results = await watcher.watch(request_ids, from_block=tx_block)
 
         return {
             "tx_hash": tx_hash,

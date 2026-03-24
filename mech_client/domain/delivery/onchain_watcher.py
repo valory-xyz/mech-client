@@ -68,7 +68,9 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         self.marketplace_contract = marketplace_contract
         self.ledger_api = ledger_api
 
-    async def watch(self, request_ids: List[str]) -> Dict[str, Any]:
+    async def watch(
+        self, request_ids: List[str], from_block: Optional[int] = None
+    ) -> Dict[str, Any]:
         """
         Watch for marketplace delivery and extract IPFS URLs.
 
@@ -76,6 +78,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         each mech's contract to extract the actual IPFS URLs with response data.
 
         :param request_ids: List of request IDs to watch for
+        :param from_block: Block to start scanning for Deliver events (e.g. tx block)
         :return: Dictionary mapping request ID to IPFS URL with response data
         """
         # Step 1: Wait for marketplace delivery (get mech addresses)
@@ -85,7 +88,9 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
             return {}
 
         # Step 2: Get IPFS URLs from mech contracts
-        return await self._fetch_data_urls_from_mechs(request_ids, request_id_to_mech)
+        return await self._fetch_data_urls_from_mechs(
+            request_ids, request_id_to_mech, from_block
+        )
 
     async def _wait_for_marketplace_delivery(
         self, request_ids: List[str]
@@ -155,7 +160,10 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
                 return request_ids_data
 
     async def _fetch_data_urls_from_mechs(
-        self, request_ids: List[str], request_id_to_mech: Dict[str, str]
+        self,
+        request_ids: List[str],
+        request_id_to_mech: Dict[str, str],
+        from_block: Optional[int] = None,
     ) -> Dict[str, str]:
         """
         Fetch IPFS URLs from mech contracts.
@@ -165,6 +173,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 
         :param request_ids: List of request IDs
         :param request_id_to_mech: Mapping of request ID to mech address
+        :param from_block: Block to start scanning from (defaults to current - 100)
         :return: Dictionary mapping request ID to IPFS URL
         """
         # Group request IDs by mech
@@ -177,15 +186,17 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         # Get Deliver event signature from IMech ABI
         mech_deliver_signature = self._get_deliver_event_signature()
 
-        # Get current block
-        current_block = self.ledger_api.api.eth.block_number
+        # Start scanning from the tx block (all Deliver events are after it).
+        # Falls back to current_block - 100 for callers that don't provide it.
+        if from_block is None:
+            from_block = self.ledger_api.api.eth.block_number - 100
 
         # Fetch data URLs from each mech
         all_results: Dict[str, str] = {}
         for mech_address, mech_request_ids in mech_to_request_ids.items():
             results = await self.watch_for_data_urls(
                 request_ids=mech_request_ids,
-                from_block=current_block - 100,  # Look back 100 blocks
+                from_block=from_block,
                 mech_contract_address=mech_address,
                 mech_deliver_signature=mech_deliver_signature,
             )

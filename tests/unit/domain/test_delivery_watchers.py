@@ -102,7 +102,7 @@ class TestOnchainDeliveryWatcherWatch:
         async def mock_wait_for_marketplace(req_ids):
             return {request_id: delivery_mech}
 
-        async def mock_fetch_data_urls(req_ids, mech_map):
+        async def mock_fetch_data_urls(req_ids, mech_map, from_block=None):
             return {request_id: expected_url}
 
         watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
@@ -136,7 +136,7 @@ class TestOnchainDeliveryWatcherWatch:
         async def mock_wait_for_marketplace(req_ids):
             return {request_id_1: delivery_mech_1, request_id_2: delivery_mech_2}
 
-        async def mock_fetch_data_urls(req_ids, mech_map):
+        async def mock_fetch_data_urls(req_ids, mech_map, from_block=None):
             return {request_id_1: url_1, request_id_2: url_2}
 
         watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
@@ -174,7 +174,7 @@ class TestOnchainDeliveryWatcherWatch:
             # Simulate that it takes a retry to get the delivery
             return {request_id: delivery_mech}
 
-        async def mock_fetch_data_urls(req_ids, mech_map):
+        async def mock_fetch_data_urls(req_ids, mech_map, from_block=None):
             return {request_id: expected_url}
 
         watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
