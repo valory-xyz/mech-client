@@ -31,7 +31,11 @@ from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
 
 from mech_client.domain.delivery.base import DeliveryWatcher
-from mech_client.domain.delivery.constants import DEFAULT_TIMEOUT, WAIT_SLEEP
+from mech_client.domain.delivery.constants import (
+    DEFAULT_TIMEOUT,
+    MAX_BLOCK_RANGE,
+    WAIT_SLEEP,
+)
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 
@@ -64,7 +68,9 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         self.marketplace_contract = marketplace_contract
         self.ledger_api = ledger_api
 
-    async def watch(self, request_ids: List[str]) -> Dict[str, Any]:
+    async def watch(
+        self, request_ids: List[str], from_block: Optional[int] = None
+    ) -> Dict[str, Any]:
         """
         Watch for marketplace delivery and extract IPFS URLs.
 
@@ -72,6 +78,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         each mech's contract to extract the actual IPFS URLs with response data.
 
         :param request_ids: List of request IDs to watch for
+        :param from_block: Block to start scanning for Deliver events (e.g. tx block)
         :return: Dictionary mapping request ID to IPFS URL with response data
         """
         # Step 1: Wait for marketplace delivery (get mech addresses)
@@ -81,7 +88,9 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
             return {}
 
         # Step 2: Get IPFS URLs from mech contracts
-        return await self._fetch_data_urls_from_mechs(request_ids, request_id_to_mech)
+        return await self._fetch_data_urls_from_mechs(
+            request_ids, request_id_to_mech, from_block
+        )
 
     async def _wait_for_marketplace_delivery(
         self, request_ids: List[str]
@@ -89,10 +98,13 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         """
         Wait for marketplace to register delivery from mechs.
 
-        :param request_ids: List of request IDs to watch for
+        :param request_ids: List of request IDs to watch for (with or without 0x prefix)
         :return: Dictionary mapping request ID to delivery mech address
         """
+        # Normalize request IDs to consistent format (no 0x prefix)
+        request_ids = [rid.removeprefix("0x") for rid in request_ids]
         request_ids_data: Dict[str, str] = {}
+        prev_count = -1
         start_time = time.time()
 
         while True:
@@ -116,7 +128,22 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 
             # All requests delivered
             if len(request_ids_data) == len(request_ids):
+                logger.info(
+                    "Marketplace delivery complete: %d/%d",
+                    len(request_ids_data),
+                    len(request_ids),
+                )
                 return request_ids_data
+
+            # Only log when progress changes to avoid spamming
+            current_count = len(request_ids_data)
+            if current_count != prev_count:
+                logger.info(
+                    "Waiting for marketplace delivery: %d/%d received",
+                    current_count,
+                    len(request_ids),
+                )
+                prev_count = current_count
 
             # Sleep once per polling cycle, not per request ID
             await asyncio.sleep(WAIT_SLEEP)
@@ -126,12 +153,17 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
             if elapsed_time >= self.timeout:
                 logger.warning(
                     "Timeout reached while waiting for marketplace delivery. "
-                    "Returning partial data."
+                    "Received %d/%d.",
+                    len(request_ids_data),
+                    len(request_ids),
                 )
                 return request_ids_data
 
     async def _fetch_data_urls_from_mechs(
-        self, request_ids: List[str], request_id_to_mech: Dict[str, str]
+        self,
+        request_ids: List[str],
+        request_id_to_mech: Dict[str, str],
+        from_block: Optional[int] = None,
     ) -> Dict[str, str]:
         """
         Fetch IPFS URLs from mech contracts.
@@ -141,6 +173,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 
         :param request_ids: List of request IDs
         :param request_id_to_mech: Mapping of request ID to mech address
+        :param from_block: Block to start scanning from (defaults to current - 100)
         :return: Dictionary mapping request ID to IPFS URL
         """
         # Group request IDs by mech
@@ -153,15 +186,17 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         # Get Deliver event signature from IMech ABI
         mech_deliver_signature = self._get_deliver_event_signature()
 
-        # Get current block
-        current_block = self.ledger_api.api.eth.block_number
+        # Start scanning from the tx block (all Deliver events are after it).
+        # Falls back to current_block - 100 for callers that don't provide it.
+        if from_block is None:
+            from_block = self.ledger_api.api.eth.block_number - 100
 
         # Fetch data URLs from each mech
         all_results: Dict[str, str] = {}
         for mech_address, mech_request_ids in mech_to_request_ids.items():
             results = await self.watch_for_data_urls(
                 request_ids=mech_request_ids,
-                from_block=current_block - 100,  # Look back 100 blocks
+                from_block=from_block,
                 mech_contract_address=mech_address,
                 mech_deliver_signature=mech_deliver_signature,
             )
@@ -206,13 +241,14 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         :return: Dictionary mapping request ID to IPFS URL
         """
         results = {}
+        prev_count = -1
         start_time = time.time()
 
-        def get_logs(from_block_: int) -> List:
+        def get_logs(from_block_: int, to_block_: int) -> List:
             logs = self.ledger_api.api.eth.get_logs(
                 {
                     "fromBlock": from_block_,
-                    "toBlock": "latest",
+                    "toBlock": to_block_,
                     "address": mech_contract_address,
                     "topics": ["0x" + mech_deliver_signature],
                 }
@@ -226,25 +262,49 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
             return request_id_bytes, delivery_data_bytes
 
         while True:
-            logs = get_logs(from_block)
-            latest_block = from_block
-            for log in logs:
-                latest_block = max(latest_block, log["blockNumber"])
-                event_data = get_event_data(log)
-                request_id, delivery_data = (data.hex() for data in event_data)
+            latest_block = self.ledger_api.api.eth.block_number
 
-                if request_id in results:
-                    continue
+            # Paginate through blocks in capped chunks to avoid RPC limits
+            scan_from = from_block
+            while scan_from <= latest_block:
+                scan_to = min(scan_from + MAX_BLOCK_RANGE - 1, latest_block)
+                logs = get_logs(scan_from, scan_to)
+                for log in logs:
+                    event_data = get_event_data(log)
+                    request_id, delivery_data = (data.hex() for data in event_data)
 
-                if request_id in request_ids:
-                    results[request_id] = IPFS_URL_TEMPLATE.format(delivery_data)
+                    if request_id in results:
+                        continue
 
-                if len(results) == len(request_ids):
-                    return results
+                    if request_id in request_ids:
+                        results[request_id] = IPFS_URL_TEMPLATE.format(delivery_data)
+
+                    if len(results) == len(request_ids):
+                        logger.info(
+                            "All delivery events found: %d/%d",
+                            len(results),
+                            len(request_ids),
+                        )
+                        return results
+
+                scan_from = scan_to + 1
+
+            current_count = len(results)
+            if current_count != prev_count:
+                logger.info(
+                    "Waiting for delivery events: %d/%d received",
+                    current_count,
+                    len(request_ids),
+                )
+                prev_count = current_count
 
             from_block = latest_block + 1
             await asyncio.sleep(WAIT_SLEEP)
             elapsed_time = time.time() - start_time
             if elapsed_time >= self.timeout:
-                logger.warning("Timeout reached. Returning partial results.")
+                logger.warning(
+                    "Timeout reached. Received %d/%d delivery events.",
+                    len(results),
+                    len(request_ids),
+                )
                 return results

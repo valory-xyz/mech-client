@@ -210,7 +210,8 @@ class TestOffchainDeliveryWatcherWatch:
     ) -> None:
         """Test watching with timeout and partial responses."""
         # Setup mock time to simulate timeout after first response
-        mock_time.side_effect = [0.0, 10.0, 10.0, 70.0, 70.0]  # Start, timeout check, logger info record, timeout check, logger warning record
+        # Extra values for progress logging calls
+        mock_time.side_effect = [0.0, 10.0, 10.0, 10.0, 70.0, 70.0, 70.0]
 
         # Setup mock to return data for first request, None for second
         def mock_get_response(*args, **kwargs):

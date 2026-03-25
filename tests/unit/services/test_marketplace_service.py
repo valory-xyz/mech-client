@@ -960,6 +960,102 @@ class TestSendRequestOnchainFlow:
                             use_prepaid=False,
                         )
 
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.watch_for_marketplace_request_ids")
+    @patch("mech_client.services.marketplace_service.wait_for_receipt")
+    @patch("mech_client.services.marketplace_service.push_metadata_to_ipfs")
+    @patch("mech_client.services.marketplace_service.PaymentStrategyFactory")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_onchain_reverted_tx_raises_error(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_payment_factory: MagicMock,
+        mock_push_metadata: MagicMock,
+        mock_wait_receipt: MagicMock,
+        mock_watch_request_ids: MagicMock,
+    ) -> None:
+        """Test that a reverted transaction raises ValueError."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.mech_marketplace_contract = "0x" + "2" * 40
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+
+        mock_executor = MagicMock()
+        mock_executor.execute_transaction.return_value = "0xtxhash"
+        mock_executor.get_sender_address.return_value = "0x" + "a" * 40
+        mock_executor_factory.create.return_value = mock_executor
+
+        service = _build_service(
+            mock_mech_config, mock_ledger_api_cls, mock_executor_factory
+        )
+
+        mock_contract = MagicMock()
+        mock_push_metadata.return_value = ("0x" + "b" * 64, "ipfs://hash")
+        # Receipt with status=0 means reverted
+        mock_wait_receipt.return_value = {"status": 0}
+
+        mock_strategy = MagicMock()
+        mock_payment_factory.create.return_value = mock_strategy
+
+        with patch.object(
+            service, "_get_marketplace_contract", return_value=mock_contract
+        ):
+            with patch.object(
+                service,
+                "_fetch_mech_info",
+                return_value=(PaymentType.NATIVE, 1, 10**17),
+            ):
+                with patch.object(service, "_validate_tools"):
+                    with patch.object(
+                        service,
+                        "_send_marketplace_request",
+                        return_value="0xtxhash",
+                    ):
+                        with pytest.raises(
+                            ValueError, match="reverted"
+                        ):
+                            await service.send_request(
+                                prompts=("hello",),
+                                tools=("some-tool",),
+                            )
+
+        # watch_for_marketplace_request_ids should NOT be called
+        mock_watch_request_ids.assert_not_called()
+
+
+class TestGasEstimationEnabled:
+    """Tests for gas estimation via is_gas_estimation_enabled config."""
+
+    def test_gas_estimation_enabled_in_default_configs(self) -> None:
+        """Test that is_gas_estimation_enabled is true in all chain configs."""
+        import json  # pylint: disable=import-outside-toplevel
+        from pathlib import Path  # pylint: disable=import-outside-toplevel
+
+        config_path = (
+            Path(__file__).parents[3]
+            / "mech_client"
+            / "configs"
+            / "mechs.json"
+        )
+        with open(config_path, encoding="utf-8") as f:
+            configs = json.load(f)
+
+        for chain_name, chain_config in configs.items():
+            ledger_config = chain_config.get("ledger_config", {})
+            assert ledger_config.get("is_gas_estimation_enabled") is True, (
+                f"is_gas_estimation_enabled must be true for {chain_name}"
+            )
+
 
 class TestSendOffchainRequest:
     """Tests for _send_offchain_request method (lines 258-345)."""

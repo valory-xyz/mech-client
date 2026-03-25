@@ -205,17 +205,25 @@ class MarketplaceService(
         tx_url = self.mech_config.transaction_url.format(transaction_digest=tx_hash)
         logger.info(f"Transaction submitted: {tx_url}")
 
-        # Wait for receipt and get request IDs
+        # Wait for receipt and check success
         receipt = wait_for_receipt(tx_hash, self.ledger_api)
+        if receipt.get("status") == 0:
+            raise ValueError(
+                f"Transaction reverted. Hash: {tx_hash}. "
+                f"This may indicate insufficient gas or a contract error. "
+                f"Check the transaction on the block explorer: "
+                f"{tx_url}"
+            )
         request_ids = watch_for_marketplace_request_ids(
-            marketplace_contract, self.ledger_api, tx_hash
+            marketplace_contract, self.ledger_api, tx_hash, tx_receipt=receipt
         )
         logger.info(f"Transaction confirmed: {tx_url}")
 
-        # Watch for on-chain delivery
+        # Watch for on-chain delivery (scan from tx block to catch all Deliver events)
         logger.info("Waiting for mech delivery...")
         watcher = OnchainDeliveryWatcher(marketplace_contract, self.ledger_api, timeout)
-        results = await watcher.watch(request_ids)
+        tx_block = receipt.get("blockNumber")
+        results = await watcher.watch(request_ids, from_block=tx_block)
 
         return {
             "tx_hash": tx_hash,
@@ -513,6 +521,10 @@ class MarketplaceService(
                 "paymentData": payment_data,
             }
 
+        # gas_limit is the initial value; when is_gas_estimation_enabled is true
+        # (default), EthereumApi.build_transaction() overwrites it with
+        # eth_estimateGas(). gas_limit serves as fallback when estimation is
+        # disabled or fails. Agent mode ignores this entirely (Safe uses gas=0).
         tx_args = {
             "sender_address": sender,
             "value": value,
