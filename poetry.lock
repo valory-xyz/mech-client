@@ -2,19 +2,21 @@
 
 [[package]]
 name = "aea-helpers"
-version = "0.21.15"
+version = "0.21.16"
 description = "CLI helpers for CI and dependency management in AEA-based projects."
 optional = false
 python-versions = "*"
 groups = ["main"]
 files = [
-    {file = "aea_helpers-0.21.15-py3-none-any.whl", hash = "sha256:71b86792c96ae23d52a18f3866f97014c6d56c1ca0c4091e46539085eef9ec82"},
-    {file = "aea_helpers-0.21.15.tar.gz", hash = "sha256:99c88b24e959ec82db19ea789391db83517e72ad158addd2f5e0a603ae2d1f21"},
+    {file = "aea_helpers-0.21.16-py3-none-any.whl", hash = "sha256:cf61403295cd42d1143b03fbdf1b3dd1f984066ca9dbf25e8ae45c969a79c4c2"},
+    {file = "aea_helpers-0.21.16.tar.gz", hash = "sha256:069e1a209bdb350335cf39c52bab7140d6688ae8fd0dcc9a36c27b1d6dc4829c"},
 ]
 
 [package.dependencies]
 click = ">=8.1.0,<9"
 open-autonomy = ">=0.21.0,<0.22.0"
+python-dotenv = ">=0.14.5,<2"
+PyYAML = ">=6.0,<7"
 requests = ">=2.28.0,<3"
 toml = ">=0.10,<1"
 
@@ -4984,4 +4986,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.15"
-content-hash = "ecb8827e837f3a4ab9a88ae071d5b75d5d1785409085a2110ef29382e7cce851"
+content-hash = "d6323c16a1e55eb0b99870e6801677f2984f851dc09171fbb2564ab4387166aa"
