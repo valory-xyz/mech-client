@@ -1,3 +1,3 @@
 .PHONY: dist
 dist:
-	poetry build
+	uv build
