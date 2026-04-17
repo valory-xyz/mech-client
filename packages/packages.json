@@ -1,12 +1,12 @@
 {
     "dev": {
-        "agent/valory/mech_client/0.1.0": "bafybeiaoaiflsizu73q6eckzydff5n4wjhabyjrhjxy26buxnjnppjfqfy",
-        "service/valory/mech_client/0.1.0": "bafybeifavlbztf7ru4t56ieugpocsjacje3eqcry6iacfu2tslyarkhcoq"
+        "agent/valory/mech_client/0.1.0": "bafybeih7krxzhusq7ukvootbjpw5jpcdoixx6h63rezm4euwzsshrgrd4i",
+        "service/valory/mech_client/0.1.0": "bafybeibcnl6qvh5gvvrr6odq2sriyswyfdcyhh36nttajqvi3pibtnkl2y"
     },
     "third_party": {
         "protocol/valory/abci/0.1.0": "bafybeiak4pwac3pwjtd7weskxdhkrcopckr32vtazfbuteu6yqjkwarpte",
         "protocol/open_aea/signing/1.0.0": "bafybeifsjmldwyki3beqyvdt5lzenrg6wyrqaar5plc5rpnvtc4zlentye",
-        "connection/valory/abci/0.1.0": "bafybeigjmetusztbj3ikgsimj55rc3nn6m2j6ns6ciew5twjtgip2axdme",
-        "skill/valory/abstract_abci/0.1.0": "bafybeict6h3wfmddpvam5gmmanqzuokup6ppoev3t4j5uyl7xxahjaols4"
+        "connection/valory/abci/0.1.0": "bafybeihgtguy5ljj2rwgwoxeor5d565alwfggnuevss7malhzdats6nfqi",
+        "skill/valory/abstract_abci/0.1.0": "bafybeif4jcv22xrmkwiaecyyli7iknmdhtkg6dmzqmwpqekmvxyr7ba3xy"
     }
 }
