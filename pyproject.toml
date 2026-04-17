@@ -16,7 +16,7 @@ dependencies = [
     "click==8.1.8",
     "jsonschema>=4.20.0,<4.24.0",
     "pydantic>=2.12.0",
-    "aea-helpers==0.21.16",
+    "open-aea-helpers==0.21.18",
     "pip>=24.0",
 ]
 
@@ -25,7 +25,7 @@ mechx = "mech_client.cli.main:cli"
 
 [dependency-groups]
 dev = [
-    "tomte[tox]==0.6.2",
+    "tomte[tox]==0.6.5",
     "pytest-asyncio==1.3.0",
     "pytest-cov>=7.0.0,<8",
     "mkdocs>=1.6.0,<2",
