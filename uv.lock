@@ -10,23 +10,6 @@ resolution-markers = [
 prerelease-mode = "allow"
 
 [[package]]
-name = "aea-helpers"
-version = "0.21.16"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "open-autonomy" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "requests" },
-    { name = "toml" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b3/38/87b47f751242b747ef5ec76c96bcd594dad7a5b50b98f090b57b2694f9a5/aea_helpers-0.21.16.tar.gz", hash = "sha256:069e1a209bdb350335cf39c52bab7140d6688ae8fd0dcc9a36c27b1d6dc4829c", size = 22793, upload-time = "2026-03-26T18:21:01.693Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/dc/d7/8ffdfffe475b71daf6a2f882366be92f40dac1ee20c1bca201e0e7376310/aea_helpers-0.21.16-py3-none-any.whl", hash = "sha256:cf61403295cd42d1143b03fbdf1b3dd1f984066ca9dbf25e8ae45c969a79c4c2", size = 30990, upload-time = "2026-03-26T18:21:00.922Z" },
-]
-
-[[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1846,12 +1829,12 @@ name = "mech-client"
 version = "0.20.1"
 source = { editable = "." }
 dependencies = [
-    { name = "aea-helpers" },
     { name = "asn1crypto" },
     { name = "click" },
     { name = "gql" },
     { name = "jsonschema" },
     { name = "olas-operate-middleware" },
+    { name = "open-aea-helpers" },
     { name = "pip" },
     { name = "pydantic" },
     { name = "safe-eth-py" },
@@ -1871,12 +1854,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aea-helpers", specifier = "==0.21.16" },
     { name = "asn1crypto", specifier = ">=1.4.0,<1.5.0" },
     { name = "click", specifier = "==8.1.8" },
     { name = "gql", specifier = ">=3.4.1" },
     { name = "jsonschema", specifier = ">=4.20.0,<4.24.0" },
     { name = "olas-operate-middleware", specifier = "==0.15.2" },
+    { name = "open-aea-helpers", specifier = "==0.21.18" },
     { name = "pip", specifier = ">=24.0" },
     { name = "pydantic", specifier = ">=2.12.0" },
     { name = "safe-eth-py", specifier = ">=7.18.0,<8" },
@@ -1891,7 +1874,7 @@ dev = [
     { name = "mkdocs-material", specifier = ">=9.5.0,<10" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
     { name = "pytest-cov", specifier = ">=7.0.0,<8" },
-    { name = "tomte", extras = ["tox"], specifier = "==0.6.2" },
+    { name = "tomte", extras = ["tox"], specifier = "==0.6.5" },
 ]
 
 [[package]]
@@ -2233,6 +2216,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/93/9d/3fbd4523e74c063ee54d035640d213c769e6a48e2f0c332b0b265628ded3/open_aea_flashbots-2.1.0.tar.gz", hash = "sha256:65a4e39615d59f96c8d6254cc6f7f9568f3e0253c66da8ff9042b1f51c80e494", size = 7919, upload-time = "2026-03-03T20:46:33.493Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/36/78/a6cb030fc689c0632c200bd56a8c852d5b6144811958775c9bb9faece403/open_aea_flashbots-2.1.0-py3-none-any.whl", hash = "sha256:4ce58aa721fb58ca1da97e5f135218c2451922847f1b707412357cf2ff7eefb2", size = 9952, upload-time = "2026-03-03T20:46:32.773Z" },
+]
+
+[[package]]
+name = "open-aea-helpers"
+version = "0.21.18"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "open-autonomy" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "toml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bf/8f/dd492cfe6a15080c59e0454a038392d08386900d26b88c59df25519d0ebc/open_aea_helpers-0.21.18.tar.gz", hash = "sha256:2a55fe9b437471887dc3f1334496b63f365d2690e111cf42416c1c2c7b479fe2", size = 27126, upload-time = "2026-04-16T17:43:38.791Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0d/a1/3d85e0df9bad3a2931a5e661b97d65bfc113efbf53bd3ed1daf699540fe9/open_aea_helpers-0.21.18-py3-none-any.whl", hash = "sha256:ef41562dafbfce310ce32f77ad31e183a536372c13a2a7b5e59307584e1b6564", size = 38188, upload-time = "2026-04-16T17:43:37.957Z" },
 ]
 
 [[package]]
@@ -3584,11 +3584,11 @@ wheels = [
 
 [[package]]
 name = "tomte"
-version = "0.6.2"
+version = "0.6.5"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/02/a7/4961a23d030db599b5dc9ea41de17aabf81441e6687052dec3f5f270f237/tomte-0.6.2.tar.gz", hash = "sha256:1cdfcdbc0cbc222ad95bfd35b9d3372316b3a53e5545c193d7b7410478905c6f", size = 11564, upload-time = "2026-03-09T14:47:11.625Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/f1/1af29384666f8e6b07ab47515fe4c25ba1fc176505e3966c177a842f1e20/tomte-0.6.5.tar.gz", hash = "sha256:f19c1b57d74394b91cfe001eac4445c3163d956b16a599f9b6de20873de0e777", size = 15867, upload-time = "2026-04-10T17:13:33.338Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/3d/f1c2223c182be15f52ddce03939bf54c739a47877b8e610499292f357e22/tomte-0.6.2-py3-none-any.whl", hash = "sha256:d57b466d2d65e2b1730651e041f64ac31bc86bb763a31c710dac805cedba1f1b", size = 14212, upload-time = "2026-03-09T14:47:10.711Z" },
+    { url = "https://files.pythonhosted.org/packages/79/5c/7ee5488c095b7ed6d3ae1dce1924e04d2a267873901cbfb043f2d2e0326a/tomte-0.6.5-py3-none-any.whl", hash = "sha256:7a89379b640fced037d6ea367d6ae7167f50b1088d7ed9cb6bec3d51341ce45c", size = 18657, upload-time = "2026-04-10T17:13:32.447Z" },
 ]
 
 [package.optional-dependencies]
