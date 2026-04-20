@@ -33,12 +33,12 @@ This guide will walk you through the essential steps to get up and running witho
 
 Find the latest available release on [PyPi](https://pypi.org/project/mech-client/).
 
-We recommend that you create a virtual Python environment using [Poetry](https://python-poetry.org/). Set up your virtual environment as follows:
+We recommend that you create a virtual Python environment using [uv](https://docs.astral.sh/uv/). Set up your virtual environment as follows:
 
 ```bash
-poetry new my_project
+uv init my_project
 cd my_project
-poetry add mech-client
+uv add mech-client
 ```
 
 Alternatively, you can also install the Mech Client in your local Python installation:
@@ -599,14 +599,14 @@ If you want to contribute to mech-client development:
 To setup the development environment for this project, clone the repository and run the following commands:
 
 ```bash
-poetry install
-poetry shell
+uv sync
+source .venv/bin/activate
 ```
 
 ## Release guide
 
 - Bump versions in `pyproject.toml`.`mech_client/__init__.py` and `SECURITY.md`
-- `poetry lock`
+- `uv lock`
 - `rm -rf dist`
 - `autonomy packages sync --update-packages`
 - `make dist`
