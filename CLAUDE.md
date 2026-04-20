@@ -16,14 +16,14 @@ Mech Client is a Python CLI tool and library for interacting with AI Mechs (on-c
 
 ```bash
 # Install dependencies
-poetry install
-poetry shell
+uv sync
+source .venv/bin/activate
 
 # Run all linters (REQUIRED before committing)
 tox -e black-check,isort-check,flake8,mypy,pylint,bandit,vulture && tox -e liccheck
 
 # Run tests
-poetry run pytest tests/unit/ -k "not trio"
+uv run pytest tests/unit/ -k "not trio"
 
 # Test documentation locally
 tox -e mkdocs-serve  # Starts dev server at http://127.0.0.1:8000/
@@ -389,8 +389,8 @@ When refactoring CLI code, be aware of these gotchas (discovered during v0.17.0 
 
 Version bump checklist:
 1. Update `pyproject.toml`, `mech_client/__init__.py`, and `SECURITY.md`
-2. Run `poetry lock` (updates lock file if dependencies changed)
-3. Run `poetry run autonomy packages sync --update-packages`
+2. Run `uv lock` (updates lock file if dependencies changed)
+3. Run `uv run autonomy packages sync --update-packages`
 4. Run `make dist` (builds distribution packages)
 5. Create release PR and tag
 

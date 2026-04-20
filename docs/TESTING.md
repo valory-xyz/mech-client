@@ -109,74 +109,74 @@ tests/
 
 ```bash
 # Run all unit tests (excludes trio backend)
-poetry run pytest tests/unit/ -k "not trio"
+uv run pytest tests/unit/ -k "not trio"
 
 # Run specific test file
-poetry run pytest tests/unit/domain/test_payment_strategies.py
+uv run pytest tests/unit/domain/test_payment_strategies.py
 
 # Run specific test class
-poetry run pytest tests/unit/domain/test_payment_strategies.py::TestNativePaymentStrategy
+uv run pytest tests/unit/domain/test_payment_strategies.py::TestNativePaymentStrategy
 
 # Run specific test method
-poetry run pytest tests/unit/domain/test_payment_strategies.py::TestNativePaymentStrategy::test_check_balance_sufficient
+uv run pytest tests/unit/domain/test_payment_strategies.py::TestNativePaymentStrategy::test_check_balance_sufficient
 
 # Run with verbose output
-poetry run pytest tests/unit/ -v
+uv run pytest tests/unit/ -v
 
 # Run with output capture disabled (see print statements)
-poetry run pytest tests/unit/ -s
+uv run pytest tests/unit/ -s
 
 # Run and stop on first failure
-poetry run pytest tests/unit/ -x
+uv run pytest tests/unit/ -x
 ```
 
 ### Coverage Reports
 
 ```bash
 # Run with coverage
-poetry run pytest tests/unit/ --cov=mech_client
+uv run pytest tests/unit/ --cov=mech_client
 
 # Generate HTML coverage report
-poetry run pytest tests/unit/ --cov=mech_client --cov-report=html
+uv run pytest tests/unit/ --cov=mech_client --cov-report=html
 
 # View coverage report
 open htmlcov/index.html
 
 # Show missing lines
-poetry run pytest tests/unit/ --cov=mech_client --cov-report=term-missing
+uv run pytest tests/unit/ --cov=mech_client --cov-report=term-missing
 ```
 
 ### Running Specific Layers
 
 ```bash
 # Run utils tests only
-poetry run pytest tests/unit/utils/
+uv run pytest tests/unit/utils/
 
 # Run domain tests only
-poetry run pytest tests/unit/domain/
+uv run pytest tests/unit/domain/
 
 # Run service tests only
-poetry run pytest tests/unit/services/
+uv run pytest tests/unit/services/
 
 # Run infrastructure tests only
-poetry run pytest tests/unit/infrastructure/
+uv run pytest tests/unit/infrastructure/
 ```
 
 ### Async Tests
 
 ```bash
 # Run async tests (asyncio backend only)
-poetry run pytest tests/unit/domain/test_delivery_watchers.py -k asyncio
+uv run pytest tests/unit/domain/test_delivery_watchers.py -k asyncio
 
 # Run all tests excluding trio backend (trio not installed)
-poetry run pytest tests/unit/ -k "not trio"
+uv run pytest tests/unit/ -k "not trio"
 ```
 
 ### Parallel Execution
 
 ```bash
 # Run tests in parallel (requires pytest-xdist)
-poetry run pytest tests/unit/ -n auto
+uv run pytest tests/unit/ -n auto
 ```
 
 ## Writing Tests
@@ -849,19 +849,19 @@ def test_payment_strategy_good(mock_ledger_api: MagicMock) -> None:
 
 ```bash
 # Generate coverage report
-poetry run pytest tests/unit/ --cov=mech_client --cov-report=html
+uv run pytest tests/unit/ --cov=mech_client --cov-report=html
 
 # View report
 open htmlcov/index.html
 
 # Show coverage by file
-poetry run pytest tests/unit/ --cov=mech_client --cov-report=term
+uv run pytest tests/unit/ --cov=mech_client --cov-report=term
 
 # Show missing lines
-poetry run pytest tests/unit/ --cov=mech_client --cov-report=term-missing
+uv run pytest tests/unit/ --cov=mech_client --cov-report=term-missing
 
 # Fail if coverage below threshold
-poetry run pytest tests/unit/ --cov=mech_client --cov-fail-under=100
+uv run pytest tests/unit/ --cov=mech_client --cov-fail-under=100
 ```
 
 ### Coverage Exclusions
@@ -919,13 +919,13 @@ CI Requirements:
 **Issue**: Tests fail with `ModuleNotFoundError`
 ```bash
 # Solution: Install dependencies
-poetry install
+uv sync
 ```
 
 **Issue**: Async tests skipped with "trio not installed"
 ```bash
 # Solution: Run with filter to exclude trio backend
-poetry run pytest tests/unit/ -k "not trio"
+uv run pytest tests/unit/ -k "not trio"
 ```
 
 **Issue**: Mock not being called

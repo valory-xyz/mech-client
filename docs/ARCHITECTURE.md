@@ -1099,13 +1099,13 @@ async def test_delivery_watcher():
 
 ```bash
 # Run all unit tests (exclude trio backend)
-poetry run pytest tests/unit/ -k "not trio"
+uv run pytest tests/unit/ -k "not trio"
 
 # Run specific layer
-poetry run pytest tests/unit/domain/
+uv run pytest tests/unit/domain/
 
 # Run with coverage
-poetry run pytest tests/unit/ --cov=mech_client --cov-report=html
+uv run pytest tests/unit/ --cov=mech_client --cov-report=html
 
 # Run linters
 tox -e black-check,isort-check,flake8,mypy,pylint

@@ -5,7 +5,7 @@ Thank you for your interest in contributing to Mech Client! This guide will help
 ## Prerequisites
 
 - Python >=3.10, <3.12
-- [Poetry](https://python-poetry.org/) for dependency management
+- [uv](https://docs.astral.sh/uv/) for dependency management
 - Git
 
 ## Getting Started
@@ -20,8 +20,8 @@ Thank you for your interest in contributing to Mech Client! This guide will help
 2. **Install dependencies:**
 
    ```bash
-   poetry install
-   poetry shell
+   uv sync
+   source .venv/bin/activate
    ```
 
 3. **Create a feature branch:**
@@ -35,7 +35,7 @@ Thank you for your interest in contributing to Mech Client! This guide will help
 ### Running Tests
 
 ```bash
-poetry run pytest tests/unit/ -k "not trio"
+uv run pytest tests/unit/ -k "not trio"
 ```
 
 ### Running Linters
@@ -101,7 +101,7 @@ tox -e isort
 tox -e black-check,isort-check,flake8,mypy,pylint,bandit,darglint,vulture && tox -e liccheck
 
 # 3. Run tests
-poetry run pytest tests/unit/ -k "not trio"
+uv run pytest tests/unit/ -k "not trio"
 ```
 
 ## Project Structure

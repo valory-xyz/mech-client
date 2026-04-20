@@ -14,7 +14,7 @@ This guide provides step-by-step instructions for manually testing all CLI comma
    # Install mech-client
    pip install mech-client
    # OR for development:
-   poetry install && poetry shell
+   uv sync && source .venv/bin/activate
    ```
 
 2. **Private Key**
