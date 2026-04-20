@@ -127,3 +127,13 @@ jobs:
         run: |
           echo Building distribution
           make dist
+
+  all-checks-passed:
+    name: All checks passed
+    if: always()
+    needs: [lock_check, linter_checks, test, build-pip-packages]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fail if any dependency failed or was cancelled
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
