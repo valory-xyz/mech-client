@@ -232,15 +232,6 @@ wheels = [
 ]
 
 [[package]]
-name = "asn1crypto"
-version = "1.4.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6b/b4/42f0e52ac2184a8abb31f0a6f98111ceee1aac0b473cee063882436e0e09/asn1crypto-1.4.0.tar.gz", hash = "sha256:f4f6e119474e58e04a2b1af817eb585b4fd72bdd89b998624712b5c99be7641c", size = 118733, upload-time = "2020-07-28T14:18:19.551Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b5/a8/56be92dcd4a5bf1998705a9b4028249fe7c9a035b955fe93b6a3e5b829f8/asn1crypto-1.4.0-py2.py3-none-any.whl", hash = "sha256:4bcdf33c861c7d40bdcd74d8e4dd7661aac320fcdf40b9a3f95b4ee12fde2fa8", size = 104031, upload-time = "2020-07-28T14:18:17.302Z" },
-]
-
-[[package]]
 name = "async-timeout"
 version = "5.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1829,18 +1820,14 @@ name = "mech-client"
 version = "0.20.1"
 source = { editable = "." }
 dependencies = [
-    { name = "asn1crypto" },
     { name = "click" },
     { name = "gql" },
-    { name = "jsonschema" },
     { name = "olas-operate-middleware" },
     { name = "open-aea-helpers" },
     { name = "pip" },
-    { name = "pydantic" },
     { name = "safe-eth-py" },
     { name = "setuptools" },
     { name = "tabulate" },
-    { name = "websocket-client" },
 ]
 
 [package.dev-dependencies]
@@ -1854,18 +1841,14 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "asn1crypto", specifier = ">=1.4.0,<1.5.0" },
     { name = "click", specifier = "==8.1.8" },
     { name = "gql", specifier = ">=3.4.1" },
-    { name = "jsonschema", specifier = ">=4.20.0,<4.24.0" },
     { name = "olas-operate-middleware", specifier = "==0.15.2" },
     { name = "open-aea-helpers", specifier = "==0.21.19" },
     { name = "pip", specifier = ">=24.0" },
-    { name = "pydantic", specifier = ">=2.12.0" },
     { name = "safe-eth-py", specifier = ">=7.18.0,<8" },
     { name = "setuptools", specifier = ">=78.1.1,<82" },
     { name = "tabulate", specifier = ">=0.9.0,<0.10" },
-    { name = "websocket-client", specifier = ">=0.32.0,<1" },
 ]
 
 [package.metadata.requires-dev]
@@ -3761,18 +3744,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/93/84/1516ee335e89e4d7d0837895d21091244ee3189d1ffe76fa435d2bd15f4e/web3-7.15.0.tar.gz", hash = "sha256:2a2bcbab8fcf120c2256ddbdc88fcc80a47c100ad758659a980e9fab66609171", size = 2211838, upload-time = "2026-04-02T18:20:40.355Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2b/f0/ef9b82557b22b1cdb95ec7863d1d9897ed3b9e096a1af5e046fb892efdc0/web3-7.15.0-py3-none-any.whl", hash = "sha256:bbeba510aaa4eb3c99662d911db9d2a648ab40f608cf0269065f7db1d1d0b0c0", size = 1373052, upload-time = "2026-04-02T18:20:36.757Z" },
-]
-
-[[package]]
-name = "websocket-client"
-version = "0.59.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "six" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/48/bf/c706b56243f1641159ff211b51d3341024e1cdf63defc2b74595b6319039/websocket-client-0.59.0.tar.gz", hash = "sha256:d376bd60eace9d437ab6d7ee16f4ab4e821c9dae591e1b783c58ebd8aaf80c5c", size = 57897, upload-time = "2021-05-05T01:43:07.811Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f7/0c/d52a2a63512a613817846d430d16a8fbe5ea56dd889e89c68facf6b91cb6/websocket_client-0.59.0-py2.py3-none-any.whl", hash = "sha256:2e50d26ca593f70aba7b13a489435ef88b8fc3b5c5643c1ce8808ff9b40f0b32", size = 67216, upload-time = "2021-05-05T01:43:04.863Z" },
 ]
 
 [[package]]
