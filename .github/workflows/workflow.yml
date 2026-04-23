@@ -68,6 +68,8 @@ jobs:
       run: tox -e spell-check
     - name: License compatibility check
       run: tox -e liccheck
+    - name: Check third-party package hashes match upstream
+      run: tox -e check-third-party-hashes
 
   test:
     name: Run tests

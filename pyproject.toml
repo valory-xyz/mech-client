@@ -16,7 +16,7 @@ dependencies = [
     "click==8.1.8",
     "jsonschema>=4.20.0,<4.24.0",
     "pydantic>=2.12.0",
-    "open-aea-helpers==0.21.18",
+    "open-aea-helpers==0.21.19",
     "pip>=24.0",
 ]
 
