@@ -232,15 +232,6 @@ wheels = [
 ]
 
 [[package]]
-name = "asn1crypto"
-version = "1.4.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6b/b4/42f0e52ac2184a8abb31f0a6f98111ceee1aac0b473cee063882436e0e09/asn1crypto-1.4.0.tar.gz", hash = "sha256:f4f6e119474e58e04a2b1af817eb585b4fd72bdd89b998624712b5c99be7641c", size = 118733, upload-time = "2020-07-28T14:18:19.551Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b5/a8/56be92dcd4a5bf1998705a9b4028249fe7c9a035b955fe93b6a3e5b829f8/asn1crypto-1.4.0-py2.py3-none-any.whl", hash = "sha256:4bcdf33c861c7d40bdcd74d8e4dd7661aac320fcdf40b9a3f95b4ee12fde2fa8", size = 104031, upload-time = "2020-07-28T14:18:17.302Z" },
-]
-
-[[package]]
 name = "async-timeout"
 version = "5.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1829,18 +1820,14 @@ name = "mech-client"
 version = "0.20.1"
 source = { editable = "." }
 dependencies = [
-    { name = "asn1crypto" },
     { name = "click" },
     { name = "gql" },
-    { name = "jsonschema" },
     { name = "olas-operate-middleware" },
     { name = "open-aea-helpers" },
     { name = "pip" },
-    { name = "pydantic" },
     { name = "safe-eth-py" },
     { name = "setuptools" },
     { name = "tabulate" },
-    { name = "websocket-client" },
 ]
 
 [package.dev-dependencies]
@@ -1854,18 +1841,14 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "asn1crypto", specifier = ">=1.4.0,<1.5.0" },
-    { name = "click", specifier = "==8.1.8" },
+    { name = "click", specifier = ">=8.1,<9" },
     { name = "gql", specifier = ">=3.4.1" },
-    { name = "jsonschema", specifier = ">=4.20.0,<4.24.0" },
-    { name = "olas-operate-middleware", specifier = "==0.15.2" },
-    { name = "open-aea-helpers", specifier = "==0.21.18" },
+    { name = "olas-operate-middleware", specifier = ">=0.15.2,<0.16" },
+    { name = "open-aea-helpers", specifier = "==0.21.19" },
     { name = "pip", specifier = ">=24.0" },
-    { name = "pydantic", specifier = ">=2.12.0" },
     { name = "safe-eth-py", specifier = ">=7.18.0,<8" },
     { name = "setuptools", specifier = ">=78.1.1,<82" },
     { name = "tabulate", specifier = ">=0.9.0,<0.10" },
-    { name = "websocket-client", specifier = ">=0.32.0,<1" },
 ]
 
 [package.metadata.requires-dev]
@@ -2220,19 +2203,14 @@ wheels = [
 
 [[package]]
 name = "open-aea-helpers"
-version = "0.21.18"
+version = "0.21.19"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click" },
     { name = "open-autonomy" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "requests" },
-    { name = "toml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bf/8f/dd492cfe6a15080c59e0454a038392d08386900d26b88c59df25519d0ebc/open_aea_helpers-0.21.18.tar.gz", hash = "sha256:2a55fe9b437471887dc3f1334496b63f365d2690e111cf42416c1c2c7b479fe2", size = 27126, upload-time = "2026-04-16T17:43:38.791Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/9c/d00ba8599f69f736db2ce3ceda88023c85955e2484a92ed8baf52370264c/open_aea_helpers-0.21.19.tar.gz", hash = "sha256:0e005b1be53a0f3305422996c6a30ebd597ad3b9406c5a6c62382924a86efc83", size = 28293, upload-time = "2026-04-21T10:53:34.036Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0d/a1/3d85e0df9bad3a2931a5e661b97d65bfc113efbf53bd3ed1daf699540fe9/open_aea_helpers-0.21.18-py3-none-any.whl", hash = "sha256:ef41562dafbfce310ce32f77ad31e183a536372c13a2a7b5e59307584e1b6564", size = 38188, upload-time = "2026-04-16T17:43:37.957Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/ce/0dc430faf05c1ead28338d1ca013ed1b9a0ebc673f58a91ee5462a8a37ed/open_aea_helpers-0.21.19-py3-none-any.whl", hash = "sha256:42bd0b54791664e1bcb873b6cae22ea1f900dfe80ca28402e07c21c7e409ed6c", size = 38704, upload-time = "2026-04-21T10:53:33.206Z" },
 ]
 
 [[package]]
@@ -3520,15 +3498,6 @@ wheels = [
 ]
 
 [[package]]
-name = "toml"
-version = "0.10.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/be/ba/1f744cdc819428fc6b5084ec34d9b30660f6f9daaf70eead706e3203ec3c/toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f", size = 22253, upload-time = "2020-11-01T01:40:22.204Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b", size = 16588, upload-time = "2020-11-01T01:40:20.672Z" },
-]
-
-[[package]]
 name = "tomli"
 version = "2.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3775,18 +3744,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/93/84/1516ee335e89e4d7d0837895d21091244ee3189d1ffe76fa435d2bd15f4e/web3-7.15.0.tar.gz", hash = "sha256:2a2bcbab8fcf120c2256ddbdc88fcc80a47c100ad758659a980e9fab66609171", size = 2211838, upload-time = "2026-04-02T18:20:40.355Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2b/f0/ef9b82557b22b1cdb95ec7863d1d9897ed3b9e096a1af5e046fb892efdc0/web3-7.15.0-py3-none-any.whl", hash = "sha256:bbeba510aaa4eb3c99662d911db9d2a648ab40f608cf0269065f7db1d1d0b0c0", size = 1373052, upload-time = "2026-04-02T18:20:36.757Z" },
-]
-
-[[package]]
-name = "websocket-client"
-version = "0.59.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "six" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/48/bf/c706b56243f1641159ff211b51d3341024e1cdf63defc2b74595b6319039/websocket-client-0.59.0.tar.gz", hash = "sha256:d376bd60eace9d437ab6d7ee16f4ab4e821c9dae591e1b783c58ebd8aaf80c5c", size = 57897, upload-time = "2021-05-05T01:43:07.811Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f7/0c/d52a2a63512a613817846d430d16a8fbe5ea56dd889e89c68facf6b91cb6/websocket_client-0.59.0-py2.py3-none-any.whl", hash = "sha256:2e50d26ca593f70aba7b13a489435ef88b8fc3b5c5643c1ce8808ff9b40f0b32", size = 67216, upload-time = "2021-05-05T01:43:04.863Z" },
 ]
 
 [[package]]
