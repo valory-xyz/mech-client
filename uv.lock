@@ -1841,9 +1841,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "click", specifier = "==8.1.8" },
+    { name = "click", specifier = ">=8.1,<9" },
     { name = "gql", specifier = ">=3.4.1" },
-    { name = "olas-operate-middleware", specifier = "==0.15.2" },
+    { name = "olas-operate-middleware", specifier = ">=0.15.2,<0.16" },
     { name = "open-aea-helpers", specifier = "==0.21.19" },
     { name = "pip", specifier = ">=24.0" },
     { name = "safe-eth-py", specifier = ">=7.18.0,<8" },
