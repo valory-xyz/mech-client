@@ -24,10 +24,9 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
+from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
 from web3 import Web3
 from web3.contract import Contract
-
-from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
 
 logger = logging.getLogger(__name__)
 

@@ -75,8 +75,10 @@ class NativePaymentStrategy(PaymentStrategy):
         """
         Get the native balance tracker contract address for this chain.
 
+        Propagates ``ValueError`` from ``_lookup_balance_tracker`` when no
+        native balance tracker is registered for the active chain.
+
         :return: Balance tracker contract address
-        :raises ValueError: If native balance tracker not available for this chain
         """
         return self._lookup_balance_tracker(CHAIN_TO_NATIVE_BALANCE_TRACKER, "Native")
 

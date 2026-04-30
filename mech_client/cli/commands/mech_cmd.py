@@ -20,12 +20,11 @@
 """Mech command for managing and querying AI mechs on the marketplace."""
 
 import click
-from tabulate import tabulate  # type: ignore
-
 from mech_client.cli.validators import validate_chain_config
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
 from mech_client.utils.errors.handlers import handle_cli_errors
+from tabulate import tabulate  # type: ignore
 
 
 @click.group()
@@ -55,6 +54,8 @@ def mech_list(chain_config: str) -> None:
     MECHX_SUBGRAPH_URL environment variable.
 
     Example: mechx mech list --chain-config gnosis
+
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)

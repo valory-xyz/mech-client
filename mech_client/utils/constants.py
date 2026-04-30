@@ -101,10 +101,10 @@ REQUEST_TYPE_BATCH = "batch"
 # Payment method display names
 PAYMENT_METHOD_NAMES = {
     "NATIVE": "Native Token",
-    "OLAS_TOKEN": "OLAS Token",
-    "USDC_TOKEN": "USDC Token",
+    "OLAS_TOKEN": "OLAS Token",  # nosec B105 — display label, not a credential
+    "USDC_TOKEN": "USDC Token",  # nosec B105 — display label, not a credential
     "NATIVE_NVM": "Native Token (NVM Subscription)",
-    "TOKEN_NVM_USDC": "USDC Token (NVM Subscription)",
+    "TOKEN_NVM_USDC": "USDC Token (NVM Subscription)",  # nosec B105 — display label
 }
 
 # Tool schema field names

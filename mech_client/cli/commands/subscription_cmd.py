@@ -23,7 +23,6 @@ from typing import Optional
 
 import click
 from click import ClickException
-
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config
 from mech_client.services.subscription_service import SubscriptionService
@@ -57,6 +56,10 @@ def subscription_purchase(  # pylint: disable=too-many-statements,too-many-local
     Only available on Gnosis and Base chains.
 
     Example: mechx subscription purchase --chain-config gnosis
+
+    :param ctx: Click context (carries client_mode flag from the parent group).
+    :param chain_config: Chain configuration name (gnosis or base).
+    :param key: Optional path to a private-key file (required in client mode).
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)

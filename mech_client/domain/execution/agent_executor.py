@@ -22,11 +22,10 @@
 from typing import Any, Dict
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
-from safe_eth.eth import EthereumClient
-from web3.contract import Contract as Web3Contract
-
 from mech_client.domain.execution.base import TransactionExecutor
 from mech_client.infrastructure.blockchain.safe_client import SafeClient
+from safe_eth.eth import EthereumClient
+from web3.contract import Contract as Web3Contract
 
 
 class AgentExecutor(TransactionExecutor):

@@ -21,8 +21,6 @@
 
 from typing import Dict, Iterable, Optional, Sequence, Tuple, Type
 
-from web3 import Web3
-
 from mech_client.infrastructure.nvm.contracts.agreement_manager import (
     AgreementManagerContract,
 )
@@ -42,6 +40,7 @@ from mech_client.infrastructure.nvm.contracts.subscription_provider import (
 )
 from mech_client.infrastructure.nvm.contracts.token import TokenContract
 from mech_client.infrastructure.nvm.contracts.transfer_nft import TransferNFTContract
+from web3 import Web3
 
 
 class NVMContractFactory:

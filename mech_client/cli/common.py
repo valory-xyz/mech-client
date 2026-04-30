@@ -26,12 +26,11 @@ from typing import Callable, Optional, TypeVar
 import click
 from aea_ledger_ethereum import EthereumCrypto
 from click import ClickException
-from safe_eth.eth import EthereumClient
-
 from mech_client.cli.validators import validate_ethereum_address
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.operate.key_manager import fetch_agent_mode_keys
 from mech_client.utils.constants import DEFAULT_PRIVATE_KEY_FILE
+from safe_eth.eth import EthereumClient
 
 
 @dataclass

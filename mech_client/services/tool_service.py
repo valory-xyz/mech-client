@@ -44,9 +44,11 @@ class ToolService:
         """
         Get description for a specific tool.
 
+        Propagates ``ValueError`` from the underlying tool manager when
+        the tool cannot be located.
+
         :param tool_id: Tool ID in format "service_id-tool_name"
         :return: Tool description
-        :raises ValueError: If tool not found
         """
         return self.tool_manager.get_tool_description(tool_id)
 
@@ -54,9 +56,11 @@ class ToolService:
         """
         Get input/output schema for a specific tool.
 
+        Propagates ``ValueError`` from the underlying tool manager when
+        the tool cannot be located.
+
         :param tool_id: Tool ID in format "service_id-tool_name"
         :return: Dictionary with name, description, input, output
-        :raises ValueError: If tool not found
         """
         return self.tool_manager.get_tool_schema(tool_id)
 

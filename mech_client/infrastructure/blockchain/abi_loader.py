@@ -29,10 +29,11 @@ from mech_client.infrastructure.config.constants import ABI_DIR_PATH
 def get_abi(contract_name: str) -> List:
     """Load contract ABI from JSON file.
 
+    Propagates ``FileNotFoundError`` if the ABI file is missing and
+    ``json.JSONDecodeError`` if its contents are malformed.
+
     :param contract_name: Contract ABI filename (e.g., "MechMarketplace.json")
     :return: Contract ABI as list of ABI elements
-    :raises FileNotFoundError: If ABI file doesn't exist
-    :raises json.JSONDecodeError: If ABI file is malformed
     """
     abi_path = ABI_DIR_PATH / contract_name
     with open(abi_path, encoding="utf-8") as f:

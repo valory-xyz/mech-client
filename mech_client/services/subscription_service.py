@@ -23,9 +23,6 @@ from dataclasses import asdict
 from typing import Any, Dict, Optional, cast
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
-from safe_eth.eth import EthereumClient
-from web3 import Web3
-
 from mech_client.domain.execution.factory import ExecutorFactory
 from mech_client.domain.subscription import (
     AgreementBuilder,
@@ -48,6 +45,8 @@ from mech_client.infrastructure.nvm.contracts import (
     TokenContract,
     TransferNFTContract,
 )
+from safe_eth.eth import EthereumClient
+from web3 import Web3
 
 
 class SubscriptionService:  # pylint: disable=too-many-instance-attributes,too-few-public-methods
@@ -114,8 +113,6 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes,too-f
 
         :param plan_did: Optional plan DID (uses config default if not provided)
         :return: Result dictionary with status and transaction details
-        :raises ValueError: If insufficient balance or invalid configuration
-        :raises RuntimeError: If transaction fails
         """
         # Use plan DID from config if not provided
         if not plan_did:

@@ -25,7 +25,6 @@ from typing import Any, Dict, List, Optional
 
 import click
 from click import ClickException
-
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
@@ -132,6 +131,19 @@ def request(
       # Batch request with prepaid balance
       mechx request --prompts "Prompt 1" --prompts "Prompt 2" \
         --tools tool1 --tools tool2 --use-prepaid --chain-config gnosis
+
+    :param ctx: Click context (carries client_mode flag from the parent group).
+    :param prompts: One or more prompt strings to send (one per request in a batch).
+    :param priority_mech: Address of the mech to prioritise for the request.
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
+    :param use_prepaid: Use the marketplace prepaid balance instead of per-request payment.
+    :param use_offchain: Route delivery off-chain (auto-discovered URL); implies prepaid.
+    :param key: Optional path to a private-key file (required in client mode).
+    :param tools: One or more tool names matching ``prompts`` positionally.
+    :param extra_attribute: Optional ``key=value`` extras attached to each request.
+    :param retries: Number of retries when sending a transaction.
+    :param timeout: Per-request timeout (seconds) waiting for delivery.
+    :param sleep: Sleep duration (seconds) between retry attempts.
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)

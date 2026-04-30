@@ -26,12 +26,11 @@ from typing import Any, Dict, Optional
 
 import requests
 from aea_ledger_ethereum import EthereumApi
-from web3.constants import ADDRESS_ZERO
-
 from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.config.loader import get_mech_config
+from web3.constants import ADDRESS_ZERO
 
 logger = logging.getLogger(__name__)
 

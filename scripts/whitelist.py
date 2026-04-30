@@ -1,5 +1,12 @@
-# Vulture whitelist for mech-client
-# This file contains intentional "unused" code that should not be flagged
+# flake8: noqa
+# type: ignore
+# pylint: skip-file
+# Vulture whitelist for mech-client.
+#
+# This file contains intentional "unused" code that should not be flagged.
+# The bare-name references below are deliberate — vulture parses them to
+# extend its allowlist, so flake8/pylint/mypy violations on this file are
+# expected and silenced wholesale rather than per-line.
 
 # CLI command parameters (reserved for future functionality)
 retries  # CLI parameter in request_cmd.py - reserved for retry logic

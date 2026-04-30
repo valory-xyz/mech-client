@@ -23,9 +23,8 @@ import logging
 from typing import List, Union
 
 from eth_typing import ChecksumAddress
-from web3.types import ENS
-
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
+from web3.types import ENS
 
 logger = logging.getLogger(__name__)
 

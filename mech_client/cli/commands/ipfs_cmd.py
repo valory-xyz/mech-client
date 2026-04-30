@@ -20,7 +20,6 @@
 """IPFS command for IPFS utility operations."""
 
 import click
-
 from mech_client.infrastructure.ipfs.client import IPFSClient
 from mech_client.infrastructure.ipfs.metadata import push_metadata_to_ipfs
 from mech_client.utils.errors.handlers import handle_cli_errors
@@ -45,6 +44,8 @@ def ipfs_upload(file_path: str) -> None:
     hash.
 
     Example: mechx ipfs upload ./myfile.json
+
+    :param file_path: Path to the file to upload.
     """
     client = IPFSClient()
     v1_file_hash, v1_file_hash_hex = client.upload(file_path)
@@ -63,6 +64,9 @@ def ipfs_upload_prompt(prompt: str, tool_name: str) -> None:
     mech requests. Returns the IPFS hash that can be used in requests.
 
     Example: mechx ipfs upload-prompt "Summarize this text" "openai-gpt-4"
+
+    :param prompt: Prompt string to bundle into the metadata.
+    :param tool_name: Mech tool name the prompt should be routed to.
     """
     v1_file_hash_hex_truncated, v1_file_hash_hex = push_metadata_to_ipfs(
         prompt, tool_name

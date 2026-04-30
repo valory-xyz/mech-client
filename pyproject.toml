@@ -16,6 +16,7 @@ dependencies = [
     "safe-eth-py>=7.18.0,<8",
     "click<9,>=8.1",
     "pip>=24.0",
+    "python-dotenv>=1.0,<2",
 ]
 
 [project.scripts]
@@ -23,16 +24,59 @@ mechx = "mech_client.cli.main:cli"
 
 [dependency-groups]
 dev = [
-    "tomte[tox]==0.6.5",
     "pytest-asyncio==1.3.0",
     "pytest-cov>=7.0.0,<8",
     "mkdocs>=1.6.0,<2",
     "mkdocs-material>=9.5.0,<10",
+    "tomte[cli, tests] @ git+https://github.com/valory-xyz/tomte.git@13731593dd93cdaeab419c7c334d6b2e33173033",
 ]
 
 [tool.uv]
 default-groups = "all"
 prerelease = "allow"
+
+[tool.tomte]
+# mech-client is a Python library; first-party Python lives at the repo
+# root, not under packages/. Override service_specific_packages to point
+# the linters at the actual code.
+service_specific_packages = ["mech_client", "scripts"]
+pytest_targets = ["tests/unit"]
+# Tomte canonical envs need OA / open-aea versions for liccheck and the
+# autonomy-dependent checks. mech-client is a library and doesn't ship
+# open-autonomy at runtime — set these explicitly so the wrapper can
+# render a valid tox.ini.
+open_autonomy_version = "0.21.19"
+open_aea_version = "2.2.1"
+# Mech marketplace contract type-id constants (32-byte keccak hashes)
+# trip gitleaks' generic-secret rule. Allowlist the two files that
+# carry them — they are documented public protocol identifiers, not
+# credentials.
+gitleaks_extra_paths = [
+    "mech_client/infrastructure/config/payment_config.py",
+    "mech_client/marketplace_interact.py",
+]
+tomte_dep_pin = " @ git+https://github.com/valory-xyz/tomte.git@13731593dd93cdaeab419c7c334d6b2e33173033"
+# Pylint disables historically applied across mech-client. Tomte's
+# canonical pylintrc already covers most of these; the surviving codes
+# are:
+#   E1101  operate-library LocalResource has dynamic attributes pylint
+#          can't follow (e.g. `wallet.safes`, `service.chain_configs`).
+#   W0719  CLI surfaces wrap library exceptions as plain Exception by
+#          design — replacing them all with custom subclasses is out
+#          of scope for the cleanup wave.
+#   C0411  Tomte's canonical isort.cfg only registers `autonomy` as
+#          first-party. mech-client's source tree makes pylint see
+#          `mech_client.*` as first-party, so it disagrees with isort
+#          on whether `mech_client` should sit before or after
+#          third-party imports. With no escape hatch on the canonical
+#          render, deferring to isort's view (lexicographic across
+#          third-party + first-party) is the only consistent option.
+#   W2301  Abstract methods need an explicit `...` body to avoid a
+#          darglint 1.8.1 / Py3.14 crash ("FunctionDescription object
+#          has no attribute 'docstring'") that aborts the whole
+#          darglint run. Pylint flags the `...` as redundant, but it
+#          is genuinely required for the linter pipeline to complete.
+pylint_disables = ["E1101", "W0719", "C0411", "W2301"]
 
 [tool.uv.build-backend]
 module-name = [

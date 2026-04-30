@@ -63,11 +63,13 @@ class SubgraphClient:
         """
         Execute a GraphQL query.
 
+        Any underlying error from the gql client (transport / parse /
+        server) propagates to the caller unchanged.
+
         :param query: GraphQL query string
         :return: Query response data
-        :raises Exception: If query execution fails
         """
-        return self.client.execute(document=gql(request_string=query))
+        return self.client.execute(gql(request_string=query))
 
     def query_mechs(
         self,

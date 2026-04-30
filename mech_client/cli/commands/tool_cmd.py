@@ -22,12 +22,11 @@
 from typing import List, Tuple
 
 import click
-from tabulate import tabulate  # type: ignore
-
 from mech_client.cli.validators import validate_chain_config, validate_tool_id
 from mech_client.services.tool_service import ToolService
 from mech_client.utils.errors.handlers import handle_cli_errors
 from mech_client.utils.validators import validate_service_id
+from tabulate import tabulate  # type: ignore
 
 
 @click.group()
@@ -56,6 +55,9 @@ def tool_list(agent_id: int, chain_config: str) -> None:
     ID of the mech on the Olas service registry.
 
     Example: mechx tool list 1 --chain-config gnosis
+
+    :param agent_id: Mech service ID on the Olas service registry.
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)
@@ -92,6 +94,9 @@ def tool_describe(tool_id: str, chain_config: str) -> None:
     to discover available tools.
 
     Example: mechx tool describe 1-openai-gpt-4 --chain-config gnosis
+
+    :param tool_id: Tool ID in ``service_id-tool_name`` form.
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
     """
     # Validate inputs
     validated_chain = validate_chain_config(chain_config)
@@ -119,6 +124,9 @@ def tool_schema(tool_id: str, chain_config: str) -> None:
     (e.g., "1-openai-gpt-4").
 
     Example: mechx tool schema 1-openai-gpt-4 --chain-config gnosis
+
+    :param tool_id: Tool ID in ``service_id-tool_name`` form.
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
     """
     # Validate inputs
     validated_chain = validate_chain_config(chain_config)

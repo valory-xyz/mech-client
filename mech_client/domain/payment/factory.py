@@ -22,7 +22,6 @@
 from typing import Optional
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
-
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.domain.payment.native import NativePaymentStrategy
 from mech_client.domain.payment.nvm import NVMPaymentStrategy

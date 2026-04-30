@@ -65,6 +65,7 @@ class TransactionExecutor(ABC):
         :return: Transaction hash
         :raises Exception: If transaction fails
         """
+        ...
 
     @abstractmethod
     def execute_transfer(
@@ -82,6 +83,7 @@ class TransactionExecutor(ABC):
         :return: Transaction hash
         :raises Exception: If transaction fails
         """
+        ...
 
     @abstractmethod
     def get_sender_address(self) -> str:
@@ -90,6 +92,7 @@ class TransactionExecutor(ABC):
 
         :return: Sender address (EOA for client mode, Safe for agent mode)
         """
+        ...
 
     @abstractmethod
     def get_nonce(self) -> int:
@@ -98,3 +101,4 @@ class TransactionExecutor(ABC):
 
         :return: Transaction nonce
         """
+        ...

@@ -23,14 +23,13 @@ import logging
 from typing import Optional
 
 from aea_ledger_ethereum import EthereumCrypto
-from safe_eth.eth import EthereumClient
-
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.blockchain.receipt_waiter import wait_for_receipt
 from mech_client.infrastructure.config import PaymentType
 from mech_client.services.base_service import BaseTransactionService
+from safe_eth.eth import EthereumClient
 
 logger = logging.getLogger(__name__)
 

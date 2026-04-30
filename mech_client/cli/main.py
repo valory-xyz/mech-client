@@ -24,7 +24,6 @@ from pathlib import Path
 import click
 from click import ClickException
 from dotenv import load_dotenv
-
 from mech_client import __version__
 
 # Import command groups
@@ -64,6 +63,10 @@ def cli(ctx: click.Context, client_mode: bool) -> None:
     Mech Client enables you to send AI task requests to on-chain AI agents (mechs)
     via the Olas (Mech) Marketplace. Supports multiple payment methods,
     tool discovery, and both agent mode (Safe multisig) and client mode (EOA).
+
+    :param ctx: Click context object carrying invocation state across subcommands.
+    :param client_mode: When ``True``, run in EOA-based client mode; otherwise
+        agent mode (Safe multisig) is used.
     """
     load_dotenv(dotenv_path=ENV_PATH, override=False)
     ctx.ensure_object(dict)

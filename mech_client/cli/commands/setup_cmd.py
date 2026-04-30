@@ -23,7 +23,6 @@ from pathlib import Path
 
 import click
 from click import ClickException
-
 from mech_client.cli.validators import validate_chain_config
 from mech_client.services.setup_service import SetupService
 from mech_client.utils.errors.handlers import handle_cli_errors
@@ -53,6 +52,8 @@ def setup(chain_config: str) -> None:
     for all chains.
 
     Example: mechx setup --chain-config gnosis
+
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)
