@@ -17,6 +17,11 @@ dependencies = [
     "click<9,>=8.1",
     "pip>=24.0",
     "python-dotenv>=1.0,<2",
+    # Direct imports in mech_client/infrastructure/ipfs/client.py.
+    # Used to be pulled in transitively by open-aea-cli-ipfs ≤ 2.1.0;
+    # the 2.2.x line dropped it, so declare explicitly.
+    "py-multibase==1.0.3",
+    "py-multicodec==0.2.1",
 ]
 
 [project.scripts]
