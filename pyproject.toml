@@ -28,7 +28,7 @@ dev = [
     "pytest-cov>=7.0.0,<8",
     "mkdocs>=1.6.0,<2",
     "mkdocs-material>=9.5.0,<10",
-    "tomte[cli, tests] @ git+https://github.com/valory-xyz/tomte.git@13731593dd93cdaeab419c7c334d6b2e33173033",
+    "tomte[cli, tests] @ git+https://github.com/valory-xyz/tomte.git@92cb14f4696bf3eba3ceec36e1a915961d5c7992",
 ]
 
 [tool.uv]
@@ -55,7 +55,7 @@ gitleaks_extra_paths = [
     "mech_client/infrastructure/config/payment_config.py",
     "mech_client/marketplace_interact.py",
 ]
-tomte_dep_pin = " @ git+https://github.com/valory-xyz/tomte.git@13731593dd93cdaeab419c7c334d6b2e33173033"
+tomte_dep_pin = " @ git+https://github.com/valory-xyz/tomte.git@92cb14f4696bf3eba3ceec36e1a915961d5c7992"
 # Pylint disables historically applied across mech-client. Tomte's
 # canonical pylintrc already covers most of these; the surviving codes
 # are:
