@@ -93,3 +93,10 @@ class TestEnvironmentConfigLoading:
             env_config.mechx_transaction_url
             == "https://tx.example.com/{transaction_digest}"
         )
+
+    @patch.dict("os.environ", {"OPERATE_PASSWORD": "s3cret"}, clear=True)
+    def test_operate_password_loaded_from_env(self) -> None:
+        """Test that OPERATE_PASSWORD is loaded into operate_password."""
+        env_config = EnvironmentConfig.load()
+
+        assert env_config.operate_password == "s3cret"
