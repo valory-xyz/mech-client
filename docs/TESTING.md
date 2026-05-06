@@ -45,7 +45,6 @@ The mech-client uses pytest for testing with a comprehensive suite of unit tests
 ```
 tests/
 ├── conftest.py                              # Shared fixtures for all tests
-├── pytest.ini                               # Pytest configuration
 ├── unit/                                    # Unit tests (689 tests, 100% coverage)
 │   ├── __init__.py
 │   ├── cli/                                 # CLI layer tests (159 tests)
@@ -351,7 +350,7 @@ def test_with_fixture(mock_ledger_api: MagicMock) -> None:
 
 ### 6. Async Testing
 
-Use `@pytest.mark.asyncio` for async tests (configured with `asyncio_mode = strict` in `pytest.ini`):
+Use `@pytest.mark.asyncio` for async tests (configured with `asyncio_mode = strict` under `[pytest]` in `tox.ini`):
 
 ```python
 @pytest.mark.asyncio
@@ -884,20 +883,20 @@ Tests must pass linting before merging:
 
 ```bash
 # Run all linters
-tox -e black-check,isort-check,flake8,mypy,pylint,bandit,darglint,vulture && tox -e liccheck
+tomte tox -p -e black-check -e isort-check -e flake8 -e mypy -e pylint -e darglint -e vulture && tomte tox -e liccheck
 
 # Fix formatting issues
-tox -e black
-tox -e isort
+tomte tox -e black
+tomte tox -e isort
 
 # Type check
-tox -e mypy
+tomte tox -e mypy
 
 # Security check
-tox -e bandit
+tomte tox -e bandit
 
-# Check for unused code
-tox -e vulture
+# Check for unused code (vulture is opt-in; not enforced in CI)
+tomte tox -e vulture
 ```
 
 ## Continuous Integration
@@ -948,11 +947,11 @@ watcher = OnchainDeliveryWatcher(
 **Issue**: Linter failures after adding tests
 ```bash
 # Solution: Run formatters
-tox -e black
-tox -e isort
+tomte tox -e black
+tomte tox -e isort
 
 # Then check again
-tox -e black-check,isort-check,flake8,mypy
+tomte tox -p -e black-check -e isort-check -e flake8 -e mypy
 ```
 
 ## Best Practices Summary
