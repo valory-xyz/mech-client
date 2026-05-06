@@ -87,8 +87,8 @@ class ClientExecutor(TransactionExecutor):
         """
         Execute a plain native token transfer in client mode.
 
-        Propagates exceptions from ``ledger_api`` (``raise_on_try=True``)
-        when build or send fails.
+        Propagates exceptions from ``ledger_api.send_signed_transaction``
+        (``raise_on_try=True``) when send fails.
 
         :param to_address: Destination address
         :param amount: Amount to transfer in wei

@@ -113,6 +113,9 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes,too-f
 
         :param plan_did: Optional plan DID (uses config default if not provided)
         :return: Result dictionary with status and transaction details
+
+        Propagates ``ValueError`` from balance / agreement / manager helpers
+        and ``RuntimeError`` from manager when on-chain calls fail.
         """
         # Use plan DID from config if not provided
         if not plan_did:
