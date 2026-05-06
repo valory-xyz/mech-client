@@ -1,6 +1,6 @@
 [project]
 name = "mech-client"
-version = "v0.20.1"
+version = "v0.20.2"
 description = "Basic client to interact with a mech"
 requires-python = ">=3.10,<3.15"
 readme = "README.md"
