@@ -22,9 +22,8 @@
 from typing import Any, Dict
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
-from web3.contract import Contract as Web3Contract
-
 from mech_client.domain.execution.base import TransactionExecutor
+from web3.contract import Contract as Web3Contract
 
 
 class ClientExecutor(TransactionExecutor):
@@ -56,12 +55,14 @@ class ClientExecutor(TransactionExecutor):
 
         Builds, signs, and sends a transaction using the private key.
 
+        Propagates exceptions from ``ledger_api`` (``raise_on_try=True``)
+        when build, sign, or send fails.
+
         :param contract: Contract instance to call
         :param method_name: Name of the contract method
         :param method_args: Arguments for the contract method
         :param tx_args: Transaction arguments (sender, value, gas, etc.)
         :return: Transaction hash
-        :raises Exception: If transaction fails
         """
         raw_transaction = self.ledger_api.build_transaction(
             contract_instance=contract,
@@ -86,11 +87,13 @@ class ClientExecutor(TransactionExecutor):
         """
         Execute a plain native token transfer in client mode.
 
+        Propagates exceptions from ``ledger_api.send_signed_transaction``
+        (``raise_on_try=True``) when send fails.
+
         :param to_address: Destination address
         :param amount: Amount to transfer in wei
         :param gas: Gas limit for the transaction
         :return: Transaction hash
-        :raises Exception: If transaction fails
         """
         raw_transaction = self.ledger_api.get_transfer_transaction(
             sender_address=self.crypto.address,

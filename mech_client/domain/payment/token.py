@@ -22,7 +22,6 @@
 from typing import Optional, TYPE_CHECKING
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
-
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
 #
-#   Copyright 2025 Valory AG
+#   Copyright 2025-2026 Valory AG
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -93,3 +93,22 @@ class TestEnvironmentConfigLoading:
             env_config.mechx_transaction_url
             == "https://tx.example.com/{transaction_digest}"
         )
+
+    @patch.dict("os.environ", {"OPERATE_PASSWORD": "s3cret"}, clear=True)
+    def test_operate_password_loaded_from_env(self) -> None:
+        """Test that OPERATE_PASSWORD is loaded into operate_password."""
+        env_config = EnvironmentConfig.load()
+
+        assert env_config.operate_password == "s3cret"
+
+    @patch.dict("os.environ", {"OPERATE_PASSWORD": ""}, clear=True)
+    def test_operate_password_empty_string_treated_as_unset(self) -> None:
+        """Empty OPERATE_PASSWORD must not become an empty-string password.
+
+        The loader uses `if password:` so falsy values leave operate_password
+        as None. Locks in that contract — a future refactor to
+        `if password is not None:` would silently change behavior.
+        """
+        env_config = EnvironmentConfig.load()
+
+        assert env_config.operate_password is None

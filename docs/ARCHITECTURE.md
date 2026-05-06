@@ -1108,7 +1108,7 @@ uv run pytest tests/unit/domain/
 uv run pytest tests/unit/ --cov=mech_client --cov-report=html
 
 # Run linters
-tox -e black-check,isort-check,flake8,mypy,pylint
+tomte tox -p -e black-check -e isort-check -e flake8 -e mypy -e pylint
 ```
 
 ## Best Practices

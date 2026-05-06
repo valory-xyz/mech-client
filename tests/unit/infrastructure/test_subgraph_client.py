@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
 #
-#   Copyright 2025 Valory AG
+#   Copyright 2025-2026 Valory AG
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -136,8 +136,8 @@ class TestSubgraphClientExecute:
         # Verify gql was called with query string
         mock_gql.assert_called_once_with(request_string=query_string)
 
-        # Verify execute was called with gql document
-        mock_client.execute.assert_called_once_with(document=mock_document)
+        # Verify execute was called with the gql document positionally
+        mock_client.execute.assert_called_once_with(mock_document)
 
         # Verify result
         assert result == expected_result

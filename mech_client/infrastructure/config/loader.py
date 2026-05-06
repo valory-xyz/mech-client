@@ -32,15 +32,15 @@ def get_mech_config(
     """Load mech configuration for a specific chain.
 
     Loads configuration from mechs.json and applies environment variable
-    overrides via dataclass __post_init__ methods.
+    overrides via dataclass __post_init__ methods. Propagates
+    ``FileNotFoundError`` if the config is missing,
+    ``json.JSONDecodeError`` if it is malformed, and ``KeyError`` if the
+    requested chain is absent.
 
     :param chain_config: Chain name (gnosis, base, polygon, optimism).
                         If None, uses first chain in config.
     :param agent_mode: Whether running in agent mode (uses stored operate config)
     :return: MechConfig instance with loaded configuration
-    :raises FileNotFoundError: If mechs.json is not found
-    :raises json.JSONDecodeError: If mechs.json is malformed
-    :raises KeyError: If chain_config is not found in mechs.json
     """
     with open(MECH_CONFIGS, "r", encoding="UTF-8") as file:
         data = json.load(file)

@@ -46,3 +46,4 @@ class DeliveryWatcher(ABC):  # pylint: disable=too-few-public-methods
         :param request_ids: List of request IDs to watch for
         :return: Dictionary mapping request ID to delivery data
         """
+        ...

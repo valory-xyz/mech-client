@@ -24,9 +24,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from aea_ledger_ethereum import EthereumCrypto
-from safe_eth.eth import EthereumClient
-from web3.contract import Contract as Web3Contract
-
 from mech_client.domain.delivery import OffchainDeliveryWatcher, OnchainDeliveryWatcher
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.domain.tools import ToolManager
@@ -40,6 +37,8 @@ from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.ipfs import IPFSClient, push_metadata_to_ipfs
 from mech_client.services.base_service import BaseTransactionService
 from mech_client.utils.validators import ensure_checksummed_address
+from safe_eth.eth import EthereumClient
+from web3.contract import Contract as Web3Contract
 
 logger = logging.getLogger(__name__)
 

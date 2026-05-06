@@ -23,10 +23,9 @@ from dataclasses import asdict
 from typing import Optional
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
-from safe_eth.eth import EthereumClient
-
 from mech_client.domain.execution import ExecutorFactory, TransactionExecutor
 from mech_client.infrastructure.config import MechConfig, get_mech_config
+from safe_eth.eth import EthereumClient
 
 
 class BaseTransactionService:  # pylint: disable=too-few-public-methods,too-many-instance-attributes

@@ -22,9 +22,8 @@
 import logging
 from typing import Any, Dict
 
-from web3.constants import ADDRESS_ZERO
-
 from mech_client.infrastructure.nvm.contracts.base import NVMContractWrapper
+from web3.constants import ADDRESS_ZERO
 
 logger = logging.getLogger(__name__)
 

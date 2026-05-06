@@ -27,9 +27,6 @@ from typing import Any, Dict, List, Optional
 from aea_ledger_ethereum import EthereumApi
 from eth_abi import decode
 from eth_utils import keccak
-from web3.constants import ADDRESS_ZERO
-from web3.contract import Contract as Web3Contract
-
 from mech_client.domain.delivery.base import DeliveryWatcher
 from mech_client.domain.delivery.constants import (
     DEFAULT_TIMEOUT,
@@ -38,6 +35,8 @@ from mech_client.domain.delivery.constants import (
 )
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
+from web3.constants import ADDRESS_ZERO
+from web3.contract import Contract as Web3Contract
 
 logger = logging.getLogger(__name__)
 

@@ -22,11 +22,10 @@
 from typing import Optional
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
-from safe_eth.eth import EthereumClient
-
 from mech_client.domain.execution.agent_executor import AgentExecutor
 from mech_client.domain.execution.base import TransactionExecutor
 from mech_client.domain.execution.client_executor import ClientExecutor
+from safe_eth.eth import EthereumClient
 
 
 class ExecutorFactory:  # pylint: disable=too-few-public-methods

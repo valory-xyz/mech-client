@@ -26,11 +26,10 @@ They can be used by services, domain logic, or any other component.
 from typing import List, Optional
 
 from eth_utils import is_address
-from web3 import Web3
-from web3.constants import ADDRESS_ZERO
-
 from mech_client.infrastructure.config import PaymentType
 from mech_client.utils.errors import ValidationError
+from web3 import Web3
+from web3.constants import ADDRESS_ZERO
 
 
 def ensure_checksummed_address(address: str) -> str:

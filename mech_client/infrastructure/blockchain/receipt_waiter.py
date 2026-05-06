@@ -23,9 +23,8 @@ import time
 from typing import Dict, List, Optional
 
 from aea_ledger_ethereum import EthereumApi
-from web3.contract import Contract as Web3Contract
-
 from mech_client.infrastructure.config.constants import TRANSACTION_RECEIPT_TIMEOUT
+from web3.contract import Contract as Web3Contract
 
 
 def wait_for_receipt(
@@ -85,14 +84,14 @@ def watch_for_marketplace_request_ids(
     Extract request IDs from marketplace request transaction logs.
 
     Parses MarketplaceRequest event logs to extract request IDs.
-    If tx_receipt is not provided, fetches it via wait_for_receipt.
+    If tx_receipt is not provided, fetches it via wait_for_receipt and
+    propagates ``TimeoutError`` from there if the receipt never arrives.
 
     :param marketplace_contract: The marketplace contract instance
     :param ledger_api: The Ethereum API used for interacting with the ledger
     :param tx_hash: Transaction hash to wait for
     :param tx_receipt: Pre-fetched transaction receipt (avoids duplicate RPC call)
     :return: List of request IDs as hex strings (without 0x prefix)
-    :raises TimeoutError: If timeout waiting for receipt
     """
     if tx_receipt is None:
         tx_receipt = wait_for_receipt(tx_hash=tx_hash, ledger_api=ledger_api)

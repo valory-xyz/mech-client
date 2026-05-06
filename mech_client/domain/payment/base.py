@@ -23,7 +23,6 @@ from abc import ABC, abstractmethod
 from typing import Dict, Optional, TYPE_CHECKING
 
 from aea_ledger_ethereum import EthereumApi
-
 from mech_client.infrastructure.config import PaymentType
 
 if TYPE_CHECKING:
@@ -67,6 +66,7 @@ class PaymentStrategy(ABC):
         :param amount: Amount to check (in wei/smallest unit)
         :return: True if balance is sufficient, False otherwise
         """
+        ...
 
     @abstractmethod
     def approve_if_needed(
@@ -87,6 +87,7 @@ class PaymentStrategy(ABC):
         :param executor: Transaction executor (handles both agent and client mode)
         :return: Transaction hash if approval was sent, None otherwise
         """
+        ...
 
     @abstractmethod
     def get_balance_tracker_address(self) -> str:
@@ -96,6 +97,7 @@ class PaymentStrategy(ABC):
         :return: Balance tracker contract address
         :raises ValueError: If balance tracker not available for this chain/type
         """
+        ...
 
     @abstractmethod
     def get_payment_token_address(self) -> Optional[str]:
@@ -104,6 +106,7 @@ class PaymentStrategy(ABC):
 
         :return: Token address, or None for native payments
         """
+        ...
 
     def check_prepaid_balance(  # pylint: disable=unused-argument
         self,

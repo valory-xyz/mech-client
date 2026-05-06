@@ -23,13 +23,12 @@ from typing import Optional
 
 import click
 from click import ClickException
-from web3.constants import ADDRESS_ZERO
-
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_amount, validate_chain_config
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.services.deposit_service import DepositService
 from mech_client.utils.errors.handlers import handle_cli_errors
+from web3.constants import ADDRESS_ZERO
 
 
 @click.group()
@@ -62,6 +61,11 @@ def deposit_native(
 
     Example: mechx deposit native 1000000000000000000 --chain-config gnosis
     (deposits 1.0 xDAI)
+
+    :param ctx: Click context (carries client_mode flag from the parent group).
+    :param amount_to_deposit: Amount to deposit in wei (smallest unit).
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
+    :param key: Optional path to a private-key file (required in client mode).
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)
@@ -129,6 +133,12 @@ def deposit_token(
 
         mechx deposit token 1000000 --chain-config base --token-type usdc
         (deposits 1.0 USDC)
+
+    :param ctx: Click context (carries client_mode flag from the parent group).
+    :param amount_to_deposit: Amount to deposit in the token's smallest unit.
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
+    :param token_type: Token to deposit (``olas`` or ``usdc``).
+    :param key: Optional path to a private-key file (required in client mode).
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)

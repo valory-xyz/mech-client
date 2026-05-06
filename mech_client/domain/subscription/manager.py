@@ -23,8 +23,6 @@ import logging
 from typing import Any, Dict, Optional
 
 from aea_ledger_ethereum import EthereumApi
-from web3 import Web3
-
 from mech_client.domain.execution.base import TransactionExecutor
 from mech_client.domain.subscription.agreement import AgreementBuilder, AgreementData
 from mech_client.domain.subscription.balance_checker import SubscriptionBalanceChecker
@@ -37,6 +35,7 @@ from mech_client.infrastructure.nvm.contracts import (
     SubscriptionProviderContract,
     TokenContract,
 )
+from web3 import Web3
 
 logger = logging.getLogger(__name__)
 

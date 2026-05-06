@@ -23,7 +23,6 @@ import json
 from pathlib import Path
 
 from click import ClickException
-
 from mech_client.utils import validators as utils_validators
 from mech_client.utils.errors import ValidationError
 

@@ -20,12 +20,10 @@
 """Error handler decorators for CLI commands."""
 
 import functools
-from typing import Callable
+from typing import Callable, Optional
 
 import requests
 from click import ClickException
-from web3.exceptions import ContractLogicError, Web3ValidationError
-
 from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.utils.errors.exceptions import (
     AgentModeError,
@@ -41,6 +39,7 @@ from mech_client.utils.errors.exceptions import (
     ValidationError,
 )
 from mech_client.utils.errors.messages import ErrorMessages
+from web3.exceptions import ContractLogicError, Web3ValidationError
 
 
 # pylint: disable=too-many-statements
@@ -111,8 +110,10 @@ def handle_cli_errors(func: Callable) -> Callable:
             ) from e
         except TimeoutError as e:
             env_config = EnvironmentConfig.load()
-            rpc_url = env_config.mechx_chain_rpc
-            raise ClickException(ErrorMessages.rpc_timeout(rpc_url, str(e))) from e
+            optional_rpc_url: Optional[str] = env_config.mechx_chain_rpc
+            raise ClickException(
+                ErrorMessages.rpc_timeout(optional_rpc_url, str(e))
+            ) from e
         except ContractLogicError as e:
             raise ClickException(ErrorMessages.contract_logic_error(str(e))) from e
         except Web3ValidationError as e:
@@ -159,9 +160,10 @@ def handle_rpc_errors(func: Callable) -> Callable:
             ) from e
         except TimeoutError as e:
             env_config = EnvironmentConfig.load()
-            rpc_url = env_config.mechx_chain_rpc
+            optional_rpc_url: Optional[str] = env_config.mechx_chain_rpc
             raise RpcError(
-                f"Timeout waiting for RPC response: {e}", rpc_url=rpc_url
+                f"Timeout waiting for RPC response: {e}",
+                rpc_url=optional_rpc_url,
             ) from e
 
     return wrapper

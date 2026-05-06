@@ -20,16 +20,40 @@ jobs:
         shell: bash
     timeout-minutes: 10
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/setup-python@v6
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install uv
-      uses: astral-sh/setup-uv@v6
-    - name: Check if dependencies can be locked
-      run: uv lock --check
-    - name: Install dependencies
-      run: uv sync --all-groups -v
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+      - name: Check if dependencies can be locked
+        run: uv lock --check
+      - name: Install dependencies
+        run: uv sync --all-groups -v
+
+  copyright_and_dependencies_check:
+    continue-on-error: False
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+        python-version: ["3.10"]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: pip install 'tomte[tox,cli] @ git+https://github.com/valory-xyz/tomte.git@v0.7.0' tox-uv
+      - name: Check copyright headers
+        run: tomte check-copyright --author valory
+      - name: License compatibility check
+        run: tomte tox -e liccheck
+      - name: Check third-party package hashes match upstream
+        run: tomte tox -e check-third-party-hashes
 
   linter_checks:
     continue-on-error: False
@@ -40,36 +64,33 @@ jobs:
         python-version: ["3.14"]
     timeout-minutes: 30
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/setup-python@v6
-      with:
-        python-version: ${{ matrix.python-version }}
-    - uses: actions/setup-go@v5
-      with:
-        go-version: "1.17.7"
-    - name: Install dependencies
-      run:  |
-        sudo apt-get update --fix-missing
-        sudo apt-get autoremove
-        sudo apt-get autoclean
-        sudo npm install -g markdown-spellcheck
-        pip install tomte[tox,cli]==0.6.5 tox-uv
-    - name: Security checks
-      run: |
-        tox -p -e bandit -e safety
-    - name: Code style check
-      run: |
-        tox -p -e black-check -e isort-check -e flake8 -e vulture
-    - name: Static type check
-      run: tox -e mypy
-    - name: Pylint
-      run: tox -e pylint
-    - name: Check spelling
-      run: tox -e spell-check
-    - name: License compatibility check
-      run: tox -e liccheck
-    - name: Check third-party package hashes match upstream
-      run: tox -e check-third-party-hashes
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: pip install 'tomte[tox,cli] @ git+https://github.com/valory-xyz/tomte.git@v0.7.0' tox-uv
+      - name: Security checks
+        run: tomte tox -p -e safety -e bandit
+      - name: Code checks
+        run: tomte tox -p -e black-check -e isort-check -e flake8 -e mypy -e pylint -e darglint
+
+  scan:
+    name: gitleaks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+      - run: |
+          wget https://github.com/zricethezav/gitleaks/releases/download/v8.10.1/gitleaks_8.10.1_linux_x64.tar.gz
+          tar -xzf gitleaks_8.10.1_linux_x64.tar.gz
+          sudo install gitleaks /usr/bin
+          pip install 'tomte[tox,cli] @ git+https://github.com/valory-xyz/tomte.git@v0.7.0' tox-uv
+          tomte tox -e gitleaks
 
   test:
     name: Run tests
@@ -96,7 +117,7 @@ jobs:
           uv run pytest tests/unit -v --tb=short -k "not trio" --cov=mech_client --cov-report=term-missing --cov-report=xml --cov-fail-under=100
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-24.04' && matrix.python-version == '3.11'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: coverage.xml
           fail_ci_if_error: false
@@ -133,7 +154,7 @@ jobs:
   all-checks-passed:
     name: All checks passed
     if: always()
-    needs: [lock_check, linter_checks, test, build-pip-packages]
+    needs: [lock_check, copyright_and_dependencies_check, linter_checks, scan, test, build-pip-packages]
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any dependency failed or was cancelled

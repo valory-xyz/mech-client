@@ -21,11 +21,10 @@
 
 from typing import Optional, Tuple
 
-from operate.cli import logger as operate_logger
-from operate.services.manage import KeysManager
-
 from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.operate.manager import OperateManager
+from operate.cli import logger as operate_logger
+from operate.services.manage import KeysManager
 
 
 def fetch_agent_mode_keys(chain_config: str) -> Tuple[str, str, Optional[str]]:

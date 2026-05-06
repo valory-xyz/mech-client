@@ -27,3 +27,7 @@ keys.json
 
 .idea/
 .idea/*
+.tomte-tox.ini
+.darglint
+.gitleaks-merged.toml
+leak_report

@@ -24,11 +24,10 @@ import os
 from pathlib import Path
 from typing import Dict, Optional
 
-from operate.quickstart.run_service import run_service
-
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.operate import OperateManager
+from operate.quickstart.run_service import run_service
 
 logger = logging.getLogger(__name__)
 
