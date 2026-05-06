@@ -47,7 +47,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install 'tomte[tox,cli] @ git+https://github.com/valory-xyz/tomte.git@54780e1e34d4a5bd908f4ece1fae86437bded2c1' tox-uv
+        run: pip install 'tomte[tox,cli] @ git+https://github.com/valory-xyz/tomte.git@v0.7.0' tox-uv
       - name: Check copyright headers
         run: tomte check-copyright --author valory
       - name: License compatibility check
@@ -69,7 +69,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install 'tomte[tox,cli] @ git+https://github.com/valory-xyz/tomte.git@54780e1e34d4a5bd908f4ece1fae86437bded2c1' tox-uv
+        run: pip install 'tomte[tox,cli] @ git+https://github.com/valory-xyz/tomte.git@v0.7.0' tox-uv
       - name: Security checks
         run: tomte tox -p -e safety -e bandit
       - name: Code checks
@@ -89,7 +89,7 @@ jobs:
           wget https://github.com/zricethezav/gitleaks/releases/download/v8.10.1/gitleaks_8.10.1_linux_x64.tar.gz
           tar -xzf gitleaks_8.10.1_linux_x64.tar.gz
           sudo install gitleaks /usr/bin
-          pip install 'tomte[tox,cli] @ git+https://github.com/valory-xyz/tomte.git@54780e1e34d4a5bd908f4ece1fae86437bded2c1' tox-uv
+          pip install 'tomte[tox,cli] @ git+https://github.com/valory-xyz/tomte.git@v0.7.0' tox-uv
           tomte tox -e gitleaks
 
   test:

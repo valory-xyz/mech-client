@@ -7,7 +7,7 @@ readme = "README.md"
 license = "Apache-2.0"
 dependencies = [
     # OA / open-aea / plugins — pinned exactly (framework contract).
-    "open-aea-helpers==0.21.19",
+    "open-aea-helpers==0.21.20",
     # Framework/lib deps — ranges.
     "gql>=3.4.1",
     "tabulate>=0.9.0,<0.10",
@@ -33,7 +33,7 @@ dev = [
     "pytest-cov>=7.0.0,<8",
     "mkdocs>=1.6.0,<2",
     "mkdocs-material>=9.5.0,<10",
-    "tomte[cli, tests] @ git+https://github.com/valory-xyz/tomte.git@54780e1e34d4a5bd908f4ece1fae86437bded2c1",
+    "tomte[cli, tests] @ git+https://github.com/valory-xyz/tomte.git@v0.7.0",
 ]
 
 [tool.uv]
@@ -50,8 +50,8 @@ pytest_targets = ["tests/unit"]
 # autonomy-dependent checks. mech-client is a library and doesn't ship
 # open-autonomy at runtime — set these explicitly so the wrapper can
 # render a valid tox.ini.
-open_autonomy_version = "0.21.19"
-open_aea_version = "2.2.1"
+open_autonomy_version = "0.21.20"
+open_aea_version = "2.2.3"
 # Mech marketplace contract type-id constants (32-byte keccak hashes)
 # trip gitleaks' generic-secret rule. Allowlist the two files that
 # carry them — they are documented public protocol identifiers, not
@@ -60,7 +60,7 @@ gitleaks_extra_paths = [
     "mech_client/infrastructure/config/payment_config.py",
     "mech_client/marketplace_interact.py",
 ]
-tomte_dep_pin = " @ git+https://github.com/valory-xyz/tomte.git@54780e1e34d4a5bd908f4ece1fae86437bded2c1"
+tomte_dep_pin = " @ git+https://github.com/valory-xyz/tomte.git@v0.7.0"
 # Pylint disables historically applied across mech-client. Tomte's
 # canonical pylintrc already covers most of these; the surviving codes
 # are:

@@ -1939,7 +1939,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1,<9" },
     { name = "gql", specifier = ">=3.4.1" },
     { name = "olas-operate-middleware", specifier = ">=0.15.2,<0.16" },
-    { name = "open-aea-helpers", specifier = "==0.21.19" },
+    { name = "open-aea-helpers", specifier = "==0.21.20" },
     { name = "pip", specifier = ">=24.0" },
     { name = "py-multibase", specifier = "==1.0.3" },
     { name = "py-multicodec", specifier = "==0.2.1" },
@@ -1955,7 +1955,7 @@ dev = [
     { name = "mkdocs-material", specifier = ">=9.5.0,<10" },
     { name = "pytest-asyncio", specifier = "==1.3.0" },
     { name = "pytest-cov", specifier = ">=7.0.0,<8" },
-    { name = "tomte", extras = ["cli", "tests"], git = "https://github.com/valory-xyz/tomte.git?rev=54780e1e34d4a5bd908f4ece1fae86437bded2c1" },
+    { name = "tomte", extras = ["cli", "tests"], git = "https://github.com/valory-xyz/tomte.git?rev=v0.7.0" },
 ]
 
 [[package]]
@@ -2289,14 +2289,14 @@ wheels = [
 
 [[package]]
 name = "open-aea-helpers"
-version = "0.21.19"
+version = "0.21.20"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "open-autonomy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d6/9c/d00ba8599f69f736db2ce3ceda88023c85955e2484a92ed8baf52370264c/open_aea_helpers-0.21.19.tar.gz", hash = "sha256:0e005b1be53a0f3305422996c6a30ebd597ad3b9406c5a6c62382924a86efc83", size = 28293, upload-time = "2026-04-21T10:53:34.036Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/61/d4/d6ba60eebaf21a95b0b0b73e37040a18a336dd025a8bcaaeadc3b059df9f/open_aea_helpers-0.21.20.tar.gz", hash = "sha256:e89cc4fa485b5986d04831dc67ad5f765d59936b1d01e21052f76a1b53aad565", size = 28466, upload-time = "2026-05-05T17:40:20.517Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e4/ce/0dc430faf05c1ead28338d1ca013ed1b9a0ebc673f58a91ee5462a8a37ed/open_aea_helpers-0.21.19-py3-none-any.whl", hash = "sha256:42bd0b54791664e1bcb873b6cae22ea1f900dfe80ca28402e07c21c7e409ed6c", size = 38704, upload-time = "2026-04-21T10:53:33.206Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/da/d33eca4e6bd0326b985d66ec1b9af52efc2e72982c00f3da29155b621377/open_aea_helpers-0.21.20-py3-none-any.whl", hash = "sha256:a99ab89d100d7ef5016e65c1da62e0d3e55caa566dddf2772b6158620361d2b7", size = 38923, upload-time = "2026-05-05T17:40:19.671Z" },
 ]
 
 [[package]]
@@ -3639,7 +3639,7 @@ wheels = [
 [[package]]
 name = "tomte"
 version = "0.7.0"
-source = { git = "https://github.com/valory-xyz/tomte.git?rev=54780e1e34d4a5bd908f4ece1fae86437bded2c1#54780e1e34d4a5bd908f4ece1fae86437bded2c1" }
+source = { git = "https://github.com/valory-xyz/tomte.git?rev=v0.7.0#0819eea387c622cc53b398a2d3ea86e94a55cf82" }
 
 [package.optional-dependencies]
 cli = [
