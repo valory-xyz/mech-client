@@ -46,6 +46,6 @@ logging_config:
       propagate: true
 dependencies:
   open-aea-ledger-ethereum:
-    version: ==1.65.0
+    version: ==2.2.6
 customs: []
 default_connection: null
