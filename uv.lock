@@ -1939,7 +1939,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1,<9" },
     { name = "gql", specifier = ">=3.4.1" },
     { name = "olas-operate-middleware", specifier = ">=0.15.2,<0.16" },
-    { name = "open-aea-helpers", specifier = "==0.21.20" },
+    { name = "open-aea-helpers", specifier = "==0.21.22" },
     { name = "pip", specifier = ">=24.0" },
     { name = "py-multibase", specifier = "==1.0.3" },
     { name = "py-multicodec", specifier = "==0.2.1" },
@@ -2289,14 +2289,14 @@ wheels = [
 
 [[package]]
 name = "open-aea-helpers"
-version = "0.21.20"
+version = "0.21.22"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "open-autonomy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/61/d4/d6ba60eebaf21a95b0b0b73e37040a18a336dd025a8bcaaeadc3b059df9f/open_aea_helpers-0.21.20.tar.gz", hash = "sha256:e89cc4fa485b5986d04831dc67ad5f765d59936b1d01e21052f76a1b53aad565", size = 28466, upload-time = "2026-05-05T17:40:20.517Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8a/46/8db346821041f301f63ea4d2519c04edb2631c4805d43fa94f12e84165b2/open_aea_helpers-0.21.22.tar.gz", hash = "sha256:c277b577a3a7ec94d5c0ed9f9e6281f8b75365207f11746026ef90635a11a507", size = 28468, upload-time = "2026-05-18T08:02:52.486Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d8/da/d33eca4e6bd0326b985d66ec1b9af52efc2e72982c00f3da29155b621377/open_aea_helpers-0.21.20-py3-none-any.whl", hash = "sha256:a99ab89d100d7ef5016e65c1da62e0d3e55caa566dddf2772b6158620361d2b7", size = 38923, upload-time = "2026-05-05T17:40:19.671Z" },
+    { url = "https://files.pythonhosted.org/packages/84/d3/3cf94fe71871ee79186072729081550a00821e359650f189d6723d10f8e9/open_aea_helpers-0.21.22-py3-none-any.whl", hash = "sha256:3d08a2c02921f3e7ff68a6036afa4efbe614fa47030fd4135c1b7569fb27d35e", size = 38920, upload-time = "2026-05-18T08:02:51.652Z" },
 ]
 
 [[package]]
