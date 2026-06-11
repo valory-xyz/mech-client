@@ -258,12 +258,25 @@ class MarketplaceService(
 
             # Approve if needed
             logger.info("Sending token approval transaction...")
-            payment_strategy.approve_if_needed(
+            approval_tx_hash = payment_strategy.approve_if_needed(
                 payer_address=sender,
                 spender_address=balance_tracker,
                 amount=price,
                 executor=self.executor,
             )
+            # Wait for the approval to be mined before submitting the request.
+            # Otherwise the request transaction is built on the pre-approval
+            # ("latest") nonce while the approval is still pending, so both grab
+            # the same nonce -> "replacement transaction underpriced", and the
+            # allowance may not yet be on-chain when the request pulls payment.
+            if approval_tx_hash:
+                approval_receipt = wait_for_receipt(approval_tx_hash, self.ledger_api)
+                if approval_receipt.get("status") == 0:
+                    raise ValueError(
+                        f"Token approval transaction reverted. Hash: {approval_tx_hash}. "
+                        f"The request was not sent. This often means the approval ran "
+                        f"out of gas; check the transaction on the block explorer."
+                    )
             logger.info("Token approval complete")
 
         # Send on-chain marketplace request

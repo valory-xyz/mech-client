@@ -114,17 +114,37 @@ class TokenPaymentStrategy(PaymentStrategy):
         abi = get_abi("IToken.json")
         token_contract = get_contract(token_address, abi, self.ledger_api)
 
-        # Build approval transaction arguments
-        tx_args = {"sender_address": payer_address, "value": 0, "gas": 60000}
+        # Build approval transaction arguments.
+        # Gas is a fixed fallback used when gas estimation is disabled; some
+        # tokens (e.g. Circle USDC proxy on Polygon) need ~67k for a 0->nonzero
+        # approve, so 60k underfunds it and the approve reverts out of gas.
+        tx_args = {"sender_address": payer_address, "value": 0, "gas": 120000}
         method_name = "approve"
         method_args = {"_to": spender_address, "_value": amount}
 
-        return executor.execute_transaction(
-            contract=token_contract,
-            method_name=method_name,
-            method_args=method_args,
-            tx_args=tx_args,
+        # Workaround for valory-xyz/open-aea#924: EthereumApi.build_transaction
+        # does not propagate `from` into the tx dict it builds, so gas
+        # estimation runs with msg.sender = 0x0 and ERC20 approve reverts with
+        # "approve from the zero address". Disable gas estimation locally so
+        # the hardcoded gas fallback above is used. Remove once the upstream
+        # fix lands.
+        original_gas_estimation = getattr(
+            self.ledger_api, "_is_gas_estimation_enabled", False
         )
+        try:
+            self.ledger_api._is_gas_estimation_enabled = (  # noqa: SLF001  # pylint: disable=protected-access
+                False
+            )
+            return executor.execute_transaction(
+                contract=token_contract,
+                method_name=method_name,
+                method_args=method_args,
+                tx_args=tx_args,
+            )
+        finally:
+            self.ledger_api._is_gas_estimation_enabled = (  # noqa: SLF001  # pylint: disable=protected-access
+                original_gas_estimation
+            )
 
     def get_balance_tracker_address(self) -> str:
         """

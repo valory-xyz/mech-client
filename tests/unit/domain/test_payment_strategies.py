@@ -169,7 +169,10 @@ class TestTokenPaymentStrategy:
         assert call_args["method_args"] == {"_to": spender_address, "_value": amount}
         assert call_args["tx_args"]["sender_address"] == payer_address
         assert call_args["tx_args"]["value"] == 0
-        assert call_args["tx_args"]["gas"] == 60000
+        # Approve gas must cover a 0->nonzero approve on Circle's USDC proxy
+        # on Polygon, which measures ~67k. 60k underfunds it and the approve
+        # reverts out of gas.
+        assert call_args["tx_args"]["gas"] >= 67_200
 
     def test_approve_if_needed_no_executor_raises_error(
         self,
