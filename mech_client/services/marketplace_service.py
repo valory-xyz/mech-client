@@ -245,7 +245,15 @@ class MarketplaceService(
         # Handle payment (approval if needed)
         if not use_prepaid and payment_type.is_token():
             balance_tracker = payment_strategy.get_balance_tracker_address()
-            price = self.mech_config.price * len(prompts)
+            # The marketplace pulls exactly `deliveryRate * numRequests` from
+            # the requester via `BalanceTracker.checkAndRecordDeliveryRates`.
+            # Use the per-mech `max_delivery_rate` (read from the mech
+            # contract) instead of the static chain-wide `mech_config.price`
+            # from mechs.json — the latter is a default that does not match
+            # per-mech pricing and under-funds the approve whenever a mech's
+            # rate exceeds it, making the marketplace's transferFrom revert
+            # with "ERC20: transfer amount exceeds allowance".
+            price = max_delivery_rate * len(prompts)
 
             # Check balance
             logger.info(f"Checking {payment_type.name} token balance...")
@@ -279,17 +287,36 @@ class MarketplaceService(
                     )
             logger.info("Token approval complete")
 
-        # Send on-chain marketplace request
+        # Send on-chain marketplace request.
+        # Workaround for valory-xyz/open-aea#924: disable gas estimation for
+        # this transaction too. EthereumApi.build_transaction does not
+        # propagate `from`, so the gas-estimation simulation runs as
+        # msg.sender=0x0 and the balance tracker's transferFrom reverts with
+        # "ERC20: transfer amount exceeds allowance" (allowance[0x0] is 0),
+        # even though the real signed tx would succeed. The fallback gas
+        # limit (mech_config.gas_limit, ~3M on polygon) covers a typical
+        # marketplace request. Remove once the upstream fix lands.
         logger.info("Submitting marketplace request transaction...")
-        tx_hash = self._send_marketplace_request(
-            marketplace_contract=marketplace_contract,
-            data_hashes=data_hashes,
-            max_delivery_rate=max_delivery_rate,
-            payment_type=payment_type,
-            priority_mech=priority_mech_address,
-            response_timeout=response_timeout,
-            use_prepaid=use_prepaid,
+        original_gas_estimation = getattr(
+            self.ledger_api, "_is_gas_estimation_enabled", False
         )
+        try:
+            self.ledger_api._is_gas_estimation_enabled = (  # noqa: SLF001  # pylint: disable=protected-access
+                False
+            )
+            tx_hash = self._send_marketplace_request(
+                marketplace_contract=marketplace_contract,
+                data_hashes=data_hashes,
+                max_delivery_rate=max_delivery_rate,
+                payment_type=payment_type,
+                priority_mech=priority_mech_address,
+                response_timeout=response_timeout,
+                use_prepaid=use_prepaid,
+            )
+        finally:
+            self.ledger_api._is_gas_estimation_enabled = (  # noqa: SLF001  # pylint: disable=protected-access
+                original_gas_estimation
+            )
         tx_url = self.mech_config.transaction_url.format(transaction_digest=tx_hash)
         logger.info(f"Transaction submitted: {tx_url}")
 
