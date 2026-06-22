@@ -91,3 +91,21 @@ def test_compute_cidv1_is_deterministic() -> None:
     """Identical input always produces the same CID — no hidden state."""
     content = b'{"different":"payload"}'
     assert compute_cidv1(content) == compute_cidv1(content)
+
+
+def test_varint_rejects_negative_value() -> None:
+    """The varint encoder refuses negative inputs.
+
+    ``compute_cidv1`` only ever calls ``_varint`` with non-negative values
+    (UnixFS type enum, byte-string length, filesize), so this branch is not
+    reachable in normal flow. The guard exists so a future refactor that
+    starts feeding a negative through doesn't silently produce nonsense
+    bytes that downstream sha256 happily hashes.
+    """
+    # pylint: disable=import-private-name
+    from mech_client.infrastructure.ipfs.local_cid import (  # noqa: PLC0415
+        _varint,
+    )
+
+    with pytest.raises(ValueError, match="non-negative"):
+        _varint(-1)
