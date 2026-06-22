@@ -27,7 +27,10 @@ import requests
 
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
-from mech_client.services.marketplace_service import MarketplaceService
+from mech_client.services.marketplace_service import (
+    MarketplaceService,
+    PaymentChallenge,
+)
 
 
 def create_mock_mech_config() -> MagicMock:
@@ -1489,7 +1492,7 @@ class TestOffchain402Handling:
     """Tests for the structured offchain 402 challenge handling."""
 
     def test_parse_402_challenge_full_body(self) -> None:
-        """A full 402 body + WWW-Authenticate header parses to the normalised dict."""
+        """A full 402 body + WWW-Authenticate header parses to a typed PaymentChallenge."""
         resp = _mock_http_response(
             402,
             {
@@ -1503,41 +1506,92 @@ class TestOffchain402Handling:
             {"WWW-Authenticate": 'Payment scheme="erc20-balance-tracker"'},
         )
         challenge = MarketplaceService._parse_402_challenge(resp)
-        assert challenge == {
-            "required": 100,
-            "current_balance": 30,
-            "pay_to": "0xbalancetracker",
-            "asset": "0x0000000000000000000000000000000000000000",
-            "chain_id": 100,
-            "error": "insufficient balance",
-        }
+        assert challenge == PaymentChallenge(
+            required=100,
+            current_balance=30,
+            pay_to="0xbalancetracker",
+            asset="0x0000000000000000000000000000000000000000",
+            chain_id=100,
+            error="insufficient balance",
+        )
+        assert challenge.shortfall == 70
 
-    def test_parse_402_challenge_invalid_body_defaults(self) -> None:
-        """A non-JSON 402 body falls back to safe defaults."""
+    def test_parse_402_challenge_invalid_body_defaults_and_warns(self) -> None:
+        """A non-JSON 402 body falls back to safe defaults and logs a warning."""
         resp = MagicMock()
         resp.headers = {}
         resp.json.side_effect = ValueError("no json")
+        resp.text = "<html>500</html>"
+        # mech_client sets propagate=False on its root logger (see
+        # mech_client/utils/logger.py), so caplog can't see these records.
+        # Patch the module logger's warning method directly.
+        with patch(
+            "mech_client.services.marketplace_service.logger.warning"
+        ) as mock_warn:
+            challenge = MarketplaceService._parse_402_challenge(resp)
+        assert challenge.required == 0
+        assert challenge.current_balance == 0
+        assert challenge.error == "payment required"
+        # Operators need a breadcrumb that the mech sent a bad body — silently
+        # zeroing the challenge would mask a mech-side regression. The warning
+        # must carry the format string AND the raw body so it's actionable.
+        mock_warn.assert_called_once()
+        fmt, *args = mock_warn.call_args[0]
+        assert "not valid JSON" in fmt
+        assert "<html>500</html>" in args
+
+    def test_parse_402_challenge_non_numeric_value_is_tolerated(self) -> None:
+        """A 402 body whose numeric fields hold strings doesn't blow up."""
+        # A mech that sends ``"required": "N/A"`` instead of an int would
+        # otherwise surface as an unhandled ValueError. Treat it as zero so
+        # the caller still gets the no-deposit error message rather than a
+        # raw traceback.
+        resp = _mock_http_response(
+            402,
+            {
+                "required": "N/A",
+                "currentBalance": None,
+                "chainId": "not-a-number",
+                "payTo": "0xbt",
+            },
+        )
         challenge = MarketplaceService._parse_402_challenge(resp)
-        assert challenge["required"] == 0
-        assert challenge["current_balance"] == 0
-        assert challenge["error"] == "payment required"
+        assert challenge.required == 0
+        assert challenge.current_balance == 0
+        assert challenge.chain_id == 0
+        assert challenge.pay_to == "0xbt"
 
-    def test_log_payment_receipt_present(self) -> None:
-        """A Payment-Receipt header is logged without error."""
+    def test_log_payment_receipt_present_logs_value(self) -> None:
+        """The Payment-Receipt header value is the audit signal — log it.
+
+        Patches the module logger directly because mech_client sets
+        propagate=False on its root logger, blocking caplog from seeing
+        the records.
+        """
         resp = _mock_http_response(200, headers={"Payment-Receipt": "abc123"})
-        MarketplaceService._log_payment_receipt(resp)
+        with patch(
+            "mech_client.services.marketplace_service.logger.info"
+        ) as mock_info:
+            MarketplaceService._log_payment_receipt(resp)
+        mock_info.assert_called_once()
+        assert "abc123" in mock_info.call_args[0][0]
 
-    def test_log_payment_receipt_absent(self) -> None:
-        """No Payment-Receipt header is a no-op."""
+    def test_log_payment_receipt_absent_emits_no_record(self) -> None:
+        """No Payment-Receipt header means no log line written."""
         resp = _mock_http_response(200, headers={})
-        MarketplaceService._log_payment_receipt(resp)
+        with patch(
+            "mech_client.services.marketplace_service.logger.info"
+        ) as mock_info:
+            MarketplaceService._log_payment_receipt(resp)
+        mock_info.assert_not_called()
 
     def test_auto_deposit_native(self) -> None:
         """Native payment deposits the shortfall via deposit_native."""
         service = _build_offchain_service()
         with patch("mech_client.services.deposit_service.DepositService") as mock_ds:
             service._auto_deposit_for_402(
-                PaymentType.NATIVE, {"required": 100, "current_balance": 30}
+                PaymentType.NATIVE,
+                PaymentChallenge(100, 30, "0xbt", "", 100, "ib"),
             )
             mock_ds.return_value.deposit_native.assert_called_once_with(70)
 
@@ -1546,7 +1600,8 @@ class TestOffchain402Handling:
         service = _build_offchain_service()
         with patch("mech_client.services.deposit_service.DepositService") as mock_ds:
             service._auto_deposit_for_402(
-                PaymentType.USDC_TOKEN, {"required": 100, "current_balance": 0}
+                PaymentType.USDC_TOKEN,
+                PaymentChallenge(100, 0, "0xbt", "", 100, "ib"),
             )
             mock_ds.return_value.deposit_token.assert_called_once_with(100, "usdc")
 
@@ -1555,7 +1610,8 @@ class TestOffchain402Handling:
         service = _build_offchain_service()
         with patch("mech_client.services.deposit_service.DepositService") as mock_ds:
             service._auto_deposit_for_402(
-                PaymentType.OLAS_TOKEN, {"required": 50, "current_balance": 10}
+                PaymentType.OLAS_TOKEN,
+                PaymentChallenge(50, 10, "0xbt", "", 100, "ib"),
             )
             mock_ds.return_value.deposit_token.assert_called_once_with(40, "olas")
 
@@ -1564,7 +1620,8 @@ class TestOffchain402Handling:
         service = _build_offchain_service()
         with patch("mech_client.services.deposit_service.DepositService") as mock_ds:
             service._auto_deposit_for_402(
-                PaymentType.NATIVE, {"required": 50, "current_balance": 50}
+                PaymentType.NATIVE,
+                PaymentChallenge(50, 50, "0xbt", "", 100, "ib"),
             )
             mock_ds.assert_not_called()
 
@@ -1574,7 +1631,8 @@ class TestOffchain402Handling:
         with patch("mech_client.services.deposit_service.DepositService"):
             with pytest.raises(ValueError, match="not supported"):
                 service._auto_deposit_for_402(
-                    PaymentType.NATIVE_NVM, {"required": 100, "current_balance": 0}
+                    PaymentType.NATIVE_NVM,
+                    PaymentChallenge(100, 0, "0xbt", "", 100, "ib"),
                 )
 
     def test_post_offchain_request_success_no_402(self) -> None:
@@ -1591,7 +1649,7 @@ class TestOffchain402Handling:
             mock_post.assert_called_once()
 
     def test_post_offchain_request_402_without_auto_deposit_raises(self) -> None:
-        """A 402 without auto-deposit raises an actionable error."""
+        """A 402 without auto-deposit raises an error naming the amount + payTo."""
         service = _build_offchain_service()
         with patch(
             "mech_client.services.marketplace_service.requests.post",
@@ -1599,7 +1657,7 @@ class TestOffchain402Handling:
                 402, {"required": "100", "currentBalance": "0", "payTo": "0xbt"}
             ),
         ):
-            with pytest.raises(ValueError, match="requires payment"):
+            with pytest.raises(ValueError, match=r"need 100.*0xbt"):
                 service._post_offchain_request(
                     "http://mech/send_signed_requests", {}, PaymentType.NATIVE, False
                 )
@@ -1624,3 +1682,44 @@ class TestOffchain402Handling:
             assert resp.status_code == 200
             assert mock_post.call_count == 2
             mock_ds.return_value.deposit_native.assert_called_once_with(100)
+
+    def test_post_offchain_request_second_402_after_deposit_raises_actionable(
+        self,
+    ) -> None:
+        """A 402 that survives the auto-deposit retry surfaces a deposit-aware error.
+
+        The deposit tx is awaited synchronously (``DepositService`` waits for
+        receipt), so by the time the second POST runs the funds have moved.
+        Silently returning the second 402 here would hit the generic
+        ``Offchain request rejected: Payment Required (HTTP 402)`` branch and
+        hide that fact from the user. The error must name the still-outstanding
+        shortfall and the balance tracker the deposit landed in so they can
+        debug (price moved, deposit too small, tx not mined yet, wrong asset).
+        """
+        service = _build_offchain_service()
+        responses = [
+            _mock_http_response(
+                402, {"required": "100", "currentBalance": "0", "payTo": "0xbt"}
+            ),
+            _mock_http_response(
+                402, {"required": "150", "currentBalance": "100", "payTo": "0xbt"}
+            ),
+        ]
+        with (
+            patch(
+                "mech_client.services.marketplace_service.requests.post",
+                side_effect=responses,
+            ) as mock_post,
+            patch("mech_client.services.deposit_service.DepositService") as mock_ds,
+        ):
+            with pytest.raises(
+                ValueError, match=r"Auto-deposit did not clear the 402.*0xbt"
+            ) as exc_info:
+                service._post_offchain_request(
+                    "http://mech/send_signed_requests", {}, PaymentType.NATIVE, True
+                )
+        assert mock_post.call_count == 2
+        # The deposit DID happen; the message has to make that visible.
+        mock_ds.return_value.deposit_native.assert_called_once()
+        # Surface the still-outstanding shortfall in the message.
+        assert "remaining shortfall 50" in str(exc_info.value)

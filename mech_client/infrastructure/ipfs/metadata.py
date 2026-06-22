@@ -25,10 +25,8 @@ import tempfile
 import uuid
 from typing import Any, Dict, Optional, Tuple
 
-import multibase
-import multicodec
 from mech_client.infrastructure.ipfs.client import IPFSClient
-from mech_client.infrastructure.ipfs.local_cid import compute_cidv1
+from mech_client.infrastructure.ipfs.local_cid import compute_cidv1_bytes
 
 
 def fetch_ipfs_hash(
@@ -65,15 +63,13 @@ def fetch_ipfs_hash(
     # the request is rejected.
     ipfs_data = json.dumps(metadata)
 
-    # Compute the CIDv1 in-process. ``compute_cidv1`` already returns a
-    # base32-lower multibase CIDv1 (``bafy...``); convert to the legacy
-    # ``f01...`` hex form the downstream truncation math expects (multibase
-    # 'f' + version '01' + dag-pb codec '70' + sha256 multihash code '12' +
-    # length '20' + 32 hex bytes of digest).
-    cidv1 = compute_cidv1(ipfs_data.encode("utf-8"))
-    cid_bytes = multibase.decode(cidv1)
-    multihash_bytes = multicodec.remove_prefix(cid_bytes)
-    v1_file_hash_hex = "f01" + multihash_bytes.hex()
+    # Compute the CIDv1 in-process and emit the legacy ``f01...`` hex form
+    # the downstream truncation math expects (multibase 'f' + version '01' +
+    # dag-pb codec '70' + sha256 multihash code '12' + length '20' + 32 hex
+    # bytes of digest). ``compute_cidv1_bytes`` returns the raw CID bytes so
+    # we can hex-encode directly — no multibase / multicodec round-trip.
+    cid_bytes = compute_cidv1_bytes(ipfs_data.encode("utf-8"))
+    v1_file_hash_hex = "f" + cid_bytes.hex()
 
     # Truncate hash for on-chain use (remove first 9 chars and add 0x prefix)
     truncated_hash = "0x" + v1_file_hash_hex[9:]

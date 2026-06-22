@@ -72,7 +72,8 @@ def _format_delivery_output(delivery_data: Any) -> str:
 )
 @click.option(
     "--auto-deposit",
-    type=bool,
+    is_flag=True,
+    default=False,
     help="On an offchain HTTP 402, top up the prepaid balance and retry.",
 )
 @click.option(
@@ -176,7 +177,6 @@ def request(
     # Process flags
     use_offchain = use_offchain or False
     use_prepaid = use_prepaid or use_offchain
-    auto_deposit = auto_deposit or False
 
     # Validate tools
     if not tools:

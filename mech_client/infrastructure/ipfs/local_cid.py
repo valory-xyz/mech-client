@@ -154,16 +154,17 @@ def _multibase_base32_lower(payload: bytes) -> str:
     return "b" + encoded
 
 
-def compute_cidv1(content: bytes) -> str:
-    """Compute the CIDv1 string a real ``ipfs add`` would produce for ``content``.
+def compute_cidv1_bytes(content: bytes) -> bytes:
+    """Compute the raw CIDv1 bytes (no multibase prefix) for ``content``.
 
-    The output is byte-for-byte equivalent to running
-    ``ipfs add --cid-version=1 --raw-leaves=false`` on the same content. The
-    returned string is a multibase base32-lower (``bafy...``) DAG-PB CIDv1 over
-    a SHA-256 multihash of the UnixFS-wrapped content.
+    Returns ``[version=0x01, codec=0x70, multihash code=0x12, digest length=0x20,
+    32 sha256 bytes]`` — the same bytes ``ipfs add --cid-version=1
+    --raw-leaves=false`` commits to, before multibase encoding. Use this when
+    the caller wants the legacy ``f01...`` hex form and would otherwise
+    multibase-encode + immediately multibase-decode the result.
 
     :param content: the content bytes to commit to.
-    :return: the multibase-encoded CIDv1 string.
+    :return: the raw CIDv1 bytes (version + codec + multihash).
     :raises ValueError: if ``content`` exceeds the single-block bound; chunked
         DAGs are intentionally unsupported (offchain payloads are well under
         256 KiB today and the unbounded path needs a different DAG shape).
@@ -179,6 +180,19 @@ def compute_cidv1(content: bytes) -> str:
 
     digest = hashlib.sha256(dag_pb_bytes).digest()
     multihash = bytes([_SHA256_MULTIHASH_CODE, _SHA256_DIGEST_LEN]) + digest
-    cid_bytes = bytes([_CIDV1_VERSION, _DAG_PB_CODEC]) + multihash
+    return bytes([_CIDV1_VERSION, _DAG_PB_CODEC]) + multihash
 
-    return _multibase_base32_lower(cid_bytes)
+
+def compute_cidv1(content: bytes) -> str:
+    """Compute the CIDv1 string a real ``ipfs add`` would produce for ``content``.
+
+    The output is byte-for-byte equivalent to running
+    ``ipfs add --cid-version=1 --raw-leaves=false`` on the same content. The
+    returned string is a multibase base32-lower (``bafy...``) DAG-PB CIDv1 over
+    a SHA-256 multihash of the UnixFS-wrapped content. Delegates the oversize
+    check to ``compute_cidv1_bytes``.
+
+    :param content: the content bytes to commit to.
+    :return: the multibase-encoded CIDv1 string.
+    """
+    return _multibase_base32_lower(compute_cidv1_bytes(content))
