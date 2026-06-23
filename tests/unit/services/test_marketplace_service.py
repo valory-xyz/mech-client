@@ -1592,6 +1592,7 @@ class TestOffchain402Handling:
             service._auto_deposit_for_402(
                 PaymentType.NATIVE,
                 PaymentChallenge(100, 30, "0xbt", "", 100, "ib"),
+                max_delivery_rate=100,
             )
             mock_ds.return_value.deposit_native.assert_called_once_with(70)
 
@@ -1602,6 +1603,7 @@ class TestOffchain402Handling:
             service._auto_deposit_for_402(
                 PaymentType.USDC_TOKEN,
                 PaymentChallenge(100, 0, "0xbt", "", 100, "ib"),
+                max_delivery_rate=100,
             )
             mock_ds.return_value.deposit_token.assert_called_once_with(100, "usdc")
 
@@ -1612,6 +1614,7 @@ class TestOffchain402Handling:
             service._auto_deposit_for_402(
                 PaymentType.OLAS_TOKEN,
                 PaymentChallenge(50, 10, "0xbt", "", 100, "ib"),
+                max_delivery_rate=100,
             )
             mock_ds.return_value.deposit_token.assert_called_once_with(40, "olas")
 
@@ -1622,6 +1625,7 @@ class TestOffchain402Handling:
             service._auto_deposit_for_402(
                 PaymentType.NATIVE,
                 PaymentChallenge(50, 50, "0xbt", "", 100, "ib"),
+                max_delivery_rate=100,
             )
             mock_ds.assert_not_called()
 
@@ -1633,7 +1637,42 @@ class TestOffchain402Handling:
                 service._auto_deposit_for_402(
                     PaymentType.NATIVE_NVM,
                     PaymentChallenge(100, 0, "0xbt", "", 100, "ib"),
+                    max_delivery_rate=100,
                 )
+
+    def test_auto_deposit_at_exactly_the_cap_proceeds(self) -> None:
+        """A shortfall equal to 10x max_delivery_rate is allowed."""
+        service = _build_offchain_service()
+        # Cap = 10 * max_delivery_rate = 1000; shortfall = 1000 = at cap.
+        with patch("mech_client.services.deposit_service.DepositService") as mock_ds:
+            service._auto_deposit_for_402(
+                PaymentType.NATIVE,
+                PaymentChallenge(1000, 0, "0xbt", "", 100, "ib"),
+                max_delivery_rate=100,
+            )
+            mock_ds.return_value.deposit_native.assert_called_once_with(1000)
+
+    def test_auto_deposit_above_the_cap_is_refused(self) -> None:
+        """A shortfall above 10x max_delivery_rate is refused with an actionable error.
+
+        Without this cap a compromised or buggy mech could return a huge
+        ``required`` and drain the user's wallet into their own prepaid
+        balance tracker in one retry. The cap closes that hole; the error
+        must name both the requested amount and the cap so the user can
+        decide whether to deposit manually.
+        """
+        service = _build_offchain_service()
+        with patch("mech_client.services.deposit_service.DepositService") as mock_ds:
+            with pytest.raises(
+                ValueError, match=r"refused.*1001.*safety cap of 1000"
+            ):
+                # Cap = 10 * 100 = 1000; shortfall = 1001 = above cap.
+                service._auto_deposit_for_402(
+                    PaymentType.NATIVE,
+                    PaymentChallenge(1001, 0, "0xbt", "", 100, "ib"),
+                    max_delivery_rate=100,
+                )
+            mock_ds.return_value.deposit_native.assert_not_called()
 
     def test_post_offchain_request_success_no_402(self) -> None:
         """A direct 200 returns the response (no deposit attempted)."""
@@ -1643,7 +1682,11 @@ class TestOffchain402Handling:
             return_value=_mock_http_response(200, headers={"Payment-Receipt": "r"}),
         ) as mock_post:
             resp = service._post_offchain_request(
-                "http://mech/send_signed_requests", {}, PaymentType.NATIVE, False
+                "http://mech/send_signed_requests",
+                {},
+                PaymentType.NATIVE,
+                False,
+                max_delivery_rate=100,
             )
             assert resp.status_code == 200
             mock_post.assert_called_once()
@@ -1659,7 +1702,11 @@ class TestOffchain402Handling:
         ):
             with pytest.raises(ValueError, match=r"need 100.*0xbt"):
                 service._post_offchain_request(
-                    "http://mech/send_signed_requests", {}, PaymentType.NATIVE, False
+                    "http://mech/send_signed_requests",
+                    {},
+                    PaymentType.NATIVE,
+                    False,
+                    max_delivery_rate=100,
                 )
 
     def test_post_offchain_request_402_auto_deposit_retries(self) -> None:
@@ -1677,11 +1724,79 @@ class TestOffchain402Handling:
             patch("mech_client.services.deposit_service.DepositService") as mock_ds,
         ):
             resp = service._post_offchain_request(
-                "http://mech/send_signed_requests", {}, PaymentType.NATIVE, True
+                "http://mech/send_signed_requests",
+                {},
+                PaymentType.NATIVE,
+                True,
+                max_delivery_rate=100,
             )
             assert resp.status_code == 200
             assert mock_post.call_count == 2
             mock_ds.return_value.deposit_native.assert_called_once_with(100)
+
+    def test_post_offchain_request_zero_shortfall_skips_retry(self) -> None:
+        """A 402 reporting no shortfall raises directly without retry or deposit.
+
+        Without this guard the code would call ``_auto_deposit_for_402`` (which
+        no-ops on ``shortfall <= 0``), then issue a pointless retry POST, and
+        if the retry also 402'd, surface the message claiming "Auto-deposit
+        did not clear the 402: deposited to <pay_to>" — telling the user
+        funds were deposited when none were. The two ways this gets reached
+        in practice are a malformed 402 body (``_safe_int`` zeros out the
+        numeric fields) and a mech bug reporting ``current_balance >=
+        required`` while still 402-ing.
+        """
+        service = _build_offchain_service()
+        with (
+            patch(
+                "mech_client.services.marketplace_service.requests.post",
+                return_value=_mock_http_response(
+                    402,
+                    {"required": "100", "currentBalance": "100", "payTo": "0xbt"},
+                ),
+            ) as mock_post,
+            patch("mech_client.services.deposit_service.DepositService") as mock_ds,
+        ):
+            with pytest.raises(
+                ValueError, match=r"reports no shortfall.*required=100.*balance=100"
+            ) as exc_info:
+                service._post_offchain_request(
+                    "http://mech/send_signed_requests",
+                    {},
+                    PaymentType.NATIVE,
+                    True,
+                    max_delivery_rate=100,
+                )
+        # Exactly one POST: the retry must not fire when no deposit happened.
+        assert mock_post.call_count == 1
+        mock_ds.return_value.deposit_native.assert_not_called()
+        # And the error must not claim funds were deposited.
+        assert "deposited to" not in str(exc_info.value)
+
+    def test_post_offchain_request_above_cap_is_refused(self) -> None:
+        """A 402 demanding more than the safety cap is refused, no retry, no deposit."""
+        service = _build_offchain_service()
+        with (
+            patch(
+                "mech_client.services.marketplace_service.requests.post",
+                return_value=_mock_http_response(
+                    402,
+                    {"required": "10001", "currentBalance": "0", "payTo": "0xbt"},
+                ),
+            ) as mock_post,
+            patch("mech_client.services.deposit_service.DepositService") as mock_ds,
+        ):
+            with pytest.raises(ValueError, match=r"refused.*safety cap"):
+                service._post_offchain_request(
+                    "http://mech/send_signed_requests",
+                    {},
+                    PaymentType.NATIVE,
+                    True,
+                    max_delivery_rate=1000,
+                )
+        # Only the original POST happened — no deposit, no retry.
+        assert mock_post.call_count == 1
+        mock_ds.return_value.deposit_native.assert_not_called()
 
     def test_post_offchain_request_second_402_after_deposit_raises_actionable(
         self,
@@ -1716,7 +1831,11 @@ class TestOffchain402Handling:
                 ValueError, match=r"Auto-deposit did not clear the 402.*0xbt"
             ) as exc_info:
                 service._post_offchain_request(
-                    "http://mech/send_signed_requests", {}, PaymentType.NATIVE, True
+                    "http://mech/send_signed_requests",
+                    {},
+                    PaymentType.NATIVE,
+                    True,
+                    max_delivery_rate=200,
                 )
         assert mock_post.call_count == 2
         # The deposit DID happen; the message has to make that visible.

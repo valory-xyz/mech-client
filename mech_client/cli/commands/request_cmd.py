@@ -74,7 +74,12 @@ def _format_delivery_output(delivery_data: Any) -> str:
     "--auto-deposit",
     is_flag=True,
     default=False,
-    help="On an offchain HTTP 402, top up the prepaid balance and retry.",
+    help=(
+        "On an offchain HTTP 402, top up the prepaid balance and retry. "
+        "Trusts the mech's reported shortfall, capped at 10x the signed "
+        "max_delivery_rate; above that the request is refused so the user "
+        "can deposit manually."
+    ),
 )
 @click.option(
     "--tools",

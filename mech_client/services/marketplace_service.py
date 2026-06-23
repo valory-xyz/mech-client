@@ -48,6 +48,15 @@ logger = logging.getLogger(__name__)
 HTTP_PAYMENT_REQUIRED = 402
 # Outbound HTTP timeout (seconds) for the offchain request POST.
 OFFCHAIN_HTTP_TIMEOUT = 30
+# Hard cap on auto-deposit: refuse to top up more than this multiple of the
+# requester's signed ``max_delivery_rate`` in a single retry. The mech URL is
+# auto-discovered from on-chain metadata, so without a cap a compromised or
+# buggy mech could return a huge ``required`` and drain the user's wallet
+# into their own balance tracker. Funds aren't stolen (they sit in the user's
+# tracker, bounded by ``check_balance``) but they're locked up and the user's
+# wallet drained. 10x is generous for legitimate price moves between
+# signature and request, tight enough that catastrophic drain stays bounded.
+_MAX_AUTO_DEPOSIT_RATIO = 10
 # Payment types that ``_auto_deposit_for_402`` knows how to top up via the
 # balance tracker. NVM subscription types (``NATIVE_NVM`` / ``TOKEN_NVM_USDC``)
 # are intentionally excluded: they're paid via subscription, not via a
@@ -388,7 +397,7 @@ class MarketplaceService(
             url = f"{mech_offchain_url.rstrip('/')}/send_signed_requests"
             try:
                 response = self._post_offchain_request(
-                    url, payload, payment_type, auto_deposit
+                    url, payload, payment_type, auto_deposit, max_delivery_rate
                 )
                 if not response.ok:
                     reason = ""
@@ -427,22 +436,29 @@ class MarketplaceService(
         payload: Dict[str, Any],
         payment_type: PaymentType,
         auto_deposit: bool,
+        max_delivery_rate: int,
     ) -> requests.Response:
         """POST an offchain request, handling a structured HTTP 402.
 
         On a 402 (insufficient prepaid balance) the mech returns a structured
         challenge. When ``auto_deposit`` is set, the shortfall is deposited and
         the request is retried once; otherwise an actionable error is raised.
+        ``max_delivery_rate`` (the requester's signed per-request maximum) is
+        used as a hard ceiling on the auto-deposit amount so a hostile or
+        buggy mech can't drain the wallet by returning an inflated ``required``.
         A ``Payment-Receipt`` header on the response is logged.
 
         :param url: the mech's ``/send_signed_requests`` endpoint.
         :param payload: the signed request payload.
         :param payment_type: the request's payment type (for the deposit asset).
         :param auto_deposit: whether to auto-deposit + retry once on a 402.
+        :param max_delivery_rate: the requester's signed per-request maximum,
+            used to cap the auto-deposit amount (see ``_MAX_AUTO_DEPOSIT_RATIO``).
         :return: the (possibly retried) HTTP response.
-        :raises ValueError: on a 402 when auto-deposit is disabled, or on a
-            second 402 after the auto-deposit retry (the deposit landed but
-            the mech still considers the balance insufficient).
+        :raises ValueError: on a 402 when auto-deposit is disabled, on a
+            non-positive shortfall that auto-deposit can't act on, on a deposit
+            request that would exceed the safety cap, or on a second 402 after
+            the deposit landed.
         """
         response = self._do_offchain_post(url, payload)
         if response.status_code == HTTP_PAYMENT_REQUIRED:
@@ -455,7 +471,23 @@ class MarketplaceService(
                     f"{challenge.pay_to}. Re-run with auto-deposit enabled or "
                     f"top up your prepaid balance. ({challenge.error})"
                 )
-            self._auto_deposit_for_402(payment_type, challenge)
+            if challenge.shortfall <= 0:
+                # Auto-deposit can't do anything useful here: either the body
+                # was malformed (``_safe_int`` returned 0 for required) or the
+                # mech is reporting current_balance >= required while still
+                # returning 402. Retrying with the same payload won't help
+                # because nothing about the request changes. Surface the
+                # situation honestly instead of running a no-op deposit + retry
+                # that would otherwise hit the second-402 path with a message
+                # claiming a deposit happened.
+                raise ValueError(
+                    "Offchain request rejected with HTTP 402 but the challenge "
+                    f"reports no shortfall (required={challenge.required}, "
+                    f"current balance={challenge.current_balance}). The mech "
+                    f"may be returning a malformed body or a stale balance. "
+                    f"({challenge.error})"
+                )
+            self._auto_deposit_for_402(payment_type, challenge, max_delivery_rate)
             response = self._do_offchain_post(url, payload)
             if response.status_code == HTTP_PAYMENT_REQUIRED:
                 # The deposit tx already confirmed (DepositService waits for
@@ -521,19 +553,44 @@ class MarketplaceService(
         )
 
     def _auto_deposit_for_402(
-        self, payment_type: PaymentType, challenge: PaymentChallenge
+        self,
+        payment_type: PaymentType,
+        challenge: PaymentChallenge,
+        max_delivery_rate: int,
     ) -> None:
         """Deposit the 402 shortfall into the prepaid balance.
 
+        Refuses to deposit when the shortfall exceeds
+        ``_MAX_AUTO_DEPOSIT_RATIO * max_delivery_rate`` — see the constant's
+        docstring for why the cap exists.
+
         :param payment_type: the request's payment type (native vs token).
         :param challenge: the parsed 402 challenge.
-        :raises ValueError: if the payment type doesn't support auto-deposit.
+        :param max_delivery_rate: the requester's signed per-request maximum.
+        :raises ValueError: if the payment type doesn't support auto-deposit,
+            or if the requested deposit would exceed the safety cap.
         """
         if challenge.shortfall <= 0:
             return
         if payment_type not in _SUPPORTED_DEPOSIT_PAYMENT_TYPES:
             raise ValueError(
                 f"Auto-deposit is not supported for payment type {payment_type.name}"
+            )
+        cap = max_delivery_rate * _MAX_AUTO_DEPOSIT_RATIO
+        if challenge.shortfall > cap:
+            # A mech with a hostile or buggy `required` field can otherwise
+            # extract the user's full wallet balance in a single retry. Cap
+            # at a generous multiple of the per-request maximum the user
+            # actually signed; anything beyond that has to be a manual
+            # deposit so the user can see the amount before it leaves their
+            # wallet.
+            raise ValueError(
+                f"Auto-deposit refused: mech demanded a {challenge.shortfall} "
+                f"shortfall which exceeds the safety cap of {cap} "
+                f"({_MAX_AUTO_DEPOSIT_RATIO}x your signed max_delivery_rate of "
+                f"{max_delivery_rate}). If this is legitimate, deposit the "
+                f"amount manually so it leaves your wallet under your direct "
+                f"control."
             )
         # Imported here to avoid a circular import at module load.
         from mech_client.services.deposit_service import (  # pylint: disable=import-outside-toplevel
