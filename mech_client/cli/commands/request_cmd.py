@@ -71,6 +71,17 @@ def _format_delivery_output(delivery_data: Any) -> str:
     help="Use offchain mech (URL discovered from on-chain metadata).",
 )
 @click.option(
+    "--auto-deposit",
+    is_flag=True,
+    default=False,
+    help=(
+        "On an offchain HTTP 402, top up the prepaid balance and retry. "
+        "Trusts the mech's reported shortfall, capped at 10x the signed "
+        "max_delivery_rate; above that the request is refused so the user "
+        "can deposit manually."
+    ),
+)
+@click.option(
     "--tools",
     type=str,
     multiple=True,
@@ -109,6 +120,7 @@ def request(
     chain_config: str,
     use_prepaid: bool,
     use_offchain: bool,
+    auto_deposit: bool,
     key: Optional[str],
     tools: Optional[tuple],
     extra_attribute: Optional[List[str]] = None,
@@ -138,6 +150,7 @@ def request(
     :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
     :param use_prepaid: Use the marketplace prepaid balance instead of per-request payment.
     :param use_offchain: Route delivery off-chain (auto-discovered URL); implies prepaid.
+    :param auto_deposit: On an offchain HTTP 402, top up the prepaid balance and retry.
     :param key: Optional path to a private-key file (required in client mode).
     :param tools: One or more tool names matching ``prompts`` positionally.
     :param extra_attribute: Optional ``key=value`` extras attached to each request.
@@ -204,6 +217,7 @@ def request(
             priority_mech=priority_mech,
             use_prepaid=use_prepaid,
             use_offchain=use_offchain,
+            auto_deposit=auto_deposit,
             extra_attributes=extra_attributes_dict,
             timeout=timeout,
         )
