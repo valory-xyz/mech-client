@@ -886,6 +886,9 @@ class TestSendRequestOnchainFlow:
 
         mock_contract = MagicMock()
         mock_push_metadata.return_value = ("0x" + "b" * 64, "ipfs://hash")
+        # Approve returns a distinct hash so we can verify wait_for_receipt
+        # is called with it before the request transaction is built.
+        mock_strategy.approve_if_needed.return_value = "0xapprovehash"
         mock_wait_receipt.return_value = {"status": 1}
         mock_watch_request_ids.return_value = ["req-1"]
 
@@ -895,6 +898,13 @@ class TestSendRequestOnchainFlow:
 
         # Use TOKEN payment type (is_token() returns True)
         token_payment_type = PaymentType.USDC_TOKEN
+        max_delivery_rate = 10**17
+
+        # Track call order between approval-receipt wait and request send.
+        call_order: list[str] = []
+        mock_wait_receipt.side_effect = lambda tx_hash, _api: (
+            call_order.append(f"wait:{tx_hash}") or {"status": 1}
+        )
 
         with patch.object(
             service, "_get_marketplace_contract", return_value=mock_contract
@@ -902,13 +912,15 @@ class TestSendRequestOnchainFlow:
             with patch.object(
                 service,
                 "_fetch_mech_info",
-                return_value=(token_payment_type, 1, 10**17),
+                return_value=(token_payment_type, 1, max_delivery_rate),
             ):
                 with patch.object(service, "_validate_tools"):
                     with patch.object(
                         service,
                         "_send_marketplace_request",
-                        return_value="0xtxhash",
+                        side_effect=lambda **_: (
+                            call_order.append("send_request") or "0xtxhash"
+                        ),
                     ):
                         result = await service.send_request(
                             prompts=("hello",),
@@ -916,8 +928,16 @@ class TestSendRequestOnchainFlow:
                             use_prepaid=False,
                         )
 
-        # Verify approval was triggered
+        # Verify approval was triggered with the per-mech rate, not mech_config.price
         mock_strategy.approve_if_needed.assert_called_once()
+        approve_kwargs = mock_strategy.approve_if_needed.call_args.kwargs
+        assert approve_kwargs["amount"] == max_delivery_rate * 1
+        # Approve receipt must be awaited before the request tx is sent.
+        assert call_order[0] == "wait:0xapprovehash"
+        assert "send_request" in call_order
+        assert call_order.index("wait:0xapprovehash") < call_order.index(
+            "send_request"
+        )
         assert result["tx_hash"] == "0xtxhash"
 
     @pytest.mark.asyncio
@@ -1097,7 +1117,6 @@ class TestSendRequestOnchainFlow:
         mock_strategy = MagicMock()
         mock_strategy.get_balance_tracker_address.return_value = "0x" + "c" * 40
         mock_strategy.check_balance.return_value = True
-        # Truthy hash triggers the wait_for_receipt + status check
         mock_strategy.approve_if_needed.return_value = "0xapprovehash"
         mock_payment_factory.create.return_value = mock_strategy
 
@@ -1105,6 +1124,7 @@ class TestSendRequestOnchainFlow:
         # Receipt with status=0 means the approve reverted on-chain
         mock_wait_receipt.return_value = {"status": 0}
 
+        max_delivery_rate = 10**17
         mock_contract = MagicMock()
         with patch.object(
             service, "_get_marketplace_contract", return_value=mock_contract
@@ -1112,7 +1132,7 @@ class TestSendRequestOnchainFlow:
             with patch.object(
                 service,
                 "_fetch_mech_info",
-                return_value=(PaymentType.USDC_TOKEN, 1, 10**17),
+                return_value=(PaymentType.USDC_TOKEN, 1, max_delivery_rate),
             ):
                 with patch.object(service, "_validate_tools"):
                     with patch.object(
@@ -1129,6 +1149,9 @@ class TestSendRequestOnchainFlow:
                             )
                         # Request must not be sent if approve reverted
                         mock_send_request.assert_not_called()
+        # Approval was sent for the per-mech rate, not mech_config.price
+        approve_kwargs = mock_strategy.approve_if_needed.call_args.kwargs
+        assert approve_kwargs["amount"] == max_delivery_rate * 1
         mock_watch_request_ids.assert_not_called()
 
 
