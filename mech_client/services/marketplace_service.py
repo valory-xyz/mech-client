@@ -243,7 +243,13 @@ class MarketplaceService(
         logger.info(f"Uploaded {len(data_hashes)} metadata hash(es) to IPFS")
 
         # Handle payment (approval if needed)
-        if not use_prepaid and payment_type.is_token():
+        # `is_token()` also matches TOKEN_NVM_USDC, which the factory routes
+        # to NVMPaymentStrategy (no ERC20 approve) — gate on the exact types
+        # that resolve to TokenPaymentStrategy, mirroring factory.py:59.
+        if not use_prepaid and payment_type in (
+            PaymentType.OLAS_TOKEN,
+            PaymentType.USDC_TOKEN,
+        ):
             balance_tracker = payment_strategy.get_balance_tracker_address()
             # The marketplace pulls up to `max_delivery_rate * numRequests`
             # from the requester via `BalanceTracker.checkAndRecordDeliveryRates`.
