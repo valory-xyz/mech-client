@@ -6,7 +6,7 @@ requires-python = ">=3.10,<3.15"
 readme = "README.md"
 license = "Apache-2.0"
 dependencies = [
-    "open-aea-helpers==0.21.23",
+    "open-aea-helpers==0.21.25",
     "gql>=3.4.1",
     "tabulate>=0.9.0,<0.10",
     "setuptools>=78.1.1,<82",
@@ -44,8 +44,8 @@ service_specific_packages = ["mech_client", "scripts"]
 pytest_targets = ["tests/unit"]
 # Library, not a runtime open-autonomy app — set explicitly so tomte's
 # liccheck / check-third-party-hashes envs render valid upstream pins.
-open_autonomy_version = "0.21.23"
-open_aea_version = "2.2.7"
+open_autonomy_version = "0.21.25"
+open_aea_version = "2.2.9"
 # 32-byte keccak hashes (public protocol identifiers, not credentials)
 # trip gitleaks' generic-secret rule. `marketplace_interact.py` was
 # removed in v0.17.0 but `gitleaks detect` scans full history.

@@ -38,6 +38,14 @@ if TYPE_CHECKING:
     from mech_client.domain.execution.base import TransactionExecutor
 
 
+# Client-mode fallback gas for ERC20 approve when estimation fails. Ignored
+# in agent mode (AgentExecutor hardcodes `gas: 0` and Safe estimates its own
+# gas). Sized as a generous buffer above the ~67k measured cost of a
+# 0->nonzero approve on Polygon's Circle USDC (FiatToken) proxy; the historic
+# 60k underfunds that proxy. Re-measure if Circle upgrades the implementation.
+_APPROVE_FALLBACK_GAS = 120_000
+
+
 class TokenPaymentStrategy(PaymentStrategy):
     """Payment strategy for ERC20 token payments (OLAS, USDC).
 
@@ -84,18 +92,19 @@ class TokenPaymentStrategy(PaymentStrategy):
         balance = token_contract.functions.balanceOf(payer_address).call()
         return balance >= amount
 
-    def approve_if_needed(  # pylint: disable=too-many-locals
+    def approve_if_needed(
         self,
         payer_address: str,
         spender_address: str,
         amount: int,
         executor: Optional["TransactionExecutor"] = None,
-    ) -> Optional[str]:
+    ) -> str:
         """
         Approve token spending for the spender address.
 
         Builds and sends an approve transaction for the specified amount.
-        This must be called before the actual token transfer.
+        This must be called before the actual token transfer. Always sends
+        a transaction and returns the hash; raises if it cannot.
 
         :param payer_address: Address of the payer
         :param spender_address: Address allowed to spend tokens (balance tracker)
@@ -114,8 +123,11 @@ class TokenPaymentStrategy(PaymentStrategy):
         abi = get_abi("IToken.json")
         token_contract = get_contract(token_address, abi, self.ledger_api)
 
-        # Build approval transaction arguments
-        tx_args = {"sender_address": payer_address, "value": 0, "gas": 60000}
+        tx_args = {
+            "sender_address": payer_address,
+            "value": 0,
+            "gas": _APPROVE_FALLBACK_GAS,
+        }
         method_name = "approve"
         method_args = {"_to": spender_address, "_value": amount}
 

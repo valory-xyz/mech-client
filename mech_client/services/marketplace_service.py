@@ -21,7 +21,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, FrozenSet, List, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Tuple, cast
 
 import requests
 from aea_ledger_ethereum import EthereumCrypto
@@ -243,9 +243,23 @@ class MarketplaceService(
         logger.info(f"Uploaded {len(data_hashes)} metadata hash(es) to IPFS")
 
         # Handle payment (approval if needed)
-        if not use_prepaid and payment_type.is_token():
+        # `is_token()` also matches TOKEN_NVM_USDC, which the factory routes
+        # to NVMPaymentStrategy (no ERC20 approve) — gate on the exact types
+        # that resolve to TokenPaymentStrategy, mirroring factory.py:59.
+        if not use_prepaid and payment_type in (
+            PaymentType.OLAS_TOKEN,
+            PaymentType.USDC_TOKEN,
+        ):
             balance_tracker = payment_strategy.get_balance_tracker_address()
-            price = self.mech_config.price * len(prompts)
+            # The marketplace pulls up to `max_delivery_rate * numRequests`
+            # from the requester via `BalanceTracker.checkAndRecordDeliveryRates`.
+            # Use the per-mech `max_delivery_rate` (read from the mech
+            # contract) instead of the static chain-wide `mech_config.price`
+            # from mechs.json — the latter is a default that does not match
+            # per-mech pricing and under-funds the approve whenever a mech's
+            # rate exceeds it, making the marketplace's transferFrom revert
+            # with "ERC20: transfer amount exceeds allowance".
+            price = max_delivery_rate * len(prompts)
 
             # Check balance
             logger.info(f"Checking {payment_type.name} token balance...")
@@ -256,17 +270,36 @@ class MarketplaceService(
                     f"Please check your token balance for address: {sender}"
                 )
 
-            # Approve if needed
-            logger.info("Sending token approval transaction...")
-            payment_strategy.approve_if_needed(
-                payer_address=sender,
-                spender_address=balance_tracker,
-                amount=price,
-                executor=self.executor,
+            # Approve. TokenPaymentStrategy.approve_if_needed always returns
+            # the hash of a sent transaction or raises; the base signature is
+            # Optional[str] only because NativePaymentStrategy is a no-op.
+            logger.info(
+                f"Approving {price} wei ({max_delivery_rate} per request "
+                f"x {len(prompts)}) for spender {balance_tracker}..."
             )
+            approval_tx_hash = cast(
+                str,
+                payment_strategy.approve_if_needed(
+                    payer_address=sender,
+                    spender_address=balance_tracker,
+                    amount=price,
+                    executor=self.executor,
+                ),
+            )
+            # Wait for the approval to be mined before submitting the request.
+            # Otherwise the request transaction is built on the pre-approval
+            # ("latest") nonce while the approval is still pending, so both grab
+            # the same nonce -> "replacement transaction underpriced", and the
+            # allowance may not yet be on-chain when the request pulls payment.
+            approval_receipt = wait_for_receipt(approval_tx_hash, self.ledger_api)
+            if approval_receipt.get("status") != 1:
+                raise ValueError(
+                    f"Token approval transaction reverted. Hash: {approval_tx_hash}. "
+                    f"The request was not sent. This often means the approval ran "
+                    f"out of gas; check the transaction on the block explorer."
+                )
             logger.info("Token approval complete")
 
-        # Send on-chain marketplace request
         logger.info("Submitting marketplace request transaction...")
         tx_hash = self._send_marketplace_request(
             marketplace_contract=marketplace_contract,
@@ -282,7 +315,7 @@ class MarketplaceService(
 
         # Wait for receipt and check success
         receipt = wait_for_receipt(tx_hash, self.ledger_api)
-        if receipt.get("status") == 0:
+        if receipt.get("status") != 1:
             raise ValueError(
                 f"Transaction reverted. Hash: {tx_hash}. "
                 f"This may indicate insufficient gas or a contract error. "

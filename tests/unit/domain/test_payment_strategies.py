@@ -26,7 +26,10 @@ import pytest
 from mech_client.domain.payment.factory import PaymentStrategyFactory
 from mech_client.domain.payment.native import NativePaymentStrategy
 from mech_client.domain.payment.nvm import NVMPaymentStrategy
-from mech_client.domain.payment.token import TokenPaymentStrategy
+from mech_client.domain.payment.token import (
+    _APPROVE_FALLBACK_GAS,
+    TokenPaymentStrategy,
+)
 from mech_client.infrastructure.config import PaymentType
 
 
@@ -169,7 +172,10 @@ class TestTokenPaymentStrategy:
         assert call_args["method_args"] == {"_to": spender_address, "_value": amount}
         assert call_args["tx_args"]["sender_address"] == payer_address
         assert call_args["tx_args"]["value"] == 0
-        assert call_args["tx_args"]["gas"] == 60000
+        # Lock to the module constant so a silent regression (e.g. 80k)
+        # that still sits above the measured ~67k cost but eats the buffer
+        # is caught here, not in production.
+        assert call_args["tx_args"]["gas"] == _APPROVE_FALLBACK_GAS
 
     def test_approve_if_needed_no_executor_raises_error(
         self,

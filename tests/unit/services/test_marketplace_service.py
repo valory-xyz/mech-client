@@ -886,7 +886,9 @@ class TestSendRequestOnchainFlow:
 
         mock_contract = MagicMock()
         mock_push_metadata.return_value = ("0x" + "b" * 64, "ipfs://hash")
-        mock_wait_receipt.return_value = {"status": 1}
+        # Approve returns a distinct hash so we can verify wait_for_receipt
+        # is called with it before the request transaction is built.
+        mock_strategy.approve_if_needed.return_value = "0xapprovehash"
         mock_watch_request_ids.return_value = ["req-1"]
 
         mock_watcher = AsyncMock()
@@ -895,6 +897,13 @@ class TestSendRequestOnchainFlow:
 
         # Use TOKEN payment type (is_token() returns True)
         token_payment_type = PaymentType.USDC_TOKEN
+        max_delivery_rate = 10**17
+
+        # Track call order between approval-receipt wait and request send.
+        call_order: list[str] = []
+        mock_wait_receipt.side_effect = lambda tx_hash, _api: (
+            call_order.append(f"wait:{tx_hash}") or {"status": 1}
+        )
 
         with patch.object(
             service, "_get_marketplace_contract", return_value=mock_contract
@@ -902,13 +911,15 @@ class TestSendRequestOnchainFlow:
             with patch.object(
                 service,
                 "_fetch_mech_info",
-                return_value=(token_payment_type, 1, 10**17),
+                return_value=(token_payment_type, 1, max_delivery_rate),
             ):
                 with patch.object(service, "_validate_tools"):
                     with patch.object(
                         service,
                         "_send_marketplace_request",
-                        return_value="0xtxhash",
+                        side_effect=lambda **_: (
+                            call_order.append("send_request") or "0xtxhash"
+                        ),
                     ):
                         result = await service.send_request(
                             prompts=("hello",),
@@ -916,8 +927,16 @@ class TestSendRequestOnchainFlow:
                             use_prepaid=False,
                         )
 
-        # Verify approval was triggered
+        # Verify approval was triggered with the per-mech rate, not mech_config.price
         mock_strategy.approve_if_needed.assert_called_once()
+        approve_kwargs = mock_strategy.approve_if_needed.call_args.kwargs
+        assert approve_kwargs["amount"] == max_delivery_rate * 1
+        # Approve receipt must be awaited before the request tx is sent.
+        assert call_order[0] == "wait:0xapprovehash"
+        assert "send_request" in call_order
+        assert call_order.index("wait:0xapprovehash") < call_order.index(
+            "send_request"
+        )
         assert result["tx_hash"] == "0xtxhash"
 
     @pytest.mark.asyncio
@@ -1054,6 +1073,255 @@ class TestSendRequestOnchainFlow:
 
         # watch_for_marketplace_request_ids should NOT be called
         mock_watch_request_ids.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.watch_for_marketplace_request_ids")
+    @patch("mech_client.services.marketplace_service.wait_for_receipt")
+    @patch("mech_client.services.marketplace_service.push_metadata_to_ipfs")
+    @patch("mech_client.services.marketplace_service.PaymentStrategyFactory")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_onchain_token_reverted_approve_raises_before_request(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_payment_factory: MagicMock,
+        mock_push_metadata: MagicMock,
+        mock_wait_receipt: MagicMock,
+        mock_watch_request_ids: MagicMock,
+    ) -> None:
+        """A status=0 approve receipt must raise before _send_marketplace_request."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.mech_marketplace_contract = "0x" + "2" * 40
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_mech_config.price = 10**18
+        mock_config.return_value = mock_mech_config
+
+        mock_executor = MagicMock()
+        mock_executor.get_sender_address.return_value = "0x" + "a" * 40
+        mock_executor_factory.create.return_value = mock_executor
+
+        service = _build_service(
+            mock_mech_config, mock_ledger_api_cls, mock_executor_factory
+        )
+
+        mock_strategy = MagicMock()
+        mock_strategy.get_balance_tracker_address.return_value = "0x" + "c" * 40
+        mock_strategy.check_balance.return_value = True
+        mock_strategy.approve_if_needed.return_value = "0xapprovehash"
+        mock_payment_factory.create.return_value = mock_strategy
+
+        mock_push_metadata.return_value = ("0x" + "b" * 64, "ipfs://hash")
+        # Receipt with status=0 means the approve reverted on-chain
+        mock_wait_receipt.return_value = {"status": 0}
+
+        max_delivery_rate = 10**17
+        mock_contract = MagicMock()
+        with patch.object(
+            service, "_get_marketplace_contract", return_value=mock_contract
+        ):
+            with patch.object(
+                service,
+                "_fetch_mech_info",
+                return_value=(PaymentType.USDC_TOKEN, 1, max_delivery_rate),
+            ):
+                with patch.object(service, "_validate_tools"):
+                    with patch.object(
+                        service, "_send_marketplace_request"
+                    ) as mock_send_request:
+                        with pytest.raises(
+                            ValueError,
+                            match="Token approval transaction reverted",
+                        ):
+                            await service.send_request(
+                                prompts=("hello",),
+                                tools=("some-tool",),
+                                use_prepaid=False,
+                            )
+                        # Request must not be sent if approve reverted
+                        mock_send_request.assert_not_called()
+        # Approval was sent for the per-mech rate, not mech_config.price
+        approve_kwargs = mock_strategy.approve_if_needed.call_args.kwargs
+        assert approve_kwargs["amount"] == max_delivery_rate * 1
+        mock_watch_request_ids.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OnchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.watch_for_marketplace_request_ids")
+    @patch("mech_client.services.marketplace_service.wait_for_receipt")
+    @patch("mech_client.services.marketplace_service.push_metadata_to_ipfs")
+    @patch("mech_client.services.marketplace_service.PaymentStrategyFactory")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_onchain_token_nvm_usdc_skips_approve_branch(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_payment_factory: MagicMock,
+        mock_push_metadata: MagicMock,
+        mock_wait_receipt: MagicMock,
+        mock_watch_request_ids: MagicMock,
+        mock_onchain_watcher_cls: MagicMock,
+    ) -> None:
+        """TOKEN_NVM_USDC is_token() but uses NVMPaymentStrategy (no approve);
+        approve_if_needed returns None and must not flow into wait_for_receipt."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.mech_marketplace_contract = "0x" + "2" * 40
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+
+        mock_executor = MagicMock()
+        mock_executor.execute_transaction.return_value = "0xtxhash"
+        mock_executor.get_sender_address.return_value = "0x" + "a" * 40
+        mock_executor_factory.create.return_value = mock_executor
+
+        service = _build_service(
+            mock_mech_config, mock_ledger_api_cls, mock_executor_factory
+        )
+
+        # NVMPaymentStrategy.approve_if_needed returns None — the regression
+        # was that this None flowed through cast(str, None) into
+        # wait_for_receipt(None, ...) and blocked for the full poll timeout.
+        mock_strategy = MagicMock()
+        mock_strategy.approve_if_needed.return_value = None
+        mock_payment_factory.create.return_value = mock_strategy
+
+        mock_push_metadata.return_value = ("0x" + "b" * 64, "ipfs://hash")
+        mock_wait_receipt.return_value = {"status": 1}
+        mock_watch_request_ids.return_value = ["req-1"]
+
+        mock_watcher = AsyncMock()
+        mock_watcher.watch.return_value = {"req-1": "result"}
+        mock_onchain_watcher_cls.return_value = mock_watcher
+
+        mock_contract = MagicMock()
+        with patch.object(
+            service, "_get_marketplace_contract", return_value=mock_contract
+        ):
+            with patch.object(
+                service,
+                "_fetch_mech_info",
+                return_value=(PaymentType.TOKEN_NVM_USDC, 1, 10**17),
+            ):
+                with patch.object(service, "_validate_tools"):
+                    with patch.object(
+                        service,
+                        "_send_marketplace_request",
+                        return_value="0xtxhash",
+                    ):
+                        await service.send_request(
+                            prompts=("hello",),
+                            tools=("some-tool",),
+                            use_prepaid=False,
+                        )
+
+        # The approve branch must be skipped entirely for NVM.
+        mock_strategy.approve_if_needed.assert_not_called()
+        # Only the request-tx receipt is awaited; no None hash polled.
+        for call in mock_wait_receipt.call_args_list:
+            assert call.args[0] is not None
+            assert call.args[0] != ""
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OnchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.watch_for_marketplace_request_ids")
+    @patch("mech_client.services.marketplace_service.wait_for_receipt")
+    @patch("mech_client.services.marketplace_service.push_metadata_to_ipfs")
+    @patch("mech_client.services.marketplace_service.PaymentStrategyFactory")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_onchain_token_approve_amount_scales_with_prompt_count(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_payment_factory: MagicMock,
+        mock_push_metadata: MagicMock,
+        mock_wait_receipt: MagicMock,
+        mock_watch_request_ids: MagicMock,
+        mock_onchain_watcher_cls: MagicMock,
+    ) -> None:
+        """With n_prompts=2, approve amount must scale as max_delivery_rate * 2;
+        a single-prompt assertion would not catch dropping `* len(prompts)`."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.mech_marketplace_contract = "0x" + "2" * 40
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+
+        mock_executor = MagicMock()
+        mock_executor.execute_transaction.return_value = "0xtxhash"
+        mock_executor.get_sender_address.return_value = "0x" + "a" * 40
+        mock_executor_factory.create.return_value = mock_executor
+
+        service = _build_service(
+            mock_mech_config, mock_ledger_api_cls, mock_executor_factory
+        )
+
+        mock_strategy = MagicMock()
+        mock_strategy.get_balance_tracker_address.return_value = "0x" + "c" * 40
+        mock_strategy.check_balance.return_value = True
+        mock_strategy.approve_if_needed.return_value = "0xapprovehash"
+        mock_payment_factory.create.return_value = mock_strategy
+
+        mock_push_metadata.return_value = ("0x" + "b" * 64, "ipfs://hash")
+        mock_wait_receipt.return_value = {"status": 1}
+        mock_watch_request_ids.return_value = ["req-1", "req-2"]
+
+        mock_watcher = AsyncMock()
+        mock_watcher.watch.return_value = {"req-1": "r1", "req-2": "r2"}
+        mock_onchain_watcher_cls.return_value = mock_watcher
+
+        max_delivery_rate = 10**17
+        prompts = ("hello", "world")
+        tools = ("some-tool", "some-tool")
+        mock_contract = MagicMock()
+
+        with patch.object(
+            service, "_get_marketplace_contract", return_value=mock_contract
+        ):
+            with patch.object(
+                service,
+                "_fetch_mech_info",
+                return_value=(PaymentType.USDC_TOKEN, 1, max_delivery_rate),
+            ):
+                with patch.object(service, "_validate_tools"):
+                    with patch.object(
+                        service,
+                        "_send_marketplace_request",
+                        return_value="0xtxhash",
+                    ):
+                        await service.send_request(
+                            prompts=prompts,
+                            tools=tools,
+                            use_prepaid=False,
+                        )
+
+        approve_kwargs = mock_strategy.approve_if_needed.call_args.kwargs
+        assert approve_kwargs["amount"] == max_delivery_rate * len(prompts)
+        assert approve_kwargs["amount"] == max_delivery_rate * 2
 
 
 class TestGasEstimationEnabled:
