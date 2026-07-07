@@ -19,8 +19,12 @@
 
 """Tests for domain.signing (Signer protocol and LocalSigner)."""
 
+from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import MagicMock
+
+from aea_ledger_ethereum import EthereumCrypto
+from eth_account import Account
 
 from mech_client.domain.signing import LocalSigner, Signer
 
@@ -139,6 +143,23 @@ class TestLocalSignerSendTransaction:
         signed_tx = mock_crypto.sign_transaction.call_args[0][0]
         assert "gasPrice" not in signed_tx
 
+    def test_preserves_explicit_zero_gas(self) -> None:
+        """Test an explicit gas=0 is kept, not silently re-estimated."""
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0x" + "a" * 40
+        mock_ledger_api = MagicMock()
+        mock_ledger_api.send_signed_transaction.return_value = "0xtxhash"
+
+        signer = LocalSigner(mock_crypto, mock_ledger_api)
+
+        signer.send_transaction(
+            {"to": "0x" + "b" * 40, "nonce": 1, "gas": 0, "gasPrice": 1}
+        )
+
+        signed_tx = mock_crypto.sign_transaction.call_args[0][0]
+        assert signed_tx["gas"] == 0
+        mock_ledger_api.api.eth.estimate_gas.assert_not_called()
+
     def test_does_not_mutate_input_dict(self) -> None:
         """Test the caller's unsigned tx dict is left untouched."""
         mock_crypto = MagicMock()
@@ -181,3 +202,32 @@ class TestLocalSignerSignMessage:
         signature = signer.sign_message(b"\x11" * 32)
 
         assert signature == b"\xcd" * 65
+
+    def test_real_key_signature_recovers_via_raw_ecrecover(
+        self, tmp_path: Path
+    ) -> None:
+        """Test a real-key signature is a raw digest signature (no EIP-191).
+
+        Everything else in this module mocks ``crypto.sign_message``, so an
+        AEA-side change to ``is_deprecated_mode`` semantics would go
+        unnoticed while the marketplace contract's plain
+        ``ecrecover(digest, v, r, s)`` started rejecting offchain requests.
+        This is the one test exercising the real signing primitive: recovery
+        over the *unprefixed* digest must yield the key's address.
+        """
+        key_file = tmp_path / "key.txt"
+        key_file.write_text("0x" + "1" * 64)  # synthetic test key
+        crypto = EthereumCrypto(private_key_path=str(key_file))
+        signer = LocalSigner(crypto, MagicMock())
+        digest = b"\x11" * 32
+
+        signature = signer.sign_message(digest)
+
+        assert len(signature) == 65
+        # Raw-hash recovery, mirroring the on-chain ecrecover (no EIP-191
+        # prefix). pylint: disable applies to eth_account's private-but-stable
+        # classmethod.
+        recovered = Account._recover_hash(  # pylint: disable=protected-access
+            digest, signature=signature
+        )
+        assert recovered == crypto.address

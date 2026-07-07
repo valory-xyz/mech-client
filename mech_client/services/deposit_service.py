@@ -136,7 +136,6 @@ class DepositService(
             payment_type=payment_type,
             ledger_api=self.ledger_api,
             chain_id=self.mech_config.ledger_config.chain_id,
-            crypto=self.crypto,
         )
 
         # Check balance

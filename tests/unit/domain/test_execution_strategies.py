@@ -28,18 +28,7 @@ from mech_client.domain.execution.client_executor import ClientExecutor
 from mech_client.domain.execution.factory import ExecutorFactory
 from mech_client.domain.signing import LocalSigner
 
-
-def create_mock_signer(address: str = "0x" + "1" * 40) -> MagicMock:
-    """
-    Create a mock Signer.
-
-    :param address: EOA address the signer reports
-    :return: Mock signer instance
-    """
-    mock_signer = MagicMock()
-    mock_signer.address = address
-    mock_signer.send_transaction.return_value = "0xtxhash"
-    return mock_signer
+from tests.unit.helpers import DEFAULT_TX_HASH, create_mock_signer
 
 
 class TestExecutorFactory:
@@ -157,7 +146,7 @@ class TestClientExecutorTransfer:
 
         result = executor.execute_transfer(to_address, amount, gas)
 
-        assert result == "0xtxhash"
+        assert result == DEFAULT_TX_HASH
         mock_ledger_api.get_transfer_transaction.assert_called_once_with(
             sender_address=mock_signer.address,
             destination_address=to_address,
@@ -303,7 +292,7 @@ class TestClientExecutorTransaction:
             tx_args=tx_args,
         )
 
-        assert result == "0xtxhash"
+        assert result == DEFAULT_TX_HASH
         mock_ledger_api.build_transaction.assert_called_once_with(
             contract_instance=mock_contract,
             method_name="request",

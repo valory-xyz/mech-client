@@ -235,7 +235,6 @@ class MarketplaceService(
             payment_type=payment_type,
             ledger_api=self.ledger_api,
             chain_id=self.mech_config.ledger_config.chain_id,
-            crypto=self.crypto,
         )
 
         # Prepare metadata and upload to IPFS
@@ -636,7 +635,6 @@ class MarketplaceService(
         deposit_service = DepositService(
             chain_config=self.chain_config,
             agent_mode=self.agent_mode,
-            crypto=self.crypto,
             safe_address=self.safe_address,
             ethereum_client=self.ethereum_client,
             signer=self.signer,

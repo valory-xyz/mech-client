@@ -31,6 +31,8 @@ from mech_client.infrastructure.blockchain.safe_client import (
     SafeClient,
 )
 
+from tests.unit.helpers import create_mock_signer
+
 
 class TestSafeClientInitialization:
     """Tests for SafeClient initialization."""
@@ -84,19 +86,6 @@ class TestSafeClientInitialization:
         # Safe constructor only called once
         mock_safe_class.assert_called_once()
         assert safe1 == safe2 == mock_safe_instance
-
-
-def create_mock_signer(address: str = "0x" + "ab" * 20) -> MagicMock:
-    """
-    Create a mock Signer.
-
-    :param address: EOA address the signer reports
-    :return: Mock signer instance
-    """
-    mock_signer = MagicMock()
-    mock_signer.address = address
-    mock_signer.send_transaction.return_value = "0x" + "ff" * 32
-    return mock_signer
 
 
 class TestPreValidatedSignature:

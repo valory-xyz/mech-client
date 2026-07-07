@@ -66,7 +66,7 @@ class LocalSigner:
             tx["nonce"] = self.ledger_api.api.eth.get_transaction_count(self.address)
         if "gasPrice" not in tx and "maxFeePerGas" not in tx:
             tx["gasPrice"] = self.ledger_api.api.eth.gas_price
-        if not tx.get("gas"):
+        if tx.get("gas") is None:
             tx["gas"] = self.ledger_api.api.eth.estimate_gas(tx)
         signed_transaction = self.crypto.sign_transaction(tx)
         transaction_digest = self.ledger_api.send_signed_transaction(

@@ -25,12 +25,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import requests
 
+from mech_client.domain.signing import LocalSigner
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.services.marketplace_service import (
     MarketplaceService,
     PaymentChallenge,
 )
+
+from tests.unit.helpers import create_mock_signer
 
 
 def create_mock_mech_config() -> MagicMock:
@@ -92,16 +95,19 @@ class TestMarketplaceServiceInitialization:
         mock_executor_factory.create.return_value = mock_executor
 
         # Initialize service
+        mock_crypto = create_mock_crypto()
         service = MarketplaceService(
             chain_config="gnosis",
             agent_mode=False,
-            crypto=create_mock_crypto(),
+            crypto=mock_crypto,
         )
 
         # Verify initialization
         assert service.chain_config == "gnosis"
         assert service.agent_mode is False
-        assert service.private_key == "0x" + "1" * 64
+        # crypto is wrapped in the default LocalSigner, not stored on the service
+        assert isinstance(service.signer, LocalSigner)
+        assert service.signer.crypto is mock_crypto
         assert service.safe_address is None
         assert service.ethereum_client is None
         mock_config.assert_called_once_with("gnosis", agent_mode=False)
@@ -135,8 +141,6 @@ class TestMarketplaceServiceInitialization:
         )
 
         # No key material in-process; signing goes through the signer
-        assert service.crypto is None
-        assert service.private_key is None
         assert service.signer is mock_signer
         create_kwargs = mock_executor_factory.create.call_args[1]
         assert create_kwargs["signer"] is mock_signer
@@ -1428,9 +1432,7 @@ class TestSendOffchainRequest:
         )
 
         # Mock crypto address and signing
-        service.signer = MagicMock()
-        service.signer.address = "0x" + "a" * 40
-        service.signer.sign_message.return_value = b"\xab" * 65
+        service.signer = create_mock_signer(address="0x" + "a" * 40)
 
         # Mock marketplace contract
         mock_contract = MagicMock()
@@ -1507,9 +1509,7 @@ class TestSendOffchainRequest:
             crypto=create_mock_crypto(),
         )
 
-        service.signer = MagicMock()
-        service.signer.address = "0x" + "a" * 40
-        service.signer.sign_message.return_value = b"\xab" * 65
+        service.signer = create_mock_signer(address="0x" + "a" * 40)
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
@@ -1578,9 +1578,7 @@ class TestSendOffchainRequest:
             crypto=create_mock_crypto(),
         )
 
-        service.signer = MagicMock()
-        service.signer.address = "0x" + "a" * 40
-        service.signer.sign_message.return_value = b"\xab" * 65
+        service.signer = create_mock_signer(address="0x" + "a" * 40)
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
@@ -1653,9 +1651,7 @@ class TestSendOffchainRequest:
             crypto=create_mock_crypto(),
         )
 
-        service.signer = MagicMock()
-        service.signer.address = "0x" + "a" * 40
-        service.signer.sign_message.return_value = b"\xab" * 65
+        service.signer = create_mock_signer(address="0x" + "a" * 40)
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
@@ -1908,6 +1904,15 @@ class TestOffchain402Handling:
                 PaymentType.NATIVE,
                 PaymentChallenge(100, 30, "0xbt", "", 100, "ib"),
                 max_delivery_rate=100,
+            )
+            # The child service must inherit the signer (external-signer path
+            # has no crypto to fall back on)
+            mock_ds.assert_called_once_with(
+                chain_config=service.chain_config,
+                agent_mode=service.agent_mode,
+                safe_address=service.safe_address,
+                ethereum_client=service.ethereum_client,
+                signer=service.signer,
             )
             mock_ds.return_value.deposit_native.assert_called_once_with(70)
 

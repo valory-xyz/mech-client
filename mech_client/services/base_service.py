@@ -72,8 +72,6 @@ class BaseTransactionService:  # pylint: disable=too-few-public-methods,too-many
 
         self.chain_config = chain_config
         self.agent_mode = agent_mode
-        self.crypto = crypto
-        self.private_key = crypto.private_key if crypto is not None else None
         self.safe_address = safe_address
         self.ethereum_client = ethereum_client
 
