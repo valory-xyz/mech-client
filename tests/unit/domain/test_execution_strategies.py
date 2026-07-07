@@ -187,7 +187,9 @@ class TestAgentExecutorTransfer:
         mock_crypto.private_key = "0x" + "a" * 64
 
         mock_safe_client = MagicMock()
-        mock_safe_client.send_transaction.return_value = None
+        mock_safe_client.send_transaction.side_effect = Exception(
+            "Transaction execution fails"
+        )
         mock_safe_client_cls.return_value = mock_safe_client
 
         safe_address = "0x" + "b" * 40
@@ -195,7 +197,11 @@ class TestAgentExecutorTransfer:
             mock_ledger_api, mock_crypto, safe_address, mock_ethereum_client
         )
 
-        with pytest.raises(Exception, match="Failed to execute Safe transfer"):
+        with pytest.raises(
+            Exception,
+            match="Failed to execute Safe transfer transaction: "
+            "Transaction execution fails",
+        ):
             executor.execute_transfer("0x" + "2" * 40, 10**18, gas=50000)
 
 
@@ -319,24 +325,26 @@ class TestClientExecutorGetters:
         )
 
 
-class TestAgentExecutorTransactionNoneHash:
+class TestAgentExecutorTransactionFailure:
     """Tests for AgentExecutor.execute_transaction failure path."""
 
     @patch("mech_client.domain.execution.agent_executor.SafeClient")
-    def test_execute_transaction_none_hash_raises(
+    def test_execute_transaction_send_failure_raises(
         self,
         mock_safe_client_cls: MagicMock,
         mock_ledger_api: MagicMock,
         mock_ethereum_client: MagicMock,
     ) -> None:
-        """Test execute_transaction raises when Safe returns None tx_hash."""
+        """Test execute_transaction surfaces the Safe failure reason."""
         mock_crypto = MagicMock()
         mock_crypto.private_key = "0x" + "a" * 64
         mock_ledger_api._chain_id = 100  # pylint: disable=protected-access
 
         mock_safe_client = MagicMock()
         mock_safe_client.get_nonce.return_value = 0
-        mock_safe_client.send_transaction.return_value = None
+        mock_safe_client.send_transaction.side_effect = Exception(
+            "Transaction execution fails"
+        )
         mock_safe_client_cls.return_value = mock_safe_client
 
         executor = AgentExecutor(
@@ -349,7 +357,10 @@ class TestAgentExecutorTransactionNoneHash:
         mock_contract.address = "0x" + "c" * 40
         mock_contract.functions.__getitem__.return_value.return_value = mock_function
 
-        with pytest.raises(Exception, match="Failed to execute Safe transaction"):
+        with pytest.raises(
+            Exception,
+            match="Failed to execute Safe transaction: Transaction execution fails",
+        ):
             executor.execute_transaction(
                 contract=mock_contract,
                 method_name="foo",
