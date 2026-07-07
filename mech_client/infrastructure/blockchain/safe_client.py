@@ -19,7 +19,6 @@
 
 """Gnosis Safe multisig client for agent mode transactions."""
 
-import logging
 from typing import Optional
 
 from hexbytes import HexBytes
@@ -27,7 +26,15 @@ from safe_eth.eth import EthereumClient  # pylint:disable=import-error
 from safe_eth.safe import Safe  # pylint:disable=import-error
 from web3.constants import ADDRESS_ZERO
 
-logger = logging.getLogger(__name__)
+# Headroom applied on top of the inner-call gas estimate when sizing the outer
+# execTransaction: the multiplier absorbs estimation variance, and the
+# overhead covers Safe plumbing (signature checks, events) plus the EIP-150
+# rule capping what the inner call can receive at 63/64 of the remaining gas.
+# The overhead scales with the estimate (5%, floored at 250k) so it stays
+# proportionate for inner calls approaching the block gas limit.
+OUTER_TX_GAS_MULTIPLIER = 1.1
+OUTER_TX_GAS_OVERHEAD_FLOOR = 250_000
+OUTER_TX_GAS_OVERHEAD_SHARE = 0.05
 
 
 class SafeClient:
@@ -66,46 +73,52 @@ class SafeClient:
         tx_data: str,
         signer_private_key: str,
         value: int = 0,
-    ) -> Optional[HexBytes]:
+    ) -> HexBytes:
         """
         Build, sign, and execute a Safe multisig transaction.
+
+        Exceptions from building, signing, or executing the transaction
+        propagate to the caller instead of being swallowed.
 
         :param to_address: Destination contract/address
         :param tx_data: Transaction data (hex string starting with 0x)
         :param signer_private_key: Private key for signing
         :param value: ETH/native token value to send (in wei)
-        :return: Transaction hash if successful, None otherwise
+        :return: Transaction hash
         """
-        try:
-            # Estimate gas for the Safe transaction
-            estimated_gas = self.safe.estimate_tx_gas_with_safe(
-                to=to_address,
-                value=value,
-                data=bytes.fromhex(tx_data[2:]),
-                operation=0,
-            )
+        # Estimate the inner call's gas to size the outer execTransaction
+        estimated_gas = self.safe.estimate_tx_gas_with_safe(
+            to=to_address,
+            value=value,
+            data=bytes.fromhex(tx_data[2:]),
+            operation=0,
+        )
 
-            # Build Safe multisig transaction
-            safe_tx = self.safe.build_multisig_tx(
-                to=to_address,
-                value=value,
-                data=bytes.fromhex(tx_data[2:]),
-                operation=0,
-                safe_tx_gas=estimated_gas,
-                base_gas=0,
-                gas_price=0,
-                gas_token=ADDRESS_ZERO,
-                refund_receiver=ADDRESS_ZERO,
-            )
+        # safe_tx_gas=0 forwards all available gas to the inner call.
+        # A non-zero safe_tx_gas makes the outer eth_estimateGas revert
+        # for gas-heavy inner calls (EIP-150 63/64 rule).
+        safe_tx = self.safe.build_multisig_tx(
+            to=to_address,
+            value=value,
+            data=bytes.fromhex(tx_data[2:]),
+            operation=0,
+            safe_tx_gas=0,
+            base_gas=0,
+            gas_price=0,
+            gas_token=ADDRESS_ZERO,
+            refund_receiver=ADDRESS_ZERO,
+        )
 
-            # Sign and execute
-            safe_tx.sign(signer_private_key)
-            tx_hash, _ = safe_tx.execute(signer_private_key)
-            return tx_hash
-
-        except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"Exception while sending Safe transaction: {e}")
-            return None
+        # Sign and execute; the explicit tx_gas skips the outer
+        # eth_estimateGas, which fails for the same 63/64 reason
+        safe_tx.sign(signer_private_key)
+        overhead = max(
+            OUTER_TX_GAS_OVERHEAD_FLOOR,
+            int(estimated_gas * OUTER_TX_GAS_OVERHEAD_SHARE),
+        )
+        tx_gas = int(estimated_gas * OUTER_TX_GAS_MULTIPLIER) + overhead
+        tx_hash, _ = safe_tx.execute(signer_private_key, tx_gas=tx_gas)
+        return tx_hash
 
     def get_nonce(self) -> int:
         """

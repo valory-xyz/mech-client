@@ -92,15 +92,15 @@ class AgentExecutor(TransactionExecutor):
 
         # Execute through Safe
         value = tx_args.get("value", 0)
-        tx_hash = self.safe_client.send_transaction(
-            to_address=contract.address,
-            tx_data=transaction["data"],
-            signer_private_key=self.private_key,
-            value=value,
-        )
-
-        if tx_hash is None:
-            raise Exception("Failed to execute Safe transaction")
+        try:
+            tx_hash = self.safe_client.send_transaction(
+                to_address=contract.address,
+                tx_data=transaction["data"],
+                signer_private_key=self.private_key,
+                value=value,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            raise Exception(f"Failed to execute Safe transaction: {e}") from e
 
         return tx_hash.to_0x_hex()
 
@@ -119,15 +119,15 @@ class AgentExecutor(TransactionExecutor):
         :return: Transaction hash
         :raises Exception: If transaction fails
         """
-        tx_hash = self.safe_client.send_transaction(
-            to_address=to_address,
-            tx_data="0x",
-            signer_private_key=self.private_key,
-            value=amount,
-        )
-
-        if tx_hash is None:
-            raise Exception("Failed to execute Safe transfer transaction")
+        try:
+            tx_hash = self.safe_client.send_transaction(
+                to_address=to_address,
+                tx_data="0x",
+                signer_private_key=self.private_key,
+                value=amount,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            raise Exception(f"Failed to execute Safe transfer transaction: {e}") from e
 
         return tx_hash.to_0x_hex()
 
