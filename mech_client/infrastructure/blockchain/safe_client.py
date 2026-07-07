@@ -27,11 +27,14 @@ from safe_eth.safe import Safe  # pylint:disable=import-error
 from web3.constants import ADDRESS_ZERO
 
 # Headroom applied on top of the inner-call gas estimate when sizing the outer
-# execTransaction: the multiplier absorbs estimation variance, and the fixed
-# overhead covers Safe plumbing (signature checks, events) plus the reserve the
-# EIP-150 63/64 forwarding rule withholds from the inner call.
+# execTransaction: the multiplier absorbs estimation variance, and the
+# overhead covers Safe plumbing (signature checks, events) plus the EIP-150
+# rule capping what the inner call can receive at 63/64 of the remaining gas.
+# The overhead scales with the estimate (5%, floored at 250k) so it stays
+# proportionate for inner calls approaching the block gas limit.
 OUTER_TX_GAS_MULTIPLIER = 1.1
-OUTER_TX_GAS_OVERHEAD = 250_000
+OUTER_TX_GAS_OVERHEAD_FLOOR = 250_000
+OUTER_TX_GAS_OVERHEAD_SHARE = 0.05
 
 
 class SafeClient:
@@ -109,7 +112,11 @@ class SafeClient:
         # Sign and execute; the explicit tx_gas skips the outer
         # eth_estimateGas, which fails for the same 63/64 reason
         safe_tx.sign(signer_private_key)
-        tx_gas = int(estimated_gas * OUTER_TX_GAS_MULTIPLIER) + OUTER_TX_GAS_OVERHEAD
+        overhead = max(
+            OUTER_TX_GAS_OVERHEAD_FLOOR,
+            int(estimated_gas * OUTER_TX_GAS_OVERHEAD_SHARE),
+        )
+        tx_gas = int(estimated_gas * OUTER_TX_GAS_MULTIPLIER) + overhead
         tx_hash, _ = safe_tx.execute(signer_private_key, tx_gas=tx_gas)
         return tx_hash
 

@@ -26,7 +26,8 @@ from hexbytes import HexBytes
 
 from mech_client.infrastructure.blockchain.safe_client import (
     OUTER_TX_GAS_MULTIPLIER,
-    OUTER_TX_GAS_OVERHEAD,
+    OUTER_TX_GAS_OVERHEAD_FLOOR,
+    OUTER_TX_GAS_OVERHEAD_SHARE,
     SafeClient,
 )
 
@@ -140,15 +141,51 @@ class TestSafeClientSendTransaction:
         assert build_call[1]["safe_tx_gas"] == 0
 
         # Verify transaction signed and executed with an explicit outer gas
-        # limit derived from the inner-call estimate
+        # limit derived from the inner-call estimate; for a small estimate
+        # the fixed overhead floor applies
         mock_safe_tx.sign.assert_called_once_with(signer_key)
-        expected_tx_gas = int(100000 * OUTER_TX_GAS_MULTIPLIER) + OUTER_TX_GAS_OVERHEAD
+        expected_tx_gas = (
+            int(100000 * OUTER_TX_GAS_MULTIPLIER) + OUTER_TX_GAS_OVERHEAD_FLOOR
+        )
         mock_safe_tx.execute.assert_called_once_with(
             signer_key, tx_gas=expected_tx_gas
         )
 
         # Verify hash returned
         assert tx_hash == expected_tx_hash
+
+    @patch("mech_client.infrastructure.blockchain.safe_client.Safe")
+    def test_send_transaction_large_inner_call_scales_overhead(
+        self, mock_safe_class: MagicMock
+    ) -> None:
+        """Test outer gas overhead scales proportionally for large inner calls."""
+        mock_eth_client = MagicMock()
+        safe_address = "0x1234567890123456789012345678901234567890"
+        to_address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+        tx_data = "0x1234abcd"
+        signer_key = "0xdeadbeef"
+
+        # Inner estimate large enough that 5% exceeds the 250k floor
+        large_estimate = 10_000_000
+        mock_safe_instance = MagicMock()
+        mock_safe_class.return_value = mock_safe_instance
+        mock_safe_instance.estimate_tx_gas_with_safe.return_value = large_estimate
+
+        mock_safe_tx = MagicMock()
+        mock_safe_tx.execute.return_value = (HexBytes("0x" + "ff" * 32), None)
+        mock_safe_instance.build_multisig_tx.return_value = mock_safe_tx
+
+        client = SafeClient(mock_eth_client, safe_address)
+        client.send_transaction(
+            to_address=to_address, tx_data=tx_data, signer_private_key=signer_key
+        )
+
+        expected_tx_gas = int(large_estimate * OUTER_TX_GAS_MULTIPLIER) + int(
+            large_estimate * OUTER_TX_GAS_OVERHEAD_SHARE
+        )
+        mock_safe_tx.execute.assert_called_once_with(
+            signer_key, tx_gas=expected_tx_gas
+        )
 
     @patch("mech_client.infrastructure.blockchain.safe_client.Safe")
     def test_send_transaction_with_zero_value(
