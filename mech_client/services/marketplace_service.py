@@ -27,6 +27,7 @@ import requests
 from aea_ledger_ethereum import EthereumCrypto
 from mech_client.domain.delivery import OffchainDeliveryWatcher, OnchainDeliveryWatcher
 from mech_client.domain.payment import PaymentStrategyFactory
+from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
@@ -128,18 +129,20 @@ class MarketplaceService(
         self,
         chain_config: str,
         agent_mode: bool,
-        crypto: EthereumCrypto,
+        crypto: Optional[EthereumCrypto] = None,
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
+        signer: Optional[Signer] = None,
     ):
         """
         Initialize marketplace service.
 
         :param chain_config: Chain configuration name (gnosis, base, etc.)
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
-        :param crypto: Ethereum crypto object for signing
+        :param crypto: Ethereum crypto object for local signing (alternative to signer)
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
+        :param signer: Signer for externalized signing (alternative to crypto)
         """
         super().__init__(
             chain_config=chain_config,
@@ -147,6 +150,7 @@ class MarketplaceService(
             crypto=crypto,
             safe_address=safe_address,
             ethereum_client=ethereum_client,
+            signer=signer,
         )
 
         # Create tool manager
@@ -373,7 +377,7 @@ class MarketplaceService(
         logger.info("Sending offchain mech marketplace request...")
 
         # Get current nonce from contract
-        sender = self.crypto.address
+        sender = self.signer.address
         current_nonce = marketplace_contract.functions.mapNonces(sender).call()
 
         # Prepare and send each request
@@ -410,10 +414,9 @@ class MarketplaceService(
             request_id_int = int.from_bytes(request_id_bytes, byteorder="big")
             request_id_hex = request_id_bytes.hex()
 
-            # Sign the request ID
-            signature = self.crypto.sign_message(
-                request_id_bytes, is_deprecated_mode=True
-            )
+            # Sign the request ID digest (raw ecrecover on-chain, no EIP-191
+            # prefix — see Signer.sign_message)
+            signature = "0x" + self.signer.sign_message(request_id_bytes).hex()
 
             # Prepare payload
             payload = {
@@ -636,6 +639,7 @@ class MarketplaceService(
             crypto=self.crypto,
             safe_address=self.safe_address,
             ethereum_client=self.ethereum_client,
+            signer=self.signer,
         )
         logger.info(
             f"Auto-depositing {challenge.shortfall} to top up the prepaid balance..."

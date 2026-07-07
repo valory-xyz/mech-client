@@ -21,7 +21,6 @@
 
 from typing import Any, Dict
 
-from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from mech_client.domain.execution.base import TransactionExecutor
 from web3.contract import Contract as Web3Contract
 
@@ -29,19 +28,10 @@ from web3.contract import Contract as Web3Contract
 class ClientExecutor(TransactionExecutor):
     """Transaction executor for client mode (EOA-based signing).
 
-    In client mode, transactions are signed directly by the user's private key
-    and sent to the network without multisig.
+    In client mode, transactions are built locally and handed to the signer,
+    which signs them with the EOA key (locally or in an external signer
+    service) and broadcasts them without multisig.
     """
-
-    def __init__(self, ledger_api: EthereumApi, crypto: EthereumCrypto):
-        """
-        Initialize client executor.
-
-        :param ledger_api: Ethereum API for blockchain interactions
-        :param crypto: Ethereum crypto object for signing
-        """
-        super().__init__(ledger_api, crypto.private_key)
-        self.crypto = crypto
 
     def execute_transaction(
         self,
@@ -53,10 +43,10 @@ class ClientExecutor(TransactionExecutor):
         """
         Execute a contract transaction in client mode.
 
-        Builds, signs, and sends a transaction using the private key.
+        Builds an unsigned transaction and submits it through the signer.
 
         Propagates exceptions from ``ledger_api`` (``raise_on_try=True``)
-        when build, sign, or send fails.
+        when build fails, and from the signer when sign or send fails.
 
         :param contract: Contract instance to call
         :param method_name: Name of the contract method
@@ -71,12 +61,7 @@ class ClientExecutor(TransactionExecutor):
             tx_args=tx_args,
             raise_on_try=True,
         )
-        signed_transaction = self.crypto.sign_transaction(raw_transaction)
-        transaction_digest = self.ledger_api.send_signed_transaction(
-            signed_transaction,
-            raise_on_try=True,
-        )
-        return transaction_digest
+        return self.signer.send_transaction(raw_transaction)
 
     def execute_transfer(
         self,
@@ -87,8 +72,7 @@ class ClientExecutor(TransactionExecutor):
         """
         Execute a plain native token transfer in client mode.
 
-        Propagates exceptions from ``ledger_api.send_signed_transaction``
-        (``raise_on_try=True``) when send fails.
+        Propagates exceptions from the signer when sign or send fails.
 
         :param to_address: Destination address
         :param amount: Amount to transfer in wei
@@ -96,18 +80,13 @@ class ClientExecutor(TransactionExecutor):
         :return: Transaction hash
         """
         raw_transaction = self.ledger_api.get_transfer_transaction(
-            sender_address=self.crypto.address,
+            sender_address=self.signer.address,
             destination_address=to_address,
             amount=amount,
             tx_fee=gas,
             tx_nonce="0x",
         )
-        signed_transaction = self.crypto.sign_transaction(raw_transaction)
-        transaction_digest = self.ledger_api.send_signed_transaction(
-            signed_transaction,
-            raise_on_try=True,
-        )
-        return transaction_digest
+        return self.signer.send_transaction(raw_transaction)
 
     def get_sender_address(self) -> str:
         """
@@ -115,7 +94,7 @@ class ClientExecutor(TransactionExecutor):
 
         :return: EOA address
         """
-        return self.crypto.address
+        return self.signer.address
 
     def get_nonce(self) -> int:
         """
@@ -123,4 +102,4 @@ class ClientExecutor(TransactionExecutor):
 
         :return: Transaction nonce
         """
-        return self.ledger_api.api.eth.get_transaction_count(self.crypto.address)
+        return self.ledger_api.api.eth.get_transaction_count(self.signer.address)

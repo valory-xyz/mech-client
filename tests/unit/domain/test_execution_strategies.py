@@ -26,19 +26,29 @@ import pytest
 from mech_client.domain.execution.agent_executor import AgentExecutor
 from mech_client.domain.execution.client_executor import ClientExecutor
 from mech_client.domain.execution.factory import ExecutorFactory
+from mech_client.domain.signing import LocalSigner
+
+
+def create_mock_signer(address: str = "0x" + "1" * 40) -> MagicMock:
+    """
+    Create a mock Signer.
+
+    :param address: EOA address the signer reports
+    :return: Mock signer instance
+    """
+    mock_signer = MagicMock()
+    mock_signer.address = address
+    mock_signer.send_transaction.return_value = "0xtxhash"
+    return mock_signer
 
 
 class TestExecutorFactory:
     """Tests for ExecutorFactory."""
 
-    @patch("mech_client.domain.execution.client_executor.EthereumCrypto")
-    def test_create_client_executor(
-        self, mock_crypto: MagicMock, mock_ledger_api: MagicMock
-    ) -> None:
-        """Test factory creates client executor for client mode."""
+    def test_create_client_executor(self, mock_ledger_api: MagicMock) -> None:
+        """Test factory creates client executor wrapping crypto in LocalSigner."""
         mock_crypto_instance = MagicMock()
-        mock_crypto.return_value = mock_crypto_instance
-        
+
         executor = ExecutorFactory.create(
             agent_mode=False,
             ledger_api=mock_ledger_api,
@@ -48,14 +58,42 @@ class TestExecutorFactory:
         )
 
         assert isinstance(executor, ClientExecutor)
-        assert executor.crypto == mock_crypto_instance
+        assert isinstance(executor.signer, LocalSigner)
+        assert executor.signer.crypto == mock_crypto_instance
+
+    def test_create_client_executor_with_signer(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test factory uses an injected signer directly (no crypto needed)."""
+        mock_signer = create_mock_signer()
+
+        executor = ExecutorFactory.create(
+            agent_mode=False,
+            ledger_api=mock_ledger_api,
+            signer=mock_signer,
+        )
+
+        assert isinstance(executor, ClientExecutor)
+        assert executor.signer is mock_signer
+
+    def test_create_requires_crypto_or_signer(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test factory raises when neither crypto nor signer is provided."""
+        with pytest.raises(
+            ValueError, match="Either a crypto object or a signer is required"
+        ):
+            ExecutorFactory.create(
+                agent_mode=False,
+                ledger_api=mock_ledger_api,
+            )
 
     def test_create_agent_executor(
         self, mock_ledger_api: MagicMock, mock_ethereum_client: MagicMock
     ) -> None:
         """Test factory creates agent executor for agent mode."""
         mock_crypto = MagicMock()
-        
+
         executor = ExecutorFactory.create(
             agent_mode=True,
             ledger_api=mock_ledger_api,
@@ -72,7 +110,7 @@ class TestExecutorFactory:
     ) -> None:
         """Test factory raises error when safe_address missing in agent mode."""
         mock_crypto = MagicMock()
-        
+
         with pytest.raises(
             ValueError, match="Safe address and Ethereum client required"
         ):
@@ -109,14 +147,10 @@ class TestClientExecutorTransfer:
         self, mock_ledger_api: MagicMock
     ) -> None:
         """Test successful native transfer in client mode."""
-        mock_crypto = MagicMock()
-        mock_crypto.address = "0x" + "1" * 40
-        mock_crypto.private_key = "0x" + "a" * 64
-        mock_crypto.sign_transaction.return_value = "0xsigned"
+        mock_signer = create_mock_signer()
         mock_ledger_api.get_transfer_transaction.return_value = {"raw": "tx"}
-        mock_ledger_api.send_signed_transaction.return_value = "0xtxhash"
 
-        executor = ClientExecutor(mock_ledger_api, mock_crypto)
+        executor = ClientExecutor(mock_ledger_api, mock_signer)
         to_address = "0x" + "2" * 40
         amount = 10**18
         gas = 50000
@@ -125,16 +159,13 @@ class TestClientExecutorTransfer:
 
         assert result == "0xtxhash"
         mock_ledger_api.get_transfer_transaction.assert_called_once_with(
-            sender_address=mock_crypto.address,
+            sender_address=mock_signer.address,
             destination_address=to_address,
             amount=amount,
             tx_fee=gas,
             tx_nonce="0x",
         )
-        mock_crypto.sign_transaction.assert_called_once_with({"raw": "tx"})
-        mock_ledger_api.send_signed_transaction.assert_called_once_with(
-            "0xsigned", raise_on_try=True,
-        )
+        mock_signer.send_transaction.assert_called_once_with({"raw": "tx"})
 
 
 class TestAgentExecutorTransfer:
@@ -148,8 +179,7 @@ class TestAgentExecutorTransfer:
         mock_ethereum_client: MagicMock,
     ) -> None:
         """Test successful native transfer through Safe multisig."""
-        mock_crypto = MagicMock()
-        mock_crypto.private_key = "0x" + "a" * 64
+        mock_signer = create_mock_signer()
 
         mock_safe_client = MagicMock()
         mock_tx_hash = MagicMock()
@@ -159,7 +189,7 @@ class TestAgentExecutorTransfer:
 
         safe_address = "0x" + "b" * 40
         executor = AgentExecutor(
-            mock_ledger_api, mock_crypto, safe_address, mock_ethereum_client
+            mock_ledger_api, mock_signer, safe_address, mock_ethereum_client
         )
 
         to_address = "0x" + "2" * 40
@@ -171,7 +201,7 @@ class TestAgentExecutorTransfer:
         mock_safe_client.send_transaction.assert_called_once_with(
             to_address=to_address,
             tx_data="0x",
-            signer_private_key=mock_crypto.private_key,
+            signer=mock_signer,
             value=amount,
         )
 
@@ -183,8 +213,7 @@ class TestAgentExecutorTransfer:
         mock_ethereum_client: MagicMock,
     ) -> None:
         """Test native transfer failure through Safe raises exception."""
-        mock_crypto = MagicMock()
-        mock_crypto.private_key = "0x" + "a" * 64
+        mock_signer = create_mock_signer()
 
         mock_safe_client = MagicMock()
         mock_safe_client.send_transaction.side_effect = Exception(
@@ -194,7 +223,7 @@ class TestAgentExecutorTransfer:
 
         safe_address = "0x" + "b" * 40
         executor = AgentExecutor(
-            mock_ledger_api, mock_crypto, safe_address, mock_ethereum_client
+            mock_ledger_api, mock_signer, safe_address, mock_ethereum_client
         )
 
         with pytest.raises(
@@ -216,8 +245,7 @@ class TestAgentExecutorTransaction:
         mock_ethereum_client: MagicMock,
     ) -> None:
         """tx_args uses sender_address, but web3 build_transaction expects from."""
-        mock_crypto = MagicMock()
-        mock_crypto.private_key = "0x" + "a" * 64
+        mock_signer = create_mock_signer()
         mock_ledger_api._chain_id = 100  # pylint: disable=protected-access
 
         mock_safe_client = MagicMock()
@@ -228,7 +256,7 @@ class TestAgentExecutorTransaction:
         mock_safe_client_cls.return_value = mock_safe_client
 
         executor = AgentExecutor(
-            mock_ledger_api, mock_crypto, "0x" + "b" * 40, mock_ethereum_client
+            mock_ledger_api, mock_signer, "0x" + "b" * 40, mock_ethereum_client
         )
 
         # Mock contract function build_transaction
@@ -258,14 +286,10 @@ class TestClientExecutorTransaction:
         self, mock_ledger_api: MagicMock
     ) -> None:
         """Test successful contract transaction in client mode."""
-        mock_crypto = MagicMock()
-        mock_crypto.address = "0x" + "1" * 40
-        mock_crypto.private_key = "0x" + "a" * 64
-        mock_crypto.sign_transaction.return_value = "0xsigned"
+        mock_signer = create_mock_signer()
         mock_ledger_api.build_transaction.return_value = {"raw": "tx"}
-        mock_ledger_api.send_signed_transaction.return_value = "0xtxhash"
 
-        executor = ClientExecutor(mock_ledger_api, mock_crypto)
+        executor = ClientExecutor(mock_ledger_api, mock_signer)
 
         mock_contract = MagicMock()
         sender = "0x" + "1" * 40
@@ -287,41 +311,34 @@ class TestClientExecutorTransaction:
             tx_args=tx_args,
             raise_on_try=True,
         )
-        mock_crypto.sign_transaction.assert_called_once_with({"raw": "tx"})
-        mock_ledger_api.send_signed_transaction.assert_called_once_with(
-            "0xsigned", raise_on_try=True
-        )
+        mock_signer.send_transaction.assert_called_once_with({"raw": "tx"})
 
 
 class TestClientExecutorGetters:
     """Tests for ClientExecutor getter methods."""
 
-    def test_get_sender_address_returns_crypto_address(
+    def test_get_sender_address_returns_signer_address(
         self, mock_ledger_api: MagicMock
     ) -> None:
-        """Test get_sender_address returns the EOA crypto address."""
-        mock_crypto = MagicMock()
-        mock_crypto.address = "0x" + "2" * 40
-        mock_crypto.private_key = "0x" + "a" * 64
+        """Test get_sender_address returns the EOA signer address."""
+        mock_signer = create_mock_signer(address="0x" + "2" * 40)
 
-        executor = ClientExecutor(mock_ledger_api, mock_crypto)
+        executor = ClientExecutor(mock_ledger_api, mock_signer)
 
-        assert executor.get_sender_address() == mock_crypto.address
+        assert executor.get_sender_address() == mock_signer.address
 
     def test_get_nonce_returns_transaction_count(
         self, mock_ledger_api: MagicMock
     ) -> None:
         """Test get_nonce returns the on-chain transaction count."""
-        mock_crypto = MagicMock()
-        mock_crypto.address = "0x" + "3" * 40
-        mock_crypto.private_key = "0x" + "a" * 64
+        mock_signer = create_mock_signer(address="0x" + "3" * 40)
         mock_ledger_api.api.eth.get_transaction_count.return_value = 5
 
-        executor = ClientExecutor(mock_ledger_api, mock_crypto)
+        executor = ClientExecutor(mock_ledger_api, mock_signer)
 
         assert executor.get_nonce() == 5
         mock_ledger_api.api.eth.get_transaction_count.assert_called_once_with(
-            mock_crypto.address
+            mock_signer.address
         )
 
 
@@ -336,8 +353,7 @@ class TestAgentExecutorTransactionFailure:
         mock_ethereum_client: MagicMock,
     ) -> None:
         """Test execute_transaction surfaces the Safe failure reason."""
-        mock_crypto = MagicMock()
-        mock_crypto.private_key = "0x" + "a" * 64
+        mock_signer = create_mock_signer()
         mock_ledger_api._chain_id = 100  # pylint: disable=protected-access
 
         mock_safe_client = MagicMock()
@@ -348,7 +364,7 @@ class TestAgentExecutorTransactionFailure:
         mock_safe_client_cls.return_value = mock_safe_client
 
         executor = AgentExecutor(
-            mock_ledger_api, mock_crypto, "0x" + "b" * 40, mock_ethereum_client
+            mock_ledger_api, mock_signer, "0x" + "b" * 40, mock_ethereum_client
         )
 
         mock_function = MagicMock()
@@ -380,12 +396,11 @@ class TestAgentExecutorGetters:
         mock_ethereum_client: MagicMock,
     ) -> None:
         """Test get_sender_address returns the Safe multisig address."""
-        mock_crypto = MagicMock()
-        mock_crypto.private_key = "0x" + "a" * 64
+        mock_signer = create_mock_signer()
         safe_address = "0x" + "b" * 40
 
         executor = AgentExecutor(
-            mock_ledger_api, mock_crypto, safe_address, mock_ethereum_client
+            mock_ledger_api, mock_signer, safe_address, mock_ethereum_client
         )
 
         assert executor.get_sender_address() == safe_address
@@ -398,15 +413,14 @@ class TestAgentExecutorGetters:
         mock_ethereum_client: MagicMock,
     ) -> None:
         """Test get_nonce returns the Safe nonce."""
-        mock_crypto = MagicMock()
-        mock_crypto.private_key = "0x" + "a" * 64
+        mock_signer = create_mock_signer()
 
         mock_safe_client = MagicMock()
         mock_safe_client.get_nonce.return_value = 3
         mock_safe_client_cls.return_value = mock_safe_client
 
         executor = AgentExecutor(
-            mock_ledger_api, mock_crypto, "0x" + "b" * 40, mock_ethereum_client
+            mock_ledger_api, mock_signer, "0x" + "b" * 40, mock_ethereum_client
         )
 
         assert executor.get_nonce() == 3

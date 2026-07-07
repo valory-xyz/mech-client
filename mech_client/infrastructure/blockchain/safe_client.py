@@ -22,6 +22,7 @@
 from typing import Optional
 
 from hexbytes import HexBytes
+from mech_client.domain.signing import Signer
 from safe_eth.eth import EthereumClient  # pylint:disable=import-error
 from safe_eth.safe import Safe  # pylint:disable=import-error
 from web3.constants import ADDRESS_ZERO
@@ -67,22 +68,54 @@ class SafeClient:
             )
         return self._safe
 
-    def send_transaction(  # pylint: disable=too-many-arguments
+    @staticmethod
+    def build_pre_validated_signature(owner: str) -> bytes:
+        """
+        Encode a pre-validated Safe owner signature.
+
+        Format (Safe contracts): ``r`` = owner address left-padded to 32
+        bytes, ``s`` = 0, ``v`` = 1. The Safe accepts it whenever the outer
+        ``execTransaction`` sender is that owner — no ECDSA over the SafeTx
+        hash is needed, so the private key never has to be in-process.
+
+        :param owner: Safe owner address (0x-prefixed) sending the outer tx
+        :return: 65-byte pre-validated signature
+        :raises ValueError: If ``owner`` is not a valid 20-byte hex address
+        """
+        try:
+            owner_bytes = bytes.fromhex(owner.removeprefix("0x"))
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid Safe owner address from signer: {owner!r} (not hex)"
+            ) from e
+        if len(owner_bytes) != 20:
+            raise ValueError(
+                f"Invalid Safe owner address from signer: {owner!r} "
+                f"(expected 20 bytes, got {len(owner_bytes)})"
+            )
+        return b"\x00" * 12 + owner_bytes + b"\x00" * 32 + b"\x01"
+
+    def send_transaction(
         self,
         to_address: str,
         tx_data: str,
-        signer_private_key: str,
+        signer: Signer,
         value: int = 0,
     ) -> HexBytes:
         """
-        Build, sign, and execute a Safe multisig transaction.
+        Build and execute a Safe multisig transaction via the signer.
+
+        The SafeTx carries a pre-validated signature for the signer's address
+        (which must be a Safe owner), and the outer ``execTransaction`` is
+        built unsigned and submitted through ``signer.send_transaction`` —
+        signing happens wherever the signer keeps its key.
 
         Exceptions from building, signing, or executing the transaction
         propagate to the caller instead of being swallowed.
 
         :param to_address: Destination contract/address
         :param tx_data: Transaction data (hex string starting with 0x)
-        :param signer_private_key: Private key for signing
+        :param signer: Signer for the Safe owner EOA sending the outer tx
         :param value: ETH/native token value to send (in wei)
         :return: Transaction hash
         """
@@ -109,16 +142,29 @@ class SafeClient:
             refund_receiver=ADDRESS_ZERO,
         )
 
-        # Sign and execute; the explicit tx_gas skips the outer
-        # eth_estimateGas, which fails for the same 63/64 reason
-        safe_tx.sign(signer_private_key)
+        # Pre-validated signature: valid because the outer tx sender is
+        # the owner encoded in it.
+        safe_tx.signatures = self.build_pre_validated_signature(signer.address)
+
+        # Size the outer gas from the inner estimate; the explicit gas limit
+        # skips the outer eth_estimateGas, which fails for gas-heavy inner
+        # calls for the same 63/64 reason. The nonce is left for the signer
+        # to fill.
         overhead = max(
             OUTER_TX_GAS_OVERHEAD_FLOOR,
             int(estimated_gas * OUTER_TX_GAS_OVERHEAD_SHARE),
         )
         tx_gas = int(estimated_gas * OUTER_TX_GAS_MULTIPLIER) + overhead
-        tx_hash, _ = safe_tx.execute(signer_private_key, tx_gas=tx_gas)
-        return tx_hash
+        outer_tx = safe_tx.w3_tx.build_transaction(
+            {
+                "from": signer.address,
+                "gas": tx_gas,
+                "gasPrice": self.ethereum_client.w3.eth.gas_price,
+            }
+        )
+
+        tx_hash = signer.send_transaction(outer_tx)
+        return HexBytes(tx_hash)
 
     def get_nonce(self) -> int:
         """

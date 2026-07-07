@@ -24,6 +24,7 @@ from typing import Optional
 
 from aea_ledger_ethereum import EthereumCrypto
 from mech_client.domain.payment import PaymentStrategyFactory
+from mech_client.domain.signing import Signer
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.blockchain.receipt_waiter import wait_for_receipt
@@ -47,18 +48,20 @@ class DepositService(
         self,
         chain_config: str,
         agent_mode: bool,
-        crypto: EthereumCrypto,
+        crypto: Optional[EthereumCrypto] = None,
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
+        signer: Optional[Signer] = None,
     ):
         """
         Initialize deposit service.
 
         :param chain_config: Chain configuration name (gnosis, base, etc.)
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
-        :param crypto: Ethereum crypto object for signing
+        :param crypto: Ethereum crypto object for local signing (alternative to signer)
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
+        :param signer: Signer for externalized signing (alternative to crypto)
         """
         super().__init__(
             chain_config=chain_config,
@@ -66,6 +69,7 @@ class DepositService(
             crypto=crypto,
             safe_address=safe_address,
             ethereum_client=ethereum_client,
+            signer=signer,
         )
 
     def deposit_native(self, amount: int) -> str:

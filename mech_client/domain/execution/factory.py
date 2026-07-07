@@ -25,6 +25,7 @@ from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from mech_client.domain.execution.agent_executor import AgentExecutor
 from mech_client.domain.execution.base import TransactionExecutor
 from mech_client.domain.execution.client_executor import ClientExecutor
+from mech_client.domain.signing import LocalSigner, Signer
 from safe_eth.eth import EthereumClient
 
 
@@ -36,24 +37,35 @@ class ExecutorFactory:  # pylint: disable=too-few-public-methods
     """
 
     @staticmethod
-    def create(
+    def create(  # pylint: disable=too-many-arguments
         agent_mode: bool,
         ledger_api: EthereumApi,
-        crypto: EthereumCrypto,
+        crypto: Optional[EthereumCrypto] = None,
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
+        signer: Optional[Signer] = None,
     ) -> TransactionExecutor:
         """
         Create transaction executor for given mode.
 
+        Signing goes through ``signer`` when provided; otherwise a
+        ``LocalSigner`` is built around ``crypto``.
+
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
         :param ledger_api: Ethereum API for blockchain interactions
-        :param crypto: Ethereum crypto object for signing
+        :param crypto: Ethereum crypto object for signing (alternative to signer)
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
+        :param signer: Signer for externalized signing (alternative to crypto)
         :return: Concrete executor instance
-        :raises ValueError: If agent mode but Safe address/client not provided
+        :raises ValueError: If neither crypto nor signer is provided, or if
+            agent mode but Safe address/client not provided
         """
+        if signer is None:
+            if crypto is None:
+                raise ValueError("Either a crypto object or a signer is required")
+            signer = LocalSigner(crypto, ledger_api)
+
         if agent_mode:
             if not safe_address or not ethereum_client:
                 raise ValueError(
@@ -61,9 +73,9 @@ class ExecutorFactory:  # pylint: disable=too-few-public-methods
                 )
             return AgentExecutor(
                 ledger_api,
-                crypto,
+                signer,
                 safe_address,
                 ethereum_client,
             )
 
-        return ClientExecutor(ledger_api, crypto)
+        return ClientExecutor(ledger_api, signer)

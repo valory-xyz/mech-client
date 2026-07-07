@@ -109,6 +109,53 @@ class TestMarketplaceServiceInitialization:
         mock_tool_manager.assert_called_once_with("gnosis")
         mock_ipfs_client.assert_called_once()
 
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    def test_initialization_with_signer_only(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+    ) -> None:
+        """Test initialization with an injected signer and no private key."""
+        mock_config.return_value = create_mock_mech_config()
+        mock_executor_factory.create.return_value = MagicMock()
+        mock_signer = MagicMock()
+        mock_signer.address = "0x" + "a" * 40
+
+        service = MarketplaceService(
+            chain_config="gnosis",
+            agent_mode=False,
+            signer=mock_signer,
+        )
+
+        # No key material in-process; signing goes through the signer
+        assert service.crypto is None
+        assert service.private_key is None
+        assert service.signer is mock_signer
+        create_kwargs = mock_executor_factory.create.call_args[1]
+        assert create_kwargs["signer"] is mock_signer
+
+    @patch("mech_client.services.base_service.get_mech_config")
+    def test_initialization_requires_crypto_or_signer(
+        self,
+        mock_config: MagicMock,
+    ) -> None:
+        """Test initialization raises when neither crypto nor signer is given."""
+        with pytest.raises(
+            ValueError, match="Either a crypto object or a signer is required"
+        ):
+            MarketplaceService(
+                chain_config="gnosis",
+                agent_mode=False,
+            )
+        mock_config.assert_not_called()
+
 
 class TestMarketplaceServiceValidation:
     """Tests for input validation in marketplace service."""
@@ -1381,9 +1428,9 @@ class TestSendOffchainRequest:
         )
 
         # Mock crypto address and signing
-        service.crypto = MagicMock()
-        service.crypto.address = "0x" + "a" * 40
-        service.crypto.sign_message.return_value = "0xsignature"
+        service.signer = MagicMock()
+        service.signer.address = "0x" + "a" * 40
+        service.signer.sign_message.return_value = b"\xab" * 65
 
         # Mock marketplace contract
         mock_contract = MagicMock()
@@ -1460,9 +1507,9 @@ class TestSendOffchainRequest:
             crypto=create_mock_crypto(),
         )
 
-        service.crypto = MagicMock()
-        service.crypto.address = "0x" + "a" * 40
-        service.crypto.sign_message.return_value = "0xsignature"
+        service.signer = MagicMock()
+        service.signer.address = "0x" + "a" * 40
+        service.signer.sign_message.return_value = b"\xab" * 65
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
@@ -1531,9 +1578,9 @@ class TestSendOffchainRequest:
             crypto=create_mock_crypto(),
         )
 
-        service.crypto = MagicMock()
-        service.crypto.address = "0x" + "a" * 40
-        service.crypto.sign_message.return_value = "0xsignature"
+        service.signer = MagicMock()
+        service.signer.address = "0x" + "a" * 40
+        service.signer.sign_message.return_value = b"\xab" * 65
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
@@ -1606,9 +1653,9 @@ class TestSendOffchainRequest:
             crypto=create_mock_crypto(),
         )
 
-        service.crypto = MagicMock()
-        service.crypto.address = "0x" + "a" * 40
-        service.crypto.sign_message.return_value = "0xsignature"
+        service.signer = MagicMock()
+        service.signer.address = "0x" + "a" * 40
+        service.signer.sign_message.return_value = b"\xab" * 65
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0

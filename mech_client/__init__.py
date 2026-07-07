@@ -20,9 +20,25 @@ Example usage:
     ...     prompts=["What is 2+2?"],
     ...     payment_type=PaymentType.NATIVE,
     ... )
+
+To keep the private key out of the process entirely (e.g. key custody in a
+separate signer service), implement the ``Signer`` protocol and pass it
+instead of ``crypto``:
+
+    >>> from mech_client import MarketplaceService, Signer
+    >>>
+    >>> my_signer: Signer = MySignerImplementation()
+    >>> service = MarketplaceService(
+    ...     chain_config="gnosis",
+    ...     agent_mode=False,
+    ...     signer=my_signer,
+    ... )
 """
 
 __version__ = "v0.21.1"
+
+# Signing
+from mech_client.domain.signing import LocalSigner, Signer
 
 # Domain models
 from mech_client.domain.tools.models import (
@@ -70,6 +86,9 @@ __all__ = [
     # Configuration
     "get_mech_config",
     "PaymentType",
+    # Signing
+    "Signer",
+    "LocalSigner",
     # Domain models
     "ToolInfo",
     "ToolsForMarketplaceMech",
