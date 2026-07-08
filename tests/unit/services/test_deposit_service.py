@@ -19,10 +19,11 @@
 
 """Tests for deposit service."""
 
-from unittest.mock import ANY, MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from mech_client.domain.signing import LocalSigner
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.services.deposit_service import DepositService
@@ -89,7 +90,9 @@ class TestDepositServiceInitialization:
         # Verify initialization
         assert service.chain_config == "gnosis"
         assert service.agent_mode is False
-        assert service.private_key == "0x" + "1" * 64
+        # crypto is wrapped in the default LocalSigner, not stored on the service
+        assert isinstance(service.signer, LocalSigner)
+        assert service.signer.crypto is mock_crypto
         assert service.safe_address is None
         assert service.ethereum_client is None
         mock_config.assert_called_once_with("gnosis", agent_mode=False)
@@ -293,7 +296,6 @@ class TestDepositToken:
             payment_type=PaymentType.OLAS_TOKEN,
             ledger_api=mock_ledger_api,
             chain_id=mock_config.return_value.ledger_config.chain_id,
-            crypto=ANY,
         )
         mock_payment_strategy.check_balance.assert_called_once()
         mock_payment_strategy.approve_if_needed.assert_called_once()
@@ -360,7 +362,6 @@ class TestDepositToken:
             payment_type=PaymentType.USDC_TOKEN,
             ledger_api=mock_ledger_api,
             chain_id=mock_config.return_value.ledger_config.chain_id,
-            crypto=ANY,
         )
         # Approval should have been executed
         assert mock_wait_receipt.call_count == 2  # Once for approval, once for deposit

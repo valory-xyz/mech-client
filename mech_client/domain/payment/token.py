@@ -21,7 +21,6 @@
 
 from typing import Optional, TYPE_CHECKING
 
-from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
@@ -30,7 +29,6 @@ from mech_client.infrastructure.config import (
     CHAIN_TO_PRICE_TOKEN_USDC,
     CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS,
     CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
-    PaymentType,
 )
 from mech_client.utils.validators import ensure_checksummed_address
 
@@ -52,24 +50,6 @@ class TokenPaymentStrategy(PaymentStrategy):
     Token payments require approval before transfer. This strategy handles
     both OLAS and USDC token types.
     """
-
-    def __init__(
-        self,
-        ledger_api: EthereumApi,
-        payment_type: PaymentType,
-        chain_id: int,
-        crypto: Optional[EthereumCrypto] = None,
-    ):
-        """
-        Initialize token payment strategy.
-
-        :param ledger_api: Ethereum API for blockchain interactions
-        :param payment_type: Type of payment (TOKEN or USDC_TOKEN)
-        :param chain_id: Chain ID
-        :param crypto: Ethereum crypto object for signing (optional)
-        """
-        super().__init__(ledger_api, payment_type, chain_id)
-        self.crypto = crypto
 
     def check_balance(
         self,

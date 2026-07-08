@@ -24,6 +24,7 @@ from typing import Optional
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
 from mech_client.domain.execution import ExecutorFactory, TransactionExecutor
+from mech_client.domain.signing import LocalSigner, Signer
 from mech_client.infrastructure.config import MechConfig, get_mech_config
 from safe_eth.eth import EthereumClient
 
@@ -36,7 +37,11 @@ class BaseTransactionService:  # pylint: disable=too-few-public-methods,too-many
     - Chain configuration and mech config loading
     - Ethereum API creation from ledger config
     - Transaction executor setup (agent mode or client mode)
-    - Crypto and address management
+    - Signer and address management
+
+    Signing is routed through a :class:`Signer`. Pass ``signer=`` to keep the
+    private key out of the mech-client process (external signer service), or
+    ``crypto=`` to sign locally as before.
 
     Subclasses should call super().__init__() first, then add their own
     specific initialization.
@@ -46,23 +51,27 @@ class BaseTransactionService:  # pylint: disable=too-few-public-methods,too-many
         self,
         chain_config: str,
         agent_mode: bool,
-        crypto: EthereumCrypto,
+        crypto: Optional[EthereumCrypto] = None,
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
+        signer: Optional[Signer] = None,
     ):
         """
         Initialize base transaction service.
 
         :param chain_config: Chain configuration name (gnosis, base, polygon, optimism)
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
-        :param crypto: Ethereum crypto object for signing
+        :param crypto: Ethereum crypto object for local signing (alternative to signer)
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
+        :param signer: Signer for externalized signing (alternative to crypto)
+        :raises ValueError: If neither crypto nor signer is provided
         """
+        if crypto is None and signer is None:
+            raise ValueError("Either a crypto object or a signer is required")
+
         self.chain_config = chain_config
         self.agent_mode = agent_mode
-        self.crypto = crypto
-        self.private_key = crypto.private_key
         self.safe_address = safe_address
         self.ethereum_client = ethereum_client
 
@@ -72,11 +81,16 @@ class BaseTransactionService:  # pylint: disable=too-few-public-methods,too-many
         )
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
 
+        # Resolve the signer (injected, or local default around crypto)
+        if signer is None:
+            signer = LocalSigner(crypto, self.ledger_api)
+        self.signer: Signer = signer
+
         # Create executor
         self.executor: TransactionExecutor = ExecutorFactory.create(
             agent_mode=agent_mode,
             ledger_api=self.ledger_api,
-            crypto=crypto,
             safe_address=safe_address,
             ethereum_client=ethereum_client,
+            signer=self.signer,
         )

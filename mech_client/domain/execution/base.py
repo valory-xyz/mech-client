@@ -23,6 +23,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict
 
 from aea_ledger_ethereum import EthereumApi
+from mech_client.domain.signing import Signer
 from web3.contract import Contract as Web3Contract
 
 
@@ -36,16 +37,16 @@ class TransactionExecutor(ABC):
     def __init__(
         self,
         ledger_api: EthereumApi,
-        private_key: str,
+        signer: Signer,
     ):
         """
         Initialize transaction executor.
 
         :param ledger_api: Ethereum API for blockchain interactions
-        :param private_key: Private key for signing transactions
+        :param signer: Signer for signing and broadcasting transactions
         """
         self.ledger_api = ledger_api
-        self.private_key = private_key
+        self.signer = signer
 
     @abstractmethod
     def execute_transaction(

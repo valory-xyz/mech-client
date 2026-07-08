@@ -31,6 +31,8 @@ from mech_client.infrastructure.blockchain.safe_client import (
     SafeClient,
 )
 
+from tests.unit.helpers import create_mock_signer
+
 
 class TestSafeClientInitialization:
     """Tests for SafeClient initialization."""
@@ -86,18 +88,69 @@ class TestSafeClientInitialization:
         assert safe1 == safe2 == mock_safe_instance
 
 
+class TestPreValidatedSignature:
+    """Tests for build_pre_validated_signature."""
+
+    def test_encoding_layout(self) -> None:
+        """Test r=owner left-padded, s=0, v=1 layout."""
+        owner = "0x" + "ab" * 20
+
+        signature = SafeClient.build_pre_validated_signature(owner)
+
+        assert len(signature) == 65
+        # r: 12 zero bytes then the 20-byte owner address
+        assert signature[:12] == b"\x00" * 12
+        assert signature[12:32] == bytes.fromhex("ab" * 20)
+        # s: zero
+        assert signature[32:64] == b"\x00" * 32
+        # v: 1 marks a pre-validated signature
+        assert signature[64] == 1
+
+    def test_accepts_unprefixed_address(self) -> None:
+        """Test an address without 0x prefix encodes the same signature."""
+        prefixed = SafeClient.build_pre_validated_signature("0x" + "ab" * 20)
+        unprefixed = SafeClient.build_pre_validated_signature("ab" * 20)
+
+        assert prefixed == unprefixed
+
+    def test_rejects_non_hex_address(self) -> None:
+        """Test a non-hex owner address raises a diagnostic ValueError."""
+        with pytest.raises(ValueError, match="Invalid Safe owner address.*not hex"):
+            SafeClient.build_pre_validated_signature("0xnot-an-address")
+
+    def test_rejects_wrong_length_address(self) -> None:
+        """Test a wrong-length owner address raises a diagnostic ValueError."""
+        with pytest.raises(ValueError, match="expected 20 bytes, got 19"):
+            SafeClient.build_pre_validated_signature("0x" + "ab" * 19)
+
+
 class TestSafeClientSendTransaction:
     """Tests for send_transaction method."""
 
+    @staticmethod
+    def _make_safe_tx() -> MagicMock:
+        """Build a mock SafeTx whose w3_tx echoes the given tx params.
+
+        :return: Mock SafeTx
+        """
+        mock_safe_tx = MagicMock()
+        mock_safe_tx.w3_tx.build_transaction.side_effect = lambda params: {
+            **params,
+            "to": "0x1234567890123456789012345678901234567890",
+            "data": "0xouter",
+        }
+        return mock_safe_tx
+
     @patch("mech_client.infrastructure.blockchain.safe_client.Safe")
     def test_send_transaction_success(self, mock_safe_class: MagicMock) -> None:
-        """Test successful Safe transaction."""
+        """Test successful Safe transaction via pre-validated signature."""
         # Setup mocks
         mock_eth_client = MagicMock()
+        mock_eth_client.w3.eth.gas_price = 2_000_000_000
         safe_address = "0x1234567890123456789012345678901234567890"
         to_address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
         tx_data = "0x1234abcd"
-        signer_key = "0xdeadbeef"
+        signer = create_mock_signer()
         value = 1000000000000000000
 
         # Mock Safe instance
@@ -108,9 +161,7 @@ class TestSafeClientSendTransaction:
         mock_safe_instance.estimate_tx_gas_with_safe.return_value = 100000
 
         # Mock transaction building
-        mock_safe_tx = MagicMock()
-        expected_tx_hash = HexBytes("0x" + "ff" * 32)
-        mock_safe_tx.execute.return_value = (expected_tx_hash, None)
+        mock_safe_tx = self._make_safe_tx()
         mock_safe_instance.build_multisig_tx.return_value = mock_safe_tx
 
         # Create client and send transaction
@@ -118,7 +169,7 @@ class TestSafeClientSendTransaction:
         tx_hash = client.send_transaction(
             to_address=to_address,
             tx_data=tx_data,
-            signer_private_key=signer_key,
+            signer=signer,
             value=value,
         )
 
@@ -140,19 +191,32 @@ class TestSafeClientSendTransaction:
         # safe_tx_gas=0 forwards all gas to the inner call (EIP-150 63/64 fix)
         assert build_call[1]["safe_tx_gas"] == 0
 
-        # Verify transaction signed and executed with an explicit outer gas
-        # limit derived from the inner-call estimate; for a small estimate
-        # the fixed overhead floor applies
-        mock_safe_tx.sign.assert_called_once_with(signer_key)
+        # Verify pre-validated signature set (no ECDSA over the SafeTx hash)
+        assert mock_safe_tx.signatures == SafeClient.build_pre_validated_signature(
+            signer.address
+        )
+        mock_safe_tx.sign.assert_not_called()
+        mock_safe_tx.execute.assert_not_called()
+
+        # Verify the outer tx was built from the owner with an explicit gas
+        # limit derived from the inner-call estimate (skips the outer
+        # eth_estimateGas); for a small estimate the fixed overhead floor
+        # applies
         expected_tx_gas = (
             int(100000 * OUTER_TX_GAS_MULTIPLIER) + OUTER_TX_GAS_OVERHEAD_FLOOR
         )
-        mock_safe_tx.execute.assert_called_once_with(
-            signer_key, tx_gas=expected_tx_gas
-        )
+        outer_params = mock_safe_tx.w3_tx.build_transaction.call_args[0][0]
+        assert outer_params["from"] == signer.address
+        assert outer_params["gasPrice"] == 2_000_000_000
+        assert outer_params["gas"] == expected_tx_gas
+
+        # Verify the outer tx was submitted via the signer
+        signer.send_transaction.assert_called_once()
+        outer_tx = signer.send_transaction.call_args[0][0]
+        assert outer_tx["gas"] == expected_tx_gas
 
         # Verify hash returned
-        assert tx_hash == expected_tx_hash
+        assert tx_hash == HexBytes("0x" + "ff" * 32)
 
     @patch("mech_client.infrastructure.blockchain.safe_client.Safe")
     def test_send_transaction_large_inner_call_scales_overhead(
@@ -163,7 +227,7 @@ class TestSafeClientSendTransaction:
         safe_address = "0x1234567890123456789012345678901234567890"
         to_address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
         tx_data = "0x1234abcd"
-        signer_key = "0xdeadbeef"
+        signer = create_mock_signer()
 
         # Inner estimate large enough that 5% exceeds the 250k floor
         large_estimate = 10_000_000
@@ -171,21 +235,16 @@ class TestSafeClientSendTransaction:
         mock_safe_class.return_value = mock_safe_instance
         mock_safe_instance.estimate_tx_gas_with_safe.return_value = large_estimate
 
-        mock_safe_tx = MagicMock()
-        mock_safe_tx.execute.return_value = (HexBytes("0x" + "ff" * 32), None)
-        mock_safe_instance.build_multisig_tx.return_value = mock_safe_tx
+        mock_safe_instance.build_multisig_tx.return_value = self._make_safe_tx()
 
         client = SafeClient(mock_eth_client, safe_address)
-        client.send_transaction(
-            to_address=to_address, tx_data=tx_data, signer_private_key=signer_key
-        )
+        client.send_transaction(to_address=to_address, tx_data=tx_data, signer=signer)
 
         expected_tx_gas = int(large_estimate * OUTER_TX_GAS_MULTIPLIER) + int(
             large_estimate * OUTER_TX_GAS_OVERHEAD_SHARE
         )
-        mock_safe_tx.execute.assert_called_once_with(
-            signer_key, tx_gas=expected_tx_gas
-        )
+        outer_tx = signer.send_transaction.call_args[0][0]
+        assert outer_tx["gas"] == expected_tx_gas
 
     @patch("mech_client.infrastructure.blockchain.safe_client.Safe")
     def test_send_transaction_with_zero_value(
@@ -197,7 +256,7 @@ class TestSafeClientSendTransaction:
         safe_address = "0x1234567890123456789012345678901234567890"
         to_address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
         tx_data = "0x1234abcd"
-        signer_key = "0xdeadbeef"
+        signer = create_mock_signer()
 
         # Mock Safe instance
         mock_safe_instance = MagicMock()
@@ -205,14 +264,12 @@ class TestSafeClientSendTransaction:
         mock_safe_instance.estimate_tx_gas_with_safe.return_value = 100000
 
         # Mock transaction
-        mock_safe_tx = MagicMock()
-        mock_safe_tx.execute.return_value = (HexBytes("0x" + "ff" * 32), None)
-        mock_safe_instance.build_multisig_tx.return_value = mock_safe_tx
+        mock_safe_instance.build_multisig_tx.return_value = self._make_safe_tx()
 
         # Send transaction without value parameter (defaults to 0)
         client = SafeClient(mock_eth_client, safe_address)
         tx_hash = client.send_transaction(
-            to_address=to_address, tx_data=tx_data, signer_private_key=signer_key
+            to_address=to_address, tx_data=tx_data, signer=signer
         )
 
         # Verify value=0 used
@@ -230,7 +287,7 @@ class TestSafeClientSendTransaction:
         safe_address = "0x1234567890123456789012345678901234567890"
         to_address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
         tx_data = "0x1234abcd"
-        signer_key = "0xdeadbeef"
+        signer = create_mock_signer()
 
         # Mock Safe instance with gas estimation failure
         mock_safe_instance = MagicMock()
@@ -243,7 +300,7 @@ class TestSafeClientSendTransaction:
         client = SafeClient(mock_eth_client, safe_address)
         with pytest.raises(Exception, match="Gas estimation failed"):
             client.send_transaction(
-                to_address=to_address, tx_data=tx_data, signer_private_key=signer_key
+                to_address=to_address, tx_data=tx_data, signer=signer
             )
 
     @patch("mech_client.infrastructure.blockchain.safe_client.Safe")
@@ -254,7 +311,7 @@ class TestSafeClientSendTransaction:
         safe_address = "0x1234567890123456789012345678901234567890"
         to_address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
         tx_data = "0x1234abcd"
-        signer_key = "0xdeadbeef"
+        signer = create_mock_signer()
 
         # Mock Safe instance
         mock_safe_instance = MagicMock()
@@ -268,63 +325,64 @@ class TestSafeClientSendTransaction:
         client = SafeClient(mock_eth_client, safe_address)
         with pytest.raises(Exception, match="Build transaction failed"):
             client.send_transaction(
-                to_address=to_address, tx_data=tx_data, signer_private_key=signer_key
+                to_address=to_address, tx_data=tx_data, signer=signer
             )
 
     @patch("mech_client.infrastructure.blockchain.safe_client.Safe")
-    def test_send_transaction_sign_failure(self, mock_safe_class: MagicMock) -> None:
-        """Test send_transaction handles signing errors."""
-        # Setup mocks
-        mock_eth_client = MagicMock()
-        safe_address = "0x1234567890123456789012345678901234567890"
-        to_address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
-        tx_data = "0x1234abcd"
-        signer_key = "0xdeadbeef"
-
-        # Mock Safe instance
-        mock_safe_instance = MagicMock()
-        mock_safe_class.return_value = mock_safe_instance
-        mock_safe_instance.estimate_tx_gas_with_safe.return_value = 100000
-
-        # Mock transaction with sign failure
-        mock_safe_tx = MagicMock()
-        mock_safe_tx.sign.side_effect = Exception("Invalid private key")
-        mock_safe_instance.build_multisig_tx.return_value = mock_safe_tx
-
-        # Send transaction and verify the error is surfaced
-        client = SafeClient(mock_eth_client, safe_address)
-        with pytest.raises(Exception, match="Invalid private key"):
-            client.send_transaction(
-                to_address=to_address, tx_data=tx_data, signer_private_key=signer_key
-            )
-
-    @patch("mech_client.infrastructure.blockchain.safe_client.Safe")
-    def test_send_transaction_execute_failure(
+    def test_send_transaction_outer_build_failure(
         self, mock_safe_class: MagicMock
     ) -> None:
-        """Test send_transaction handles execution errors."""
+        """Test send_transaction handles outer execTransaction build errors."""
         # Setup mocks
         mock_eth_client = MagicMock()
         safe_address = "0x1234567890123456789012345678901234567890"
         to_address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
         tx_data = "0x1234abcd"
-        signer_key = "0xdeadbeef"
+        signer = create_mock_signer()
 
         # Mock Safe instance
         mock_safe_instance = MagicMock()
         mock_safe_class.return_value = mock_safe_instance
         mock_safe_instance.estimate_tx_gas_with_safe.return_value = 100000
 
-        # Mock transaction with execute failure
+        # Mock outer tx build failure (e.g. estimation revert)
         mock_safe_tx = MagicMock()
-        mock_safe_tx.execute.side_effect = Exception("Execution reverted")
+        mock_safe_tx.w3_tx.build_transaction.side_effect = Exception(
+            "Invalid owner provided"
+        )
         mock_safe_instance.build_multisig_tx.return_value = mock_safe_tx
 
         # Send transaction and verify the error is surfaced
         client = SafeClient(mock_eth_client, safe_address)
-        with pytest.raises(Exception, match="Execution reverted"):
+        with pytest.raises(Exception, match="Invalid owner provided"):
             client.send_transaction(
-                to_address=to_address, tx_data=tx_data, signer_private_key=signer_key
+                to_address=to_address, tx_data=tx_data, signer=signer
+            )
+
+    @patch("mech_client.infrastructure.blockchain.safe_client.Safe")
+    def test_send_transaction_signer_failure(
+        self, mock_safe_class: MagicMock
+    ) -> None:
+        """Test send_transaction surfaces signer submission errors."""
+        # Setup mocks
+        mock_eth_client = MagicMock()
+        safe_address = "0x1234567890123456789012345678901234567890"
+        to_address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+        tx_data = "0x1234abcd"
+        signer = create_mock_signer()
+        signer.send_transaction.side_effect = Exception("Signer unavailable")
+
+        # Mock Safe instance
+        mock_safe_instance = MagicMock()
+        mock_safe_class.return_value = mock_safe_instance
+        mock_safe_instance.estimate_tx_gas_with_safe.return_value = 100000
+        mock_safe_instance.build_multisig_tx.return_value = self._make_safe_tx()
+
+        # Send transaction and verify the error is surfaced
+        client = SafeClient(mock_eth_client, safe_address)
+        with pytest.raises(Exception, match="Signer unavailable"):
+            client.send_transaction(
+                to_address=to_address, tx_data=tx_data, signer=signer
             )
 
 

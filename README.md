@@ -475,6 +475,41 @@ You can also use the Mech Client as a library on your Python project.
 
     **Note:** See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for architecture details and more examples.
 
+### Using an external signer (no private key in-process)
+
+If key custody lives outside your process (e.g., a local signer service that only exposes sign/send capabilities over an API), implement the `Signer` protocol and pass it as `signer=` instead of `crypto=`. The raw private key never enters the mech-client process:
+
+```python
+from mech_client import MarketplaceService, Signer
+
+
+class MySigner:
+    """Adapter for an external signer service (satisfies the Signer protocol)."""
+
+    address = "0xYourEOA..."  # the EOA the service signs for
+
+    def send_transaction(self, unsigned_tx: dict) -> str:
+        # Forward to your signer service; it fills nonce/gas if absent,
+        # signs, broadcasts, and returns the tx hash.
+        ...
+
+    def sign_message(self, message: bytes) -> bytes:
+        # Sign the raw 32-byte digest directly (no EIP-191 prefix) and
+        # return the 65-byte signature. See Signer.sign_message docs.
+        ...
+
+
+signer: Signer = MySigner()  # structural typing — no inheritance needed
+
+service = MarketplaceService(
+    chain_config="gnosis",
+    agent_mode=False,  # agent mode (Safe) is supported too
+    signer=signer,
+)
+```
+
+This works for on-chain requests (client and agent mode), deposits (`DepositService`), and offchain prepaid requests. In agent mode the Safe transaction is approved via the pre-validated signature encoding, so only ordinary transaction signing is required from the signer. Passing `crypto=` keeps working unchanged (it wraps the key in the default `LocalSigner`).
+
 You can also use the Mech Client to programmatically fetch tools for marketplace mechs in your Python project, as well as retrieve descriptions and input/output schemas for specific tools given their unique identifier.
 
 1. Set up the private key as specified [above](#set-up-the-private-key). Store the resulting key file (e.g., `ethereum_private_key.txt`) in a convenient and secure location.

@@ -321,6 +321,34 @@ class TransactionExecutor(ABC):
         """Execute a plain native token transfer. Returns tx_hash."""
 ```
 
+#### Signing (`domain/signing/`)
+Abstract who holds the key material:
+- `base.py`: `Signer` protocol (injectable signing interface)
+- `local.py`: `LocalSigner` — default implementation wrapping an in-process private key
+
+**Key Abstractions**:
+```python
+@runtime_checkable
+class Signer(Protocol):
+    @property
+    def address(self) -> str:
+        """The EOA address this signer signs for."""
+
+    def send_transaction(self, unsigned_tx: Dict[str, Any]) -> str:
+        """Sign and broadcast an EOA transaction. Returns tx_hash."""
+
+    def sign_message(self, message: bytes) -> bytes:
+        """Sign a raw 32-byte digest (no EIP-191 prefix). Returns 65-byte signature."""
+```
+
+All signing (client-mode EOA transactions, agent-mode Safe outer transactions,
+offchain request signatures) routes through a `Signer`. Services accept
+`signer=` as an alternative to `crypto=`, so key custody can live in an
+external signer service with no raw private key in the mech-client process.
+In agent mode the SafeTx approval uses the Safe's pre-validated signature
+encoding (valid because the outer `execTransaction` sender is the owner), so
+no ECDSA over the SafeTx hash is needed.
+
 #### Delivery Watchers (`domain/delivery/`)
 Handle response delivery mechanisms:
 - `onchain_watcher.py`: On-chain event watching

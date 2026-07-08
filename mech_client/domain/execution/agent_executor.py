@@ -21,8 +21,9 @@
 
 from typing import Any, Dict
 
-from aea_ledger_ethereum import EthereumApi, EthereumCrypto
+from aea_ledger_ethereum import EthereumApi
 from mech_client.domain.execution.base import TransactionExecutor
+from mech_client.domain.signing import Signer
 from mech_client.infrastructure.blockchain.safe_client import SafeClient
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
@@ -39,7 +40,7 @@ class AgentExecutor(TransactionExecutor):
     def __init__(
         self,
         ledger_api: EthereumApi,
-        crypto: EthereumCrypto,
+        signer: Signer,
         safe_address: str,
         ethereum_client: EthereumClient,
     ):
@@ -47,11 +48,11 @@ class AgentExecutor(TransactionExecutor):
         Initialize agent executor.
 
         :param ledger_api: Ethereum API for blockchain interactions
-        :param crypto: Ethereum crypto object for signing
+        :param signer: Signer for the Safe owner EOA (signs the outer tx)
         :param safe_address: Address of the Safe multisig wallet
         :param ethereum_client: Ethereum client for Safe operations
         """
-        super().__init__(ledger_api, crypto.private_key)
+        super().__init__(ledger_api, signer)
         self.safe_address = safe_address
         self.ethereum_client = ethereum_client
         self.safe_client = SafeClient(ethereum_client, safe_address)
@@ -96,7 +97,7 @@ class AgentExecutor(TransactionExecutor):
             tx_hash = self.safe_client.send_transaction(
                 to_address=contract.address,
                 tx_data=transaction["data"],
-                signer_private_key=self.private_key,
+                signer=self.signer,
                 value=value,
             )
         except Exception as e:  # pylint: disable=broad-except
@@ -123,7 +124,7 @@ class AgentExecutor(TransactionExecutor):
             tx_hash = self.safe_client.send_transaction(
                 to_address=to_address,
                 tx_data="0x",
-                signer_private_key=self.private_key,
+                signer=self.signer,
                 value=amount,
             )
         except Exception as e:  # pylint: disable=broad-except

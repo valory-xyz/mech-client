@@ -19,9 +19,7 @@
 
 """Payment strategy factory."""
 
-from typing import Optional
-
-from aea_ledger_ethereum import EthereumApi, EthereumCrypto
+from aea_ledger_ethereum import EthereumApi
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.domain.payment.native import NativePaymentStrategy
 from mech_client.domain.payment.nvm import NVMPaymentStrategy
@@ -41,7 +39,6 @@ class PaymentStrategyFactory:  # pylint: disable=too-few-public-methods
         payment_type: PaymentType,
         ledger_api: EthereumApi,
         chain_id: int,
-        crypto: Optional[EthereumCrypto] = None,
     ) -> PaymentStrategy:
         """
         Create payment strategy for given payment type.
@@ -49,7 +46,6 @@ class PaymentStrategyFactory:  # pylint: disable=too-few-public-methods
         :param payment_type: Type of payment
         :param ledger_api: Ethereum API for blockchain interactions
         :param chain_id: Chain ID (100=Gnosis, 137=Polygon, etc.)
-        :param crypto: Ethereum crypto object for signing (optional)
         :return: Concrete payment strategy instance
         :raises ValueError: If payment type is unknown
         """
@@ -57,7 +53,7 @@ class PaymentStrategyFactory:  # pylint: disable=too-few-public-methods
             return NativePaymentStrategy(ledger_api, payment_type, chain_id)
 
         if payment_type in (PaymentType.OLAS_TOKEN, PaymentType.USDC_TOKEN):
-            return TokenPaymentStrategy(ledger_api, payment_type, chain_id, crypto)
+            return TokenPaymentStrategy(ledger_api, payment_type, chain_id)
 
         if payment_type in (PaymentType.NATIVE_NVM, PaymentType.TOKEN_NVM_USDC):
             return NVMPaymentStrategy(ledger_api, payment_type, chain_id)

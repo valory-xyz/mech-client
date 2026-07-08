@@ -25,8 +25,10 @@ from typing import Any, Dict, FrozenSet, List, Optional, Tuple, cast
 
 import requests
 from aea_ledger_ethereum import EthereumCrypto
+from eth_account import Account
 from mech_client.domain.delivery import OffchainDeliveryWatcher, OnchainDeliveryWatcher
 from mech_client.domain.payment import PaymentStrategyFactory
+from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
@@ -128,18 +130,20 @@ class MarketplaceService(
         self,
         chain_config: str,
         agent_mode: bool,
-        crypto: EthereumCrypto,
+        crypto: Optional[EthereumCrypto] = None,
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
+        signer: Optional[Signer] = None,
     ):
         """
         Initialize marketplace service.
 
         :param chain_config: Chain configuration name (gnosis, base, etc.)
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
-        :param crypto: Ethereum crypto object for signing
+        :param crypto: Ethereum crypto object for local signing (alternative to signer)
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
+        :param signer: Signer for externalized signing (alternative to crypto)
         """
         super().__init__(
             chain_config=chain_config,
@@ -147,6 +151,7 @@ class MarketplaceService(
             crypto=crypto,
             safe_address=safe_address,
             ethereum_client=ethereum_client,
+            signer=signer,
         )
 
         # Create tool manager
@@ -231,7 +236,6 @@ class MarketplaceService(
             payment_type=payment_type,
             ledger_api=self.ledger_api,
             chain_id=self.mech_config.ledger_config.chain_id,
-            crypto=self.crypto,
         )
 
         # Prepare metadata and upload to IPFS
@@ -373,7 +377,7 @@ class MarketplaceService(
         logger.info("Sending offchain mech marketplace request...")
 
         # Get current nonce from contract
-        sender = self.crypto.address
+        sender = self.signer.address
         current_nonce = marketplace_contract.functions.mapNonces(sender).call()
 
         # Prepare and send each request
@@ -410,10 +414,9 @@ class MarketplaceService(
             request_id_int = int.from_bytes(request_id_bytes, byteorder="big")
             request_id_hex = request_id_bytes.hex()
 
-            # Sign the request ID
-            signature = self.crypto.sign_message(
-                request_id_bytes, is_deprecated_mode=True
-            )
+            # Sign the request ID digest (raw ecrecover on-chain, no EIP-191
+            # prefix — see Signer.sign_message)
+            signature = self._sign_request_digest(request_id_bytes)
 
             # Prepare payload
             payload = {
@@ -462,6 +465,58 @@ class MarketplaceService(
             "delivery_results": results,
             "receipt": None,  # No receipt for offchain requests
         }
+
+    def _sign_request_digest(self, request_id_bytes: bytes) -> str:
+        """Sign the request-id digest via the signer and verify recoverability.
+
+        The marketplace contract validates offchain requests with plain
+        ``ecrecover(digest, v, r, s)``, so the signature must be over the raw
+        32-byte digest — NOT wrapped in an EIP-191 personal-message prefix.
+        External signer services commonly default to EIP-191
+        (``eth_account.Account.sign_message``), which produces a signature
+        that recovers to a *different* address; on-chain that fails silently
+        (the request is treated as coming from an unpaid sender). Recovering
+        locally and comparing against ``signer.address`` turns that
+        misconfiguration into an immediate, actionable error at fire time.
+
+        :param request_id_bytes: the 32-byte request-id digest to sign.
+        :return: 0x-prefixed hex signature, as sent to the mech.
+        :raises ValueError: if the signature has the wrong length or does not
+            recover to the signer's address (e.g. the signer applied EIP-191).
+        """
+        signature = self.signer.sign_message(request_id_bytes)
+        if len(signature) != 65:
+            raise ValueError(
+                f"Signer returned a {len(signature)}-byte signature; expected "
+                f"65 bytes (r ‖ s ‖ v). See Signer.sign_message."
+            )
+        # Local recovery expects v in {27, 28}; the contract accepts {0, 1}
+        # too, so normalize only for the check and send the original bytes.
+        normalized = signature
+        if signature[64] < 27:
+            normalized = signature[:64] + bytes([signature[64] + 27])
+        try:
+            # Raw-hash recovery mirroring the on-chain ecrecover.
+            # protected-access: private-but-stable eth_account API;
+            # no-value-for-parameter: _recover_hash is a combomethod, which
+            # pylint misreads as an unbound instance method.
+            # pylint: disable-next=protected-access,no-value-for-parameter
+            recovered = Account._recover_hash(request_id_bytes, signature=normalized)
+        except Exception as e:
+            raise ValueError(
+                f"Signer returned a signature that cannot be recovered over "
+                f"the request digest (v byte {signature[64]}): {e}. See "
+                f"Signer.sign_message for the expected encoding."
+            ) from e
+        if recovered.lower() != self.signer.address.lower():
+            raise ValueError(
+                f"Signer produced a signature that recovers to {recovered}, "
+                f"not the signer address {self.signer.address}. Most likely "
+                f"the signer applied an EIP-191 personal-message prefix; the "
+                f"marketplace contract requires raw-digest signing (see "
+                f"Signer.sign_message)."
+            )
+        return "0x" + signature.hex()
 
     def _post_offchain_request(
         self,
@@ -633,9 +688,9 @@ class MarketplaceService(
         deposit_service = DepositService(
             chain_config=self.chain_config,
             agent_mode=self.agent_mode,
-            crypto=self.crypto,
             safe_address=self.safe_address,
             ethereum_client=self.ethereum_client,
+            signer=self.signer,
         )
         logger.info(
             f"Auto-depositing {challenge.shortfall} to top up the prepaid balance..."
