@@ -25,6 +25,7 @@ from typing import Any, Dict, FrozenSet, List, Optional, Tuple, cast
 
 import requests
 from aea_ledger_ethereum import EthereumCrypto
+from eth_account import Account
 from mech_client.domain.delivery import OffchainDeliveryWatcher, OnchainDeliveryWatcher
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.domain.signing import Signer
@@ -415,7 +416,7 @@ class MarketplaceService(
 
             # Sign the request ID digest (raw ecrecover on-chain, no EIP-191
             # prefix — see Signer.sign_message)
-            signature = "0x" + self.signer.sign_message(request_id_bytes).hex()
+            signature = self._sign_request_digest(request_id_bytes)
 
             # Prepare payload
             payload = {
@@ -464,6 +465,58 @@ class MarketplaceService(
             "delivery_results": results,
             "receipt": None,  # No receipt for offchain requests
         }
+
+    def _sign_request_digest(self, request_id_bytes: bytes) -> str:
+        """Sign the request-id digest via the signer and verify recoverability.
+
+        The marketplace contract validates offchain requests with plain
+        ``ecrecover(digest, v, r, s)``, so the signature must be over the raw
+        32-byte digest — NOT wrapped in an EIP-191 personal-message prefix.
+        External signer services commonly default to EIP-191
+        (``eth_account.Account.sign_message``), which produces a signature
+        that recovers to a *different* address; on-chain that fails silently
+        (the request is treated as coming from an unpaid sender). Recovering
+        locally and comparing against ``signer.address`` turns that
+        misconfiguration into an immediate, actionable error at fire time.
+
+        :param request_id_bytes: the 32-byte request-id digest to sign.
+        :return: 0x-prefixed hex signature, as sent to the mech.
+        :raises ValueError: if the signature has the wrong length or does not
+            recover to the signer's address (e.g. the signer applied EIP-191).
+        """
+        signature = self.signer.sign_message(request_id_bytes)
+        if len(signature) != 65:
+            raise ValueError(
+                f"Signer returned a {len(signature)}-byte signature; expected "
+                f"65 bytes (r ‖ s ‖ v). See Signer.sign_message."
+            )
+        # Local recovery expects v in {27, 28}; the contract accepts {0, 1}
+        # too, so normalize only for the check and send the original bytes.
+        normalized = signature
+        if signature[64] < 27:
+            normalized = signature[:64] + bytes([signature[64] + 27])
+        try:
+            # Raw-hash recovery mirroring the on-chain ecrecover.
+            # protected-access: private-but-stable eth_account API;
+            # no-value-for-parameter: _recover_hash is a combomethod, which
+            # pylint misreads as an unbound instance method.
+            # pylint: disable-next=protected-access,no-value-for-parameter
+            recovered = Account._recover_hash(request_id_bytes, signature=normalized)
+        except Exception as e:
+            raise ValueError(
+                f"Signer returned a signature that cannot be recovered over "
+                f"the request digest (v byte {signature[64]}): {e}. See "
+                f"Signer.sign_message for the expected encoding."
+            ) from e
+        if recovered.lower() != self.signer.address.lower():
+            raise ValueError(
+                f"Signer produced a signature that recovers to {recovered}, "
+                f"not the signer address {self.signer.address}. Most likely "
+                f"the signer applied an EIP-191 personal-message prefix; the "
+                f"marketplace contract requires raw-digest signing (see "
+                f"Signer.sign_message)."
+            )
+        return "0x" + signature.hex()
 
     def _post_offchain_request(
         self,

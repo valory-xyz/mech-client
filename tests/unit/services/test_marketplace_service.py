@@ -24,6 +24,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import requests
+from eth_account import Account
+from eth_account.messages import encode_defunct
 
 from mech_client.domain.signing import LocalSigner
 from mech_client.infrastructure.config import PaymentType
@@ -68,6 +70,24 @@ def create_mock_crypto(private_key: str = "0x" + "1" * 64) -> MagicMock:
     mock_crypto = MagicMock()
     mock_crypto.private_key = private_key
     return mock_crypto
+
+
+# Real key material for the offchain signing path: the request signature is
+# recovered locally against signer.address before the request goes out, so a
+# canned byte string won't do.
+_TEST_ACCOUNT = Account.from_key("0x" + "1" * 64)  # synthetic test key
+
+
+def _real_signing_signer() -> MagicMock:
+    """Create a mock signer that produces real raw-digest signatures.
+
+    :return: Mock signer whose sign_message output recovers to its address
+    """
+    signer = create_mock_signer(address=_TEST_ACCOUNT.address)
+    signer.sign_message.side_effect = lambda digest: bytes(
+        _TEST_ACCOUNT.unsafe_sign_hash(digest).signature
+    )
+    return signer
 
 
 class TestMarketplaceServiceInitialization:
@@ -1432,7 +1452,7 @@ class TestSendOffchainRequest:
         )
 
         # Mock crypto address and signing
-        service.signer = create_mock_signer(address="0x" + "a" * 40)
+        service.signer = _real_signing_signer()
 
         # Mock marketplace contract
         mock_contract = MagicMock()
@@ -1509,7 +1529,7 @@ class TestSendOffchainRequest:
             crypto=create_mock_crypto(),
         )
 
-        service.signer = create_mock_signer(address="0x" + "a" * 40)
+        service.signer = _real_signing_signer()
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
@@ -1578,7 +1598,7 @@ class TestSendOffchainRequest:
             crypto=create_mock_crypto(),
         )
 
-        service.signer = create_mock_signer(address="0x" + "a" * 40)
+        service.signer = _real_signing_signer()
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
@@ -1651,7 +1671,7 @@ class TestSendOffchainRequest:
             crypto=create_mock_crypto(),
         )
 
-        service.signer = create_mock_signer(address="0x" + "a" * 40)
+        service.signer = _real_signing_signer()
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
@@ -1691,6 +1711,71 @@ class TestSendOffchainRequest:
                         extra_attributes=None,
                         timeout=30.0,
                     )
+
+
+class TestSignRequestDigest:
+    """Tests for _sign_request_digest (fire-time ecrecover guard)."""
+
+    @staticmethod
+    def _digest() -> bytes:
+        """Return a fixed 32-byte request-id digest.
+
+        :return: 32-byte digest
+        """
+        return b"\x11" * 32
+
+    def test_valid_signature_passes_and_is_hex_encoded(self) -> None:
+        """A raw-digest signature recovers to the signer and is returned."""
+        service = _build_offchain_service()
+        service.signer = _real_signing_signer()
+
+        signature = service._sign_request_digest(self._digest())
+
+        expected = bytes(_TEST_ACCOUNT.unsafe_sign_hash(self._digest()).signature)
+        assert signature == "0x" + expected.hex()
+
+    def test_low_v_signature_is_normalized_for_recovery_only(self) -> None:
+        """A signer using v in {0, 1} passes; original bytes are sent."""
+        service = _build_offchain_service()
+        real = bytes(_TEST_ACCOUNT.unsafe_sign_hash(self._digest()).signature)
+        low_v = real[:64] + bytes([real[64] - 27])
+        service.signer = create_mock_signer(
+            address=_TEST_ACCOUNT.address, signature=low_v
+        )
+
+        signature = service._sign_request_digest(self._digest())
+
+        # The low-v original goes out; normalization is check-only
+        assert signature == "0x" + low_v.hex()
+
+    def test_eip191_signature_is_rejected_with_diagnostic(self) -> None:
+        """An EIP-191 personal-message signature recovers to the wrong address."""
+        service = _build_offchain_service()
+        eip191 = bytes(
+            _TEST_ACCOUNT.sign_message(encode_defunct(self._digest())).signature
+        )
+        service.signer = create_mock_signer(
+            address=_TEST_ACCOUNT.address, signature=eip191
+        )
+
+        with pytest.raises(ValueError, match="EIP-191"):
+            service._sign_request_digest(self._digest())
+
+    def test_wrong_length_signature_is_rejected(self) -> None:
+        """A non-65-byte signature fails fast with a clear message."""
+        service = _build_offchain_service()
+        service.signer = create_mock_signer(signature=b"\xab" * 64)
+
+        with pytest.raises(ValueError, match="expected\\s+65 bytes"):
+            service._sign_request_digest(self._digest())
+
+    def test_unrecoverable_signature_is_rejected(self) -> None:
+        """A malformed signature (r = s = 0) surfaces a diagnostic error."""
+        service = _build_offchain_service()
+        service.signer = create_mock_signer(signature=b"\x00" * 64 + b"\x1b")
+
+        with pytest.raises(ValueError, match="cannot be recovered"):
+            service._sign_request_digest(self._digest())
 
 
 class TestSendRequestOffchainBranch:
