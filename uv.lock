@@ -1953,7 +1953,7 @@ wheels = [
 
 [[package]]
 name = "mech-client"
-version = "0.21.1"
+version = "0.21.2"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
