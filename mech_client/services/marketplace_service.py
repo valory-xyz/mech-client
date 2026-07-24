@@ -422,7 +422,7 @@ class MarketplaceService(
             # requester: Safe.isValidSignature (agent mode) requires the
             # SafeMessage-wrapped hash to be signed; plain ecrecover
             # (client mode) requires the raw digest.
-            signature = self._sign_request_digest(request_id_bytes)
+            signature = self._sign_request_digest(sender, request_id_bytes)
 
             # Prepare payload
             payload = {
@@ -494,7 +494,7 @@ class MarketplaceService(
             return ensure_checksummed_address(self.safe_address)
         return ensure_checksummed_address(self.signer.address)
 
-    def _sign_request_digest(self, request_id_bytes: bytes) -> str:
+    def _sign_request_digest(self, sender: str, request_id_bytes: bytes) -> str:
         """Sign the request-id digest and return the 0x-prefixed hex signature.
 
         Client mode: sign the raw 32-byte digest so the marketplace's
@@ -509,17 +509,34 @@ class MarketplaceService(
         Agent mode: sign the SafeMessage-wrapped hash so
         ``Safe.isValidSignature(digest, sig)`` returns the ERC-1271 magic
         value on-chain. Raw-digest signing fails with ``GS026`` on Safe
-        v1.4.1 with the standard fallback handler. The wrapped hash is
+        v1.3.0+ with the standard fallback handler. The wrapped hash is
         computed locally by the signer (no RPC round-trip).
 
+        ``sender`` is the requester of record already resolved by the
+        caller (Safe in agent mode, EOA in client mode). Threading it in
+        rather than re-resolving keeps the address the signature is bound
+        to identical to the address the caller wrote into the payload and
+        ``getRequestId``.
+
+        :param sender: Checksummed requester address (agent mode: Safe;
+            client mode: EOA). Must equal the ``sender`` field of the
+            outbound payload and the requester argument to
+            ``getRequestId``.
         :param request_id_bytes: the 32-byte request-id digest to sign.
         :return: 0x-prefixed hex signature, as sent to the mech.
-        :raises ValueError: if the signature has the wrong length or
-            (client mode) does not recover to the signer's address.
+        :raises ValueError: if the signature has the wrong length, uses an
+            unsupported ``v`` byte, or (client mode) does not recover to
+            the signer's address.
         """
         if self.agent_mode:
+            if not hasattr(self.signer, "sign_safe_message"):
+                raise ValueError(
+                    "The provided Signer implementation must define "
+                    "sign_safe_message for agent-mode offchain requests. "
+                    "See mech_client.domain.signing.Signer."
+                )
             signature = self.signer.sign_safe_message(
-                self._resolve_offchain_sender(),
+                sender,
                 self.mech_config.ledger_config.chain_id,
                 request_id_bytes,
             )
@@ -528,6 +545,14 @@ class MarketplaceService(
                     f"Signer returned a {len(signature)}-byte signature; "
                     f"expected 65 bytes (r ‖ s ‖ v). See "
                     f"Signer.sign_safe_message."
+                )
+            if signature[64] not in (27, 28):
+                raise ValueError(
+                    f"Signer returned v={signature[64]}; "
+                    f"sign_safe_message requires raw-hash signing with v "
+                    f"in {{27, 28}} (v=0 is read as a contract signature "
+                    f"and v=1 as an approved hash by Safe, both fail as "
+                    f"GS026). See Signer.sign_safe_message."
                 )
             return "0x" + signature.hex()
 

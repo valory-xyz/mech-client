@@ -24,13 +24,18 @@ from unittest.mock import MagicMock
 DEFAULT_SIGNER_ADDRESS = "0x" + "1" * 40
 DEFAULT_TX_HASH = "0x" + "ff" * 32
 DEFAULT_SIGNATURE = b"\xab" * 65
+# Agent-mode signing rejects any v byte outside {27, 28} so the raw ECDSA
+# path stays distinguishable from Safe's contract-signature and
+# approved-hash markers. Default to v=27 so tests that don't care about
+# the v byte still produce a shape the guard accepts.
+DEFAULT_SAFE_SIGNATURE = b"\xab" * 64 + b"\x1b"
 
 
 def create_mock_signer(
     address: str = DEFAULT_SIGNER_ADDRESS,
     tx_hash: str = DEFAULT_TX_HASH,
     signature: bytes = DEFAULT_SIGNATURE,
-    safe_signature: bytes = DEFAULT_SIGNATURE,
+    safe_signature: bytes = DEFAULT_SAFE_SIGNATURE,
 ) -> MagicMock:
     """
     Create a mock Signer.

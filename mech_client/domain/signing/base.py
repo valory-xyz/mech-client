@@ -75,7 +75,7 @@ class Signer(Protocol):
         Used by the agent-mode offchain marketplace flow, where the requester
         of record is a Safe multisig (not the signing EOA). The marketplace
         verifies via ``Safe.isValidSignature(digest, sig)``, which on Safe
-        v1.4.1 with the standard ``CompatibilityFallbackHandler`` rehashes
+        v1.3.0+ with the standard ``CompatibilityFallbackHandler`` rehashes
         the raw ``digest`` into an EIP-712 ``SafeMessage`` and checks that
         the sig recovers to an owner over the wrapped hash. A raw
         ``ecrecover`` signature over ``digest`` fails on-chain with
@@ -91,17 +91,32 @@ class Signer(Protocol):
         to ``Safe.getMessageHash``) and sign it raw (``v`` in ``{27, 28}``).
         The signer must be an owner of ``safe_address``.
 
+        ``message`` MUST be exactly 32 bytes. Callers pass the request-id
+        digest; the wrapping formula's shortcut ``keccak256(message)`` only
+        equals ``keccak256(abi.encode(bytes32, message))`` at 32 bytes, so
+        any other length silently signs a hash the fallback handler will
+        not accept. Implementations MUST reject non-32-byte inputs.
+
         This is a required protocol member. Downstream implementers of
         :class:`Signer` (e.g. Pearl BYOA agents) must add this method to
         remain compatible with agent-mode offchain requests. Existing
         :meth:`sign_message` is unchanged and continues to serve client mode.
 
-        Domain assumption: Safe v1.4.1. Older Safes (v1.3.0) use a domain
-        typehash without ``chainId`` and are not supported by this method.
+        Domain assumption: Safe v1.3.0+ (v1.3.0 and v1.4.1 share the
+        ``EIP712Domain(uint256 chainId,address verifyingContract)``
+        typehash and the same ``SafeMessage`` wrapping). ``mechx setup``
+        deploys the canonical Safe v1.3.0 singleton, so this method
+        targets that domain. Pre-v1.3.0 Safes (v1.2.0 and earlier) use a
+        domain typehash without ``chainId`` and are not supported.
+
+        The Safe's signature threshold must be 1 for this single-owner
+        signature to validate. Safes with threshold > 1 will reject the
+        signature via ``checkNSignatures`` (a distinct failure mode from
+        ``GS026``).
 
         :param safe_address: Checksummed Safe address (verifyingContract in
             the EIP-712 domain)
         :param chain_id: Chain ID of the network the Safe is deployed on
-        :param message: Message bytes to wrap and sign (32-byte digest for
-            mech requests)
+        :param message: 32-byte digest to wrap and sign (the mech
+            request-id digest)
         """
