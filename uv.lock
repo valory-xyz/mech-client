@@ -1953,7 +1953,7 @@ wheels = [
 
 [[package]]
 name = "mech-client"
-version = "0.21.2"
+version = "0.21.3"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -1983,7 +1983,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1,<9" },
     { name = "gql", specifier = ">=3.4.1" },
     { name = "olas-operate-middleware", specifier = ">=0.15.2,<0.16" },
-    { name = "open-aea-helpers", specifier = "==0.21.25" },
+    { name = "open-aea-helpers", specifier = "==0.21.26" },
     { name = "pip", specifier = ">=24.0" },
     { name = "py-multibase", specifier = "==1.0.3" },
     { name = "py-multicodec", specifier = "==0.2.1" },
@@ -2333,14 +2333,14 @@ wheels = [
 
 [[package]]
 name = "open-aea-helpers"
-version = "0.21.25"
+version = "0.21.26"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "open-autonomy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ee/66/6f78f598fcd0bf9b826b82b00276e12932117d8b3d48b681bcf25d9ed8fb/open_aea_helpers-0.21.25.tar.gz", hash = "sha256:4e061cb30e95b1c260b7ac4ef7e8a2b3a9cf680e3671db3f57e725cea638f4ee", size = 41119, upload-time = "2026-06-25T11:17:26.107Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ba/76/60c31f9757505d84ee14392077eb6f804b0f3150f282a97de58c27f9c3c9/open_aea_helpers-0.21.26.tar.gz", hash = "sha256:c76c328c3147ea6c7318c4968cfa465f987162fd4bc377c43db8f86fd82384dc", size = 41116, upload-time = "2026-07-03T12:36:13.798Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/db/e3e37e30f9a9043bbbb99d6f8628c0599aab1864e2716a2c864233add00e/open_aea_helpers-0.21.25-py3-none-any.whl", hash = "sha256:7c62788b67d26add7f719c3becd875d697f3420696c035644dd02bda409a57d4", size = 44413, upload-time = "2026-06-25T11:17:25.211Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/a0/993a7abaab4520706fc54d5bfd16164d54aec45d1ccc3efcf5f3deed6a16/open_aea_helpers-0.21.26-py3-none-any.whl", hash = "sha256:f6039f3f0fad3abbcc6862c7d416373e6c6d98e620174b394eba611389d3152e", size = 44415, upload-time = "2026-07-03T12:36:12.861Z" },
 ]
 
 [[package]]

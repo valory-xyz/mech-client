@@ -22,6 +22,18 @@
 from typing import Any, Dict
 
 from aea_ledger_ethereum import EthereumApi, EthereumCrypto
+from eth_abi import encode as abi_encode
+from eth_account import Account
+from eth_utils import keccak
+from mech_client.utils.validators import ensure_checksummed_address
+
+# EIP-712 typehash constants for Safe v1.4.1 SafeMessage wrapping.
+# Recomputed as keccak of the type string below so a reader can diff them
+# against the on-chain constants without decoding hex.
+_EIP712_DOMAIN_TYPEHASH = keccak(
+    text="EIP712Domain(uint256 chainId,address verifyingContract)"
+)
+_SAFE_MESSAGE_TYPEHASH = keccak(text="SafeMessage(bytes message)")
 
 
 class LocalSigner:
@@ -87,3 +99,45 @@ class LocalSigner:
         """
         signature = self.crypto.sign_message(message, is_deprecated_mode=True)
         return bytes.fromhex(signature.removeprefix("0x"))
+
+    def sign_safe_message(
+        self, safe_address: str, chain_id: int, message: bytes
+    ) -> bytes:
+        """Sign the Safe-wrapped EIP-712 hash of ``message`` with the local key.
+
+        Computes the SafeMessage wrapped hash locally (no RPC) and signs it
+        raw so ``Safe.isValidSignature(message, sig)`` returns the ERC-1271
+        magic value on-chain — see :meth:`Signer.sign_safe_message` for the
+        formula and domain assumptions.
+
+        :param safe_address: Safe (verifyingContract) address
+        :param chain_id: Chain ID for the EIP-712 domain
+        :param message: Message bytes to wrap and sign
+        :return: 65-byte signature (r ‖ s ‖ v) over the wrapped hash
+        """
+        checksummed_safe = ensure_checksummed_address(safe_address)
+        domain_separator = keccak(
+            abi_encode(
+                ["bytes32", "uint256", "address"],
+                [_EIP712_DOMAIN_TYPEHASH, chain_id, checksummed_safe],
+            )
+        )
+        # ``Safe.isValidSignature(bytes32 hash, bytes sig)`` on the
+        # v1.4.1 CompatibilityFallbackHandler wraps ``hash`` as
+        # ``keccak256(abi.encode(hash))`` before hashing into
+        # ``SafeMessage``. For a 32-byte input, ``abi.encode(bytes32)``
+        # yields the same 32 bytes, so ``keccak256(message)`` here is
+        # exactly ``keccak256(<32 raw bytes>)`` — the same value the
+        # handler computes on-chain.
+        struct_hash = keccak(
+            abi_encode(
+                ["bytes32", "bytes32"],
+                [_SAFE_MESSAGE_TYPEHASH, keccak(message)],
+            )
+        )
+        wrapped_hash = keccak(b"\x19\x01" + domain_separator + struct_hash)
+        # pylint: disable-next=no-value-for-parameter
+        signed = Account.unsafe_sign_hash(
+            wrapped_hash, private_key=self.crypto.private_key
+        )
+        return bytes(signed.signature)

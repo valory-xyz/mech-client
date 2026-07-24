@@ -30,17 +30,20 @@ def create_mock_signer(
     address: str = DEFAULT_SIGNER_ADDRESS,
     tx_hash: str = DEFAULT_TX_HASH,
     signature: bytes = DEFAULT_SIGNATURE,
+    safe_signature: bytes = DEFAULT_SIGNATURE,
 ) -> MagicMock:
     """
     Create a mock Signer.
 
     :param address: EOA address the signer reports
     :param tx_hash: Transaction hash send_transaction returns
-    :param signature: Signature bytes sign_message returns
+    :param signature: Signature bytes sign_message returns (client mode)
+    :param safe_signature: Signature bytes sign_safe_message returns (agent mode)
     :return: Mock signer instance
     """
     mock_signer = MagicMock()
     mock_signer.address = address
     mock_signer.send_transaction.return_value = tx_hash
     mock_signer.sign_message.return_value = signature
+    mock_signer.sign_safe_message.return_value = safe_signature
     return mock_signer

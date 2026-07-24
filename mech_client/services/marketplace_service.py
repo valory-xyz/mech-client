@@ -376,8 +376,12 @@ class MarketplaceService(
         """
         logger.info("Sending offchain mech marketplace request...")
 
-        # Get current nonce from contract
-        sender = self.signer.address
+        # In agent mode the requester of record is the Safe (msg.sender on
+        # the on-chain path, ``mapNonces`` key, and requester bound into
+        # ``getRequestId``); in client mode it is the EOA. The signature is
+        # verified against this address downstream (Safe.isValidSignature
+        # for the Safe branch, plain ecrecover for the EOA branch).
+        sender = self._resolve_offchain_sender()
         current_nonce = marketplace_contract.functions.mapNonces(sender).call()
 
         # Prepare and send each request
@@ -414,8 +418,10 @@ class MarketplaceService(
             request_id_int = int.from_bytes(request_id_bytes, byteorder="big")
             request_id_hex = request_id_bytes.hex()
 
-            # Sign the request ID digest (raw ecrecover on-chain, no EIP-191
-            # prefix — see Signer.sign_message)
+            # Signature encoding depends on how the marketplace verifies the
+            # requester: Safe.isValidSignature (agent mode) requires the
+            # SafeMessage-wrapped hash to be signed; plain ecrecover
+            # (client mode) requires the raw digest.
             signature = self._sign_request_digest(request_id_bytes)
 
             # Prepare payload
@@ -466,24 +472,65 @@ class MarketplaceService(
             "receipt": None,  # No receipt for offchain requests
         }
 
-    def _sign_request_digest(self, request_id_bytes: bytes) -> str:
-        """Sign the request-id digest via the signer and verify recoverability.
+    def _resolve_offchain_sender(self) -> str:
+        """Return the requester address bound into the offchain request.
 
-        The marketplace contract validates offchain requests with plain
-        ``ecrecover(digest, v, r, s)``, so the signature must be over the raw
-        32-byte digest — NOT wrapped in an EIP-191 personal-message prefix.
-        External signer services commonly default to EIP-191
+        In agent mode this is the Safe (matching the onchain flow where the
+        Safe is ``msg.sender`` on the marketplace call); in client mode it
+        is the EOA. Callers use this for ``mapNonces``, ``getRequestId``,
+        and the payload ``sender`` field so the mech, subgraph, and
+        settlement path all agree on who owns the request.
+
+        :return: Checksummed requester address
+        :raises ValueError: if agent mode is set but no Safe address was
+            passed to the service constructor
+        """
+        if self.agent_mode:
+            if not self.safe_address:
+                raise ValueError(
+                    "Agent-mode offchain requests require a Safe address; "
+                    "pass safe_address=... to MarketplaceService."
+                )
+            return ensure_checksummed_address(self.safe_address)
+        return ensure_checksummed_address(self.signer.address)
+
+    def _sign_request_digest(self, request_id_bytes: bytes) -> str:
+        """Sign the request-id digest and return the 0x-prefixed hex signature.
+
+        Client mode: sign the raw 32-byte digest so the marketplace's
+        ``ecrecover(digest, v, r, s)`` recovers to the EOA. External signer
+        services commonly default to EIP-191
         (``eth_account.Account.sign_message``), which produces a signature
         that recovers to a *different* address; on-chain that fails silently
         (the request is treated as coming from an unpaid sender). Recovering
         locally and comparing against ``signer.address`` turns that
         misconfiguration into an immediate, actionable error at fire time.
 
+        Agent mode: sign the SafeMessage-wrapped hash so
+        ``Safe.isValidSignature(digest, sig)`` returns the ERC-1271 magic
+        value on-chain. Raw-digest signing fails with ``GS026`` on Safe
+        v1.4.1 with the standard fallback handler. The wrapped hash is
+        computed locally by the signer (no RPC round-trip).
+
         :param request_id_bytes: the 32-byte request-id digest to sign.
         :return: 0x-prefixed hex signature, as sent to the mech.
-        :raises ValueError: if the signature has the wrong length or does not
-            recover to the signer's address (e.g. the signer applied EIP-191).
+        :raises ValueError: if the signature has the wrong length or
+            (client mode) does not recover to the signer's address.
         """
+        if self.agent_mode:
+            signature = self.signer.sign_safe_message(
+                self._resolve_offchain_sender(),
+                self.mech_config.ledger_config.chain_id,
+                request_id_bytes,
+            )
+            if len(signature) != 65:
+                raise ValueError(
+                    f"Signer returned a {len(signature)}-byte signature; "
+                    f"expected 65 bytes (r ‖ s ‖ v). See "
+                    f"Signer.sign_safe_message."
+                )
+            return "0x" + signature.hex()
+
         signature = self.signer.sign_message(request_id_bytes)
         if len(signature) != 65:
             raise ValueError(

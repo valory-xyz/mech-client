@@ -57,12 +57,51 @@ class Signer(Protocol):
     def sign_message(self, message: bytes) -> bytes:
         """Return a 65-byte ECDSA signature (r ‖ s ‖ v) over ``message``.
 
-        The mech marketplace flow passes the raw 32-byte request-id digest
-        here, and the on-chain verifier recovers it with plain
-        ``ecrecover(digest, v, r, s)`` — i.e. the digest must be signed
-        directly (``eth_account``'s ``unsafe_sign_hash`` semantics), NOT
-        wrapped in an EIP-191 personal-message prefix. ``v`` may be
+        Used by the client-mode offchain marketplace flow: the EOA is the
+        requester of record, and the marketplace verifier recovers with
+        plain ``ecrecover(digest, v, r, s)`` — i.e. the digest must be
+        signed directly (``eth_account``'s ``unsafe_sign_hash`` semantics),
+        NOT wrapped in an EIP-191 personal-message prefix. ``v`` may be
         ``{0, 1}`` or ``{27, 28}``; the contract normalizes both.
 
         :param message: Message bytes to sign (32-byte digest for mech requests)
+        """
+
+    def sign_safe_message(
+        self, safe_address: str, chain_id: int, message: bytes
+    ) -> bytes:
+        """Return a 65-byte ECDSA signature over the Safe-wrapped ``message``.
+
+        Used by the agent-mode offchain marketplace flow, where the requester
+        of record is a Safe multisig (not the signing EOA). The marketplace
+        verifies via ``Safe.isValidSignature(digest, sig)``, which on Safe
+        v1.4.1 with the standard ``CompatibilityFallbackHandler`` rehashes
+        the raw ``digest`` into an EIP-712 ``SafeMessage`` and checks that
+        the sig recovers to an owner over the wrapped hash. A raw
+        ``ecrecover`` signature over ``digest`` fails on-chain with
+        ``GS026``; the signature MUST be produced over::
+
+            wrappedHash = keccak256(
+                0x1901
+                || keccak256(abi.encode(DOMAIN_TYPEHASH, chainId, safe))
+                || keccak256(abi.encode(SAFE_MSG_TYPEHASH, keccak256(abi.encode(message))))
+            )
+
+        Implementations MUST compute ``wrappedHash`` locally (no RPC call
+        to ``Safe.getMessageHash``) and sign it raw (``v`` in ``{27, 28}``).
+        The signer must be an owner of ``safe_address``.
+
+        This is a required protocol member. Downstream implementers of
+        :class:`Signer` (e.g. Pearl BYOA agents) must add this method to
+        remain compatible with agent-mode offchain requests. Existing
+        :meth:`sign_message` is unchanged and continues to serve client mode.
+
+        Domain assumption: Safe v1.4.1. Older Safes (v1.3.0) use a domain
+        typehash without ``chainId`` and are not supported by this method.
+
+        :param safe_address: Checksummed Safe address (verifyingContract in
+            the EIP-712 domain)
+        :param chain_id: Chain ID of the network the Safe is deployed on
+        :param message: Message bytes to wrap and sign (32-byte digest for
+            mech requests)
         """
