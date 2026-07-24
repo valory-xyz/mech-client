@@ -34,6 +34,7 @@ from mech_client.services.marketplace_service import (
     MarketplaceService,
     PaymentChallenge,
 )
+from mech_client.utils.validators import ensure_checksummed_address
 
 from tests.unit.helpers import create_mock_signer
 
@@ -1505,6 +1506,199 @@ class TestSendOffchainRequest:
     @patch("mech_client.services.marketplace_service.EthereumCrypto")
     @patch("mech_client.services.base_service.EthereumApi")
     @patch("mech_client.services.base_service.get_mech_config")
+    async def test_client_mode_offchain_uses_eoa_as_requester(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_offchain_watcher_cls: MagicMock,
+    ) -> None:
+        """Client-mode offchain request binds the EOA as the requester.
+
+        Symmetric to the agent-mode invariant: with no Safe, the EOA is
+        ``msg.sender`` on the settlement path and must be the address the
+        offchain payload, ``mapNonces`` lookup, and ``getRequestId`` all
+        key on. The Safe-wrapped signing helper must not be exercised.
+        """
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+        mock_executor_factory.create.return_value = MagicMock()
+        mock_ledger_api_cls.return_value = MagicMock()
+
+        service = MarketplaceService(
+            chain_config="gnosis",
+            agent_mode=False,
+            crypto=create_mock_crypto(),
+        )
+        service.signer = _real_signing_signer()
+
+        mock_contract = MagicMock()
+        mock_contract.functions.mapNonces.return_value.call.return_value = 3
+        request_id_bytes = b"\xcd" * 32
+        mock_contract.functions.getRequestId.return_value.call.return_value = (
+            request_id_bytes
+        )
+
+        mock_watcher = AsyncMock()
+        mock_watcher.watch.return_value = {request_id_bytes.hex(): "ok"}
+        mock_offchain_watcher_cls.return_value = mock_watcher
+
+        with patch(
+            "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash",
+            return_value=("0x" + "b" * 64, "full-hash", '{"prompt":"hi"}'),
+        ):
+            with patch(
+                "mech_client.services.marketplace_service.requests"
+            ) as mock_requests:
+                mock_response = MagicMock()
+                mock_response.ok = True
+                mock_response.json.return_value = {"status": "ok"}
+                mock_requests.post.return_value = mock_response
+                mock_requests.exceptions.RequestException = Exception
+
+                await service._send_offchain_request(  # pylint: disable=protected-access
+                    marketplace_contract=mock_contract,
+                    prompts=("hi",),
+                    tools=("some-tool",),
+                    priority_mech_address="0x" + "9" * 40,
+                    max_delivery_rate=10**17,
+                    payment_type=PaymentType.NATIVE,
+                    response_timeout=300,
+                    mech_offchain_url="https://mech.example.com",
+                    extra_attributes=None,
+                    timeout=30.0,
+                )
+
+        expected_sender = ensure_checksummed_address(_TEST_ACCOUNT.address)
+
+        # Requester of record on all three surfaces is the EOA
+        mock_contract.functions.mapNonces.assert_called_once_with(expected_sender)
+        assert (
+            mock_contract.functions.getRequestId.call_args.args[1] == expected_sender
+        )
+        posted_payload = mock_requests.post.call_args.kwargs["data"]
+        assert posted_payload["sender"] == expected_sender
+
+        # Safe-wrapped signing path is not exercised in client mode
+        service.signer.sign_safe_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OffchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    async def test_agent_mode_offchain_uses_safe_as_requester(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_offchain_watcher_cls: MagicMock,
+    ) -> None:
+        """Agent-mode offchain request binds the Safe as the requester.
+
+        End-to-end assertion of the requester-of-record property: the
+        Safe address (not the signer EOA) must be the address passed to
+        ``mapNonces``, into ``getRequestId``, and set as ``sender`` on the
+        payload posted to the mech. The mech, subgraph, and settlement
+        path all key on that field, so any of the three falling back to
+        the EOA would split the identity across the offchain and onchain
+        flows.
+        """
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+        mock_executor_factory.create.return_value = MagicMock()
+        mock_ledger_api_cls.return_value = MagicMock()
+
+        safe = "0x" + "5a" * 20
+        service = MarketplaceService(
+            chain_config="gnosis",
+            agent_mode=True,
+            crypto=create_mock_crypto(),
+            safe_address=safe,
+            ethereum_client=MagicMock(),
+        )
+        # Distinct EOA so a regression that binds the signer would surface
+        service.signer = create_mock_signer(
+            address="0x" + "e0" * 20, safe_signature=b"\xdd" * 64 + b"\x1b"
+        )
+
+        mock_contract = MagicMock()
+        mock_contract.functions.mapNonces.return_value.call.return_value = 7
+        request_id_bytes = b"\xab" * 32
+        mock_contract.functions.getRequestId.return_value.call.return_value = (
+            request_id_bytes
+        )
+
+        mock_watcher = AsyncMock()
+        mock_watcher.watch.return_value = {request_id_bytes.hex(): "ok"}
+        mock_offchain_watcher_cls.return_value = mock_watcher
+
+        with patch(
+            "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash",
+            return_value=("0x" + "b" * 64, "full-hash", '{"prompt":"hi"}'),
+        ):
+            with patch(
+                "mech_client.services.marketplace_service.requests"
+            ) as mock_requests:
+                mock_response = MagicMock()
+                mock_response.ok = True
+                mock_response.json.return_value = {"status": "ok"}
+                mock_requests.post.return_value = mock_response
+                mock_requests.exceptions.RequestException = Exception
+
+                await service._send_offchain_request(  # pylint: disable=protected-access
+                    marketplace_contract=mock_contract,
+                    prompts=("hi",),
+                    tools=("some-tool",),
+                    priority_mech_address="0x" + "9" * 40,
+                    max_delivery_rate=10**17,
+                    payment_type=PaymentType.NATIVE,
+                    response_timeout=300,
+                    mech_offchain_url="https://mech.example.com",
+                    extra_attributes=None,
+                    timeout=30.0,
+                )
+
+        expected_sender = ensure_checksummed_address(safe)
+
+        # 1. mapNonces was keyed on the Safe, not the EOA
+        mock_contract.functions.mapNonces.assert_called_once_with(expected_sender)
+
+        # 2. getRequestId was computed against the Safe as requester
+        get_req_call = mock_contract.functions.getRequestId.call_args
+        assert get_req_call.args[1] == expected_sender
+
+        # 3. The signature was produced through the Safe-wrapped path
+        service.signer.sign_safe_message.assert_called_once_with(
+            expected_sender,
+            service.mech_config.ledger_config.chain_id,
+            request_id_bytes,
+        )
+
+        # 4. The payload posted to the mech advertised the Safe as sender
+        posted_payload = mock_requests.post.call_args.kwargs["data"]
+        assert posted_payload["sender"] == expected_sender
+        assert posted_payload["signature"] == "0x" + ("dd" * 64) + "1b"
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OffchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     async def test_offchain_request_http_error_raises(
         self,
         mock_config: MagicMock,
@@ -1729,7 +1923,9 @@ class TestSignRequestDigest:
         service = _build_offchain_service()
         service.signer = _real_signing_signer()
 
-        signature = service._sign_request_digest(self._digest())
+        signature = service._sign_request_digest(
+            _TEST_ACCOUNT.address, self._digest()
+        )
 
         expected = bytes(_TEST_ACCOUNT.unsafe_sign_hash(self._digest()).signature)
         assert signature == "0x" + expected.hex()
@@ -1743,7 +1939,9 @@ class TestSignRequestDigest:
             address=_TEST_ACCOUNT.address, signature=low_v
         )
 
-        signature = service._sign_request_digest(self._digest())
+        signature = service._sign_request_digest(
+            _TEST_ACCOUNT.address, self._digest()
+        )
 
         # The low-v original goes out; normalization is check-only
         assert signature == "0x" + low_v.hex()
@@ -1759,7 +1957,7 @@ class TestSignRequestDigest:
         )
 
         with pytest.raises(ValueError, match="EIP-191"):
-            service._sign_request_digest(self._digest())
+            service._sign_request_digest(_TEST_ACCOUNT.address, self._digest())
 
     def test_wrong_length_signature_is_rejected(self) -> None:
         """A non-65-byte signature fails fast with a clear message."""
@@ -1767,7 +1965,9 @@ class TestSignRequestDigest:
         service.signer = create_mock_signer(signature=b"\xab" * 64)
 
         with pytest.raises(ValueError, match="expected\\s+65 bytes"):
-            service._sign_request_digest(self._digest())
+            service._sign_request_digest(
+                create_mock_signer().address, self._digest()
+            )
 
     def test_unrecoverable_signature_is_rejected(self) -> None:
         """A malformed signature (r = s = 0) surfaces a diagnostic error."""
@@ -1775,7 +1975,147 @@ class TestSignRequestDigest:
         service.signer = create_mock_signer(signature=b"\x00" * 64 + b"\x1b")
 
         with pytest.raises(ValueError, match="cannot be recovered"):
-            service._sign_request_digest(self._digest())
+            service._sign_request_digest(
+                create_mock_signer().address, self._digest()
+            )
+
+    def test_agent_mode_signs_via_safe_message_wrapper(self) -> None:
+        """Agent-mode signing routes through sign_safe_message with the Safe."""
+        safe = "0x" + "5a" * 20
+        service = _build_offchain_service(agent_mode=True, safe_address=safe)
+        service.signer = create_mock_signer(safe_signature=b"\xdd" * 64 + b"\x1b")
+        checksummed_safe = ensure_checksummed_address(safe)
+
+        signature = service._sign_request_digest(checksummed_safe, self._digest())
+
+        assert signature == "0x" + ("dd" * 64) + "1b"
+        service.signer.sign_safe_message.assert_called_once_with(
+            checksummed_safe,
+            service.mech_config.ledger_config.chain_id,
+            self._digest(),
+        )
+        # Client-mode signing path must not be exercised in agent mode
+        service.signer.sign_message.assert_not_called()
+
+    def test_agent_mode_signs_against_caller_provided_sender(self) -> None:
+        """The signature is bound to the sender argument, not re-resolved.
+
+        Threading ``sender`` through the API is the invariant that keeps
+        the signed-over address identical to the address written into
+        the payload and ``getRequestId``. Passing a distinct Safe address
+        as ``sender`` (with the service configured for a different Safe)
+        proves the sign path uses the caller's value rather than
+        re-reading ``self.safe_address``.
+        """
+        service = _build_offchain_service(agent_mode=True)
+        service.signer = create_mock_signer(safe_signature=b"\xdd" * 64 + b"\x1b")
+        other_safe = ensure_checksummed_address("0x" + "cc" * 20)
+
+        service._sign_request_digest(other_safe, self._digest())
+
+        service.signer.sign_safe_message.assert_called_once_with(
+            other_safe,
+            service.mech_config.ledger_config.chain_id,
+            self._digest(),
+        )
+
+    def test_agent_mode_rejects_wrong_length_safe_signature(self) -> None:
+        """Agent-mode signing fails fast on a non-65-byte SafeMessage signature."""
+        service = _build_offchain_service(agent_mode=True)
+        service.signer = create_mock_signer(safe_signature=b"\xdd" * 64)
+
+        with pytest.raises(ValueError, match="expected\\s+65 bytes"):
+            service._sign_request_digest(
+                ensure_checksummed_address("0x" + "5a" * 20), self._digest()
+            )
+
+    @pytest.mark.parametrize("bad_v", [0, 1, 26, 29, 255])
+    def test_agent_mode_rejects_unsupported_v_byte(self, bad_v: int) -> None:
+        """Agent-mode signing requires v in {27, 28}.
+
+        Safe reads ``v=0`` as a contract signature marker and ``v=1`` as
+        an approved-hash marker, both distinct from raw ECDSA recovery.
+        A signer that returns any other ``v`` would be misinterpreted
+        on-chain and fail as an opaque ``GS026``; the guard converts
+        that into an actionable local error.
+        """
+        service = _build_offchain_service(agent_mode=True)
+        bad_sig = b"\xdd" * 64 + bytes([bad_v])
+        service.signer = create_mock_signer(safe_signature=bad_sig)
+
+        with pytest.raises(ValueError, match=r"v in \{27, 28\}"):
+            service._sign_request_digest(
+                ensure_checksummed_address("0x" + "5a" * 20), self._digest()
+            )
+
+    def test_agent_mode_requires_signer_with_sign_safe_message(self) -> None:
+        """A signer missing sign_safe_message surfaces an actionable error.
+
+        Downstream :class:`Signer` implementations predating this method
+        (e.g. Pearl BYOA signers) would otherwise die with a bare
+        ``AttributeError`` deep in the request flow; catching the missing
+        attribute early names the requirement and points to the protocol.
+        """
+        service = _build_offchain_service(agent_mode=True)
+        # A plain object without sign_safe_message. Using ``spec`` on a
+        # MagicMock would also work, but this keeps the point explicit.
+
+        class _LegacySigner:
+            address = "0x" + "1" * 40
+
+            def sign_message(self, message: bytes) -> bytes:
+                return b"\x00" * 65
+
+        service.signer = _LegacySigner()  # type: ignore[assignment]
+
+        with pytest.raises(ValueError, match="sign_safe_message"):
+            service._sign_request_digest(
+                ensure_checksummed_address("0x" + "5a" * 20), self._digest()
+            )
+
+
+class TestOffchainSenderResolution:
+    """Tests for the requester address bound into offchain requests."""
+
+    def test_client_mode_binds_signer_address(self) -> None:
+        """Client mode uses the EOA as the offchain requester."""
+        service = _build_offchain_service()
+        service.signer = create_mock_signer(address="0x" + "1" * 40)
+
+        # pylint: disable-next=protected-access
+        sender = service._resolve_offchain_sender()
+
+        assert sender == ensure_checksummed_address("0x" + "1" * 40)
+
+    def test_agent_mode_binds_safe_address(self) -> None:
+        """Agent mode uses the Safe as the offchain requester of record.
+
+        This is the invariant that keeps the offchain flow consistent with
+        the onchain flow — where the Safe is ``msg.sender`` and therefore
+        the requester recorded by the marketplace and indexed by the
+        subgraph. Binding the signer EOA in agent mode would split the two
+        views of "who owns this request".
+        """
+        safe = "0x" + "5a" * 20
+        service = _build_offchain_service(agent_mode=True, safe_address=safe)
+        service.signer = create_mock_signer(address="0x" + "1" * 40)
+
+        # pylint: disable-next=protected-access
+        sender = service._resolve_offchain_sender()
+
+        assert sender == ensure_checksummed_address(safe)
+        # Assert the EOA is NOT bound — that would be the client-mode value
+        # and would fail Safe.isValidSignature downstream.
+        assert sender != ensure_checksummed_address("0x" + "1" * 40)
+
+    def test_agent_mode_without_safe_address_raises(self) -> None:
+        """Agent mode without a Safe address surfaces a clear configuration error."""
+        service = _build_offchain_service(agent_mode=True)
+        service.safe_address = None
+
+        with pytest.raises(ValueError, match="require a Safe address"):
+            # pylint: disable-next=protected-access
+            service._resolve_offchain_sender()
 
 
 class TestSendRequestOffchainBranch:
@@ -1849,8 +2189,18 @@ class TestSendRequestOffchainBranch:
         assert result["tx_hash"] is None
 
 
-def _build_offchain_service() -> MarketplaceService:
-    """Build a MarketplaceService with its heavy init dependencies mocked."""
+def _build_offchain_service(
+    agent_mode: bool = False,
+    safe_address: str = "0x" + "5a" * 20,
+) -> MarketplaceService:
+    """Build a MarketplaceService with its heavy init dependencies mocked.
+
+    :param agent_mode: True to build an agent-mode (Safe-bound) service,
+        False for the default client-mode (EOA) service
+    :param safe_address: Safe address to bind as requester of record
+        (agent mode only, ignored in client mode)
+    :return: MarketplaceService instance
+    """
     with (
         patch(
             "mech_client.services.base_service.get_mech_config",
@@ -1862,11 +2212,15 @@ def _build_offchain_service() -> MarketplaceService:
         patch("mech_client.services.marketplace_service.ToolManager"),
         patch("mech_client.services.marketplace_service.IPFSClient"),
     ):
-        return MarketplaceService(
-            chain_config="gnosis",
-            agent_mode=False,
-            crypto=create_mock_crypto(),
-        )
+        kwargs: Dict[str, Any] = {
+            "chain_config": "gnosis",
+            "agent_mode": agent_mode,
+            "crypto": create_mock_crypto(),
+        }
+        if agent_mode:
+            kwargs["safe_address"] = safe_address
+            kwargs["ethereum_client"] = MagicMock()
+        return MarketplaceService(**kwargs)
 
 
 def _mock_http_response(

@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import MagicMock
 
+import pytest
 from aea_ledger_ethereum import EthereumCrypto
 from eth_account import Account
 
@@ -52,6 +53,12 @@ class TestSignerProtocol:
 
             def sign_message(self, message: bytes) -> bytes:
                 """Pretend to sign a digest."""
+                return b"\x00" * 65
+
+            def sign_safe_message(
+                self, safe_address: str, chain_id: int, message: bytes
+            ) -> bytes:
+                """Pretend to sign a Safe-wrapped digest."""
                 return b"\x00" * 65
 
         assert isinstance(RemoteSigner(), Signer)
@@ -231,3 +238,250 @@ class TestLocalSignerSignMessage:
             digest, signature=signature
         )
         assert recovered == crypto.address
+
+
+# Reference vector produced against a Gnosis-fork anvil instance with a
+# fresh Safe v1.4.1 deployed via SafeProxyFactory 0x4e1D...c67 + singleton
+# 0x4167...61a + CompatibilityFallbackHandler 0xfd07...c99. Verified
+# on-fork: ``Safe.isValidSignature(REQUEST_ID, SIG)`` returned the
+# ERC-1271 magic value ``0x1626ba7e``.
+_SAFE_FORK_SAFE_ADDRESS = "0x56f3a6943924e88e6aeb4278b88dcafbb9c2d7ae"
+_SAFE_FORK_CHAIN_ID = 100
+# Anvil account 0 default key, a public test constant, not a credential.
+_SAFE_FORK_OWNER_KEY = (
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+)
+_SAFE_FORK_REQUEST_ID = bytes.fromhex(
+    "1111111111111111111111111111111111111111111111111111111111111111"
+)
+_SAFE_FORK_EXPECTED_SIGNATURE = bytes.fromhex(
+    "df56c320b8a9fd9d7ca5a9393d59d47e1f973c4fa473f6a119949effe580a6c3"
+    "7dcc822b76790bf0c713dd19932e3016366edd71cefbe59386ae7f65819443581c"
+)
+
+# Second reference vector produced against a Gnosis-fork anvil instance
+# with a fresh Safe v1.3.0 deployed via SafeProxyFactory
+# ``0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2`` + singleton
+# ``0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552`` + fallback handler
+# ``0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4``. This is the version
+# ``mechx setup`` (via olas-operate-middleware) deploys on every
+# supported chain, so it's the deployment every real agent-mode user
+# will have. Verified on-fork: ``Safe.isValidSignature(REQUEST_ID, SIG)``
+# returned the ERC-1271 magic value ``0x1626ba7e``. Same owner key,
+# same chain_id, same request-id digest as the v1.4.1 vector; the two
+# signatures differ only because each Safe has a different deployment
+# address (which enters the domain separator).
+_SAFE_V130_FORK_ADDRESS = "0x8bcb8c0321efeae6b1daeb02273b28e71aeea0ed"
+_SAFE_V130_FORK_EXPECTED_SIGNATURE = bytes.fromhex(
+    "604f709329907e68906860f747b45e236add71ca044a01b718e72328c6a9e767"
+    "2b3c04a6e3eecd5562ecd0103646df7c3e5c700b13c2cf8ab098822c58d0225e1c"
+)
+
+class TestLocalSignerSignSafeMessage:
+    """Tests for LocalSigner.sign_safe_message (Safe v1.3.0+ wrapping)."""
+
+    @staticmethod
+    def _signer_for_key(private_key: str, tmp_path: Path) -> LocalSigner:
+        """Build a LocalSigner wrapping ``private_key``.
+
+        :param private_key: 0x-prefixed hex private key
+        :param tmp_path: pytest tmp_path fixture
+        :return: LocalSigner backed by an EthereumCrypto over the key
+        """
+        key_file = tmp_path / "key.txt"
+        key_file.write_text(private_key)
+        crypto = EthereumCrypto(private_key_path=str(key_file))
+        return LocalSigner(crypto, MagicMock())
+
+    def test_signature_matches_fork_verified_reference(
+        self, tmp_path: Path
+    ) -> None:
+        """The locally computed wrapped-hash signature matches the fork vector.
+
+        This is the invariant that makes Safe.isValidSignature accept the
+        signature on-chain: the wrapping formula (domain separator + struct
+        hash + \\x19\\x01 prefix) must byte-for-byte match Safe v1.3.0+'s
+        CompatibilityFallbackHandler. A drift in either constant, in the
+        abi.encode layout, or in the raw-hash signing convention would flip
+        this byte string and be caught here before it reaches the mech.
+        """
+        signer = self._signer_for_key(_SAFE_FORK_OWNER_KEY, tmp_path)
+
+        signature = signer.sign_safe_message(
+            _SAFE_FORK_SAFE_ADDRESS,
+            _SAFE_FORK_CHAIN_ID,
+            _SAFE_FORK_REQUEST_ID,
+        )
+
+        assert signature == _SAFE_FORK_EXPECTED_SIGNATURE
+        assert len(signature) == 65
+        # Raw ECDSA, so v is in {27, 28}
+        assert signature[64] in (27, 28)
+
+    def test_signature_matches_v130_fork_verified_reference(
+        self, tmp_path: Path
+    ) -> None:
+        """The wrapped-hash signature matches the Safe v1.3.0 fork vector.
+
+        ``mechx setup`` deploys the canonical Safe v1.3.0 singleton on
+        every supported chain, so v1.3.0 is the actual deployment every
+        agent-mode user has. Pinning this second vector alongside the
+        v1.4.1 vector ensures a future regression that broke either
+        version's wrapping fails the suite, rather than only surfacing
+        against whichever version the fork happened to run against.
+        """
+        signer = self._signer_for_key(_SAFE_FORK_OWNER_KEY, tmp_path)
+
+        signature = signer.sign_safe_message(
+            _SAFE_V130_FORK_ADDRESS,
+            _SAFE_FORK_CHAIN_ID,
+            _SAFE_FORK_REQUEST_ID,
+        )
+
+        assert signature == _SAFE_V130_FORK_EXPECTED_SIGNATURE
+        assert len(signature) == 65
+        assert signature[64] in (27, 28)
+
+    def test_returns_bytes_type(self, tmp_path: Path) -> None:
+        """The return value is ``bytes``, not a hex string or SignedMessage."""
+        signer = self._signer_for_key(_SAFE_FORK_OWNER_KEY, tmp_path)
+
+        signature = signer.sign_safe_message(
+            _SAFE_FORK_SAFE_ADDRESS,
+            _SAFE_FORK_CHAIN_ID,
+            _SAFE_FORK_REQUEST_ID,
+        )
+
+        assert isinstance(signature, bytes)
+
+    def test_different_safe_address_yields_different_signature(
+        self, tmp_path: Path
+    ) -> None:
+        """The Safe address enters the domain separator.
+
+        Two different Safe addresses (same owner key, same chain, same
+        request id) must produce different signatures, otherwise the
+        verifyingContract is not being bound into the wrapped hash and the
+        signature could be replayed against a different Safe controlled by
+        the same owner.
+        """
+        signer = self._signer_for_key(_SAFE_FORK_OWNER_KEY, tmp_path)
+        other_safe = "0x" + "a" * 40
+
+        sig_a = signer.sign_safe_message(
+            _SAFE_FORK_SAFE_ADDRESS,
+            _SAFE_FORK_CHAIN_ID,
+            _SAFE_FORK_REQUEST_ID,
+        )
+        sig_b = signer.sign_safe_message(
+            other_safe,
+            _SAFE_FORK_CHAIN_ID,
+            _SAFE_FORK_REQUEST_ID,
+        )
+
+        assert sig_a != sig_b
+
+    def test_different_chain_id_yields_different_signature(
+        self, tmp_path: Path
+    ) -> None:
+        """The chain id enters the domain separator.
+
+        Two different chain ids (same Safe address, same owner, same
+        request id) must produce different signatures — otherwise the
+        signature could be replayed across chains where the same Safe
+        address exists.
+        """
+        signer = self._signer_for_key(_SAFE_FORK_OWNER_KEY, tmp_path)
+
+        sig_gnosis = signer.sign_safe_message(
+            _SAFE_FORK_SAFE_ADDRESS, 100, _SAFE_FORK_REQUEST_ID
+        )
+        sig_base = signer.sign_safe_message(
+            _SAFE_FORK_SAFE_ADDRESS, 8453, _SAFE_FORK_REQUEST_ID
+        )
+
+        assert sig_gnosis != sig_base
+
+    def test_different_message_yields_different_signature(
+        self, tmp_path: Path
+    ) -> None:
+        """The message enters the struct hash — same domain, different digest."""
+        signer = self._signer_for_key(_SAFE_FORK_OWNER_KEY, tmp_path)
+        other_digest = b"\x22" * 32
+
+        sig_a = signer.sign_safe_message(
+            _SAFE_FORK_SAFE_ADDRESS,
+            _SAFE_FORK_CHAIN_ID,
+            _SAFE_FORK_REQUEST_ID,
+        )
+        sig_b = signer.sign_safe_message(
+            _SAFE_FORK_SAFE_ADDRESS,
+            _SAFE_FORK_CHAIN_ID,
+            other_digest,
+        )
+
+        assert sig_a != sig_b
+
+    def test_lowercase_safe_address_accepted(self, tmp_path: Path) -> None:
+        """Callers may pass an unchecksummed address; result is unchanged.
+
+        The wrapper normalizes to a checksummed address internally so the
+        domain separator is invariant to the caller's casing.
+        """
+        signer = self._signer_for_key(_SAFE_FORK_OWNER_KEY, tmp_path)
+
+        sig_lower = signer.sign_safe_message(
+            _SAFE_FORK_SAFE_ADDRESS.lower(),
+            _SAFE_FORK_CHAIN_ID,
+            _SAFE_FORK_REQUEST_ID,
+        )
+
+        assert sig_lower == _SAFE_FORK_EXPECTED_SIGNATURE
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            b"",
+            b"\x11" * 31,
+            b"\x11" * 33,
+            b"\x11" * 64,
+        ],
+    )
+    def test_sign_safe_message_rejects_non_32_byte_message(
+        self, tmp_path: Path, message: bytes
+    ) -> None:
+        """The signer requires a 32-byte digest.
+
+        The wrapping shortcut ``keccak256(message)`` only equals
+        ``keccak256(abi.encode(bytes32, message))`` at exactly 32 bytes.
+        Any other length would silently sign a hash that
+        ``Safe.isValidSignature`` will not accept; rejecting the input
+        surfaces the misuse before the request leaves the client.
+        """
+        signer = self._signer_for_key(_SAFE_FORK_OWNER_KEY, tmp_path)
+
+        with pytest.raises(ValueError, match="32-byte digest"):
+            signer.sign_safe_message(
+                _SAFE_FORK_SAFE_ADDRESS,
+                _SAFE_FORK_CHAIN_ID,
+                message,
+            )
+
+    def test_sign_safe_message_accepts_exactly_32_bytes(
+        self, tmp_path: Path
+    ) -> None:
+        """The 32-byte boundary is inclusive; the reference digest signs.
+
+        Companion to the non-32-byte rejection test: proves the guard is
+        an equality check on the boundary rather than a stricter bound
+        that would break the real request-id digest path.
+        """
+        signer = self._signer_for_key(_SAFE_FORK_OWNER_KEY, tmp_path)
+
+        signature = signer.sign_safe_message(
+            _SAFE_FORK_SAFE_ADDRESS,
+            _SAFE_FORK_CHAIN_ID,
+            _SAFE_FORK_REQUEST_ID,
+        )
+
+        assert len(signature) == 65
