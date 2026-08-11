@@ -83,14 +83,19 @@ class TestOnchainDeliveryWatcherWatch:
     """Tests for OnchainDeliveryWatcher watch method."""
 
     @pytest.mark.asyncio
+    @patch("mech_client.domain.delivery.onchain_watcher.fetch_result_file")
     async def test_watch_single_request_immediate_delivery(
-        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self,
+        mock_fetch_result_file: MagicMock,
+        mock_web3_contract: MagicMock,
+        mock_ledger_api: MagicMock,
     ) -> None:
-        """Test watching single request returns IPFS URL."""
+        """Test watching single request returns the delivered content."""
         request_id = "1234567890abcdef"
         delivery_mech = "0x" + "1" * 40
         ipfs_hash = "a" * 64
         expected_url = f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash}"
+        mock_fetch_result_file.return_value = {"result": "the answer"}
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -112,13 +117,20 @@ class TestOnchainDeliveryWatcherWatch:
 
         assert len(result) == 1
         assert request_id in result
-        assert result[request_id] == expected_url
+        assert result[request_id].url == expected_url
+        assert result[request_id].data == {"result": "the answer"}
+        mock_fetch_result_file.assert_called_once_with(expected_url)
 
     @pytest.mark.asyncio
+    @patch("mech_client.domain.delivery.onchain_watcher.fetch_result_file")
     async def test_watch_multiple_requests_all_delivered(
-        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self,
+        mock_fetch_result_file: MagicMock,
+        mock_web3_contract: MagicMock,
+        mock_ledger_api: MagicMock,
     ) -> None:
         """Test watching multiple requests from different mechs."""
+        mock_fetch_result_file.return_value = {"result": "answer"}
         request_id_1 = "1111111111111111"
         request_id_2 = "2222222222222222"
         delivery_mech_1 = "0x" + "1" * 40
@@ -147,17 +159,22 @@ class TestOnchainDeliveryWatcherWatch:
         assert len(result) == 2
         assert request_id_1 in result
         assert request_id_2 in result
-        assert result[request_id_1] == url_1
-        assert result[request_id_2] == url_2
+        assert result[request_id_1].url == url_1
+        assert result[request_id_2].url == url_2
 
     @pytest.mark.asyncio
+    @patch("mech_client.domain.delivery.onchain_watcher.fetch_result_file")
     async def test_watch_zero_address_not_delivered(
-        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self,
+        mock_fetch_result_file: MagicMock,
+        mock_web3_contract: MagicMock,
+        mock_ledger_api: MagicMock,
     ) -> None:
         """Test that zero address means request not yet delivered, then delivers."""
         request_id = "1234567890abcdef"
         delivery_mech = "0x" + "1" * 40
         expected_url = "https://gateway.autonolas.tech/ipfs/f01701220" + "a" * 64
+        mock_fetch_result_file.return_value = {"result": "answer"}
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -184,7 +201,7 @@ class TestOnchainDeliveryWatcherWatch:
 
         assert len(result) == 1
         assert request_id in result
-        assert result[request_id] == expected_url
+        assert result[request_id].url == expected_url
 
     @pytest.mark.asyncio
     async def test_watch_timeout_returns_partial_results(
@@ -314,7 +331,12 @@ class TestOnchainDeliveryWatcherDataUrls:
 
         assert len(result) == 1
         assert request_id_padded in result
-        assert ipfs_hash in result[request_id_padded]
+        # The delivery hash addresses a directory; the result file inside it is
+        # named after the request id in decimal, so the URL must point at it.
+        assert result[request_id_padded] == (
+            f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash}"
+            f"/{int(request_id_padded, 16)}"
+        )
         mock_ledger_api.api.eth.get_logs.assert_called()
 
     @pytest.mark.asyncio
@@ -775,7 +797,7 @@ class TestOffchainDeliveryWatcherContinueBranch:
 
         # Both results received; req1 hit continue on second poll iteration
         assert len(result) == 2
-        assert result[req1] == {"result": "data1"}
-        assert result[req2] == {"result": "data2"}
+        assert result[req1].data == {"result": "data1"}
+        assert result[req2].data == {"result": "data2"}
         # req2 was fetched twice (once returning None, once returning data)
         assert req2_call_count[0] == 2

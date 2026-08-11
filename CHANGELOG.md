@@ -47,6 +47,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔧 Changed
 
+- **Delivery results are now the delivered content, in one shape** (breaking, [#250](https://github.com/valory-xyz/mech-client/issues/250))
+  - `delivery_results[request_id]` is the parsed result file for both the on-chain and
+    off-chain flows. Previously the on-chain flow returned a URL string and the off-chain
+    flow returned the mech's raw envelope, so a caller could not write one handler.
+  - The on-chain URL addressed the delivery *directory*, which serves an HTML listing;
+    the result file inside is named after the request ID in decimal. Both watchers now
+    build that full path and read the file themselves.
+  - New `delivery_urls[request_id]` key carries the result-file URL, `None` for off-chain
+    mechs that answer inline. `delivery_results[request_id]` is `None` if the gateway
+    could not be read; the URL is still there to retry with.
+  - `mechx request` prints the mech's answer (decoding the JSON-encoded `result` field
+    when the payload has one, otherwise the payload itself) followed by the result-file
+    URL.
 - **NVM Subscription Purchase**: Now uses layered architecture with strategy patterns
   - Supports both agent mode (Safe multisig) and client mode (EOA)
   - Chain-specific payment handling (native xDAI for Gnosis, USDC for Base)

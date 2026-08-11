@@ -26,7 +26,11 @@ from typing import Any, Dict, FrozenSet, List, Optional, Tuple, cast
 import requests
 from aea_ledger_ethereum import EthereumCrypto
 from eth_account import Account
-from mech_client.domain.delivery import OffchainDeliveryWatcher, OnchainDeliveryWatcher
+from mech_client.domain.delivery import (
+    DeliveryResult,
+    OffchainDeliveryWatcher,
+    OnchainDeliveryWatcher,
+)
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
@@ -92,6 +96,27 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _delivery_payload(results: Dict[str, DeliveryResult]) -> Dict[str, Any]:
+    """Split resolved deliveries into the keys ``send_request`` returns.
+
+    ``delivery_results`` holds the parsed result content and ``delivery_urls``
+    the gateway location it was read from, keyed by request ID and identical
+    in shape for on-chain and offchain deliveries alike, so a caller that does
+    not know which path ran can still write one handler.
+
+    :param results: Resolved deliveries, keyed by request ID.
+    :return: Mapping with the ``delivery_results`` and ``delivery_urls`` keys.
+    """
+    return {
+        "delivery_results": {
+            request_id: result.data for request_id, result in results.items()
+        },
+        "delivery_urls": {
+            request_id: result.url for request_id, result in results.items()
+        },
+    }
 
 
 @dataclass(frozen=True)
@@ -183,7 +208,12 @@ class MarketplaceService(
             with the shortfall and retry once (only applies to the offchain path)
         :param extra_attributes: Extra attributes for metadata
         :param timeout: Timeout for delivery watching
-        :return: Dictionary with request results
+        :return: Dictionary with ``tx_hash``, ``request_ids``, ``receipt``
+            (all ``None`` on the offchain path), ``delivery_results`` mapping
+            each request ID to the parsed content the mech delivered, and
+            ``delivery_urls`` mapping it to the gateway URL that content was
+            read from. The two delivery keys have the same shape regardless of
+            whether delivery was on-chain or offchain.
         """
         # Validate inputs
         if len(prompts) != len(tools):
@@ -340,7 +370,7 @@ class MarketplaceService(
         return {
             "tx_hash": tx_hash,
             "request_ids": request_ids,
-            "delivery_results": results,
+            **_delivery_payload(results),
             "receipt": receipt,
         }
 
@@ -468,7 +498,7 @@ class MarketplaceService(
         return {
             "tx_hash": None,  # No on-chain transaction for offchain requests
             "request_ids": request_ids_hex,
-            "delivery_results": results,
+            **_delivery_payload(results),
             "receipt": None,  # No receipt for offchain requests
         }
 

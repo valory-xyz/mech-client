@@ -352,7 +352,9 @@ no ECDSA over the SafeTx hash is needed.
 #### Delivery Watchers (`domain/delivery/`)
 Handle response delivery mechanisms:
 - `onchain_watcher.py`: On-chain event watching
+- `offchain_watcher.py`: Offchain endpoint polling
 - `base.py`: Delivery watcher interface
+- `models.py`: `DeliveryResult`, the shape both watchers return
 
 **Key Abstractions**:
 ```python
@@ -361,6 +363,11 @@ class DeliveryWatcher(ABC):
     async def watch(self, request_ids: List[str]) -> Dict[str, Any]:
         """Watch for delivery. Returns results by request_id."""
 ```
+
+Both watchers resolve the delivery to its content before returning, so the
+on-chain and offchain paths hand callers the same `DeliveryResult` (parsed
+`data` plus the gateway `url` it came from) rather than a URL on one path and
+an endpoint envelope on the other.
 
 #### Tool Managers (`domain/tools/`)
 Handle tool metadata and discovery:
@@ -639,7 +646,10 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 |-----------|-------|---------|
 | `DeliveryWatcher` | Domain | Abstract delivery interface |
 | `OnchainDeliveryWatcher` | Domain | On-chain event watching |
+| `OffchainDeliveryWatcher` | Domain | Offchain endpoint polling |
+| `DeliveryResult` | Domain | Resolved delivery (content + URL) |
 | `wait_for_receipt` | Infrastructure | Transaction receipt polling |
+| `result_file` | Infrastructure | Reads delivered results from the IPFS gateway |
 
 ### Tool Components
 

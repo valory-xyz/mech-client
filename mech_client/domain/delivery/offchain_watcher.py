@@ -27,6 +27,11 @@ from typing import Any, Dict, List
 import requests
 from mech_client.domain.delivery.base import DeliveryWatcher
 from mech_client.domain.delivery.constants import WAIT_SLEEP
+from mech_client.domain.delivery.models import DeliveryResult
+from mech_client.infrastructure.ipfs.result_file import (
+    build_result_file_url,
+    fetch_result_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,17 +59,18 @@ class OffchainDeliveryWatcher(
         self.mech_offchain_url = mech_offchain_url.rstrip("/")
         self.deliver_url = f"{self.mech_offchain_url}/{OFFCHAIN_DELIVER_ENDPOINT}"
 
-    async def watch(self, request_ids: List[str]) -> Dict[str, Any]:
+    async def watch(self, request_ids: List[str]) -> Dict[str, DeliveryResult]:
         """
         Watch for delivery of offchain mech responses.
 
         Polls the offchain endpoint for each request ID until all responses
-        are received or timeout occurs.
+        are received or timeout occurs, then reads the result file each
+        response points at.
 
         :param request_ids: List of request IDs to watch for
-        :return: Dictionary mapping request ID to delivery data
+        :return: Dictionary mapping request ID to its delivery result
         """
-        results: Dict[str, Any] = {}
+        results: Dict[str, DeliveryResult] = {}
         prev_count = -1
         start_time = time.time()
 
@@ -88,7 +94,9 @@ class OffchainDeliveryWatcher(
                 try:
                     response = await self._fetch_offchain_data(request_id_int)
                     if response:
-                        results[request_id] = response
+                        results[request_id] = self._resolve_delivery(
+                            request_id, request_id_int, response
+                        )
                         logger.info(
                             f"Received offchain response for request {request_id_int}"
                         )
@@ -111,6 +119,36 @@ class OffchainDeliveryWatcher(
                 await asyncio.sleep(WAIT_SLEEP)
 
         return results
+
+    @staticmethod
+    def _resolve_delivery(
+        request_id: str, request_id_decimal: str, response: Any
+    ) -> DeliveryResult:
+        """
+        Resolve an offchain response to the result it points at.
+
+        The endpoint answers with an envelope carrying ``task_result``, the
+        IPFS hash of the directory the mech filed the result under. Reading
+        that file here gives callers the same content the on-chain watcher
+        returns. Mechs that answer inline (no ``task_result``) are passed
+        through unchanged.
+
+        :param request_id: Request ID in hex, as used to key the results
+        :param request_id_decimal: Same request ID in decimal, the name of the
+            result file inside the delivery directory
+        :param response: Raw response from the offchain endpoint
+        :return: The resolved delivery result
+        """
+        task_result = (
+            response.get("task_result") if isinstance(response, dict) else None
+        )
+        if not isinstance(task_result, str) or not task_result:
+            return DeliveryResult(request_id=request_id, data=response)
+
+        url = build_result_file_url(task_result, request_id_decimal)
+        return DeliveryResult(
+            request_id=request_id, data=fetch_result_file(url), url=url
+        )
 
     async def _fetch_offchain_data(self, request_id: str) -> Any:
         """

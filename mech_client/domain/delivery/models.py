@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
 #
-#   Copyright 2025 Valory AG
+#   Copyright 2026 Valory AG
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -17,18 +17,25 @@
 #
 # ------------------------------------------------------------------------------
 
-"""IPFS infrastructure for uploading and downloading files via IPFS gateway."""
+"""Models shared by the delivery watchers."""
 
-from mech_client.infrastructure.ipfs.client import IPFSClient
-from mech_client.infrastructure.ipfs.metadata import push_metadata_to_ipfs
-from mech_client.infrastructure.ipfs.result_file import (
-    build_result_file_url,
-    fetch_result_file,
-)
+from dataclasses import dataclass
+from typing import Any, Optional
 
-__all__ = [
-    "IPFSClient",
-    "build_result_file_url",
-    "fetch_result_file",
-    "push_metadata_to_ipfs",
-]
+
+@dataclass(frozen=True)
+class DeliveryResult:
+    """A mech delivery, resolved to its content.
+
+    Both watchers return this, so callers get the same shape whether the
+    response was delivered on-chain or off-chain.
+
+    ``data`` holds the parsed content of the delivered result file, or
+    ``None`` when the gateway could not be read (``url`` still points at it).
+    ``url`` is the gateway URL ``data`` was read from; it is ``None`` for
+    offchain mechs that answer inline instead of pinning a result file.
+    """
+
+    request_id: str
+    data: Any = None
+    url: Optional[str] = None

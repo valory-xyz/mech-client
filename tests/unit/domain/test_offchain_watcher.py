@@ -84,7 +84,7 @@ class TestOffchainDeliveryWatcherWatch:
         # Verify
         assert len(results) == 1
         assert "0x1a" in results
-        assert results["0x1a"]["data"] == "response_data"
+        assert results["0x1a"].data["data"] == "response_data"
 
         # Verify request was made with integer string
         mock_requests.get.assert_called_once()
@@ -124,9 +124,9 @@ class TestOffchainDeliveryWatcherWatch:
         assert "0xa" in results
         assert "0x14" in results
         assert "0x1e" in results
-        assert results["0xa"]["data"] == "response_for_10"
-        assert results["0x14"]["data"] == "response_for_20"
-        assert results["0x1e"]["data"] == "response_for_30"
+        assert results["0xa"].data["data"] == "response_for_10"
+        assert results["0x14"].data["data"] == "response_for_20"
+        assert results["0x1e"].data["data"] == "response_for_30"
 
     @pytest.mark.anyio
     @patch("mech_client.domain.delivery.offchain_watcher.asyncio.sleep")
@@ -166,7 +166,7 @@ class TestOffchainDeliveryWatcherWatch:
 
         # Verify delivery received after delay
         assert len(results) == 1
-        assert results["0x1"]["data"] == "delayed_response"
+        assert results["0x1"].data["data"] == "delayed_response"
 
         # Verify sleep was called (polling happened)
         assert mock_sleep.call_count >= 1
@@ -277,7 +277,7 @@ class TestOffchainDeliveryWatcherWatch:
 
         # Verify delivery received after error
         assert len(results) == 1
-        assert results["0x1"]["data"] == "success_after_retry"
+        assert results["0x1"].data["data"] == "success_after_retry"
 
     @pytest.mark.anyio
     @patch("mech_client.domain.delivery.offchain_watcher.requests")
@@ -315,10 +315,90 @@ class TestOffchainDeliveryWatcherWatch:
 
         # Verify non-empty response received
         assert len(results) == 1
-        assert results["0x1"]["data"] == "real_response"
+        assert results["0x1"].data["data"] == "real_response"
 
         # Verify multiple calls were made
         assert mock_requests.get.call_count >= 2
+
+
+class TestOffchainDeliveryWatcherResolvesResultFile:
+    """Tests for resolving the `task_result` hash to the delivered file."""
+
+    @pytest.mark.anyio
+    @patch("mech_client.domain.delivery.offchain_watcher.fetch_result_file")
+    @patch("mech_client.domain.delivery.offchain_watcher.requests")
+    async def test_task_result_resolved_to_result_file(
+        self, mock_requests: MagicMock, mock_fetch_result_file: MagicMock
+    ) -> None:
+        """Test the envelope's task_result hash is fetched as the result file."""
+        ipfs_hash = "a" * 64
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "request_id": "26",
+            "task_result": ipfs_hash,
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_requests.get.return_value = mock_response
+        mock_fetch_result_file.return_value = {"result": '{"answer": 42}'}
+
+        watcher = OffchainDeliveryWatcher(
+            mech_offchain_url="https://mech.example.com", timeout=60.0
+        )
+
+        results = await watcher.watch(["0x1a"])
+
+        # The result file lives under the *decimal* request id, not the hex one
+        expected_url = f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash}/26"
+        mock_fetch_result_file.assert_called_once_with(expected_url)
+        assert results["0x1a"].url == expected_url
+        assert results["0x1a"].data == {"result": '{"answer": 42}'}
+
+    @pytest.mark.anyio
+    @patch("mech_client.domain.delivery.offchain_watcher.fetch_result_file")
+    @patch("mech_client.domain.delivery.offchain_watcher.requests")
+    async def test_unreadable_result_file_keeps_url(
+        self, mock_requests: MagicMock, mock_fetch_result_file: MagicMock
+    ) -> None:
+        """Test an unreadable result file leaves data None but keeps the URL."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "request_id": "26",
+            "task_result": "b" * 64,
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_requests.get.return_value = mock_response
+        mock_fetch_result_file.return_value = None
+
+        watcher = OffchainDeliveryWatcher(
+            mech_offchain_url="https://mech.example.com", timeout=60.0
+        )
+
+        results = await watcher.watch(["0x1a"])
+
+        assert results["0x1a"].data is None
+        assert results["0x1a"].url is not None
+
+    @pytest.mark.anyio
+    @patch("mech_client.domain.delivery.offchain_watcher.fetch_result_file")
+    @patch("mech_client.domain.delivery.offchain_watcher.requests")
+    async def test_inline_response_passed_through(
+        self, mock_requests: MagicMock, mock_fetch_result_file: MagicMock
+    ) -> None:
+        """Test a response without task_result is returned as-is."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"result": "inline answer"}
+        mock_response.raise_for_status.return_value = None
+        mock_requests.get.return_value = mock_response
+
+        watcher = OffchainDeliveryWatcher(
+            mech_offchain_url="https://mech.example.com", timeout=60.0
+        )
+
+        results = await watcher.watch(["0x1a"])
+
+        mock_fetch_result_file.assert_not_called()
+        assert results["0x1a"].data == {"result": "inline answer"}
+        assert results["0x1a"].url is None
 
 
 class TestOffchainDeliveryWatcherFetchData:

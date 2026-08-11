@@ -52,7 +52,8 @@ class TestRequestCommand:
             return_value={
                 "tx_hash": "0xabc123...",
                 "request_ids": [1],
-                "delivery_results": {1: "ipfs://Qm..."},
+                "delivery_results": {1: {"result": '"4"'}},
+                "delivery_urls": {1: f"{IPFS_URL_TEMPLATE.format('a' * 64)}/1"},
             }
         )
         mock_marketplace_service.return_value = mock_service
@@ -82,7 +83,9 @@ class TestRequestCommand:
             assert "0xabc123" in result.output
             assert "Request IDs: [1]" in result.output
             assert "Delivery results" in result.output
-            assert "ipfs://Qm" in result.output
+            # A JSON-encoded string answer prints as itself, not as `"4"`
+            assert "Request 1: 4" in result.output
+            assert f"{IPFS_URL_TEMPLATE.format('a' * 64)}/1" in result.output
 
             # Verify service was called correctly
             mock_marketplace_service.assert_called_once()
@@ -106,10 +109,18 @@ class TestRequestCommand:
             return_value={
                 "tx_hash": "0xbatch123...",
                 "request_ids": [1, 2, 3],
+                # Three tools, three payload shapes: a JSON-encoded string
+                # answer, an answer already decoded to an object, and a bare
+                # list with no `result` field at all.
                 "delivery_results": {
-                    1: "ipfs://Qm1...",
-                    2: "ipfs://Qm2...",
-                    3: "ipfs://Qm3...",
+                    1: {"result": '"answer one"'},
+                    2: {"result": {"p_yes": 0.42}},
+                    3: [1, 2, 3],
+                },
+                "delivery_urls": {
+                    1: f"{IPFS_URL_TEMPLATE.format('a' * 64)}/1",
+                    2: f"{IPFS_URL_TEMPLATE.format('b' * 64)}/2",
+                    3: f"{IPFS_URL_TEMPLATE.format('c' * 64)}/3",
                 },
             }
         )
@@ -145,9 +156,13 @@ class TestRequestCommand:
             # Verify success
             assert result.exit_code == 0
             assert "Request IDs: [1, 2, 3]" in result.output
-            assert "ipfs://Qm1" in result.output
-            assert "ipfs://Qm2" in result.output
-            assert "ipfs://Qm3" in result.output
+            assert "Request 1: answer one" in result.output
+            # An already-decoded answer is pretty-printed rather than stringified
+            assert '"p_yes": 0.42' in result.output
+            # ...as is a payload that carries no `result` field
+            assert "[\n  1,\n  2,\n  3\n]" in result.output
+            for i, char in enumerate("abc", start=1):
+                assert f"{IPFS_URL_TEMPLATE.format(char * 64)}/{i}" in result.output
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
@@ -265,9 +280,13 @@ class TestRequestCommand:
                 "request_ids": [1],
                 "delivery_results": {
                     "0xabc": {
-                        "request_id": "12345",
-                        "task_result": "a" * 64,
+                        "requestId": 12345,
+                        "result": '{"p_yes": 0.38}',
+                        "tool": "factual_research",
                     }
+                },
+                "delivery_urls": {
+                    "0xabc": f"{IPFS_URL_TEMPLATE.format('a' * 64)}/12345"
                 },
             }
         )
@@ -299,17 +318,20 @@ class TestRequestCommand:
             call_kwargs = mock_service.send_request.call_args[1]
             assert call_kwargs["use_offchain"] is True
             assert call_kwargs["use_prepaid"] is True  # Auto-enabled with offchain
-            assert IPFS_URL_TEMPLATE.format("a" * 64) in result.output
-            assert '"task_result": "' not in result.output
+            # The answer itself is printed, decoded from the JSON-encoded string
+            assert '"p_yes": 0.38' in result.output
+            assert '\\"p_yes\\"' not in result.output
+            # ...alongside the URL of the file it came from
+            assert f"{IPFS_URL_TEMPLATE.format('a' * 64)}/12345" in result.output
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
-    def test_request_with_use_offchain_pretty_prints_metadata(
+    def test_request_pretty_prints_payload_without_result_key(
         self,
         mock_setup_wallet: MagicMock,
         mock_marketplace_service: MagicMock,
     ) -> None:
-        """Test offchain result pretty-prints nested JSON values."""
+        """Test a delivered payload with no `result` key is pretty-printed whole."""
         mock_wallet_ctx = MagicMock()
         mock_setup_wallet.return_value = mock_wallet_ctx
 
@@ -318,12 +340,8 @@ class TestRequestCommand:
             return_value={
                 "tx_hash": "0xoffchain123...",
                 "request_ids": [1],
-                "delivery_results": {
-                    "0xabc": {
-                        "request_id": "12345",
-                        "task_result": "a" * 64,
-                    }
-                },
+                "delivery_results": {"0xabc": {"tool": "factual_research"}},
+                "delivery_urls": {"0xabc": IPFS_URL_TEMPLATE.format("a" * 64)},
             }
         )
         mock_marketplace_service.return_value = mock_service
@@ -350,17 +368,16 @@ class TestRequestCommand:
             )
 
             assert result.exit_code == 0
-            assert IPFS_URL_TEMPLATE.format("a" * 64) in result.output
-            assert '"task_result": "' not in result.output
+            assert '"tool": "factual_research"' in result.output
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
-    def test_request_with_use_offchain_requestid_key_supported(
+    def test_request_unreadable_result_still_prints_url(
         self,
         mock_setup_wallet: MagicMock,
         mock_marketplace_service: MagicMock,
     ) -> None:
-        """Test offchain result fetch supports requestId key."""
+        """Test an unreadable result file reports so and still prints its URL."""
         mock_wallet_ctx = MagicMock()
         mock_setup_wallet.return_value = mock_wallet_ctx
 
@@ -369,11 +386,9 @@ class TestRequestCommand:
             return_value={
                 "tx_hash": None,
                 "request_ids": ["0xabc"],
-                "delivery_results": {
-                    "0xabc": {
-                        "requestId": "67890",
-                        "task_result": "b" * 64,
-                    }
+                "delivery_results": {"0xabc": None},
+                "delivery_urls": {
+                    "0xabc": f"{IPFS_URL_TEMPLATE.format('b' * 64)}/67890"
                 },
             }
         )
@@ -401,8 +416,57 @@ class TestRequestCommand:
             )
 
             assert result.exit_code == 0
-            assert IPFS_URL_TEMPLATE.format("b" * 64) in result.output
-            assert '"task_result": "' not in result.output
+            assert "unavailable" in result.output
+            assert f"{IPFS_URL_TEMPLATE.format('b' * 64)}/67890" in result.output
+
+    @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
+    @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    def test_request_inline_text_answer_has_no_result_file_line(
+        self,
+        mock_setup_wallet: MagicMock,
+        mock_marketplace_service: MagicMock,
+    ) -> None:
+        """Test a bare text answer prints as-is, with no result-file URL line."""
+        mock_wallet_ctx = MagicMock()
+        mock_setup_wallet.return_value = mock_wallet_ctx
+
+        mock_service = MagicMock()
+        mock_service.send_request = AsyncMock(
+            return_value={
+                "tx_hash": None,
+                "request_ids": ["0xabc"],
+                # A result file that is not JSON comes back as raw text, and an
+                # offchain mech answering inline pins no file to link to.
+                "delivery_results": {"0xabc": "plain text answer"},
+                "delivery_urls": {"0xabc": None},
+            }
+        )
+        mock_marketplace_service.return_value = mock_service
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("key.txt", "w") as f:
+                f.write("dummy_key")
+
+            result = runner.invoke(
+                request,
+                [
+                    "--prompts",
+                    "Test prompt",
+                    "--tools",
+                    "tool1",
+                    "--use-offchain",
+                    "true",
+                    "--chain-config",
+                    "gnosis",
+                    "--key",
+                    "key.txt",
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "Request 0xabc: plain text answer" in result.output
+            assert "Result file:" not in result.output
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
@@ -411,7 +475,7 @@ class TestRequestCommand:
         mock_setup_wallet: MagicMock,
         mock_marketplace_service: MagicMock,
     ) -> None:
-        """Test on-chain dict delivery output does not trigger offchain fetch."""
+        """Test on-chain delivery prints the answer, not the wrapping payload."""
         mock_wallet_ctx = MagicMock()
         mock_setup_wallet.return_value = mock_wallet_ctx
 
@@ -426,6 +490,7 @@ class TestRequestCommand:
                         "result": "on-chain answer",
                     }
                 },
+                "delivery_urls": {1: IPFS_URL_TEMPLATE.format("c" * 64) + "/1"},
             }
         )
         mock_marketplace_service.return_value = mock_service
@@ -450,8 +515,9 @@ class TestRequestCommand:
             )
 
             assert result.exit_code == 0
-            assert '"status": "done"' in result.output
-            assert '"result": "on-chain answer"' in result.output
+            assert "on-chain answer" in result.output
+            assert '"status": "done"' not in result.output
+            assert IPFS_URL_TEMPLATE.format("c" * 64) + "/1" in result.output
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
