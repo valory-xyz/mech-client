@@ -27,6 +27,7 @@ import requests
 from eth_account import Account
 from eth_account.messages import encode_defunct
 
+from mech_client.domain.delivery import DeliveryResult
 from mech_client.domain.signing import LocalSigner
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
@@ -878,7 +879,9 @@ class TestSendRequestOnchainFlow:
         mock_watch_request_ids.return_value = ["req-1"]
 
         mock_watcher = AsyncMock()
-        mock_watcher.watch.return_value = {"req-1": "result"}
+        mock_watcher.watch.return_value = {
+            "req-1": DeliveryResult("req-1", data={"result": "answer"}, url="ipfs://1")
+        }
         mock_onchain_watcher_cls.return_value = mock_watcher
 
         # Mock payment strategy (NATIVE — not token, so no approval needed)
@@ -907,6 +910,11 @@ class TestSendRequestOnchainFlow:
 
         assert result["tx_hash"] == "0xtxhash"
         assert result["request_ids"] == ["req-1"]
+        # Content and location are separate keys, both keyed by request ID
+        # One object per request: content and location cannot drift apart
+        assert result["deliveries"] == {
+            "req-1": DeliveryResult("req-1", data={"result": "answer"}, url="ipfs://1")
+        }
 
     @pytest.mark.asyncio
     @patch("mech_client.services.marketplace_service.OnchainDeliveryWatcher")
@@ -964,7 +972,9 @@ class TestSendRequestOnchainFlow:
         mock_watch_request_ids.return_value = ["req-1"]
 
         mock_watcher = AsyncMock()
-        mock_watcher.watch.return_value = {"req-1": "result"}
+        mock_watcher.watch.return_value = {
+            "req-1": DeliveryResult("req-1", data={"result": "answer"}, url="ipfs://1")
+        }
         mock_onchain_watcher_cls.return_value = mock_watcher
 
         # Use TOKEN payment type (is_token() returns True)
@@ -1279,7 +1289,9 @@ class TestSendRequestOnchainFlow:
         mock_watch_request_ids.return_value = ["req-1"]
 
         mock_watcher = AsyncMock()
-        mock_watcher.watch.return_value = {"req-1": "result"}
+        mock_watcher.watch.return_value = {
+            "req-1": DeliveryResult("req-1", data={"result": "answer"}, url="ipfs://1")
+        }
         mock_onchain_watcher_cls.return_value = mock_watcher
 
         mock_contract = MagicMock()
@@ -1363,7 +1375,10 @@ class TestSendRequestOnchainFlow:
         mock_watch_request_ids.return_value = ["req-1", "req-2"]
 
         mock_watcher = AsyncMock()
-        mock_watcher.watch.return_value = {"req-1": "r1", "req-2": "r2"}
+        mock_watcher.watch.return_value = {
+            "req-1": DeliveryResult("req-1", data={"result": "r1"}, url="ipfs://1"),
+            "req-2": DeliveryResult("req-2", data={"result": "r2"}, url="ipfs://2"),
+        }
         mock_onchain_watcher_cls.return_value = mock_watcher
 
         max_delivery_rate = 10**17
@@ -1465,7 +1480,11 @@ class TestSendOffchainRequest:
 
         # Mock watcher
         mock_watcher = AsyncMock()
-        mock_watcher.watch.return_value = {"0" * 64: "offchain-result"}
+        mock_watcher.watch.return_value = {
+            "0" * 64: DeliveryResult(
+                "0" * 64, data={"result": "offchain-result"}, url="ipfs://off"
+            )
+        }
         mock_offchain_watcher_cls.return_value = mock_watcher
 
         # Patch fetch_ipfs_hash and requests.post
@@ -1497,6 +1516,13 @@ class TestSendOffchainRequest:
 
         assert result["tx_hash"] is None
         assert result["receipt"] is None
+        # Same shape as the on-chain path: content and location, keyed by request ID
+        assert result["deliveries"] == {
+            "0"
+            * 64: DeliveryResult(
+                "0" * 64, data={"result": "offchain-result"}, url="ipfs://off"
+            )
+        }
 
     @pytest.mark.asyncio
     @patch("mech_client.services.marketplace_service.OffchainDeliveryWatcher")
@@ -1544,7 +1570,11 @@ class TestSendOffchainRequest:
         )
 
         mock_watcher = AsyncMock()
-        mock_watcher.watch.return_value = {request_id_bytes.hex(): "ok"}
+        mock_watcher.watch.return_value = {
+            request_id_bytes.hex(): DeliveryResult(
+                request_id_bytes.hex(), data={"result": "ok"}, url="ipfs://ok"
+            )
+        }
         mock_offchain_watcher_cls.return_value = mock_watcher
 
         with patch(
@@ -1641,7 +1671,11 @@ class TestSendOffchainRequest:
         )
 
         mock_watcher = AsyncMock()
-        mock_watcher.watch.return_value = {request_id_bytes.hex(): "ok"}
+        mock_watcher.watch.return_value = {
+            request_id_bytes.hex(): DeliveryResult(
+                request_id_bytes.hex(), data={"result": "ok"}, url="ipfs://ok"
+            )
+        }
         mock_offchain_watcher_cls.return_value = mock_watcher
 
         with patch(
@@ -2154,7 +2188,7 @@ class TestSendRequestOffchainBranch:
         offchain_result = {
             "tx_hash": None,
             "request_ids": ["hex-id"],
-            "delivery_results": {},
+            "deliveries": {},
             "receipt": None,
         }
 

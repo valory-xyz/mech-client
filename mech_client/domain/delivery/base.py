@@ -20,7 +20,9 @@
 """Base delivery watcher interface."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Dict, List
+
+from mech_client.domain.delivery.models import DeliveryResult
 
 
 class DeliveryWatcher(ABC):  # pylint: disable=too-few-public-methods
@@ -39,11 +41,14 @@ class DeliveryWatcher(ABC):  # pylint: disable=too-few-public-methods
         self.timeout = timeout
 
     @abstractmethod
-    async def watch(self, request_ids: List[str]) -> Dict[str, Any]:
+    async def watch(self, request_ids: List[str]) -> Dict[str, DeliveryResult]:
         """
         Watch for delivery of mech responses.
 
+        Implementations resolve the delivery to its content before returning,
+        so every mechanism hands callers the same shape.
+
         :param request_ids: List of request IDs to watch for
-        :return: Dictionary mapping request ID to delivery data
+        :return: Dictionary mapping request ID to its delivery result
         """
         ...

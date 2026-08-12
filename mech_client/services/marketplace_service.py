@@ -21,12 +21,26 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, FrozenSet, List, Optional, Tuple, cast
+from typing import (
+    Any,
+    Dict,
+    FrozenSet,
+    List,
+    Optional,
+    Tuple,
+    TypedDict,
+    Union,
+    cast,
+)
 
 import requests
 from aea_ledger_ethereum import EthereumCrypto
 from eth_account import Account
-from mech_client.domain.delivery import OffchainDeliveryWatcher, OnchainDeliveryWatcher
+from mech_client.domain.delivery import (
+    DeliveryResult,
+    OffchainDeliveryWatcher,
+    OnchainDeliveryWatcher,
+)
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
@@ -42,6 +56,7 @@ from mech_client.services.base_service import BaseTransactionService
 from mech_client.utils.validators import ensure_checksummed_address
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
+from web3.types import TxReceipt
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +107,43 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+class OnchainRequestResult(TypedDict):
+    """What :meth:`MarketplaceService.send_request` returns on the on-chain path.
+
+    The shape is a documented public contract, so spell it out: a key typo at
+    a call site is then a mypy error rather than a runtime ``KeyError``.
+
+    ``receipt`` is web3's ``TxReceipt``, an ``AttributeDict`` — a dict subclass
+    that also allows attribute access, which a plain ``Dict[str, Any]`` would
+    have hidden from consumers.
+    """
+
+    tx_hash: str
+    request_ids: List[str]
+    receipt: TxReceipt
+    deliveries: Dict[str, DeliveryResult]
+
+
+class OffchainRequestResult(TypedDict):
+    """What :meth:`MarketplaceService.send_request` returns on the offchain path.
+
+    There is no transaction to report, so ``tx_hash`` and ``receipt`` are
+    always ``None`` — typed as such rather than ``Optional`` so that the two
+    cannot be described independently. ``request_ids`` is populated here too.
+    """
+
+    tx_hash: None
+    request_ids: List[str]
+    receipt: None
+    deliveries: Dict[str, DeliveryResult]
+
+
+#: The two are a discriminated union rather than one shape with optional
+#: fields: `tx_hash` and `receipt` are set together or absent together, and
+#: `Optional` on both would admit the two states where only one is filled in.
+RequestResult = Union[OnchainRequestResult, OffchainRequestResult]
 
 
 @dataclass(frozen=True)
@@ -170,7 +222,7 @@ class MarketplaceService(
         auto_deposit: bool = False,
         extra_attributes: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+    ) -> RequestResult:
         """
         Send marketplace request(s) to mech(s).
 
@@ -183,7 +235,13 @@ class MarketplaceService(
             with the shortfall and retry once (only applies to the offchain path)
         :param extra_attributes: Extra attributes for metadata
         :param timeout: Timeout for delivery watching
-        :return: Dictionary with request results
+        :return: A :class:`RequestResult` with ``tx_hash`` and ``receipt``
+            (both ``None`` on the offchain path, which has no transaction),
+            ``request_ids``, and ``deliveries`` mapping each request ID to a
+            :class:`DeliveryResult` carrying the parsed content the mech
+            delivered plus the gateway URL it was read from. ``deliveries``
+            has the same shape regardless of whether delivery was on-chain
+            or offchain.
         """
         # Validate inputs
         if len(prompts) != len(tools):
@@ -340,7 +398,7 @@ class MarketplaceService(
         return {
             "tx_hash": tx_hash,
             "request_ids": request_ids,
-            "delivery_results": results,
+            "deliveries": results,
             "receipt": receipt,
         }
 
@@ -357,7 +415,7 @@ class MarketplaceService(
         extra_attributes: Optional[Dict[str, Any]],
         timeout: float,
         auto_deposit: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> OffchainRequestResult:
         """
         Send offchain request to mech HTTP endpoint.
 
@@ -468,7 +526,7 @@ class MarketplaceService(
         return {
             "tx_hash": None,  # No on-chain transaction for offchain requests
             "request_ids": request_ids_hex,
-            "delivery_results": results,
+            "deliveries": results,
             "receipt": None,  # No receipt for offchain requests
         }
 

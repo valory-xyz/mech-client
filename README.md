@@ -433,6 +433,8 @@ You can also use the Mech Client as a library on your Python project.
 3. Edit `my_script.py` as follows:
 
     ```python
+    import json
+
     from mech_client.services import MarketplaceService
     from mech_client.domain.payment import PaymentType
     from mech_client.infrastructure.config import get_mech_config
@@ -469,8 +471,21 @@ You can also use the Mech Client as a library on your Python project.
     )
 
     print(f"Transaction hash: {result['tx_hash']}")
-    print(f"Request ID: {result['request_ids'][0]}")
-    print(f"Result: {result.get('result')}")
+
+    # `deliveries` maps each request ID to a DeliveryResult: `.data` is the
+    # parsed content the mech delivered, `.url` the IPFS URL it was read from.
+    # Same shape whether delivery was on-chain or off-chain.
+    for request_id, delivery in result["deliveries"].items():
+        print(f"Request {request_id}: {delivery.url}")
+        payload = delivery.data
+        if payload is None:
+            print("  result file could not be read")
+            continue
+        # Mechs typically put the answer in a `result` field, JSON-encoded as a
+        # string. That is a convention rather than a guarantee, so fall back to
+        # the payload itself for tools that do not follow it.
+        answer = payload.get("result") if isinstance(payload, dict) else None
+        print(f"  {json.loads(answer) if isinstance(answer, str) else payload}")
     ```
 
     **Note:** See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for architecture details and more examples.

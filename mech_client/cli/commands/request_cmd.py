@@ -27,9 +27,9 @@ import click
 from click import ClickException
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
-from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from mech_client.services.marketplace_service import MarketplaceService
 from mech_client.utils.errors.handlers import handle_cli_errors
+from mech_client.utils.types import JSONValue
 from mech_client.utils.validators import (
     validate_batch_sizes_match,
     validate_extra_attributes,
@@ -37,13 +37,40 @@ from mech_client.utils.validators import (
 )
 
 
-def _format_delivery_output(delivery_data: Any) -> str:
-    """Format delivery data for CLI output with parity across delivery modes."""
-    if isinstance(delivery_data, dict):
-        task_result = delivery_data.get("task_result")
-        if isinstance(task_result, str) and task_result:
-            return IPFS_URL_TEMPLATE.format(task_result)
-        return json.dumps(delivery_data, ensure_ascii=True, indent=2, sort_keys=True)
+def _dump(value: JSONValue) -> str:
+    """
+    Render a value parsed out of a delivered result file for CLI output.
+
+    :param value: A value decoded from JSON, so always JSON-serialisable.
+    :return: Indented JSON.
+    """
+    return json.dumps(value, ensure_ascii=True, indent=2, sort_keys=True)
+
+
+def _format_delivery_output(delivery_data: JSONValue) -> str:
+    """
+    Format delivery data for CLI output with parity across delivery modes.
+
+    :param delivery_data: Parsed content of the delivered result file.
+    :return: The mech's answer, ready to print.
+    """
+    if delivery_data is None:
+        return "unavailable — could not read the result file"
+
+    if isinstance(delivery_data, dict) and "result" in delivery_data:
+        result = delivery_data["result"]
+        # Mechs store `result` as a JSON-encoded string; decode it so the
+        # answer prints as itself rather than as an escaped blob.
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except ValueError:
+                return result
+        return result if isinstance(result, str) else _dump(result)
+
+    if isinstance(delivery_data, (dict, list)):
+        return _dump(delivery_data)
+
     return str(delivery_data)
 
 
@@ -226,9 +253,11 @@ def request(
     # Display results
     click.echo(f"\n✓ Transaction hash: {result['tx_hash']}")
     click.echo(f"✓ Request IDs: {result['request_ids']}")
-    if result.get("delivery_results"):
+    if result.get("deliveries"):
         click.echo("\n✓ Delivery results:")
-        for request_id, delivery_data in result["delivery_results"].items():
+        for request_id, delivery in result["deliveries"].items():
             click.echo(
-                f"  Request {request_id}: {_format_delivery_output(delivery_data)}"
+                f"  Request {request_id}: {_format_delivery_output(delivery.data)}"
             )
+            if delivery.url:
+                click.echo(f"    Result file: {delivery.url}")

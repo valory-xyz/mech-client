@@ -22,16 +22,41 @@
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import requests
 from mech_client.domain.delivery.base import DeliveryWatcher
 from mech_client.domain.delivery.constants import WAIT_SLEEP
+from mech_client.domain.delivery.models import DeliveryResult
+from mech_client.infrastructure.ipfs.result_file import (
+    build_result_file_url,
+    fetch_result_file,
+)
 
 logger = logging.getLogger(__name__)
 
 # Constants for offchain polling
 OFFCHAIN_DELIVER_ENDPOINT = "fetch_offchain_info"
+
+# `IPFS_URL_TEMPLATE` already carries the multibase and multicodec prefix, so a
+# delivery hash is the bare digest: 32 bytes, i.e. 64 hex characters.
+DELIVERY_HASH_BYTES = 32
+
+
+def _is_delivery_hash(value: str) -> bool:
+    """
+    Report whether a value is shaped like the hash of a delivery directory.
+
+    Checked by decoding rather than with ``int(value, 16)``, which would accept
+    a ``0x`` prefix the bare digest never carries.
+
+    :param value: Candidate ``task_result`` from the offchain endpoint
+    :return: True if it is a 32-byte digest in hex
+    """
+    try:
+        return len(bytes.fromhex(value)) == DELIVERY_HASH_BYTES
+    except ValueError:
+        return False
 
 
 class OffchainDeliveryWatcher(
@@ -54,17 +79,25 @@ class OffchainDeliveryWatcher(
         self.mech_offchain_url = mech_offchain_url.rstrip("/")
         self.deliver_url = f"{self.mech_offchain_url}/{OFFCHAIN_DELIVER_ENDPOINT}"
 
-    async def watch(self, request_ids: List[str]) -> Dict[str, Any]:
+    async def watch(self, request_ids: List[str]) -> Dict[str, DeliveryResult]:
         """
         Watch for delivery of offchain mech responses.
 
         Polls the offchain endpoint for each request ID until all responses
-        are received or timeout occurs.
+        are received or timeout occurs, then reads the result file each
+        response points at.
 
         :param request_ids: List of request IDs to watch for
-        :return: Dictionary mapping request ID to delivery data
+        :return: Dictionary mapping request ID to its delivery result
         """
-        results: Dict[str, Any] = {}
+        results: Dict[str, DeliveryResult] = {}
+        # Result-file URLs seen for requests whose file has not been read yet.
+        # A read that keeps failing is retried for as long as there is budget,
+        # so the URL is held here to report at timeout rather than written into
+        # `results`, which would mark the request done after a single attempt.
+        # Retrying matters most for the ordinary case — a pinned file that
+        # 404s until the gateway catches up — not just for unexpected errors.
+        pending_urls: Dict[str, str] = {}
         prev_count = -1
         start_time = time.time()
 
@@ -87,15 +120,44 @@ class OffchainDeliveryWatcher(
 
                 try:
                     response = await self._fetch_offchain_data(request_id_int)
-                    if response:
-                        results[request_id] = response
-                        logger.info(
-                            f"Received offchain response for request {request_id_int}"
+                    if not response:
+                        continue
+
+                    url = self._result_file_url(response, request_id_int)
+                    if url is None:
+                        # The mech answered inline; the envelope is the answer.
+                        results[request_id] = DeliveryResult(
+                            request_id=request_id, data=response
                         )
-                except Exception as e:  # pylint: disable=broad-except
-                    # Log error but continue polling
-                    logger.error(
-                        f"Error fetching offchain data for {request_id_int}: {e}"
+                    else:
+                        pending_urls[request_id] = url
+                        # Off the event loop: a gateway round-trip here would
+                        # otherwise stall every other request's poll.
+                        data = await asyncio.to_thread(
+                            fetch_result_file, url, request_id
+                        )
+                        if data is None:
+                            # Not readable yet. `fetch_result_file` returns
+                            # `None` for every HTTP failure, and a freshly
+                            # pinned file routinely 404s while it propagates,
+                            # so leave the request out of `results` to have the
+                            # next cycle try again. The backfill below reports
+                            # it with this URL if it never becomes readable.
+                            continue
+                        pending_urls.pop(request_id, None)
+                        results[request_id] = DeliveryResult(
+                            request_id=request_id, data=data, url=url
+                        )
+                    logger.info(
+                        f"Received offchain response for request {request_id_int}"
+                    )
+                except Exception:  # pylint: disable=broad-except
+                    # Log error but continue polling. Leaving the request out of
+                    # `results` is what keeps it eligible for the next cycle.
+                    # Retries are handled above, so anything here is unforeseen
+                    # and the traceback is the part worth having.
+                    logger.exception(
+                        f"Error fetching offchain data for {request_id_int}"
                     )
 
             # Sleep before next poll if not all results received
@@ -110,7 +172,50 @@ class OffchainDeliveryWatcher(
                     prev_count = current_count
                 await asyncio.sleep(WAIT_SLEEP)
 
+        # A request whose file never became readable still reports where to look,
+        # the same shape the on-chain path returns for an unreadable result. Say
+        # so per request: the timeout warning above only counts how many arrived,
+        # which does not separate "never delivered" from "delivered, unreadable".
+        # Popping on success above leaves this holding only unresolved requests.
+        for request_id, url in pending_urls.items():
+            logger.warning(
+                "Delivered but unreadable for request %s; retry the result file "
+                "at %s",
+                request_id,
+                url,
+            )
+            results[request_id] = DeliveryResult(
+                request_id=request_id, data=None, url=url
+            )
+
         return results
+
+    @staticmethod
+    def _result_file_url(response: Any, request_id_decimal: str) -> Optional[str]:
+        """
+        Locate the result file an offchain response points at.
+
+        The endpoint answers with an envelope carrying ``task_result``, the
+        IPFS hash of the directory the mech filed the result under. Reading
+        that file gives callers the same content the on-chain watcher returns.
+
+        Only a well-formed hash counts. A mech reporting status through the
+        field instead — ``"pending"``, ``"error"`` — would otherwise produce a
+        URL that 404s, and since an unreadable file is now retried, that would
+        spend the entire wait budget on a request that answered inline.
+
+        :param response: Raw response from the offchain endpoint
+        :param request_id_decimal: Request ID in decimal, the name of the
+            result file inside the delivery directory
+        :return: URL of the result file, or ``None`` for a mech that answered
+            inline and pinned no file
+        """
+        task_result = (
+            response.get("task_result") if isinstance(response, dict) else None
+        )
+        if not isinstance(task_result, str) or not _is_delivery_hash(task_result):
+            return None
+        return build_result_file_url(task_result, request_id_decimal)
 
     async def _fetch_offchain_data(self, request_id: str) -> Any:
         """

@@ -83,14 +83,19 @@ class TestOnchainDeliveryWatcherWatch:
     """Tests for OnchainDeliveryWatcher watch method."""
 
     @pytest.mark.asyncio
+    @patch("mech_client.domain.delivery.onchain_watcher.fetch_result_file")
     async def test_watch_single_request_immediate_delivery(
-        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self,
+        mock_fetch_result_file: MagicMock,
+        mock_web3_contract: MagicMock,
+        mock_ledger_api: MagicMock,
     ) -> None:
-        """Test watching single request returns IPFS URL."""
+        """Test watching single request returns the delivered content."""
         request_id = "1234567890abcdef"
         delivery_mech = "0x" + "1" * 40
         ipfs_hash = "a" * 64
         expected_url = f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash}"
+        mock_fetch_result_file.return_value = {"result": "the answer"}
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -112,13 +117,77 @@ class TestOnchainDeliveryWatcherWatch:
 
         assert len(result) == 1
         assert request_id in result
-        assert result[request_id] == expected_url
+        assert result[request_id].url == expected_url
+        assert result[request_id].data == {"result": "the answer"}
+        # The hex request ID travels with the URL, so a failed read logs both
+        mock_fetch_result_file.assert_called_once_with(expected_url, request_id)
 
     @pytest.mark.asyncio
+    @patch("mech_client.domain.delivery.onchain_watcher.fetch_result_file")
+    async def test_watch_one_failed_read_does_not_sink_the_batch(
+        self,
+        mock_fetch_result_file: MagicMock,
+        mock_web3_contract: MagicMock,
+        mock_ledger_api: MagicMock,
+    ) -> None:
+        """Test a raising result-file read costs only its own request."""
+        failing_id = "1111111111111111"
+        ok_id = "2222222222222222"
+        delivery_mech = "0x" + "1" * 40
+        url_failing = "https://gateway.autonolas.tech/ipfs/f01701220" + "a" * 64
+        url_ok = "https://gateway.autonolas.tech/ipfs/f01701220" + "b" * 64
+
+        def fetch(url: str, request_id: str) -> dict:
+            if url == url_failing:
+                raise RuntimeError("gateway exploded")
+            return {"result": "the answer"}
+
+        mock_fetch_result_file.side_effect = fetch
+
+        watcher = OnchainDeliveryWatcher(
+            marketplace_contract=mock_web3_contract,
+            ledger_api=mock_ledger_api,
+            timeout=10.0,
+        )
+
+        async def mock_wait_for_marketplace(req_ids):
+            return {failing_id: delivery_mech, ok_id: delivery_mech}
+
+        async def mock_fetch_data_urls(req_ids, mech_map, from_block=None):
+            return {failing_id: url_failing, ok_id: url_ok}
+
+        watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
+        watcher._fetch_data_urls_from_mechs = mock_fetch_data_urls
+
+        with patch(
+            "mech_client.domain.delivery.onchain_watcher.logger"
+        ) as mock_logger:
+            result = await watcher.watch([failing_id, ok_id])
+
+        # The requests are already paid for, so the unreadable one degrades to
+        # `data=None` (keeping its URL) instead of discarding its sibling.
+        assert result[failing_id].data is None
+        assert result[failing_id].url == url_failing
+        assert result[ok_id].data == {"result": "the answer"}
+        # The degradation is loud: without this log there is nothing to debug from
+        mock_logger.error.assert_called_once()
+        _, logged_id, logged_url = mock_logger.error.call_args.args
+        assert logged_id == failing_id
+        assert logged_url == url_failing
+        # The exception goes through exc_info so the traceback is logged too
+        logged_error = mock_logger.error.call_args.kwargs["exc_info"]
+        assert "gateway exploded" in str(logged_error)
+
+    @pytest.mark.asyncio
+    @patch("mech_client.domain.delivery.onchain_watcher.fetch_result_file")
     async def test_watch_multiple_requests_all_delivered(
-        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self,
+        mock_fetch_result_file: MagicMock,
+        mock_web3_contract: MagicMock,
+        mock_ledger_api: MagicMock,
     ) -> None:
         """Test watching multiple requests from different mechs."""
+        mock_fetch_result_file.return_value = {"result": "answer"}
         request_id_1 = "1111111111111111"
         request_id_2 = "2222222222222222"
         delivery_mech_1 = "0x" + "1" * 40
@@ -147,17 +216,22 @@ class TestOnchainDeliveryWatcherWatch:
         assert len(result) == 2
         assert request_id_1 in result
         assert request_id_2 in result
-        assert result[request_id_1] == url_1
-        assert result[request_id_2] == url_2
+        assert result[request_id_1].url == url_1
+        assert result[request_id_2].url == url_2
 
     @pytest.mark.asyncio
+    @patch("mech_client.domain.delivery.onchain_watcher.fetch_result_file")
     async def test_watch_zero_address_not_delivered(
-        self, mock_web3_contract: MagicMock, mock_ledger_api: MagicMock
+        self,
+        mock_fetch_result_file: MagicMock,
+        mock_web3_contract: MagicMock,
+        mock_ledger_api: MagicMock,
     ) -> None:
         """Test that zero address means request not yet delivered, then delivers."""
         request_id = "1234567890abcdef"
         delivery_mech = "0x" + "1" * 40
         expected_url = "https://gateway.autonolas.tech/ipfs/f01701220" + "a" * 64
+        mock_fetch_result_file.return_value = {"result": "answer"}
 
         watcher = OnchainDeliveryWatcher(
             marketplace_contract=mock_web3_contract,
@@ -184,7 +258,7 @@ class TestOnchainDeliveryWatcherWatch:
 
         assert len(result) == 1
         assert request_id in result
-        assert result[request_id] == expected_url
+        assert result[request_id].url == expected_url
 
     @pytest.mark.asyncio
     async def test_watch_timeout_returns_partial_results(
@@ -314,7 +388,12 @@ class TestOnchainDeliveryWatcherDataUrls:
 
         assert len(result) == 1
         assert request_id_padded in result
-        assert ipfs_hash in result[request_id_padded]
+        # The delivery hash addresses a directory; the result file inside it is
+        # named after the request id in decimal, so the URL must point at it.
+        assert result[request_id_padded] == (
+            f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash}"
+            f"/{int(request_id_padded, 16)}"
+        )
         mock_ledger_api.api.eth.get_logs.assert_called()
 
     @pytest.mark.asyncio
@@ -775,7 +854,7 @@ class TestOffchainDeliveryWatcherContinueBranch:
 
         # Both results received; req1 hit continue on second poll iteration
         assert len(result) == 2
-        assert result[req1] == {"result": "data1"}
-        assert result[req2] == {"result": "data2"}
+        assert result[req1].data == {"result": "data1"}
+        assert result[req2].data == {"result": "data2"}
         # req2 was fetched twice (once returning None, once returning data)
         assert req2_call_count[0] == 2

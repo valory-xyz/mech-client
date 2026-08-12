@@ -323,7 +323,17 @@ Replace the placeholders as follows:
 
 **Note:** If using agent mode (`AGENT_MODE = True`), you must provide a valid `SAFE_ADDRESS`. For client mode, set `AGENT_MODE = False` and `SAFE_ADDRESS = ""`.
 
-The variable **result** contains the response of the mech.
+The variable **result** contains the response of the mech:
+
+`result["deliveries"]` maps each request ID to a `DeliveryResult` — the same shape for
+on-chain and off-chain requests alike. Each one carries two fields:
+
+- `.data` is the parsed content the mech delivered. Mechs typically put their answer in
+  the payload's `result` field as a JSON-encoded string, so reading it takes a
+  `json.loads`; treat that as a convention rather than a guarantee and handle payloads
+  that omit the field. It is `None` if the result file could not be read.
+- `.url` is the IPFS URL that content was read from, so you can re-fetch or link to it.
+  It is `None` for off-chain mechs that answer inline instead of pinning a result file.
 
 
 ## 2. Tool Management

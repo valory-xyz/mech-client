@@ -22,7 +22,7 @@
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from aea_ledger_ethereum import EthereumApi
 from eth_abi import decode
@@ -33,8 +33,12 @@ from mech_client.domain.delivery.constants import (
     MAX_BLOCK_RANGE,
     WAIT_SLEEP,
 )
+from mech_client.domain.delivery.models import DeliveryResult
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
-from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
+from mech_client.infrastructure.ipfs.result_file import (
+    build_result_file_url,
+    fetch_result_file,
+)
 from web3.constants import ADDRESS_ZERO
 from web3.contract import Contract as Web3Contract
 
@@ -69,27 +73,67 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 
     async def watch(
         self, request_ids: List[str], from_block: Optional[int] = None
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, DeliveryResult]:
         """
-        Watch for marketplace delivery and extract IPFS URLs.
+        Watch for marketplace delivery and read the delivered results.
 
-        First polls marketplace to see which mechs delivered, then polls
-        each mech's contract to extract the actual IPFS URLs with response data.
+        First polls marketplace to see which mechs delivered, then polls each
+        mech's contract for the IPFS location of the response, then reads the
+        result file itself so callers get the content rather than a URL they
+        have to resolve.
 
         :param request_ids: List of request IDs to watch for
         :param from_block: Block to start scanning for Deliver events (e.g. tx block)
-        :return: Dictionary mapping request ID to IPFS URL with response data
+        :return: Dictionary mapping request ID to its delivery result
         """
-        # Step 1: Wait for marketplace delivery (get mech addresses)
         request_id_to_mech = await self._wait_for_marketplace_delivery(request_ids)
 
         if not request_id_to_mech:
             return {}
 
-        # Step 2: Get IPFS URLs from mech contracts
-        return await self._fetch_data_urls_from_mechs(
+        urls = await self._fetch_data_urls_from_mechs(
             request_ids, request_id_to_mech, from_block
         )
+
+        # Read the result files concurrently and off the event loop. A batch
+        # delivers one file per request; reading them one after another would
+        # serialise that many gateway round-trips, each with its own timeout,
+        # after the caller's wait budget has already been spent.
+        #
+        # `return_exceptions` keeps one bad read from sinking the batch: the
+        # requests are paid for by the time we get here, so a file that cannot
+        # be read degrades to `data=None` — its URL still points at it — rather
+        # than discarding every sibling result along with it.
+        file_data = await asyncio.gather(
+            *(
+                asyncio.to_thread(fetch_result_file, url, request_id)
+                for request_id, url in urls.items()
+            ),
+            return_exceptions=True,
+        )
+
+        results: Dict[str, DeliveryResult] = {}
+        for (request_id, url), data in zip(urls.items(), file_data):
+            if isinstance(data, BaseException):
+                # `fetch_result_file` logs the read failures it anticipates, so
+                # anything surfacing here is unforeseen. Say so loudly: the
+                # delivery is degraded either way, and a silent `None` would
+                # leave nothing to debug from.
+                # `gather` preserves __traceback__ on what it hands back, so
+                # pass the exception itself: the stack is the useful part of
+                # an error nothing anticipated.
+                logger.error(
+                    "Unexpected error reading the result file for request %s "
+                    "from %s",
+                    request_id,
+                    url,
+                    exc_info=data,
+                )
+                data = None
+            results[request_id] = DeliveryResult(
+                request_id=request_id, data=data, url=url
+            )
+        return results
 
     async def _wait_for_marketplace_delivery(
         self, request_ids: List[str]
@@ -228,16 +272,18 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         mech_deliver_signature: str,
     ) -> Dict[str, str]:
         """
-        Watch for delivery events and extract IPFS URLs.
+        Watch for delivery events and extract result file URLs.
 
-        Polls blockchain logs for Deliver events and extracts IPFS hash
-        from event data.
+        Polls blockchain logs for Deliver events and extracts the IPFS hash
+        from event data. The hash addresses a directory, so the request ID
+        (in decimal, the name the mech files the result under) is appended to
+        get a URL that resolves to the result itself.
 
         :param request_ids: List of request IDs to watch for
         :param from_block: Block number to start searching from
         :param mech_contract_address: Mech contract address
         :param mech_deliver_signature: Topic signature for Deliver event
-        :return: Dictionary mapping request ID to IPFS URL
+        :return: Dictionary mapping request ID to its result file URL
         """
         results = {}
         prev_count = -1
@@ -276,7 +322,9 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
                         continue
 
                     if request_id in request_ids:
-                        results[request_id] = IPFS_URL_TEMPLATE.format(delivery_data)
+                        results[request_id] = build_result_file_url(
+                            delivery_data, str(int(request_id, 16))
+                        )
 
                     if len(results) == len(request_ids):
                         logger.info(

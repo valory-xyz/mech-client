@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
 #
-#   Copyright 2025 Valory AG
+#   Copyright 2026 Valory AG
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -17,18 +17,19 @@
 #
 # ------------------------------------------------------------------------------
 
-"""IPFS infrastructure for uploading and downloading files via IPFS gateway."""
+"""Shared type aliases."""
 
-from mech_client.infrastructure.ipfs.client import IPFSClient
-from mech_client.infrastructure.ipfs.metadata import push_metadata_to_ipfs
-from mech_client.infrastructure.ipfs.result_file import (
-    build_result_file_url,
-    fetch_result_file,
-)
+from typing import Dict, List, Union
 
-__all__ = [
-    "IPFSClient",
-    "build_result_file_url",
-    "fetch_result_file",
-    "push_metadata_to_ipfs",
+#: Anything ``json.loads`` can return. Spelled out rather than ``Any`` so that
+#: consumers of a decoded payload — chiefly the content of a delivered result
+#: file — have to narrow it before use instead of silently assuming a shape.
+JSONValue = Union[
+    None,
+    bool,
+    int,
+    float,
+    str,
+    List["JSONValue"],
+    Dict[str, "JSONValue"],
 ]
