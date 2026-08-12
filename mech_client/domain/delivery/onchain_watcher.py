@@ -119,12 +119,15 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
                 # anything surfacing here is unforeseen. Say so loudly: the
                 # delivery is degraded either way, and a silent `None` would
                 # leave nothing to debug from.
+                # `gather` preserves __traceback__ on what it hands back, so
+                # pass the exception itself: the stack is the useful part of
+                # an error nothing anticipated.
                 logger.error(
                     "Unexpected error reading the result file for request %s "
-                    "from %s: %r",
+                    "from %s",
                     request_id,
                     url,
-                    data,
+                    exc_info=data,
                 )
                 data = None
             results[request_id] = DeliveryResult(

@@ -38,6 +38,26 @@ logger = logging.getLogger(__name__)
 # Constants for offchain polling
 OFFCHAIN_DELIVER_ENDPOINT = "fetch_offchain_info"
 
+# `IPFS_URL_TEMPLATE` already carries the multibase and multicodec prefix, so a
+# delivery hash is the bare digest: 32 bytes, i.e. 64 hex characters.
+DELIVERY_HASH_BYTES = 32
+
+
+def _is_delivery_hash(value: str) -> bool:
+    """
+    Report whether a value is shaped like the hash of a delivery directory.
+
+    Checked by decoding rather than with ``int(value, 16)``, which would accept
+    a ``0x`` prefix the bare digest never carries.
+
+    :param value: Candidate ``task_result`` from the offchain endpoint
+    :return: True if it is a 32-byte digest in hex
+    """
+    try:
+        return len(bytes.fromhex(value)) == DELIVERY_HASH_BYTES
+    except ValueError:
+        return False
+
 
 class OffchainDeliveryWatcher(
     DeliveryWatcher
@@ -124,17 +144,20 @@ class OffchainDeliveryWatcher(
                             # next cycle try again. The backfill below reports
                             # it with this URL if it never becomes readable.
                             continue
+                        pending_urls.pop(request_id, None)
                         results[request_id] = DeliveryResult(
                             request_id=request_id, data=data, url=url
                         )
                     logger.info(
                         f"Received offchain response for request {request_id_int}"
                     )
-                except Exception as e:  # pylint: disable=broad-except
+                except Exception:  # pylint: disable=broad-except
                     # Log error but continue polling. Leaving the request out of
                     # `results` is what keeps it eligible for the next cycle.
-                    logger.error(
-                        f"Error fetching offchain data for {request_id_int}: {e}"
+                    # Retries are handled above, so anything here is unforeseen
+                    # and the traceback is the part worth having.
+                    logger.exception(
+                        f"Error fetching offchain data for {request_id_int}"
                     )
 
             # Sleep before next poll if not all results received
@@ -150,10 +173,19 @@ class OffchainDeliveryWatcher(
                 await asyncio.sleep(WAIT_SLEEP)
 
         # A request whose file never became readable still reports where to look,
-        # the same shape the on-chain path returns for an unreadable result.
+        # the same shape the on-chain path returns for an unreadable result. Say
+        # so per request: the timeout warning above only counts how many arrived,
+        # which does not separate "never delivered" from "delivered, unreadable".
+        # Popping on success above leaves this holding only unresolved requests.
         for request_id, url in pending_urls.items():
-            results.setdefault(
-                request_id, DeliveryResult(request_id=request_id, data=None, url=url)
+            logger.warning(
+                "Delivered but unreadable for request %s; retry the result file "
+                "at %s",
+                request_id,
+                url,
+            )
+            results[request_id] = DeliveryResult(
+                request_id=request_id, data=None, url=url
             )
 
         return results
@@ -167,6 +199,11 @@ class OffchainDeliveryWatcher(
         IPFS hash of the directory the mech filed the result under. Reading
         that file gives callers the same content the on-chain watcher returns.
 
+        Only a well-formed hash counts. A mech reporting status through the
+        field instead — ``"pending"``, ``"error"`` — would otherwise produce a
+        URL that 404s, and since an unreadable file is now retried, that would
+        spend the entire wait budget on a request that answered inline.
+
         :param response: Raw response from the offchain endpoint
         :param request_id_decimal: Request ID in decimal, the name of the
             result file inside the delivery directory
@@ -176,7 +213,7 @@ class OffchainDeliveryWatcher(
         task_result = (
             response.get("task_result") if isinstance(response, dict) else None
         )
-        if not isinstance(task_result, str) or not task_result:
+        if not isinstance(task_result, str) or not _is_delivery_hash(task_result):
             return None
         return build_result_file_url(task_result, request_id_decimal)
 

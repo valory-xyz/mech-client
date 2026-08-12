@@ -171,9 +171,11 @@ class TestOnchainDeliveryWatcherWatch:
         assert result[ok_id].data == {"result": "the answer"}
         # The degradation is loud: without this log there is nothing to debug from
         mock_logger.error.assert_called_once()
-        _, logged_id, logged_url, logged_error = mock_logger.error.call_args.args
+        _, logged_id, logged_url = mock_logger.error.call_args.args
         assert logged_id == failing_id
         assert logged_url == url_failing
+        # The exception goes through exc_info so the traceback is logged too
+        logged_error = mock_logger.error.call_args.kwargs["exc_info"]
         assert "gateway exploded" in str(logged_error)
 
     @pytest.mark.asyncio

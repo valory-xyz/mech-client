@@ -56,6 +56,7 @@ from mech_client.services.base_service import BaseTransactionService
 from mech_client.utils.validators import ensure_checksummed_address
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
+from web3.types import TxReceipt
 
 logger = logging.getLogger(__name__)
 
@@ -113,11 +114,15 @@ class OnchainRequestResult(TypedDict):
 
     The shape is a documented public contract, so spell it out: a key typo at
     a call site is then a mypy error rather than a runtime ``KeyError``.
+
+    ``receipt`` is web3's ``TxReceipt``, an ``AttributeDict`` — a dict subclass
+    that also allows attribute access, which a plain ``Dict[str, Any]`` would
+    have hidden from consumers.
     """
 
     tx_hash: str
     request_ids: List[str]
-    receipt: Dict[str, Any]
+    receipt: TxReceipt
     deliveries: Dict[str, DeliveryResult]
 
 
