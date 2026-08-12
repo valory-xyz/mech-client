@@ -29,10 +29,11 @@ its content.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 import requests
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
+from mech_client.utils.types import JSONValue
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +55,18 @@ def build_result_file_url(ipfs_hash: str, request_id_decimal: str) -> str:
     return f"{directory_url}/{request_id_decimal}"
 
 
-def fetch_result_file(url: str, timeout: float = RESULT_FILE_TIMEOUT) -> Optional[Any]:
+def fetch_result_file(
+    url: str,
+    request_id: Optional[str] = None,
+    timeout: float = RESULT_FILE_TIMEOUT,
+) -> JSONValue:
     """
     Fetch and parse a delivered result file.
 
     :param url: URL of the result file, as built by :func:`build_result_file_url`
+    :param request_id: Request ID in hex, for the log line. The URL carries the
+        decimal form, but the rest of the client keys off hex, so log both and
+        spare whoever is chasing a failed delivery the conversion.
     :param timeout: HTTP timeout in seconds
     :return: Parsed JSON content, the raw text if the file is not JSON, or
         ``None`` if the gateway could not be read
@@ -67,7 +75,12 @@ def fetch_result_file(url: str, timeout: float = RESULT_FILE_TIMEOUT) -> Optiona
         response = requests.get(url, timeout=timeout)
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
-        logger.warning("Could not fetch delivery result from %s: %s", url, e)
+        logger.warning(
+            "Could not fetch delivery result for request %s from %s: %s",
+            request_id or "unknown",
+            url,
+            e,
+        )
         return None
 
     try:

@@ -29,6 +29,7 @@ from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
 from mech_client.services.marketplace_service import MarketplaceService
 from mech_client.utils.errors.handlers import handle_cli_errors
+from mech_client.utils.types import JSONValue
 from mech_client.utils.validators import (
     validate_batch_sizes_match,
     validate_extra_attributes,
@@ -36,7 +37,7 @@ from mech_client.utils.validators import (
 )
 
 
-def _dump(value: Any) -> str:
+def _dump(value: JSONValue) -> str:
     """
     Render a value parsed out of a delivered result file for CLI output.
 
@@ -46,7 +47,7 @@ def _dump(value: Any) -> str:
     return json.dumps(value, ensure_ascii=True, indent=2, sort_keys=True)
 
 
-def _format_delivery_output(delivery_data: Any) -> str:
+def _format_delivery_output(delivery_data: JSONValue) -> str:
     """
     Format delivery data for CLI output with parity across delivery modes.
 
@@ -54,7 +55,7 @@ def _format_delivery_output(delivery_data: Any) -> str:
     :return: The mech's answer, ready to print.
     """
     if delivery_data is None:
-        return "unavailable — could not read the result file (URL below)"
+        return "unavailable — could not read the result file"
 
     if isinstance(delivery_data, dict) and "result" in delivery_data:
         result = delivery_data["result"]
