@@ -86,26 +86,34 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         :param from_block: Block to start scanning for Deliver events (e.g. tx block)
         :return: Dictionary mapping request ID to its delivery result
         """
-        # Step 1: Wait for marketplace delivery (get mech addresses)
         request_id_to_mech = await self._wait_for_marketplace_delivery(request_ids)
 
         if not request_id_to_mech:
             return {}
 
-        # Step 2: Get result file URLs from mech contracts
         urls = await self._fetch_data_urls_from_mechs(
             request_ids, request_id_to_mech, from_block
         )
 
-        # Step 3: Read the result files, concurrently and off the event loop.
-        # A batch delivers one file per request; reading them one after another
-        # would serialise that many gateway round-trips, each with its own
-        # timeout, after the caller's wait budget has already been spent.
+        # Read the result files concurrently and off the event loop. A batch
+        # delivers one file per request; reading them one after another would
+        # serialise that many gateway round-trips, each with its own timeout,
+        # after the caller's wait budget has already been spent.
+        #
+        # `return_exceptions` keeps one bad read from sinking the batch: the
+        # requests are paid for by the time we get here, so a file that cannot
+        # be read degrades to `data=None` — its URL still points at it — rather
+        # than discarding every sibling result along with it.
         file_data = await asyncio.gather(
-            *(asyncio.to_thread(fetch_result_file, url) for url in urls.values())
+            *(asyncio.to_thread(fetch_result_file, url) for url in urls.values()),
+            return_exceptions=True,
         )
         return {
-            request_id: DeliveryResult(request_id=request_id, data=data, url=url)
+            request_id: DeliveryResult(
+                request_id=request_id,
+                data=None if isinstance(data, BaseException) else data,
+                url=url,
+            )
             for (request_id, url), data in zip(urls.items(), file_data)
         }
 

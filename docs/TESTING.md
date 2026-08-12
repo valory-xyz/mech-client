@@ -538,8 +538,13 @@ def test_request_command_success() -> None:
                 return_value={
                     "tx_hash": "0xabc123...",
                     "request_ids": [1],
-                    "delivery_results": {1: {"result": '"answer"'}},
-                    "delivery_urls": {1: "https://gateway.../ipfs/f0170.../1"},
+                    "deliveries": {
+                        1: DeliveryResult(
+                            "1",
+                            data={"result": '"answer"'},
+                            url="https://gateway.../ipfs/f0170.../1",
+                        )
+                    },
                 }
             )
             mock_service.return_value = mock_service_instance

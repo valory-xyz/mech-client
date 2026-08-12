@@ -94,7 +94,7 @@ class OffchainDeliveryWatcher(
                 try:
                     response = await self._fetch_offchain_data(request_id_int)
                     if response:
-                        results[request_id] = self._resolve_delivery(
+                        results[request_id] = await self._resolve_delivery(
                             request_id, request_id_int, response
                         )
                         logger.info(
@@ -121,7 +121,7 @@ class OffchainDeliveryWatcher(
         return results
 
     @staticmethod
-    def _resolve_delivery(
+    async def _resolve_delivery(
         request_id: str, request_id_decimal: str, response: Any
     ) -> DeliveryResult:
         """
@@ -145,9 +145,13 @@ class OffchainDeliveryWatcher(
         if not isinstance(task_result, str) or not task_result:
             return DeliveryResult(request_id=request_id, data=response)
 
+        # Off the event loop: this is a gateway round-trip inside the polling
+        # loop, so blocking here would stall every other request's poll.
         url = build_result_file_url(task_result, request_id_decimal)
         return DeliveryResult(
-            request_id=request_id, data=fetch_result_file(url), url=url
+            request_id=request_id,
+            data=await asyncio.to_thread(fetch_result_file, url),
+            url=url,
         )
 
     async def _fetch_offchain_data(self, request_id: str) -> Any:

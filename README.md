@@ -472,11 +472,12 @@ You can also use the Mech Client as a library on your Python project.
 
     print(f"Transaction hash: {result['tx_hash']}")
 
-    # `delivery_results` maps each request ID to the parsed content the mech
-    # delivered, and `delivery_urls` to the IPFS URL it was read from. Both
-    # have the same shape whether delivery was on-chain or off-chain.
-    for request_id, payload in result["delivery_results"].items():
-        print(f"Request {request_id}: {result['delivery_urls'][request_id]}")
+    # `deliveries` maps each request ID to a DeliveryResult: `.data` is the
+    # parsed content the mech delivered, `.url` the IPFS URL it was read from.
+    # Same shape whether delivery was on-chain or off-chain.
+    for request_id, delivery in result["deliveries"].items():
+        print(f"Request {request_id}: {delivery.url}")
+        payload = delivery.data
         if payload is None:
             print("  result file could not be read")
             continue

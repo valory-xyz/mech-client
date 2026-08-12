@@ -48,15 +48,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🔧 Changed
 
 - **Delivery results are now the delivered content, in one shape** (breaking, [#250](https://github.com/valory-xyz/mech-client/issues/250))
-  - `delivery_results[request_id]` is the parsed result file for both the on-chain and
-    off-chain flows. Previously the on-chain flow returned a URL string and the off-chain
-    flow returned the mech's raw envelope, so a caller could not write one handler.
+  - `send_request` now returns a single `deliveries[request_id]` key holding a
+    `DeliveryResult`, replacing `delivery_results`. Previously the on-chain flow returned
+    a URL string and the off-chain flow returned the mech's raw envelope, so a caller
+    could not write one handler.
   - The on-chain URL addressed the delivery *directory*, which serves an HTML listing;
     the result file inside is named after the request ID in decimal. Both watchers now
     build that full path and read the file themselves.
-  - New `delivery_urls[request_id]` key carries the result-file URL, `None` for off-chain
-    mechs that answer inline. `delivery_results[request_id]` is `None` if the gateway
-    could not be read; the URL is still there to retry with.
+  - `DeliveryResult.data` is the parsed result file, `None` if the gateway could not be
+    read. `DeliveryResult.url` is the result-file URL to retry with, `None` for off-chain
+    mechs that answer inline. Pairing content with its location in one object keeps the
+    two from drifting apart per request.
   - `mechx request` prints the mech's answer (decoding the JSON-encoded `result` field
     when the payload has one, otherwise the payload itself) followed by the result-file
     URL.

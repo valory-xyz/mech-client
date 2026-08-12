@@ -325,14 +325,15 @@ Replace the placeholders as follows:
 
 The variable **result** contains the response of the mech:
 
-- `result["delivery_results"]` maps each request ID to the parsed content the mech
-  delivered — the same shape for on-chain and off-chain requests alike. Mechs typically
-  put their answer in the payload's `result` field as a JSON-encoded string, so reading
-  it takes a `json.loads`; treat that as a convention rather than a guarantee and handle
-  payloads that omit the field. The value is `None` if the result file could not be read.
-- `result["delivery_urls"]` maps each request ID to the IPFS URL that content was read
-  from, so you can re-fetch or link to it. It is `None` for off-chain mechs that answer
-  inline instead of pinning a result file.
+`result["deliveries"]` maps each request ID to a `DeliveryResult` — the same shape for
+on-chain and off-chain requests alike. Each one carries two fields:
+
+- `.data` is the parsed content the mech delivered. Mechs typically put their answer in
+  the payload's `result` field as a JSON-encoded string, so reading it takes a
+  `json.loads`; treat that as a convention rather than a guarantee and handle payloads
+  that omit the field. It is `None` if the result file could not be read.
+- `.url` is the IPFS URL that content was read from, so you can re-fetch or link to it.
+  It is `None` for off-chain mechs that answer inline instead of pinning a result file.
 
 
 ## 2. Tool Management

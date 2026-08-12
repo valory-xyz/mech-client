@@ -25,6 +25,7 @@ from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from click.testing import CliRunner
 
 from mech_client.cli.commands.request_cmd import request
+from mech_client.domain.delivery import DeliveryResult
 
 
 class TestRequestCommand:
@@ -52,8 +53,13 @@ class TestRequestCommand:
             return_value={
                 "tx_hash": "0xabc123...",
                 "request_ids": [1],
-                "delivery_results": {1: {"result": '"4"'}},
-                "delivery_urls": {1: f"{IPFS_URL_TEMPLATE.format('a' * 64)}/1"},
+                "deliveries": {
+                    1: DeliveryResult(
+                        "1",
+                        data={"result": '"4"'},
+                        url=f"{IPFS_URL_TEMPLATE.format('a' * 64)}/1",
+                    )
+                },
             }
         )
         mock_marketplace_service.return_value = mock_service
@@ -112,15 +118,22 @@ class TestRequestCommand:
                 # Three tools, three payload shapes: a JSON-encoded string
                 # answer, an answer already decoded to an object, and a bare
                 # list with no `result` field at all.
-                "delivery_results": {
-                    1: {"result": '"answer one"'},
-                    2: {"result": {"p_yes": 0.42}},
-                    3: [1, 2, 3],
-                },
-                "delivery_urls": {
-                    1: f"{IPFS_URL_TEMPLATE.format('a' * 64)}/1",
-                    2: f"{IPFS_URL_TEMPLATE.format('b' * 64)}/2",
-                    3: f"{IPFS_URL_TEMPLATE.format('c' * 64)}/3",
+                "deliveries": {
+                    1: DeliveryResult(
+                        "1",
+                        data={"result": '"answer one"'},
+                        url=f"{IPFS_URL_TEMPLATE.format('a' * 64)}/1",
+                    ),
+                    2: DeliveryResult(
+                        "2",
+                        data={"result": {"p_yes": 0.42}},
+                        url=f"{IPFS_URL_TEMPLATE.format('b' * 64)}/2",
+                    ),
+                    3: DeliveryResult(
+                        "3",
+                        data=[1, 2, 3],
+                        url=f"{IPFS_URL_TEMPLATE.format('c' * 64)}/3",
+                    ),
                 },
             }
         )
@@ -278,15 +291,16 @@ class TestRequestCommand:
             return_value={
                 "tx_hash": "0xoffchain123...",
                 "request_ids": [1],
-                "delivery_results": {
-                    "0xabc": {
-                        "requestId": 12345,
-                        "result": '{"p_yes": 0.38}',
-                        "tool": "factual_research",
-                    }
-                },
-                "delivery_urls": {
-                    "0xabc": f"{IPFS_URL_TEMPLATE.format('a' * 64)}/12345"
+                "deliveries": {
+                    "0xabc": DeliveryResult(
+                        "0xabc",
+                        data={
+                            "requestId": 12345,
+                            "result": '{"p_yes": 0.38}',
+                            "tool": "factual_research",
+                        },
+                        url=f"{IPFS_URL_TEMPLATE.format('a' * 64)}/12345",
+                    )
                 },
             }
         )
@@ -340,8 +354,13 @@ class TestRequestCommand:
             return_value={
                 "tx_hash": "0xoffchain123...",
                 "request_ids": [1],
-                "delivery_results": {"0xabc": {"tool": "factual_research"}},
-                "delivery_urls": {"0xabc": IPFS_URL_TEMPLATE.format("a" * 64)},
+                "deliveries": {
+                    "0xabc": DeliveryResult(
+                        "0xabc",
+                        data={"tool": "factual_research"},
+                        url=IPFS_URL_TEMPLATE.format("a" * 64),
+                    )
+                },
             }
         )
         mock_marketplace_service.return_value = mock_service
@@ -386,9 +405,12 @@ class TestRequestCommand:
             return_value={
                 "tx_hash": None,
                 "request_ids": ["0xabc"],
-                "delivery_results": {"0xabc": None},
-                "delivery_urls": {
-                    "0xabc": f"{IPFS_URL_TEMPLATE.format('b' * 64)}/67890"
+                "deliveries": {
+                    "0xabc": DeliveryResult(
+                        "0xabc",
+                        data=None,
+                        url=f"{IPFS_URL_TEMPLATE.format('b' * 64)}/67890",
+                    )
                 },
             }
         )
@@ -437,8 +459,9 @@ class TestRequestCommand:
                 "request_ids": ["0xabc"],
                 # A result file that is not JSON comes back as raw text, and an
                 # offchain mech answering inline pins no file to link to.
-                "delivery_results": {"0xabc": "plain text answer"},
-                "delivery_urls": {"0xabc": None},
+                "deliveries": {
+                    "0xabc": DeliveryResult("0xabc", data="plain text answer")
+                },
             }
         )
         mock_marketplace_service.return_value = mock_service
@@ -484,13 +507,13 @@ class TestRequestCommand:
             return_value={
                 "tx_hash": "0xonchain123...",
                 "request_ids": [1],
-                "delivery_results": {
-                    1: {
-                        "status": "done",
-                        "result": "on-chain answer",
-                    }
+                "deliveries": {
+                    1: DeliveryResult(
+                        "1",
+                        data={"status": "done", "result": "on-chain answer"},
+                        url=IPFS_URL_TEMPLATE.format("c" * 64) + "/1",
+                    )
                 },
-                "delivery_urls": {1: IPFS_URL_TEMPLATE.format("c" * 64) + "/1"},
             }
         )
         mock_marketplace_service.return_value = mock_service
@@ -760,12 +783,12 @@ class TestRequestCommand:
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
-    def test_request_without_delivery_results(
+    def test_request_without_deliveries(
         self,
         mock_setup_wallet: MagicMock,
         mock_marketplace_service: MagicMock,
     ) -> None:
-        """Test request when no delivery results returned."""
+        """Test request when no deliveries are returned."""
         # Mock wallet
         mock_wallet_ctx = MagicMock()
         mock_setup_wallet.return_value = mock_wallet_ctx

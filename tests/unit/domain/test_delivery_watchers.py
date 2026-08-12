@@ -123,6 +123,51 @@ class TestOnchainDeliveryWatcherWatch:
 
     @pytest.mark.asyncio
     @patch("mech_client.domain.delivery.onchain_watcher.fetch_result_file")
+    async def test_watch_one_failed_read_does_not_sink_the_batch(
+        self,
+        mock_fetch_result_file: MagicMock,
+        mock_web3_contract: MagicMock,
+        mock_ledger_api: MagicMock,
+    ) -> None:
+        """Test a raising result-file read costs only its own request."""
+        failing_id = "1111111111111111"
+        ok_id = "2222222222222222"
+        delivery_mech = "0x" + "1" * 40
+        url_failing = "https://gateway.autonolas.tech/ipfs/f01701220" + "a" * 64
+        url_ok = "https://gateway.autonolas.tech/ipfs/f01701220" + "b" * 64
+
+        def fetch(url: str) -> dict:
+            if url == url_failing:
+                raise RuntimeError("gateway exploded")
+            return {"result": "the answer"}
+
+        mock_fetch_result_file.side_effect = fetch
+
+        watcher = OnchainDeliveryWatcher(
+            marketplace_contract=mock_web3_contract,
+            ledger_api=mock_ledger_api,
+            timeout=10.0,
+        )
+
+        async def mock_wait_for_marketplace(req_ids):
+            return {failing_id: delivery_mech, ok_id: delivery_mech}
+
+        async def mock_fetch_data_urls(req_ids, mech_map, from_block=None):
+            return {failing_id: url_failing, ok_id: url_ok}
+
+        watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
+        watcher._fetch_data_urls_from_mechs = mock_fetch_data_urls
+
+        result = await watcher.watch([failing_id, ok_id])
+
+        # The requests are already paid for, so the unreadable one degrades to
+        # `data=None` (keeping its URL) instead of discarding its sibling.
+        assert result[failing_id].data is None
+        assert result[failing_id].url == url_failing
+        assert result[ok_id].data == {"result": "the answer"}
+
+    @pytest.mark.asyncio
+    @patch("mech_client.domain.delivery.onchain_watcher.fetch_result_file")
     async def test_watch_multiple_requests_all_delivered(
         self,
         mock_fetch_result_file: MagicMock,

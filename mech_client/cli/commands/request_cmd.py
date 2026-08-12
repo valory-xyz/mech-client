@@ -252,13 +252,11 @@ def request(
     # Display results
     click.echo(f"\n✓ Transaction hash: {result['tx_hash']}")
     click.echo(f"✓ Request IDs: {result['request_ids']}")
-    if result.get("delivery_results"):
-        delivery_urls = result.get("delivery_urls") or {}
+    if result.get("deliveries"):
         click.echo("\n✓ Delivery results:")
-        for request_id, delivery_data in result["delivery_results"].items():
+        for request_id, delivery in result["deliveries"].items():
             click.echo(
-                f"  Request {request_id}: {_format_delivery_output(delivery_data)}"
+                f"  Request {request_id}: {_format_delivery_output(delivery.data)}"
             )
-            url = delivery_urls.get(request_id)
-            if url:
-                click.echo(f"    Result file: {url}")
+            if delivery.url:
+                click.echo(f"    Result file: {delivery.url}")

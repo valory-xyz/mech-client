@@ -911,8 +911,10 @@ class TestSendRequestOnchainFlow:
         assert result["tx_hash"] == "0xtxhash"
         assert result["request_ids"] == ["req-1"]
         # Content and location are separate keys, both keyed by request ID
-        assert result["delivery_results"] == {"req-1": {"result": "answer"}}
-        assert result["delivery_urls"] == {"req-1": "ipfs://1"}
+        # One object per request: content and location cannot drift apart
+        assert result["deliveries"] == {
+            "req-1": DeliveryResult("req-1", data={"result": "answer"}, url="ipfs://1")
+        }
 
     @pytest.mark.asyncio
     @patch("mech_client.services.marketplace_service.OnchainDeliveryWatcher")
@@ -1515,8 +1517,12 @@ class TestSendOffchainRequest:
         assert result["tx_hash"] is None
         assert result["receipt"] is None
         # Same shape as the on-chain path: content and location, keyed by request ID
-        assert result["delivery_results"] == {"0" * 64: {"result": "offchain-result"}}
-        assert result["delivery_urls"] == {"0" * 64: "ipfs://off"}
+        assert result["deliveries"] == {
+            "0"
+            * 64: DeliveryResult(
+                "0" * 64, data={"result": "offchain-result"}, url="ipfs://off"
+            )
+        }
 
     @pytest.mark.asyncio
     @patch("mech_client.services.marketplace_service.OffchainDeliveryWatcher")
@@ -2182,7 +2188,7 @@ class TestSendRequestOffchainBranch:
         offchain_result = {
             "tx_hash": None,
             "request_ids": ["hex-id"],
-            "delivery_results": {},
+            "deliveries": {},
             "receipt": None,
         }
 
