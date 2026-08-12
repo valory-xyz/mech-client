@@ -21,12 +21,16 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, FrozenSet, List, Optional, Tuple, cast
+from typing import Any, Dict, FrozenSet, List, Optional, Tuple, TypedDict, cast
 
 import requests
 from aea_ledger_ethereum import EthereumCrypto
 from eth_account import Account
-from mech_client.domain.delivery import OffchainDeliveryWatcher, OnchainDeliveryWatcher
+from mech_client.domain.delivery import (
+    DeliveryResult,
+    OffchainDeliveryWatcher,
+    OnchainDeliveryWatcher,
+)
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
@@ -92,6 +96,22 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+class RequestResult(TypedDict):
+    """What :meth:`MarketplaceService.send_request` returns.
+
+    The shape is a documented public contract, so spell it out: a key typo at
+    a call site is then a mypy error rather than a runtime ``KeyError``.
+
+    ``tx_hash`` and ``receipt`` are ``None`` on the offchain path, which has no
+    transaction to report. ``request_ids`` is populated on both paths.
+    """
+
+    tx_hash: Optional[str]
+    request_ids: List[str]
+    receipt: Optional[Dict[str, Any]]
+    deliveries: Dict[str, DeliveryResult]
 
 
 @dataclass(frozen=True)
@@ -170,7 +190,7 @@ class MarketplaceService(
         auto_deposit: bool = False,
         extra_attributes: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+    ) -> RequestResult:
         """
         Send marketplace request(s) to mech(s).
 
@@ -183,12 +203,13 @@ class MarketplaceService(
             with the shortfall and retry once (only applies to the offchain path)
         :param extra_attributes: Extra attributes for metadata
         :param timeout: Timeout for delivery watching
-        :return: Dictionary with ``tx_hash``, ``request_ids``, ``receipt``
-            (all ``None`` on the offchain path), and ``deliveries`` mapping
-            each request ID to a :class:`DeliveryResult` carrying the parsed
-            content the mech delivered plus the gateway URL it was read from.
-            ``deliveries`` has the same shape regardless of whether delivery
-            was on-chain or offchain.
+        :return: A :class:`RequestResult` with ``tx_hash`` and ``receipt``
+            (both ``None`` on the offchain path, which has no transaction),
+            ``request_ids``, and ``deliveries`` mapping each request ID to a
+            :class:`DeliveryResult` carrying the parsed content the mech
+            delivered plus the gateway URL it was read from. ``deliveries``
+            has the same shape regardless of whether delivery was on-chain
+            or offchain.
         """
         # Validate inputs
         if len(prompts) != len(tools):
@@ -362,7 +383,7 @@ class MarketplaceService(
         extra_attributes: Optional[Dict[str, Any]],
         timeout: float,
         auto_deposit: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> RequestResult:
         """
         Send offchain request to mech HTTP endpoint.
 

@@ -99,3 +99,28 @@ class TestFetchResultFile:
         mock_get.side_effect = requests.exceptions.ConnectionError("refused")
 
         assert fetch_result_file("https://gateway.example.com/ipfs/abc/1") is None
+
+    @patch("mech_client.infrastructure.ipfs.result_file.logger")
+    @patch("mech_client.infrastructure.ipfs.result_file.requests.get")
+    def test_logs_hex_request_id_on_failure(
+        self, mock_get: MagicMock, mock_logger: MagicMock
+    ) -> None:
+        """Test the hex request ID is logged, sparing a decimal conversion."""
+        mock_get.side_effect = requests.exceptions.ConnectionError("refused")
+
+        fetch_result_file("https://gateway.example.com/ipfs/abc/1", "0x1a")
+
+        # The URL only carries the decimal form, hence logging the hex too
+        assert mock_logger.warning.call_args.args[1] == "0x1a"
+
+    @patch("mech_client.infrastructure.ipfs.result_file.logger")
+    @patch("mech_client.infrastructure.ipfs.result_file.requests.get")
+    def test_logs_unknown_when_request_id_omitted(
+        self, mock_get: MagicMock, mock_logger: MagicMock
+    ) -> None:
+        """Test the log stays readable when called without a request ID."""
+        mock_get.side_effect = requests.exceptions.ConnectionError("refused")
+
+        fetch_result_file("https://gateway.example.com/ipfs/abc/1")
+
+        assert mock_logger.warning.call_args.args[1] == "unknown"

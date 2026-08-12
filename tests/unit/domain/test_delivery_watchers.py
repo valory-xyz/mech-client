@@ -119,7 +119,8 @@ class TestOnchainDeliveryWatcherWatch:
         assert request_id in result
         assert result[request_id].url == expected_url
         assert result[request_id].data == {"result": "the answer"}
-        mock_fetch_result_file.assert_called_once_with(expected_url)
+        # The hex request ID travels with the URL, so a failed read logs both
+        mock_fetch_result_file.assert_called_once_with(expected_url, request_id)
 
     @pytest.mark.asyncio
     @patch("mech_client.domain.delivery.onchain_watcher.fetch_result_file")
@@ -136,7 +137,7 @@ class TestOnchainDeliveryWatcherWatch:
         url_failing = "https://gateway.autonolas.tech/ipfs/f01701220" + "a" * 64
         url_ok = "https://gateway.autonolas.tech/ipfs/f01701220" + "b" * 64
 
-        def fetch(url: str) -> dict:
+        def fetch(url: str, request_id: str) -> dict:
             if url == url_failing:
                 raise RuntimeError("gateway exploded")
             return {"result": "the answer"}
@@ -158,13 +159,22 @@ class TestOnchainDeliveryWatcherWatch:
         watcher._wait_for_marketplace_delivery = mock_wait_for_marketplace
         watcher._fetch_data_urls_from_mechs = mock_fetch_data_urls
 
-        result = await watcher.watch([failing_id, ok_id])
+        with patch(
+            "mech_client.domain.delivery.onchain_watcher.logger"
+        ) as mock_logger:
+            result = await watcher.watch([failing_id, ok_id])
 
         # The requests are already paid for, so the unreadable one degrades to
         # `data=None` (keeping its URL) instead of discarding its sibling.
         assert result[failing_id].data is None
         assert result[failing_id].url == url_failing
         assert result[ok_id].data == {"result": "the answer"}
+        # The degradation is loud: without this log there is nothing to debug from
+        mock_logger.error.assert_called_once()
+        _, logged_id, logged_url, logged_error = mock_logger.error.call_args.args
+        assert logged_id == failing_id
+        assert logged_url == url_failing
+        assert "gateway exploded" in str(logged_error)
 
     @pytest.mark.asyncio
     @patch("mech_client.domain.delivery.onchain_watcher.fetch_result_file")

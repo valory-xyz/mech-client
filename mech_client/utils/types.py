@@ -17,27 +17,19 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Models shared by the delivery watchers."""
+"""Shared type aliases."""
 
-from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, List, Union
 
-from mech_client.utils.types import JSONValue
-
-
-@dataclass(frozen=True)
-class DeliveryResult:
-    """A mech delivery, resolved to its content.
-
-    Both watchers return this, so callers get the same shape whether the
-    response was delivered on-chain or off-chain.
-
-    ``data`` holds the parsed content of the delivered result file, or
-    ``None`` when the gateway could not be read (``url`` still points at it).
-    ``url`` is the gateway URL ``data`` was read from; it is ``None`` for
-    offchain mechs that answer inline instead of pinning a result file.
-    """
-
-    request_id: str
-    data: JSONValue = None
-    url: Optional[str] = None
+#: Anything ``json.loads`` can return. Spelled out rather than ``Any`` so that
+#: consumers of a decoded payload — chiefly the content of a delivered result
+#: file — have to narrow it before use instead of silently assuming a shape.
+JSONValue = Union[
+    None,
+    bool,
+    int,
+    float,
+    str,
+    List["JSONValue"],
+    Dict[str, "JSONValue"],
+]

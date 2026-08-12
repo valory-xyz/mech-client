@@ -22,7 +22,7 @@
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import requests
 from mech_client.domain.delivery.base import DeliveryWatcher
@@ -71,6 +71,11 @@ class OffchainDeliveryWatcher(
         :return: Dictionary mapping request ID to its delivery result
         """
         results: Dict[str, DeliveryResult] = {}
+        # Result-file URLs seen for requests whose file has not been read yet.
+        # A read that keeps failing is retried for as long as there is budget,
+        # so the URL is held here to report at timeout rather than written into
+        # `results`, which would mark the request done after a single attempt.
+        pending_urls: Dict[str, str] = {}
         prev_count = -1
         start_time = time.time()
 
@@ -93,15 +98,32 @@ class OffchainDeliveryWatcher(
 
                 try:
                     response = await self._fetch_offchain_data(request_id_int)
-                    if response:
-                        results[request_id] = await self._resolve_delivery(
-                            request_id, request_id_int, response
+                    if not response:
+                        continue
+
+                    url = self._result_file_url(response, request_id_int)
+                    if url is None:
+                        # The mech answered inline; the envelope is the answer.
+                        results[request_id] = DeliveryResult(
+                            request_id=request_id, data=response
                         )
-                        logger.info(
-                            f"Received offchain response for request {request_id_int}"
+                    else:
+                        pending_urls[request_id] = url
+                        # Off the event loop: a gateway round-trip here would
+                        # otherwise stall every other request's poll.
+                        results[request_id] = DeliveryResult(
+                            request_id=request_id,
+                            data=await asyncio.to_thread(
+                                fetch_result_file, url, request_id
+                            ),
+                            url=url,
                         )
+                    logger.info(
+                        f"Received offchain response for request {request_id_int}"
+                    )
                 except Exception as e:  # pylint: disable=broad-except
-                    # Log error but continue polling
+                    # Log error but continue polling. Leaving the request out of
+                    # `results` is what keeps it eligible for the next cycle.
                     logger.error(
                         f"Error fetching offchain data for {request_id_int}: {e}"
                     )
@@ -118,41 +140,36 @@ class OffchainDeliveryWatcher(
                     prev_count = current_count
                 await asyncio.sleep(WAIT_SLEEP)
 
+        # A request whose file never became readable still reports where to look,
+        # the same shape the on-chain path returns for an unreadable result.
+        for request_id, url in pending_urls.items():
+            results.setdefault(
+                request_id, DeliveryResult(request_id=request_id, data=None, url=url)
+            )
+
         return results
 
     @staticmethod
-    async def _resolve_delivery(
-        request_id: str, request_id_decimal: str, response: Any
-    ) -> DeliveryResult:
+    def _result_file_url(response: Any, request_id_decimal: str) -> Optional[str]:
         """
-        Resolve an offchain response to the result it points at.
+        Locate the result file an offchain response points at.
 
         The endpoint answers with an envelope carrying ``task_result``, the
         IPFS hash of the directory the mech filed the result under. Reading
-        that file here gives callers the same content the on-chain watcher
-        returns. Mechs that answer inline (no ``task_result``) are passed
-        through unchanged.
+        that file gives callers the same content the on-chain watcher returns.
 
-        :param request_id: Request ID in hex, as used to key the results
-        :param request_id_decimal: Same request ID in decimal, the name of the
-            result file inside the delivery directory
         :param response: Raw response from the offchain endpoint
-        :return: The resolved delivery result
+        :param request_id_decimal: Request ID in decimal, the name of the
+            result file inside the delivery directory
+        :return: URL of the result file, or ``None`` for a mech that answered
+            inline and pinned no file
         """
         task_result = (
             response.get("task_result") if isinstance(response, dict) else None
         )
         if not isinstance(task_result, str) or not task_result:
-            return DeliveryResult(request_id=request_id, data=response)
-
-        # Off the event loop: this is a gateway round-trip inside the polling
-        # loop, so blocking here would stall every other request's poll.
-        url = build_result_file_url(task_result, request_id_decimal)
-        return DeliveryResult(
-            request_id=request_id,
-            data=await asyncio.to_thread(fetch_result_file, url),
-            url=url,
-        )
+            return None
+        return build_result_file_url(task_result, request_id_decimal)
 
     async def _fetch_offchain_data(self, request_id: str) -> Any:
         """

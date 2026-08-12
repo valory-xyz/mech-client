@@ -105,17 +105,32 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
         # be read degrades to `data=None` — its URL still points at it — rather
         # than discarding every sibling result along with it.
         file_data = await asyncio.gather(
-            *(asyncio.to_thread(fetch_result_file, url) for url in urls.values()),
+            *(
+                asyncio.to_thread(fetch_result_file, url, request_id)
+                for request_id, url in urls.items()
+            ),
             return_exceptions=True,
         )
-        return {
-            request_id: DeliveryResult(
-                request_id=request_id,
-                data=None if isinstance(data, BaseException) else data,
-                url=url,
+
+        results: Dict[str, DeliveryResult] = {}
+        for (request_id, url), data in zip(urls.items(), file_data):
+            if isinstance(data, BaseException):
+                # `fetch_result_file` logs the read failures it anticipates, so
+                # anything surfacing here is unforeseen. Say so loudly: the
+                # delivery is degraded either way, and a silent `None` would
+                # leave nothing to debug from.
+                logger.error(
+                    "Unexpected error reading the result file for request %s "
+                    "from %s: %r",
+                    request_id,
+                    url,
+                    data,
+                )
+                data = None
+            results[request_id] = DeliveryResult(
+                request_id=request_id, data=data, url=url
             )
-            for (request_id, url), data in zip(urls.items(), file_data)
-        }
+        return results
 
     async def _wait_for_marketplace_delivery(
         self, request_ids: List[str]
