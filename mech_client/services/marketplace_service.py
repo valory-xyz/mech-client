@@ -21,7 +21,17 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, FrozenSet, List, Optional, Tuple, TypedDict, cast
+from typing import (
+    Any,
+    Dict,
+    FrozenSet,
+    List,
+    Optional,
+    Tuple,
+    TypedDict,
+    Union,
+    cast,
+)
 
 import requests
 from aea_ledger_ethereum import EthereumCrypto
@@ -98,20 +108,37 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-class RequestResult(TypedDict):
-    """What :meth:`MarketplaceService.send_request` returns.
+class OnchainRequestResult(TypedDict):
+    """What :meth:`MarketplaceService.send_request` returns on the on-chain path.
 
     The shape is a documented public contract, so spell it out: a key typo at
     a call site is then a mypy error rather than a runtime ``KeyError``.
-
-    ``tx_hash`` and ``receipt`` are ``None`` on the offchain path, which has no
-    transaction to report. ``request_ids`` is populated on both paths.
     """
 
-    tx_hash: Optional[str]
+    tx_hash: str
     request_ids: List[str]
-    receipt: Optional[Dict[str, Any]]
+    receipt: Dict[str, Any]
     deliveries: Dict[str, DeliveryResult]
+
+
+class OffchainRequestResult(TypedDict):
+    """What :meth:`MarketplaceService.send_request` returns on the offchain path.
+
+    There is no transaction to report, so ``tx_hash`` and ``receipt`` are
+    always ``None`` — typed as such rather than ``Optional`` so that the two
+    cannot be described independently. ``request_ids`` is populated here too.
+    """
+
+    tx_hash: None
+    request_ids: List[str]
+    receipt: None
+    deliveries: Dict[str, DeliveryResult]
+
+
+#: The two are a discriminated union rather than one shape with optional
+#: fields: `tx_hash` and `receipt` are set together or absent together, and
+#: `Optional` on both would admit the two states where only one is filled in.
+RequestResult = Union[OnchainRequestResult, OffchainRequestResult]
 
 
 @dataclass(frozen=True)
@@ -383,7 +410,7 @@ class MarketplaceService(
         extra_attributes: Optional[Dict[str, Any]],
         timeout: float,
         auto_deposit: bool = False,
-    ) -> RequestResult:
+    ) -> OffchainRequestResult:
         """
         Send offchain request to mech HTTP endpoint.
 

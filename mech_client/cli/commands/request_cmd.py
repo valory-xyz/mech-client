@@ -55,7 +55,7 @@ def _format_delivery_output(delivery_data: JSONValue) -> str:
     :return: The mech's answer, ready to print.
     """
     if delivery_data is None:
-        return "unavailable — could not read the result file (URL below)"
+        return "unavailable — could not read the result file"
 
     if isinstance(delivery_data, dict) and "result" in delivery_data:
         result = delivery_data["result"]

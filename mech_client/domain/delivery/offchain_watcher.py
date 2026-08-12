@@ -75,6 +75,8 @@ class OffchainDeliveryWatcher(
         # A read that keeps failing is retried for as long as there is budget,
         # so the URL is held here to report at timeout rather than written into
         # `results`, which would mark the request done after a single attempt.
+        # Retrying matters most for the ordinary case — a pinned file that
+        # 404s until the gateway catches up — not just for unexpected errors.
         pending_urls: Dict[str, str] = {}
         prev_count = -1
         start_time = time.time()
@@ -111,12 +113,19 @@ class OffchainDeliveryWatcher(
                         pending_urls[request_id] = url
                         # Off the event loop: a gateway round-trip here would
                         # otherwise stall every other request's poll.
+                        data = await asyncio.to_thread(
+                            fetch_result_file, url, request_id
+                        )
+                        if data is None:
+                            # Not readable yet. `fetch_result_file` returns
+                            # `None` for every HTTP failure, and a freshly
+                            # pinned file routinely 404s while it propagates,
+                            # so leave the request out of `results` to have the
+                            # next cycle try again. The backfill below reports
+                            # it with this URL if it never becomes readable.
+                            continue
                         results[request_id] = DeliveryResult(
-                            request_id=request_id,
-                            data=await asyncio.to_thread(
-                                fetch_result_file, url, request_id
-                            ),
-                            url=url,
+                            request_id=request_id, data=data, url=url
                         )
                     logger.info(
                         f"Received offchain response for request {request_id_int}"

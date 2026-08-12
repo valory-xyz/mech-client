@@ -355,12 +355,16 @@ class TestOffchainDeliveryWatcherResolvesResultFile:
         assert results["0x1a"].data == {"result": '{"answer": 42}'}
 
     @pytest.mark.anyio
+    @patch("mech_client.domain.delivery.offchain_watcher.asyncio.sleep")
     @patch("mech_client.domain.delivery.offchain_watcher.fetch_result_file")
     @patch("mech_client.domain.delivery.offchain_watcher.requests")
-    async def test_unreadable_result_file_keeps_url(
-        self, mock_requests: MagicMock, mock_fetch_result_file: MagicMock
+    async def test_unreadable_result_file_is_retried(
+        self,
+        mock_requests: MagicMock,
+        mock_fetch_result_file: MagicMock,
+        mock_sleep: AsyncMock,
     ) -> None:
-        """Test an unreadable result file leaves data None but keeps the URL."""
+        """Test an unreadable file leaves the request pending so the poll retries."""
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "request_id": "26",
@@ -368,7 +372,10 @@ class TestOffchainDeliveryWatcherResolvesResultFile:
         }
         mock_response.raise_for_status.return_value = None
         mock_requests.get.return_value = mock_response
-        mock_fetch_result_file.return_value = None
+        # `fetch_result_file` returns None for every HTTP failure — this is the
+        # shape a freshly pinned file takes while the gateway catches up, and
+        # the case the retry exists for.
+        mock_fetch_result_file.side_effect = [None, None, {"result": "the answer"}]
 
         watcher = OffchainDeliveryWatcher(
             mech_offchain_url="https://mech.example.com", timeout=60.0
@@ -376,10 +383,12 @@ class TestOffchainDeliveryWatcherResolvesResultFile:
 
         results = await watcher.watch(["0x1a"])
 
-        assert results["0x1a"].data is None
-        assert results["0x1a"].url is not None
+        assert mock_fetch_result_file.call_count == 3
+        assert results["0x1a"].data == {"result": "the answer"}
+        assert mock_sleep.await_count >= 1
 
     @pytest.mark.anyio
+    @patch("mech_client.domain.delivery.offchain_watcher.logger")
     @patch("mech_client.domain.delivery.offchain_watcher.asyncio.sleep")
     @patch("mech_client.domain.delivery.offchain_watcher.fetch_result_file")
     @patch("mech_client.domain.delivery.offchain_watcher.requests")
@@ -388,8 +397,9 @@ class TestOffchainDeliveryWatcherResolvesResultFile:
         mock_requests: MagicMock,
         mock_fetch_result_file: MagicMock,
         mock_sleep: AsyncMock,
+        mock_logger: MagicMock,
     ) -> None:
-        """Test a raising read leaves the request pending so the next poll retries."""
+        """Test an unforeseen error also leaves the request eligible for retry."""
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "request_id": "26",
@@ -397,7 +407,6 @@ class TestOffchainDeliveryWatcherResolvesResultFile:
         }
         mock_response.raise_for_status.return_value = None
         mock_requests.get.return_value = mock_response
-        # Fails once, then succeeds — the retry is the whole point.
         mock_fetch_result_file.side_effect = [
             RuntimeError("gateway exploded"),
             {"result": "the answer"},
@@ -411,10 +420,10 @@ class TestOffchainDeliveryWatcherResolvesResultFile:
 
         assert mock_fetch_result_file.call_count == 2
         assert results["0x1a"].data == {"result": "the answer"}
-        assert mock_sleep.await_count >= 1
+        # ...and the unforeseen error was not silent
+        assert "gateway exploded" in str(mock_logger.error.call_args)
 
     @pytest.mark.anyio
-    @patch("mech_client.domain.delivery.offchain_watcher.logger")
     @patch("mech_client.domain.delivery.offchain_watcher.time.time")
     @patch("mech_client.domain.delivery.offchain_watcher.asyncio.sleep")
     @patch("mech_client.domain.delivery.offchain_watcher.fetch_result_file")
@@ -425,7 +434,6 @@ class TestOffchainDeliveryWatcherResolvesResultFile:
         mock_fetch_result_file: MagicMock,
         mock_sleep: AsyncMock,
         mock_time: MagicMock,
-        mock_logger: MagicMock,
     ) -> None:
         """Test a read failing until timeout still reports where the answer is."""
         ipfs_hash = "b" * 64
@@ -436,7 +444,7 @@ class TestOffchainDeliveryWatcherResolvesResultFile:
         }
         mock_response.raise_for_status.return_value = None
         mock_requests.get.return_value = mock_response
-        mock_fetch_result_file.side_effect = RuntimeError("gateway exploded")
+        mock_fetch_result_file.return_value = None
 
         def clock() -> Iterator[float]:
             """Start the clock, allow one poll, then run past the budget."""
@@ -453,6 +461,9 @@ class TestOffchainDeliveryWatcherResolvesResultFile:
 
         results = await watcher.watch(["0x1a"])
 
+        # Pins that the poll actually reached the read, so a regression that
+        # short-circuits it fails here rather than as a KeyError below.
+        assert mock_fetch_result_file.call_count >= 1
         # Content is unavailable, but the request is still reported with the URL
         # to fetch it by hand — the same shape the on-chain path returns.
         assert results["0x1a"].data is None
@@ -460,8 +471,6 @@ class TestOffchainDeliveryWatcherResolvesResultFile:
             results["0x1a"].url
             == f"https://gateway.autonolas.tech/ipfs/f01701220{ipfs_hash}/26"
         )
-        # ...and the failure was not silent
-        assert "gateway exploded" in str(mock_logger.error.call_args)
 
     @pytest.mark.anyio
     @patch("mech_client.domain.delivery.offchain_watcher.fetch_result_file")
