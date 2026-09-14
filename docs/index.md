@@ -106,7 +106,7 @@ mechx mech list --chain-config <chain-config>
 
 Replace `<chain-config>` by the chosen network. Supported marketplace chains: gnosis, base, polygon, optimism.
 
-**Note**: Default subgraph URLs are provided for all supported chains. You can optionally override the default:
+**Note**: Default subgraph URLs are provided for Gnosis, Base, Polygon and Optimism. Robinhood has no subgraph, so `mech list` is not available there. You can optionally override the default:
 ```bash
 export MECHX_SUBGRAPH_URL=<your-custom-subgraph-url>
 ```

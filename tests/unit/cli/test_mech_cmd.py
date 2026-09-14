@@ -21,6 +21,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from mech_client.cli.commands.mech_cmd import mech
@@ -292,3 +293,23 @@ class TestMechListCommandMetadataEdgeCases:
         # Should use first entry
         assert result.exit_code == 0
         assert "first_hash" in result.output
+
+
+class TestMechListWithoutSubgraph:
+    """Tests for mech list on a chain with no subgraph."""
+
+    def test_robinhood_gets_the_subgraph_error_not_the_catch_all(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test mech list on Robinhood shows the subgraph error message."""
+        monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+
+        runner = CliRunner()
+        result = runner.invoke(mech, ["list", "--chain-config", "robinhood"])
+
+        assert result.exit_code == 1
+        assert (
+            "Subgraph endpoint error: Subgraph URL not set for chain config: robinhood"
+            in result.output
+        )
+        assert "Unexpected error" not in result.output

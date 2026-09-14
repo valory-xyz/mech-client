@@ -140,7 +140,7 @@ mechx mech list --chain-config gnosis
    └─ IPFS Gateway links (metadata URLs)
 
 ENV VARS:
-  MECHX_SUBGRAPH_URL (optional - defaults provided for all supported chains)
+  MECHX_SUBGRAPH_URL (optional - defaults provided for gnosis, base, polygon, optimism)
 
 NOTES:
   - Read-only command, no transactions
@@ -262,9 +262,9 @@ All commands require `--chain-config` with one of these five chain names. Arbitr
 - **Subgraph**: Default subgraph URL provided in `mechs.json` for Gnosis, Base, Polygon and Optimism. Robinhood has no subgraph, so `mech list` is not available there. Override with `MECHX_SUBGRAPH_URL` if needed.
 
 **Command Requirements:**
-- `mech list`: Requires marketplace (default subgraph URLs provided; optionally override with `MECHX_SUBGRAPH_URL`)
+- `mech list`: Requires marketplace + a subgraph (default URLs for Gnosis, Base, Polygon, Optimism; none for Robinhood; optionally override with `MECHX_SUBGRAPH_URL`)
 - `request`: Requires marketplace contract and standard Olas service registry
 - `deposit native`: Requires marketplace + native payment support (Gnosis, Base, Polygon, Optimism, Robinhood)
 - `deposit token`: Requires marketplace + token addresses in config (Gnosis, Base, Polygon, Optimism; USDC type only on Robinhood, which is USDG)
 - `subscription purchase`: Requires marketplace + NVM subscription support (Gnosis, Base)
-- `setup`: All marketplace chains (Gnosis, Base, Polygon, Optimism)
+- `setup`: Gnosis, Base, Polygon, Optimism (not Robinhood, which is client mode only)
