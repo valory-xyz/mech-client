@@ -23,6 +23,7 @@ from typing import List, Optional
 
 from mech_client.infrastructure.config.loader import get_mech_config
 from mech_client.infrastructure.subgraph.client import SubgraphClient
+from mech_client.utils.errors import SubgraphError
 
 # Mapping of mech factory addresses to mech types per chain
 CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE = {
@@ -63,11 +64,14 @@ def query_mm_mechs_info(chain_config: str) -> Optional[List]:
 
     :param chain_config: Chain configuration name (gnosis, base, polygon, optimism)
     :return: List of mech data dicts, or None if no mechs found
-    :raises Exception: If subgraph URL not set for chain
+    :raises SubgraphError: If no subgraph URL is set for the chain
     """
     mech_config = get_mech_config(chain_config)
     if not mech_config.subgraph_url:
-        raise Exception(f"Subgraph URL not set for chain config: {chain_config}")
+        raise SubgraphError(
+            f"Subgraph URL not set for chain config: {chain_config}. "
+            "mech list needs a subgraph, and this chain has none configured."
+        )
 
     client = SubgraphClient(mech_config.subgraph_url)
     response = client.query_mechs()

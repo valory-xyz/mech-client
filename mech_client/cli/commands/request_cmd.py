@@ -174,7 +174,7 @@ def request(
     :param ctx: Click context (carries client_mode flag from the parent group).
     :param prompts: One or more prompt strings to send (one per request in a batch).
     :param priority_mech: Address of the mech to prioritise for the request.
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood).
     :param use_prepaid: Use the marketplace prepaid balance instead of per-request payment.
     :param use_offchain: Route delivery off-chain (auto-discovered URL); implies prepaid.
     :param auto_deposit: On an offchain HTTP 402, top up the prepaid balance and retry.

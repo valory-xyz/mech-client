@@ -22,6 +22,8 @@
 import pytest
 
 from mech_client.infrastructure.config import get_mech_config
+from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
+from mech_client.utils.constants import CHAIN_NAME_TO_ID
 
 
 class TestGetMechConfigIntegration:
@@ -79,9 +81,28 @@ class TestGetMechConfigIntegration:
         assert config.mech_marketplace_contract is not None
         assert config.ledger_config.chain_id == 10
 
+    def test_load_robinhood_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test loading robinhood config: a client-mode chain with no subgraph."""
+        monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+
+        config = get_mech_config("robinhood")
+
+        assert config.ledger_config.chain_id == 4663
+        assert (
+            config.mech_marketplace_contract
+            == "0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8"
+        )
+        assert (
+            config.complementary_metadata_hash_address
+            == "0xD1155408D58293BE0743225bcDe28b9FD0C12378"
+        )
+        assert config.subgraph_url == ""
+        assert CHAIN_ID_TO_NAME[4663] == "robinhood"
+        assert CHAIN_NAME_TO_ID["robinhood"] == 4663
+
     def test_all_chains_load_successfully(self) -> None:
         """Test all chains in mechs.json can be loaded without errors."""
-        chains = ["gnosis", "base", "polygon", "optimism"]
+        chains = ["gnosis", "base", "polygon", "optimism", "robinhood"]
 
         for chain in chains:
             config = get_mech_config(chain)
@@ -105,7 +126,7 @@ class TestGetMechConfigIntegration:
 
     def test_ledger_config_fields_populated(self) -> None:
         """Test ledger_config is properly populated for all chains."""
-        chains = ["gnosis", "base", "polygon", "optimism"]
+        chains = ["gnosis", "base", "polygon", "optimism", "robinhood"]
 
         for chain in chains:
             config = get_mech_config(chain)
