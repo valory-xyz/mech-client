@@ -88,7 +88,7 @@ class TestDepositNativeCommand:
         mock_deposit_service: MagicMock,
     ) -> None:
         """Test deposit native works for all supported chains."""
-        chains = ["gnosis", "base", "polygon", "optimism"]
+        chains = ["gnosis", "base", "polygon", "optimism", "robinhood"]
 
         runner = CliRunner()
         for chain in chains:

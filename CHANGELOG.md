@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ Added
+
+- **Robinhood Chain (4663)** in client mode: marketplace requests (on-chain and offchain), native and USDC-type deposits (USDG on Robinhood), and `tool` commands. Agent mode (`setup`) and `mech list` are not available on Robinhood yet: the operate middleware does not support the chain, and there is no marketplace subgraph.
+
 ## [0.22.0] - 2026-08-12
 
 ### ✨ Added

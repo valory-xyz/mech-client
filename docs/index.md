@@ -63,9 +63,9 @@ Run `setup` for each chain you interact with, and ensure your `.env` file has th
 
 ## Supported Chains
 
-**Supported chains:** `gnosis`, `base`, `polygon`, `optimism`
+**Supported chains:** `gnosis`, `base`, `polygon`, `optimism`, `robinhood`
 
-All commands require `--chain-config` with one of these four chain names.
+All commands require `--chain-config` with one of these five chain names.
 
 | Chain | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Payments | USDC Payments |
 |-------|-------------|------------|----------------|-------------------|---------------|---------------|
@@ -73,16 +73,17 @@ All commands require `--chain-config` with one of these four chain names.
 | Base | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Polygon | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
 | Optimism | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Robinhood | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ (USDG) |
 
 **Key:**
 - **Marketplace**: All supported chains have marketplace contracts deployed.
-- **Agent Mode**: All supported chains support on-chain agent registration via `setup`.
+- **Agent Mode**: Gnosis, Base, Polygon and Optimism support on-chain agent registration via `setup`. Robinhood is client mode only: pass `--client-mode`.
 - **Native Payment**: Chains supporting `deposit native` command for prepaid native token deposits.
 - **NVM Subscriptions**: Chains supporting `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base only).
-- **OLAS/USDC Payments**: Chains supporting `deposit token` command with OLAS or USDC tokens.
+- **OLAS/USDC Payments**: Chains supporting `deposit token` command with OLAS or USDC tokens. On Robinhood the USDC payment type uses USDG, so `--token-type usdc` deposits USDG.
 
 **Important Notes:**
-- The `mech list` command works on all marketplace chains (Gnosis, Base, Polygon, Optimism) with default subgraph URLs provided. The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
+- The `mech list` command works on Gnosis, Base, Polygon and Optimism with default subgraph URLs provided. Robinhood has no subgraph, so `mech list` is not available there. The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
 - For other marketplace commands (`request`, deposits), subgraph is not required.
 
 ## 1. How to Send a request to a Mech (registered on the Mech MarketPlace)

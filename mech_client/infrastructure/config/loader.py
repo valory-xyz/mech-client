@@ -37,7 +37,7 @@ def get_mech_config(
     ``json.JSONDecodeError`` if it is malformed, and ``KeyError`` if the
     requested chain is absent.
 
-    :param chain_config: Chain name (gnosis, base, polygon, optimism).
+    :param chain_config: Chain name (gnosis, base, polygon, optimism, robinhood).
                         If None, uses first chain in config.
     :param agent_mode: Whether running in agent mode (uses stored operate config)
     :return: MechConfig instance with loaded configuration

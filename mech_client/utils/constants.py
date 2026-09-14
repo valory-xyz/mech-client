@@ -49,6 +49,7 @@ SUPPORTED_MARKETPLACE_CHAINS = [
     "base",
     "polygon",
     "optimism",
+    "robinhood",
 ]
 
 # Chains supporting NVM subscriptions
@@ -75,12 +76,14 @@ GNOSIS_CHAIN_ID = 100
 BASE_CHAIN_ID = 8453
 POLYGON_CHAIN_ID = 137
 OPTIMISM_CHAIN_ID = 10
+ROBINHOOD_CHAIN_ID = 4663
 
 CHAIN_ID_TO_NAME = {
     GNOSIS_CHAIN_ID: "gnosis",
     BASE_CHAIN_ID: "base",
     POLYGON_CHAIN_ID: "polygon",
     OPTIMISM_CHAIN_ID: "optimism",
+    ROBINHOOD_CHAIN_ID: "robinhood",
 }
 
 CHAIN_NAME_TO_ID = {
@@ -88,6 +91,7 @@ CHAIN_NAME_TO_ID = {
     "base": BASE_CHAIN_ID,
     "polygon": POLYGON_CHAIN_ID,
     "optimism": OPTIMISM_CHAIN_ID,
+    "robinhood": ROBINHOOD_CHAIN_ID,
 }
 
 # Safe multisig constants

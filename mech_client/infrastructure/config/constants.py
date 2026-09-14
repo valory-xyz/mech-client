@@ -43,6 +43,7 @@ CHAIN_ID_GNOSIS = 100
 CHAIN_ID_BASE = 8453
 CHAIN_ID_POLYGON = 137
 CHAIN_ID_OPTIMISM = 10
+CHAIN_ID_ROBINHOOD = 4663
 
 # Mapping from chain ID to chain name
 CHAIN_ID_TO_NAME = {
@@ -50,4 +51,5 @@ CHAIN_ID_TO_NAME = {
     CHAIN_ID_BASE: "base",
     CHAIN_ID_POLYGON: "polygon",
     CHAIN_ID_OPTIMISM: "optimism",
+    CHAIN_ID_ROBINHOOD: "robinhood",
 }

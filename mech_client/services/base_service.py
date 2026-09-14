@@ -59,7 +59,7 @@ class BaseTransactionService:  # pylint: disable=too-few-public-methods,too-many
         """
         Initialize base transaction service.
 
-        :param chain_config: Chain configuration name (gnosis, base, polygon, optimism)
+        :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood)
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
         :param crypto: Ethereum crypto object for local signing (alternative to signer)
         :param safe_address: Safe address (required for agent mode)

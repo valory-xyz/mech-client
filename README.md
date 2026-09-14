@@ -89,9 +89,9 @@ Learn more about mech marketplace [here](https://olas.network/mech-marketplace)
 
 ### Supported Chains
 
-**Supported chains:** `gnosis`, `base`, `polygon`, `optimism`
+**Supported chains:** `gnosis`, `base`, `polygon`, `optimism`, `robinhood`
 
-All commands require `--chain-config` with one of these four chain names.
+All commands require `--chain-config` with one of these five chain names.
 
 | Chain | Marketplace | Agent Mode | Native Payment | NVM Subscriptions | OLAS Payments | USDC Payments |
 |-------|-------------|------------|----------------|-------------------|---------------|---------------|
@@ -99,14 +99,15 @@ All commands require `--chain-config` with one of these four chain names.
 | Base | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Polygon | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
 | Optimism | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Robinhood | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ (USDG) |
 
 **Notes:**
 - **Marketplace**: Chains with marketplace contracts deployed. All supported chains have marketplace support.
-- **Agent Mode**: All supported chains support on-chain agent registration via `setup`.
+- **Agent Mode**: Gnosis, Base, Polygon and Optimism support on-chain agent registration via `setup`. Robinhood is client mode only: pass `--client-mode`.
 - **Native Payment**: Chains that support `deposit native` command for prepaid native token deposits.
 - **NVM Subscriptions**: Chains that support `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base only).
-- **OLAS/USDC Payments**: Chains that support `deposit token` command with OLAS or USDC tokens.
-- **Subgraph**: Default subgraph URLs are provided for all supported chains. The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
+- **OLAS/USDC Payments**: Chains that support `deposit token` command with OLAS or USDC tokens. On Robinhood the USDC payment type uses USDG, so `--token-type usdc` deposits USDG.
+- **Subgraph**: Default subgraph URLs are provided for all supported chains except Robinhood, which has no subgraph, so `mech list` is not available there. The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
 
 ### Set up agent mode for on-chain interactions
 

@@ -435,3 +435,18 @@ class TestQueryMmMechsInfo:
         assert result[0]["service"]["totalDeliveries"] == "5"
         assert result[0]["service"]["metadata"][0]["metadata"] == "0x1234567890abcdef"
         assert result[0]["mech_type"] == "Fixed Price Native"
+
+
+class TestQueryMechsChainWithoutSubgraph:
+    """Tests for marketplace chains that have no subgraph."""
+
+    def test_robinhood_raises_subgraph_url_not_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test mech list on Robinhood fails fast: it has no subgraph."""
+        monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+
+        with pytest.raises(
+            Exception, match="Subgraph URL not set for chain config: robinhood"
+        ):
+            query_mm_mechs_info("robinhood")

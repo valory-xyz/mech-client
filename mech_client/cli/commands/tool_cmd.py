@@ -44,7 +44,7 @@ def tool() -> None:
 @click.option(
     "--chain-config",
     required=True,
-    help="Chain configuration name (gnosis, base, polygon, optimism).",
+    help="Chain configuration name (gnosis, base, polygon, optimism, robinhood).",
 )
 @handle_cli_errors
 def tool_list(agent_id: int, chain_config: str) -> None:
@@ -57,7 +57,7 @@ def tool_list(agent_id: int, chain_config: str) -> None:
     Example: mechx tool list 1 --chain-config gnosis
 
     :param agent_id: Mech service ID on the Olas service registry.
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood).
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)
@@ -83,7 +83,7 @@ def tool_list(agent_id: int, chain_config: str) -> None:
 @click.option(
     "--chain-config",
     required=True,
-    help="Chain configuration name (gnosis, base, polygon, optimism).",
+    help="Chain configuration name (gnosis, base, polygon, optimism, robinhood).",
 )
 @handle_cli_errors
 def tool_describe(tool_id: str, chain_config: str) -> None:
@@ -96,7 +96,7 @@ def tool_describe(tool_id: str, chain_config: str) -> None:
     Example: mechx tool describe 1-openai-gpt-4 --chain-config gnosis
 
     :param tool_id: Tool ID in ``service_id-tool_name`` form.
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood).
     """
     # Validate inputs
     validated_chain = validate_chain_config(chain_config)
@@ -113,7 +113,7 @@ def tool_describe(tool_id: str, chain_config: str) -> None:
 @click.option(
     "--chain-config",
     required=True,
-    help="Chain configuration name (gnosis, base, polygon, optimism).",
+    help="Chain configuration name (gnosis, base, polygon, optimism, robinhood).",
 )
 @handle_cli_errors
 def tool_schema(tool_id: str, chain_config: str) -> None:
@@ -126,7 +126,7 @@ def tool_schema(tool_id: str, chain_config: str) -> None:
     Example: mechx tool schema 1-openai-gpt-4 --chain-config gnosis
 
     :param tool_id: Tool ID in ``service_id-tool_name`` form.
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood).
     """
     # Validate inputs
     validated_chain = validate_chain_config(chain_config)

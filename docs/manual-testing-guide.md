@@ -326,7 +326,7 @@ Deposit successful!
 **Verification**:
 Check your prepaid balance on the blockchain explorer for the BalanceTrackerFixedPriceNative contract.
 
-**Supported Chains**: gnosis, base, polygon, optimism
+**Supported Chains**: gnosis, base, polygon, optimism, robinhood
 
 ---
 
@@ -409,7 +409,7 @@ Deposit successful!
 - ✅ Both transaction URLs have "0x" prefix
 - ✅ Balance updated in BalanceTracker contract
 
-**Supported Chains**: gnosis, base, polygon, optimism
+**Supported Chains**: gnosis, base, polygon, optimism, robinhood (`usdc` is USDG on Robinhood)
 
 ---
 
@@ -1014,7 +1014,7 @@ mechx subscription purchase --chain-config gnosis
 
 **Goal**: Verify functionality across different chains
 
-**Chains to Test**: gnosis, base, polygon, optimism
+**Chains to Test**: gnosis, base, polygon, optimism, robinhood (client mode only)
 
 **Test per Chain**:
 - [ ] Interact command works
@@ -1090,7 +1090,7 @@ export MECHX_CHAIN_RPC='https://rpc.ankr.com/gnosis'
 
 **Cause**: Chain doesn't have marketplace contract
 
-**Solution**: Use supported chains (gnosis, base, polygon, optimism)
+**Solution**: Use supported chains (gnosis, base, polygon, optimism, robinhood)
 
 ### Issue: "MECHX_SUBGRAPH_URL is required"
 
@@ -1134,7 +1134,7 @@ Use this template to document your testing:
 
 **Tester**: [Name]
 **Version**: [mech-client version]
-**Chain**: [gnosis/base/polygon/optimism]
+**Chain**: [gnosis/base/polygon/optimism/robinhood]
 
 ### Tests Completed
 

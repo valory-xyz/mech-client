@@ -399,7 +399,7 @@ Version bump checklist:
 ## Important Notes
 
 - **Python version**: >=3.10, <3.12 (supports Python 3.10, 3.11)
-- **Supported chains**: gnosis, base, polygon, optimism (Arbitrum and Celo not functional)
+- **Supported chains**: gnosis, base, polygon, optimism, robinhood (Robinhood in client mode only; Arbitrum and Celo not functional)
 - **Main dependencies**: `olas-operate-middleware`, `safe-eth-py`, `gql`, `click`
 - **Agent mode**: Supports all marketplace chains
 - **Always use custom RPC providers** for reliability (public RPCs may be rate-limited)

@@ -28,6 +28,7 @@ Chain IDs:
 - 137: Polygon
 - 8453: Base
 - 10: Optimism
+- 4663: Robinhood (its USDC payment type uses USDG)
 - 42161: Arbitrum (not supported)
 - 42220: Celo (not supported)
 """
@@ -42,6 +43,7 @@ CHAIN_TO_NATIVE_BALANCE_TRACKER: Dict[int, str] = {
     8453: "0xB3921F8D8215603f0Bd521341Ac45eA8f2d274c1",  # Base
     42220: "",  # Celo (not supported)
     10: "0x4Cd816ce806FF1003ee459158A093F02AbF042a8",  # Optimism
+    4663: "0x1d79e0a600B61FAC1B8F40c27347e48962Ed2f23",  # Robinhood
 }
 
 # Balance tracker contracts for OLAS token payments
@@ -52,6 +54,7 @@ CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS: Dict[int, str] = {
     8453: "0x43fB32f25dce34EB76c78C7A42C8F40F84BCD237",  # Base
     42220: "",  # Celo (not supported)
     10: "0x70A0D93fb0dB6EAab871AB0A3BE279DcA37a2bcf",  # Optimism
+    4663: "",  # Robinhood (not supported)
 }
 
 # Balance tracker contracts for USDC token payments
@@ -62,6 +65,7 @@ CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC: Dict[int, str] = {
     8453: "0x0443C55e151dBA13fae079518F9dd01ff9c21CB2",  # Base
     42220: "",  # Celo (not supported)
     10: "0xA123748Ce7609F507060F947b70298D0bde621E6",  # Optimism
+    4663: "0xEB5638eefE289691EcE01943f768EDBF96258a80",  # Robinhood (USDG)
 }
 
 # OLAS token addresses by chain
@@ -72,6 +76,7 @@ CHAIN_TO_PRICE_TOKEN_OLAS: Dict[int, str] = {
     8453: "0x54330d28ca3357F294334BDC454a032e7f353416",  # Base
     42220: "",  # Celo (not supported)
     10: "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",  # Optimism
+    4663: "",  # Robinhood (not supported)
 }
 
 # USDC token addresses by chain
@@ -82,4 +87,5 @@ CHAIN_TO_PRICE_TOKEN_USDC: Dict[int, str] = {
     8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",  # Base
     42220: "",  # Celo (not supported)
     10: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",  # Optimism
+    4663: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",  # Robinhood (USDG)
 }

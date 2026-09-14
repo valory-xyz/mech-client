@@ -127,7 +127,7 @@ class TestToolListCommand:
         self, mock_tool_service: MagicMock
     ) -> None:
         """Test tool list works for all supported chains."""
-        chains = ["gnosis", "base", "polygon", "optimism"]
+        chains = ["gnosis", "base", "polygon", "optimism", "robinhood"]
 
         for chain in chains:
             # Mock response
@@ -318,7 +318,7 @@ class TestToolSchemaCommand:
     @patch("mech_client.cli.commands.tool_cmd.ToolService")
     def test_schema_command_all_chains(self, mock_tool_service: MagicMock) -> None:
         """Test tool schema works for all supported chains."""
-        chains = ["gnosis", "base", "polygon", "optimism"]
+        chains = ["gnosis", "base", "polygon", "optimism", "robinhood"]
 
         for chain in chains:
             # Mock response

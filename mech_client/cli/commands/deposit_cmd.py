@@ -64,7 +64,7 @@ def deposit_native(
 
     :param ctx: Click context (carries client_mode flag from the parent group).
     :param amount_to_deposit: Amount to deposit in wei (smallest unit).
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood).
     :param key: Optional path to a private-key file (required in client mode).
     """
     # Validate chain config
@@ -80,7 +80,7 @@ def deposit_native(
             f"Chain {validated_chain!r} does not support marketplace "
             f"deposits.\n\n"
             f"Marketplace contract is not deployed on this chain.\n\n"
-            f"Supported chains: gnosis, base, polygon, optimism"
+            f"Supported chains: gnosis, base, polygon, optimism, robinhood"
         )
 
     # Setup wallet command (agent mode detection, key loading, etc.)
@@ -136,7 +136,7 @@ def deposit_token(
 
     :param ctx: Click context (carries client_mode flag from the parent group).
     :param amount_to_deposit: Amount to deposit in the token's smallest unit.
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood).
     :param token_type: Token to deposit (``olas`` or ``usdc``).
     :param key: Optional path to a private-key file (required in client mode).
     """
@@ -153,7 +153,7 @@ def deposit_token(
             f"Chain {validated_chain!r} does not support marketplace "
             f"deposits.\n\n"
             f"Marketplace contract is not deployed on this chain.\n\n"
-            f"Supported chains: gnosis, base, polygon, optimism"
+            f"Supported chains: gnosis, base, polygon, optimism, robinhood"
         )
 
     # Setup wallet command (agent mode detection, key loading, etc.)

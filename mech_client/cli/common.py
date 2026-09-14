@@ -156,6 +156,6 @@ def common_wallet_options(func: F) -> F:
         "--chain-config",
         type=str,
         required=True,
-        help="Chain configuration name (gnosis, base, polygon, optimism).",
+        help="Chain configuration name (gnosis, base, polygon, optimism, robinhood).",
     )(func)
     return func

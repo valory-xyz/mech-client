@@ -112,5 +112,21 @@
     "price": 3000000000000,
     "transaction_url": "https://optimistic.etherscan.io/tx/{transaction_digest}",
     "subgraph_url": "https://api.subgraph.autonolas.tech/api/proxy/marketplace-optimism"
+  },
+  "robinhood": {
+    "mech_marketplace_contract": "0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",
+    "complementary_metadata_hash_address": "0xD1155408D58293BE0743225bcDe28b9FD0C12378",
+    "rpc_url": "https://rpc.mainnet.chain.robinhood.com",
+    "ledger_config": {
+      "address": "https://rpc.mainnet.chain.robinhood.com",
+      "chain_id": 4663,
+      "poa_chain": false,
+      "default_gas_price_strategy": "eip1559",
+      "is_gas_estimation_enabled": true
+    },
+    "gas_limit": 500000,
+    "price": 10000,
+    "transaction_url": "https://robinhoodchain.blockscout.com/tx/{transaction_digest}",
+    "subgraph_url": ""
   }
 }

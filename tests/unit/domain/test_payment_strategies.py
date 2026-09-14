@@ -545,6 +545,20 @@ class TestNativePaymentStrategyMethods:
         # Gnosis native balance tracker from contract_addresses.py
         assert address == "0x21cE6799A22A3Da84B7c44a814a9c79ab1d2A50D"
 
+    def test_get_balance_tracker_address_returns_robinhood_address(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test get_balance_tracker_address returns the Robinhood native tracker."""
+        strategy = NativePaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.NATIVE,
+            chain_id=4663,  # Robinhood
+        )
+        assert (
+            strategy.get_balance_tracker_address()
+            == "0x1d79e0a600B61FAC1B8F40c27347e48962Ed2f23"
+        )
+
     def test_get_payment_token_address_returns_none(
         self, strategy: NativePaymentStrategy
     ) -> None:
@@ -719,6 +733,50 @@ class TestTokenPaymentStrategyMethods:
             ValueError, match="OLAS token not available for chain 42161"
         ):
             strategy.get_payment_token_address()
+
+    def test_robinhood_usdc_type_resolves_usdg_and_its_tracker(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test the USDC payment type on Robinhood resolves USDG and its tracker."""
+        strategy = TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.USDC_TOKEN,
+            chain_id=4663,  # Robinhood - the USDC type is USDG
+        )
+        assert (
+            strategy.get_payment_token_address()
+            == "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168"
+        )
+        assert (
+            strategy.get_balance_tracker_address()
+            == "0xEB5638eefE289691EcE01943f768EDBF96258a80"
+        )
+
+    def test_get_payment_token_address_olas_raises_for_robinhood(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test get_payment_token_address raises ValueError for OLAS on Robinhood."""
+        strategy = TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.OLAS_TOKEN,
+            chain_id=4663,  # Robinhood - OLAS not available
+        )
+        with pytest.raises(ValueError, match="OLAS token not available for chain 4663"):
+            strategy.get_payment_token_address()
+
+    def test_get_balance_tracker_address_olas_raises_for_robinhood(
+        self, mock_ledger_api: MagicMock
+    ) -> None:
+        """Test the OLAS balance tracker lookup raises on Robinhood."""
+        strategy = TokenPaymentStrategy(
+            ledger_api=mock_ledger_api,
+            payment_type=PaymentType.OLAS_TOKEN,
+            chain_id=4663,  # Robinhood - no OLAS balance tracker
+        )
+        with pytest.raises(
+            ValueError, match="OLAS balance tracker not available for chain 4663"
+        ):
+            strategy.get_balance_tracker_address()
 
     def test_get_payment_token_address_unknown_type_raises(
         self, mock_ledger_api: MagicMock
