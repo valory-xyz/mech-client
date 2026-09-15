@@ -19,7 +19,7 @@
 
 """GraphQL subgraph client."""
 
-from typing import Any, Dict
+from typing import Any, Dict, get_args
 
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
@@ -38,16 +38,19 @@ class SubgraphClient:
     def __init__(
         self,
         subgraph_url: str,
+        dialect: SubgraphDialect,
         timeout: float = DEFAULT_TIMEOUT,
-        dialect: SubgraphDialect = "graph",
     ):
         """
         Initialize subgraph client.
 
         :param subgraph_url: GraphQL endpoint URL for the subgraph
-        :param timeout: Request timeout in seconds (default: 600)
         :param dialect: "graph" for The Graph, "squid" for an SQD squid (OpenReader)
+        :param timeout: Request timeout in seconds (default: 600)
+        :raises ValueError: If dialect is not a known dialect
         """
+        if dialect not in get_args(SubgraphDialect):
+            raise ValueError(f"Unknown subgraph dialect: {dialect}")
         self.subgraph_url = subgraph_url
         self.timeout = timeout
         self.dialect = dialect
@@ -90,14 +93,11 @@ class SubgraphClient:
         :param order_by: Field to order by (default: totalDeliveriesTransactions)
         :param order_direction: Sort direction "asc" or "desc" (default: desc)
         :return: Query response with mech data
-        :raises ValueError: If the client's dialect is unknown
         """
         if self.dialect == "squid":
             order = f"orderBy: [{order_by}_{order_direction.upper()}]"
-        elif self.dialect == "graph":
-            order = f"orderBy: {order_by}, orderDirection: {order_direction}"
         else:
-            raise ValueError(f"Unknown subgraph dialect: {self.dialect}")
+            order = f"orderBy: {order_by}, orderDirection: {order_direction}"
         query = f"""
         query MechsOrderedByServiceDeliveries {{
           meches({order}) {{

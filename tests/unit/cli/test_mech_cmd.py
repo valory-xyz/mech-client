@@ -296,7 +296,11 @@ class TestMechListCommandMetadataEdgeCases:
 
 
 class TestMechListWithoutSubgraph:
-    """Tests for mech list on a chain with no subgraph."""
+    """Tests for mech list on a chain with no subgraph URL.
+
+    Arbitrum stands in: it has no subgraph and no deployed marketplace, and no
+    chain has a deployed marketplace without a subgraph any more.
+    """
 
     def test_chain_without_subgraph_gets_the_subgraph_error_not_the_catch_all(
         self, monkeypatch: pytest.MonkeyPatch

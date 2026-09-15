@@ -32,7 +32,7 @@ class TestSubgraphClientInitialization:
     def test_initialization_default_timeout(self) -> None:
         """Test client initialization with default timeout."""
         url = "https://subgraph.example.com/graphql"
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
 
         assert client.subgraph_url == url
         assert client.timeout == 600.0
@@ -42,7 +42,7 @@ class TestSubgraphClientInitialization:
         """Test client initialization with custom timeout."""
         url = "https://subgraph.example.com/graphql"
         custom_timeout = 120.0
-        client = SubgraphClient(subgraph_url=url, timeout=custom_timeout)
+        client = SubgraphClient(subgraph_url=url, dialect="graph", timeout=custom_timeout)
 
         assert client.subgraph_url == url
         assert client.timeout == custom_timeout
@@ -66,7 +66,7 @@ class TestSubgraphClientProperty:
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
 
-        client = SubgraphClient(subgraph_url=url, timeout=timeout)
+        client = SubgraphClient(subgraph_url=url, dialect="graph", timeout=timeout)
 
         # Initially, _client should be None
         assert client._client is None
@@ -97,7 +97,7 @@ class TestSubgraphClientProperty:
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
 
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
 
         # Access client property twice
         result1 = client.client
@@ -126,7 +126,7 @@ class TestSubgraphClientExecute:
         mock_gql.return_value = mock_document
 
         # Create client with mocked underlying client
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
         mock_client = MagicMock()
         mock_client.execute.return_value = expected_result
         client._client = mock_client
@@ -153,7 +153,7 @@ class TestSubgraphClientExecute:
         mock_gql.return_value = mock_document
 
         # Create client with mocked underlying client
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
         mock_client = MagicMock()
         mock_client.execute.side_effect = Exception("GraphQL query failed")
         client._client = mock_client
@@ -183,7 +183,7 @@ class TestSubgraphClientQueryMechs:
         mock_gql.return_value = mock_document
 
         # Create client with mocked underlying client
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
         mock_client = MagicMock()
         mock_client.execute.return_value = expected_result
         client._client = mock_client
@@ -210,7 +210,7 @@ class TestSubgraphClientQueryMechs:
         mock_gql.return_value = mock_document
 
         # Create client with mocked underlying client
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
         mock_client = MagicMock()
         mock_client.execute.return_value = expected_result
         client._client = mock_client
@@ -238,7 +238,7 @@ class TestSubgraphClientQueryMechs:
         mock_gql.return_value = mock_document
 
         # Create client with mocked underlying client
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
         mock_client = MagicMock()
         mock_client.execute.side_effect = Exception("Subgraph unreachable")
         client._client = mock_client
@@ -273,15 +273,16 @@ class TestSubgraphClientSquidDialect:
         assert order_clause in query_str
         assert "orderDirection" not in query_str
 
-    def test_unknown_dialect_raises(self) -> None:
-        """Test an unknown dialect fails instead of sending a guessed query."""
-        client = SubgraphClient(
-            subgraph_url="https://example.com/graphql",
-            dialect="hasura",  # type: ignore[arg-type]
-        )
-        client._client = MagicMock()
-
+    def test_unknown_dialect_is_rejected_when_built(self) -> None:
+        """Test an unknown dialect fails at construction, not at the first query."""
         with pytest.raises(ValueError, match="Unknown subgraph dialect: hasura"):
-            client.query_mechs()
-        client._client.execute.assert_not_called()
+            SubgraphClient(
+                subgraph_url="https://example.com/graphql",
+                dialect="hasura",  # type: ignore[arg-type]
+            )
+
+    def test_dialect_is_required(self) -> None:
+        """Test a client can't be built without naming its dialect."""
+        with pytest.raises(TypeError, match="dialect"):
+            SubgraphClient(subgraph_url="https://example.com/graphql")  # type: ignore[call-arg]
 

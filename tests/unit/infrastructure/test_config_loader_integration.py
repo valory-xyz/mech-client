@@ -19,10 +19,14 @@
 
 """Integration tests for configuration loader with real mechs.json file."""
 
+import json
+from pathlib import Path
+
 import pytest
 
+import mech_client.infrastructure.config.loader as config_loader
 from mech_client.infrastructure.config import get_mech_config
-from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
+from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME, MECH_CONFIGS
 from mech_client.utils.constants import CHAIN_NAME_TO_ID
 
 
@@ -143,3 +147,19 @@ class TestGetMechConfigIntegration:
             assert isinstance(ledger_config.poa_chain, bool)
             assert ledger_config.default_gas_price_strategy is not None
             assert isinstance(ledger_config.is_gas_estimation_enabled, bool)
+
+    def test_unknown_subgraph_dialect_fails_when_the_config_loads(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test a mistyped subgraph_dialect in mechs.json fails at load, not at query."""
+        configs = json.loads(MECH_CONFIGS.read_text())
+        configs["robinhood"]["subgraph_dialect"] = "hasura"
+        mistyped = tmp_path / "mechs.json"
+        mistyped.write_text(json.dumps(configs))
+        monkeypatch.setattr(config_loader, "MECH_CONFIGS", mistyped)
+
+        with pytest.raises(
+            ValueError, match="Unknown subgraph_dialect 'hasura' for chain 'robinhood'"
+        ):
+            get_mech_config("robinhood")
+

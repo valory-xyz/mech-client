@@ -20,7 +20,7 @@
 """Chain configuration dataclasses."""
 
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal, Optional, get_args
 
 import requests
 from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
@@ -204,13 +204,20 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     subgraph_dialect: SubgraphDialect = field(default="graph")
 
     def __post_init__(self) -> None:
-        """Post initialization to override with environment variables.
+        """Validate the subgraph dialect, then apply environment variable overrides.
 
         Priority order for RPC URL:
         1. MECHX_CHAIN_RPC environment variable (highest priority)
         2. Stored operate config (agent mode only)
         3. Default from mechs.json (lowest priority)
+
+        :raises ValueError: If subgraph_dialect is not a known dialect
         """
+        if self.subgraph_dialect not in get_args(SubgraphDialect):
+            raise ValueError(
+                f"Unknown subgraph_dialect {self.subgraph_dialect!r} for chain "
+                f"{self.chain_config!r}; expected one of {get_args(SubgraphDialect)}"
+            )
         # Load environment configuration (centralized env var loading)
         env_config = EnvironmentConfig.load()
 

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🔧 Changed
 
 - `olas-operate-middleware>=0.15.38` and `open-aea-helpers==0.21.29` (open-autonomy 0.21.29), the first releases with Robinhood support. open-autonomy 0.21.27 made the Solana plugin an optional extra, so it and its transitive dependencies are no longer installed.
+- `SubgraphClient` now requires a `dialect` argument (`"graph"` or `"squid"`) and rejects an unknown one when built. A `mechs.json` entry with an unknown `subgraph_dialect` fails when the config loads.
 
 ## [0.22.1] - 2026-09-14
 

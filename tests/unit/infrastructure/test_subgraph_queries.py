@@ -19,15 +19,18 @@
 
 """Tests for subgraph queries."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from mech_client.infrastructure.config.constants import MECH_CONFIGS
 from mech_client.infrastructure.subgraph.queries import (
     CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE,
     RESULTS_LIMIT,
     query_mm_mechs_info,
 )
+from mech_client.utils.constants import CHAIN_NAME_TO_ID
 from mech_client.utils.errors import SubgraphError
 
 
@@ -38,6 +41,14 @@ class TestChainToMechFactoryMapping:
         """Test mapping contains all supported chains."""
         expected_chains = {"gnosis", "base", "optimism", "polygon", "robinhood"}
         assert set(CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE.keys()) == expected_chains
+
+    def test_every_chain_with_a_subgraph_has_a_factory_mapping(self) -> None:
+        """Test mech list can type every chain it can query, keyed by known chains."""
+        configs = json.loads(MECH_CONFIGS.read_text())
+        with_subgraph = {name for name, cfg in configs.items() if cfg["subgraph_url"]}
+
+        assert set(CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE) == with_subgraph
+        assert set(CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE) <= set(CHAIN_NAME_TO_ID)
 
     def test_gnosis_mapping(self) -> None:
         """Test gnosis chain factory mappings."""
@@ -440,7 +451,12 @@ class TestQueryMmMechsInfo:
 
 
 class TestQueryMechsChainWithoutSubgraph:
-    """Tests for chains that have no subgraph."""
+    """Tests for chains with no subgraph URL.
+
+    Arbitrum stands in: it has no subgraph and no deployed marketplace. No chain
+    has a deployed marketplace without a subgraph any more; the mocked config in
+    TestQueryMmMechsInfo.test_query_mechs_no_subgraph_url covers that shape.
+    """
 
     def test_arbitrum_raises_subgraph_url_not_set(
         self, monkeypatch: pytest.MonkeyPatch
