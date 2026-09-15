@@ -35,7 +35,7 @@ instead of ``crypto``:
     ... )
 """
 
-__version__ = "0.22.0"
+__version__ = "0.22.1"
 
 # Signing
 from mech_client.domain.signing import LocalSigner, Signer
