@@ -50,6 +50,10 @@ CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE = {
         "0x85899f9d8C058A5BBBaF344ea0f0b63c0CcBe851": "Fixed Price Token USDC",
         "0x43fB32f25dce34EB76c78C7A42C8F40F84BCD237": "NvmSubscription Token USDC",
     },
+    "robinhood": {
+        "0x04b0007b2aFb398015B76e5f22993a1fddF83644": "Fixed Price Native",
+        "0x7Fd1F4b764fA41d19fe3f63C85d12bf64d2bbf68": "Fixed Price Token USDC",
+    },
 }
 
 RESULTS_LIMIT = 20
@@ -62,7 +66,7 @@ def query_mm_mechs_info(chain_config: str) -> Optional[List]:
     Queries the subgraph for mech information, filtering by mechs with
     total deliveries > 0 and enriching with mech type from factory address.
 
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism)
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood)
     :return: List of mech data dicts, or None if no mechs found
     :raises SubgraphError: If no subgraph URL is set for the chain
     """
@@ -73,7 +77,9 @@ def query_mm_mechs_info(chain_config: str) -> Optional[List]:
             "mech list needs a subgraph, and this chain has none configured."
         )
 
-    client = SubgraphClient(mech_config.subgraph_url)
+    client = SubgraphClient(
+        mech_config.subgraph_url, dialect=mech_config.subgraph_dialect
+    )
     response = client.query_mechs()
 
     # Map factory addresses to mech types (case-insensitive)

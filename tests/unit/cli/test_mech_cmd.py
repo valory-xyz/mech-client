@@ -298,18 +298,18 @@ class TestMechListCommandMetadataEdgeCases:
 class TestMechListWithoutSubgraph:
     """Tests for mech list on a chain with no subgraph."""
 
-    def test_robinhood_gets_the_subgraph_error_not_the_catch_all(
+    def test_chain_without_subgraph_gets_the_subgraph_error_not_the_catch_all(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test mech list on Robinhood shows the subgraph error message."""
+        """Test mech list on a chain with no subgraph shows the subgraph error."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
 
         runner = CliRunner()
-        result = runner.invoke(mech, ["list", "--chain-config", "robinhood"])
+        result = runner.invoke(mech, ["list", "--chain-config", "arbitrum"])
 
         assert result.exit_code == 1
         assert (
-            "Subgraph endpoint error: Subgraph URL not set for chain config: robinhood"
+            "Subgraph endpoint error: Subgraph URL not set for chain config: arbitrum"
             in result.output
         )
         assert "Unexpected error" not in result.output

@@ -127,6 +127,7 @@
     "gas_limit": 500000,
     "price": 10000,
     "transaction_url": "https://robinhoodchain.blockscout.com/tx/{transaction_digest}",
-    "subgraph_url": ""
+    "subgraph_url": "https://subgraph.autonolas.tech/squid/marketplace-robinhood/graphql",
+    "subgraph_dialect": "squid"
   }
 }

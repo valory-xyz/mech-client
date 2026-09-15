@@ -20,7 +20,7 @@
 """Chain configuration dataclasses."""
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Literal, Optional
 
 import requests
 from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
@@ -165,6 +165,10 @@ class MechMarketplaceRequestConfig:
     payment_data: Optional[str] = field(default=None)
 
 
+# GraphQL dialect of a chain's marketplace indexer: The Graph, or an SQD squid (OpenReader).
+SubgraphDialect = Literal["graph", "squid"]
+
+
 @dataclass
 class MechConfig:  # pylint: disable=too-many-instance-attributes
     """Chain-specific mech configuration with environment variable overrides.
@@ -183,6 +187,7 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         priority_mech_address: Priority mech address (optional)
         agent_mode: Whether running in agent mode (default: False)
         chain_config: Chain configuration name (e.g., 'gnosis')
+        subgraph_dialect: GraphQL dialect of subgraph_url ("graph" or "squid")
     """
 
     complementary_metadata_hash_address: str
@@ -196,6 +201,7 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     priority_mech_address: Optional[str] = field(default=None)
     agent_mode: bool = field(default=False)
     chain_config: Optional[str] = field(default=None)
+    subgraph_dialect: SubgraphDialect = field(default="graph")
 
     def __post_init__(self) -> None:
         """Post initialization to override with environment variables.

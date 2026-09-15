@@ -82,7 +82,7 @@ class TestGetMechConfigIntegration:
         assert config.ledger_config.chain_id == 10
 
     def test_load_robinhood_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test loading robinhood config: a client-mode chain with no subgraph."""
+        """Test loading robinhood config: its marketplace indexer is an SQD squid."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
 
         config = get_mech_config("robinhood")
@@ -96,7 +96,12 @@ class TestGetMechConfigIntegration:
             config.complementary_metadata_hash_address
             == "0xD1155408D58293BE0743225bcDe28b9FD0C12378"
         )
-        assert config.subgraph_url == ""
+        assert (
+            config.subgraph_url
+            == "https://subgraph.autonolas.tech/squid/marketplace-robinhood/graphql"
+        )
+        assert config.subgraph_dialect == "squid"
+        assert get_mech_config("gnosis").subgraph_dialect == "graph"
         assert CHAIN_ID_TO_NAME[4663] == "robinhood"
         assert CHAIN_NAME_TO_ID["robinhood"] == 4663
 

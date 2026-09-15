@@ -41,7 +41,7 @@ def mech() -> None:
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration name (gnosis, base, polygon, optimism).",
+    help="Chain configuration name (gnosis, base, polygon, optimism, robinhood).",
 )
 @handle_cli_errors
 def mech_list(chain_config: str) -> None:
@@ -55,7 +55,7 @@ def mech_list(chain_config: str) -> None:
 
     Example: mechx mech list --chain-config gnosis
 
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood).
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)

@@ -245,3 +245,43 @@ class TestSubgraphClientQueryMechs:
 
         with pytest.raises(Exception, match="Subgraph unreachable"):
             client.query_mechs()
+
+
+class TestSubgraphClientSquidDialect:
+    """Tests for query_mechs against an SQD squid (OpenReader)."""
+
+    @pytest.mark.parametrize(
+        ("order_direction", "order_clause"),
+        [
+            pytest.param("desc", "orderBy: [totalDeliveriesTransactions_DESC]", id="desc"),
+            pytest.param("asc", "orderBy: [totalDeliveriesTransactions_ASC]", id="asc"),
+        ],
+    )
+    @patch("mech_client.infrastructure.subgraph.client.gql")
+    def test_squid_uses_openreader_sort_syntax(
+        self, mock_gql: MagicMock, order_direction: str, order_clause: str
+    ) -> None:
+        """Test the squid dialect sends OpenReader's orderBy list, no orderDirection."""
+        client = SubgraphClient(
+            subgraph_url="https://squid.example.com/graphql", dialect="squid"
+        )
+        client._client = MagicMock()
+
+        client.query_mechs(order_direction=order_direction)
+
+        query_str = mock_gql.call_args[1]["request_string"]
+        assert order_clause in query_str
+        assert "orderDirection" not in query_str
+
+    def test_unknown_dialect_raises(self) -> None:
+        """Test an unknown dialect fails instead of sending a guessed query."""
+        client = SubgraphClient(
+            subgraph_url="https://example.com/graphql",
+            dialect="hasura",  # type: ignore[arg-type]
+        )
+        client._client = MagicMock()
+
+        with pytest.raises(ValueError, match="Unknown subgraph dialect: hasura"):
+            client.query_mechs()
+        client._client.execute.assert_not_called()
+

@@ -19,12 +19,16 @@
 
 """Tests for setup command."""
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
+from mech_client.cli.commands.setup_cmd import CHAIN_TO_TEMPLATE
 from mech_client.cli.commands.setup_cmd import setup as setup_command
+from mech_client.infrastructure.config.contract_addresses import CHAIN_TO_PRICE_TOKEN_USDC
+from mech_client.utils.constants import CHAIN_NAME_TO_ID
 
 
 class TestSetupCommand:
@@ -139,14 +143,21 @@ class TestSetupCommand:
         assert "Agent mode not supported" in result.output
         assert "arbitrum" in result.output.lower()
 
-    def test_setup_command_rejects_robinhood(self) -> None:
-        """Test setup rejects Robinhood, which is client mode only."""
+    @patch("mech_client.cli.commands.setup_cmd.SetupService")
+    def test_setup_command_success_robinhood(
+        self, mock_setup_service: MagicMock
+    ) -> None:
+        """Test successful setup for robinhood chain."""
+        mock_setup_service.return_value = MagicMock()
+
         runner = CliRunner()
         result = runner.invoke(setup_command, ["--chain-config", "robinhood"])
 
-        assert result.exit_code == 1
-        assert "Agent mode not supported" in result.output
-        assert "robinhood" in result.output.lower()
+        assert result.exit_code == 0
+        assert "Setting up agent mode for robinhood" in result.output
+        call_args = mock_setup_service.call_args[0]
+        assert call_args[0] == "robinhood"
+        assert "mech_client_robinhood.json" in str(call_args[1])
 
     @patch("mech_client.cli.commands.setup_cmd.SetupService")
     def test_setup_command_service_setup_fails(
@@ -189,7 +200,7 @@ class TestSetupCommand:
         self, mock_setup_service: MagicMock
     ) -> None:
         """Test setup works for all supported chains."""
-        supported_chains = ["gnosis", "base", "polygon", "optimism"]
+        supported_chains = ["gnosis", "base", "polygon", "optimism", "robinhood"]
 
         for chain in supported_chains:
             mock_service_instance = MagicMock()
@@ -318,3 +329,21 @@ class TestSetupCommandEdgeCases:
         # Click will use the last value - should succeed with 'base'
         assert result.exit_code == 0
         assert "Setting up agent mode for base" in result.output
+
+
+class TestRobinhoodTemplate:
+    """Tests for the robinhood agent-mode template."""
+
+    ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+
+    def test_safe_is_funded_with_the_token_robinhood_mechs_charge(self) -> None:
+        """Test the Safe gets the chain's USDC-type token (USDG), the agent gets gas."""
+        template = json.loads(CHAIN_TO_TEMPLATE["robinhood"].read_text())
+        assert template["home_chain"] == "robinhood"
+        funds = template["configurations"]["robinhood"]["fund_requirements"]
+        usdc_type_token = CHAIN_TO_PRICE_TOKEN_USDC[CHAIN_NAME_TO_ID["robinhood"]]
+
+        by_token = {token.lower(): amounts for token, amounts in funds.items()}
+        assert by_token[usdc_type_token.lower()] == {"agent": 0, "safe": 1_000_000}
+        assert by_token[self.ZERO_ADDRESS] == {"agent": 500_000_000_000_000, "safe": 0}
+

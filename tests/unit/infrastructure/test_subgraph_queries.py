@@ -36,7 +36,7 @@ class TestChainToMechFactoryMapping:
 
     def test_mapping_contains_all_chains(self) -> None:
         """Test mapping contains all supported chains."""
-        expected_chains = {"gnosis", "base", "optimism", "polygon"}
+        expected_chains = {"gnosis", "base", "optimism", "polygon", "robinhood"}
         assert set(CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE.keys()) == expected_chains
 
     def test_gnosis_mapping(self) -> None:
@@ -140,6 +140,7 @@ class TestQueryMmMechsInfo:
         # Setup mock config
         mock_config = MagicMock()
         mock_config.subgraph_url = "https://subgraph.example.com/gnosis"
+        mock_config.subgraph_dialect = "graph"
         mock_get_config.return_value = mock_config
 
         # Setup mock subgraph response
@@ -170,7 +171,7 @@ class TestQueryMmMechsInfo:
         assert result[1]["mech_type"] == "Fixed Price Token"
         mock_get_config.assert_called_once_with("gnosis")
         mock_subgraph_client.assert_called_once_with(
-            "https://subgraph.example.com/gnosis"
+            "https://subgraph.example.com/gnosis", dialect="graph"
         )
 
     @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
@@ -439,15 +440,45 @@ class TestQueryMmMechsInfo:
 
 
 class TestQueryMechsChainWithoutSubgraph:
-    """Tests for marketplace chains that have no subgraph."""
+    """Tests for chains that have no subgraph."""
 
-    def test_robinhood_raises_subgraph_url_not_set(
+    def test_arbitrum_raises_subgraph_url_not_set(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test mech list on Robinhood fails fast: it has no subgraph."""
+        """Test mech list fails fast on a chain with no subgraph URL."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
 
         with pytest.raises(
-            SubgraphError, match="Subgraph URL not set for chain config: robinhood"
+            SubgraphError, match="Subgraph URL not set for chain config: arbitrum"
         ):
-            query_mm_mechs_info("robinhood")
+            query_mm_mechs_info("arbitrum")
+
+
+class TestQueryMechsRobinhoodSquid:
+    """Tests for mech list on Robinhood, whose indexer is an SQD squid."""
+
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_robinhood_queries_the_squid_and_maps_its_factories(
+        self, mock_client_class: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test robinhood uses the squid dialect and names its USDC-type mech."""
+        monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        mock_client_class.return_value.query_mechs.return_value = {
+            "meches": [
+                {
+                    "address": "0x65ea02825e7c21e47d768f3fc6c1e7597e5830af",
+                    "mechFactory": "0x7fd1f4b764fa41d19fe3f63c85d12bf64d2bbf68",
+                    "totalDeliveriesTransactions": "3",
+                    "service": {"id": "1", "totalDeliveries": "2", "metadata": []},
+                }
+            ]
+        }
+
+        result = query_mm_mechs_info("robinhood")
+
+        assert mock_client_class.call_args[0] == (
+            "https://subgraph.autonolas.tech/squid/marketplace-robinhood/graphql",
+        )
+        assert mock_client_class.call_args[1] == {"dialect": "squid"}
+        assert result is not None
+        assert [m["mech_type"] for m in result] == ["Fixed Price Token USDC"]
