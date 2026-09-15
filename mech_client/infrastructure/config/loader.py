@@ -41,6 +41,7 @@ def get_mech_config(
                         If None, uses first chain in config.
     :param agent_mode: Whether running in agent mode (uses stored operate config)
     :return: MechConfig instance with loaded configuration
+    :raises ValueError: If the chain's entry has no subgraph_dialect
     """
     with open(MECH_CONFIGS, "r", encoding="UTF-8") as file:
         data = json.load(file)
@@ -52,6 +53,11 @@ def get_mech_config(
         ledger_config_data = entry.pop("ledger_config")
         # Remove nvm_subscription if present (used by NVMConfig, not MechConfig)
         entry.pop("nvm_subscription", None)
+        if "subgraph_dialect" not in entry:
+            raise ValueError(
+                f"mechs.json entry for {chain_config!r} has no subgraph_dialect "
+                '("graph" or "squid")'
+            )
 
         # Create LedgerConfig with agent_mode and chain_config context
         ledger_config = LedgerConfig(

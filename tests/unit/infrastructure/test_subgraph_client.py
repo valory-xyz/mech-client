@@ -286,3 +286,27 @@ class TestSubgraphClientSquidDialect:
         with pytest.raises(TypeError, match="dialect"):
             SubgraphClient(subgraph_url="https://example.com/graphql")  # type: ignore[call-arg]
 
+
+class TestSubgraphClientSortArguments:
+    """Tests for the sort arguments query_mechs interpolates into its query."""
+
+    @pytest.mark.parametrize(
+        ("order_by", "order_direction", "message"),
+        [
+            pytest.param("x) { id } #", "desc", "order_by must be a GraphQL field name", id="order-by-injection"),
+            pytest.param("", "desc", "order_by must be a GraphQL field name", id="order-by-empty"),
+            pytest.param("totalDeliveriesTransactions", "DESC", "order_direction must be one of", id="direction-uppercase"),
+            pytest.param("totalDeliveriesTransactions", "desc, first: 1", "order_direction must be one of", id="direction-injection"),
+        ],
+    )
+    def test_invalid_sort_arguments_are_rejected_before_querying(
+        self, order_by: str, order_direction: str, message: str
+    ) -> None:
+        """Test sort arguments outside the allow-list never reach the query string."""
+        client = SubgraphClient(subgraph_url="https://example.com/graphql", dialect="graph")
+        client._client = MagicMock()
+
+        with pytest.raises(ValueError, match=message):
+            client.query_mechs(order_by=order_by, order_direction=order_direction)
+        client._client.execute.assert_not_called()
+

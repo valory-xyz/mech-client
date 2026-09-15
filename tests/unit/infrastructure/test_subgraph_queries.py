@@ -20,10 +20,12 @@
 """Tests for subgraph queries."""
 
 import json
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.config.constants import MECH_CONFIGS
 from mech_client.infrastructure.subgraph.queries import (
     CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE,
@@ -41,6 +43,19 @@ class TestChainToMechFactoryMapping:
         """Test mapping contains all supported chains."""
         expected_chains = {"gnosis", "base", "optimism", "polygon", "robinhood"}
         assert set(CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE.keys()) == expected_chains
+
+    def test_robinhood_mapping(self) -> None:
+        """Test robinhood chain factory mappings."""
+        robinhood_mapping = CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE["robinhood"]
+        assert len(robinhood_mapping) == 2
+        assert (
+            robinhood_mapping["0x04b0007b2aFb398015B76e5f22993a1fddF83644"]
+            == "Fixed Price Native"
+        )
+        assert (
+            robinhood_mapping["0x7Fd1F4b764fA41d19fe3f63C85d12bf64d2bbf68"]
+            == "Fixed Price Token USDC"
+        )
 
     def test_every_chain_with_a_subgraph_has_a_factory_mapping(self) -> None:
         """Test mech list can type every chain it can query, keyed by known chains."""
@@ -451,23 +466,23 @@ class TestQueryMmMechsInfo:
 
 
 class TestQueryMechsChainWithoutSubgraph:
-    """Tests for chains with no subgraph URL.
+    """Tests for a chain with a deployed marketplace but a blank subgraph URL."""
 
-    Arbitrum stands in: it has no subgraph and no deployed marketplace. No chain
-    has a deployed marketplace without a subgraph any more; the mocked config in
-    TestQueryMmMechsInfo.test_query_mechs_no_subgraph_url covers that shape.
-    """
-
-    def test_arbitrum_raises_subgraph_url_not_set(
+    def test_blank_subgraph_url_raises_subgraph_url_not_set(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test mech list fails fast on a chain with no subgraph URL."""
+        """Test mech list fails fast when a marketplace chain has no subgraph URL."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        blank = replace(get_mech_config("robinhood"), subgraph_url="")
+        assert int(blank.mech_marketplace_contract, 16) != 0
 
-        with pytest.raises(
-            SubgraphError, match="Subgraph URL not set for chain config: arbitrum"
+        with patch(
+            "mech_client.infrastructure.subgraph.queries.get_mech_config",
+            return_value=blank,
+        ), pytest.raises(
+            SubgraphError, match="Subgraph URL not set for chain config: robinhood"
         ):
-            query_mm_mechs_info("arbitrum")
+            query_mm_mechs_info("robinhood")
 
 
 class TestQueryMechsRobinhoodSquid:
@@ -486,7 +501,13 @@ class TestQueryMechsRobinhoodSquid:
                     "mechFactory": "0x7fd1f4b764fa41d19fe3f63c85d12bf64d2bbf68",
                     "totalDeliveriesTransactions": "3",
                     "service": {"id": "1", "totalDeliveries": "2", "metadata": []},
-                }
+                },
+                {
+                    "address": "0x00000000000000000000000000000000000000aa",
+                    "mechFactory": "0x04b0007b2afb398015b76e5f22993a1fddf83644",
+                    "totalDeliveriesTransactions": "1",
+                    "service": {"id": "2", "totalDeliveries": "1", "metadata": []},
+                },
             ]
         }
 
@@ -497,4 +518,42 @@ class TestQueryMechsRobinhoodSquid:
         )
         assert mock_client_class.call_args[1] == {"dialect": "squid"}
         assert result is not None
-        assert [m["mech_type"] for m in result] == ["Fixed Price Token USDC"]
+        assert [m["mech_type"] for m in result] == [
+            "Fixed Price Token USDC",
+            "Fixed Price Native",
+        ]
+
+
+class TestUnmappedMechFactory:
+    """Tests for a mech whose factory isn't in the chain's mapping."""
+
+    @patch("mech_client.infrastructure.subgraph.queries.logger")
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_unmapped_factory_is_listed_as_unknown_and_logged(
+        self,
+        mock_client_class: MagicMock,
+        mock_logger: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test an unmapped factory shows as Unknown and names itself in a warning."""
+        monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        unmapped = "0x00000000000000000000000000000000000000ff"
+        mock_client_class.return_value.query_mechs.return_value = {
+            "meches": [
+                {
+                    "address": "0x00000000000000000000000000000000000000bb",
+                    "mechFactory": unmapped,
+                    "totalDeliveriesTransactions": "1",
+                    "service": {"id": "9", "totalDeliveries": "1", "metadata": []},
+                }
+            ]
+        }
+
+        result = query_mm_mechs_info("robinhood")
+
+        assert result is not None
+        assert result[0]["mech_type"] == "Unknown"
+        mock_logger.warning.assert_called_once()
+        assert unmapped in mock_logger.warning.call_args[0]
+        assert "robinhood" in mock_logger.warning.call_args[0]
+

@@ -145,8 +145,8 @@ ENV VARS:
 NOTES:
   - Read-only command, no transactions
   - Does NOT use HTTP RPC
-  - Default subgraph URLs provided for gnosis, base, polygon, optimism
-  - Override with MECHX_SUBGRAPH_URL only if using custom subgraph
+  - Default subgraph URLs provided for gnosis, base, polygon, optimism, robinhood (the marketplace squid)
+  - Override with MECHX_SUBGRAPH_URL only if using custom subgraph (on robinhood, it must also be a squid)
 ```
 
 ### 7. tool list

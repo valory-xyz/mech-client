@@ -347,3 +347,19 @@ class TestRobinhoodTemplate:
         assert by_token[usdc_type_token.lower()] == {"agent": 0, "safe": 1_000_000}
         assert by_token[self.ZERO_ADDRESS] == {"agent": 500_000_000_000_000, "safe": 0}
 
+
+class TestSetupWalletSummary:
+    """Tests for setup when the wallet summary can't be read."""
+
+    @patch("mech_client.cli.commands.setup_cmd.SetupService")
+    def test_unreadable_wallet_summary_fails_the_command(
+        self, mock_setup_service: MagicMock
+    ) -> None:
+        """Test setup exits 1 instead of 0 when display_wallets returns None."""
+        mock_setup_service.return_value.display_wallets.return_value = None
+
+        result = CliRunner().invoke(setup_command, ["--chain-config", "robinhood"])
+
+        assert result.exit_code == 1
+        assert "wallet summary could not be read" in result.output
+

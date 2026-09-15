@@ -19,6 +19,7 @@
 
 """Subgraph query functions and mappings."""
 
+import logging
 from typing import List, Optional
 
 from mech_client.infrastructure.config.loader import get_mech_config
@@ -58,6 +59,8 @@ CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE = {
 
 RESULTS_LIMIT = 20
 
+logger = logging.getLogger(__name__)
+
 
 def query_mm_mechs_info(chain_config: str) -> Optional[List]:
     """
@@ -93,7 +96,16 @@ def query_mm_mechs_info(chain_config: str) -> Optional[List]:
     for item in response["meches"]:  # pylint: disable=unsubscriptable-object
         if int(item["totalDeliveriesTransactions"]) > 0:
             factory = item["mechFactory"].lower()
-            item["mech_type"] = mech_factory_to_mech_type.get(factory, "Unknown")
+            mech_type = mech_factory_to_mech_type.get(factory)
+            if mech_type is None:
+                logger.warning(
+                    "Mech factory %s on %s is not in CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE; "
+                    "listing its mechs as Unknown",
+                    factory,
+                    chain_config,
+                )
+                mech_type = "Unknown"
+            item["mech_type"] = mech_type
             filtered_mechs_data.append(item)
 
     return filtered_mechs_data[:RESULTS_LIMIT]

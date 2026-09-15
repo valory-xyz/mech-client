@@ -19,6 +19,7 @@
 
 """GraphQL subgraph client."""
 
+import re
 from typing import Any, Dict, get_args
 
 from gql import Client, gql
@@ -26,6 +27,8 @@ from gql.transport.aiohttp import AIOHTTPTransport
 from mech_client.infrastructure.config.chain_config import SubgraphDialect
 
 DEFAULT_TIMEOUT = 600.0
+ORDER_DIRECTIONS = ("asc", "desc")
+_GRAPHQL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 class SubgraphClient:
@@ -93,7 +96,14 @@ class SubgraphClient:
         :param order_by: Field to order by (default: totalDeliveriesTransactions)
         :param order_direction: Sort direction "asc" or "desc" (default: desc)
         :return: Query response with mech data
+        :raises ValueError: If order_by is not a field name or order_direction is not asc/desc
         """
+        if not _GRAPHQL_NAME.fullmatch(order_by):
+            raise ValueError(f"order_by must be a GraphQL field name, got {order_by!r}")
+        if order_direction not in ORDER_DIRECTIONS:
+            raise ValueError(
+                f"order_direction must be one of {ORDER_DIRECTIONS}, got {order_direction!r}"
+            )
         if self.dialect == "squid":
             order = f"orderBy: [{order_by}_{order_direction.upper()}]"
         else:

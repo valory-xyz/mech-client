@@ -10,12 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### ✨ Added
 
 - **Agent mode on Robinhood Chain (4663)**: `mechx setup --chain-config robinhood` sets up the agent's Safe, funded with USDG (the chain's USDC-type payment token) for requests and ETH for the agent's gas.
-- **`mech list` on Robinhood** via the marketplace squid. A chain can set `"subgraph_dialect": "squid"` in `mechs.json` (the default is `"graph"`), and `mech list` sends the matching sort syntax.
+- **`mech list` on Robinhood** via the marketplace squid. Every chain in `mechs.json` now names its `subgraph_dialect` (`"graph"` or `"squid"`), and `mech list` sends the matching sort syntax.
 
 ### 🔧 Changed
 
-- `olas-operate-middleware>=0.15.38` and `open-aea-helpers==0.21.29` (open-autonomy 0.21.29), the first releases with Robinhood support. open-autonomy 0.21.27 made the Solana plugin an optional extra, so it and its transitive dependencies are no longer installed.
-- `SubgraphClient` now requires a `dialect` argument (`"graph"` or `"squid"`) and rejects an unknown one when built. A `mechs.json` entry with an unknown `subgraph_dialect` fails when the config loads.
+- `olas-operate-middleware>=0.15.38` and `open-aea-helpers==0.21.29` (open-autonomy 0.21.29), the first releases with Robinhood support. open-autonomy 0.21.27 made the Solana plugin an optional extra ([valory-xyz/open-autonomy#2541](https://github.com/valory-xyz/open-autonomy/pull/2541)), so it and its transitive dependencies are no longer installed.
+- `SubgraphClient` now requires a `dialect` argument (`"graph"` or `"squid"`) and rejects an unknown one when built. A `mechs.json` entry with a missing or unknown `subgraph_dialect` fails when the config loads. `query_mechs` rejects an `order_by` that isn't a field name and an `order_direction` other than `asc`/`desc`.
 
 ## [0.22.1] - 2026-09-14
 

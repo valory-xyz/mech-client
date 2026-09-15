@@ -163,3 +163,16 @@ class TestGetMechConfigIntegration:
         ):
             get_mech_config("robinhood")
 
+    def test_missing_subgraph_dialect_fails_when_the_config_loads(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test a chain entry without subgraph_dialect fails instead of defaulting."""
+        configs = json.loads(MECH_CONFIGS.read_text())
+        del configs["robinhood"]["subgraph_dialect"]
+        incomplete = tmp_path / "mechs.json"
+        incomplete.write_text(json.dumps(configs))
+        monkeypatch.setattr(config_loader, "MECH_CONFIGS", incomplete)
+
+        with pytest.raises(ValueError, match="'robinhood' has no subgraph_dialect"):
+            get_mech_config("robinhood")
+

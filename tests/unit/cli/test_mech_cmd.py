@@ -19,12 +19,14 @@
 
 """Tests for mech command."""
 
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
 from mech_client.cli.commands.mech_cmd import mech
+from mech_client.infrastructure.config import get_mech_config
 
 
 class TestMechListCommand:
@@ -296,24 +298,25 @@ class TestMechListCommandMetadataEdgeCases:
 
 
 class TestMechListWithoutSubgraph:
-    """Tests for mech list on a chain with no subgraph URL.
-
-    Arbitrum stands in: it has no subgraph and no deployed marketplace, and no
-    chain has a deployed marketplace without a subgraph any more.
-    """
+    """Tests for mech list on a marketplace chain whose subgraph URL is blank."""
 
     def test_chain_without_subgraph_gets_the_subgraph_error_not_the_catch_all(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test mech list on a chain with no subgraph shows the subgraph error."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        blank = replace(get_mech_config("robinhood"), subgraph_url="")
 
         runner = CliRunner()
-        result = runner.invoke(mech, ["list", "--chain-config", "arbitrum"])
+        with patch(
+            "mech_client.infrastructure.subgraph.queries.get_mech_config",
+            return_value=blank,
+        ):
+            result = runner.invoke(mech, ["list", "--chain-config", "robinhood"])
 
         assert result.exit_code == 1
         assert (
-            "Subgraph endpoint error: Subgraph URL not set for chain config: arbitrum"
+            "Subgraph endpoint error: Subgraph URL not set for chain config: robinhood"
             in result.output
         )
         assert "Unexpected error" not in result.output
