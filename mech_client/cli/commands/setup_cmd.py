@@ -33,7 +33,6 @@ CHAIN_TO_TEMPLATE = {
     "base": CURR_DIR / "templates" / "mech_client_base.json",
     "polygon": CURR_DIR / "templates" / "mech_client_polygon.json",
     "optimism": CURR_DIR / "templates" / "mech_client_optimism.json",
-    "robinhood": CURR_DIR / "templates" / "mech_client_robinhood.json",
 }
 
 
@@ -42,7 +41,7 @@ CHAIN_TO_TEMPLATE = {
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration name (gnosis, base, polygon, optimism, robinhood).",
+    help="Chain configuration name (gnosis, base, polygon, optimism).",
 )
 @handle_cli_errors
 def setup(chain_config: str) -> None:
@@ -54,7 +53,7 @@ def setup(chain_config: str) -> None:
 
     Example: mechx setup --chain-config gnosis
 
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood).
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)

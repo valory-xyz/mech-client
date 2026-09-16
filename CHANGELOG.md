@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
-- **Agent mode on Robinhood Chain (4663)**: `mechx setup --chain-config robinhood` sets up the agent's Safe, funded with USDG (the chain's USDC-type payment token) for requests and ETH for the agent's gas.
 - **`mech list` on Robinhood** via the marketplace squid. Every chain in `mechs.json` now names its `subgraph_dialect` (`"graph"` or `"squid"`), and `mech list` sends the matching sort syntax.
 
 ### 🔧 Changed
