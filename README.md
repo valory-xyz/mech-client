@@ -99,11 +99,11 @@ All commands require `--chain-config` with one of these five chain names.
 | Base | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Polygon | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
 | Optimism | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
-| Robinhood | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ (USDG) |
+| Robinhood | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ (USDG) |
 
 **Notes:**
 - **Marketplace**: Chains with marketplace contracts deployed. All supported chains have marketplace support.
-- **Agent Mode**: Gnosis, Base, Polygon and Optimism support on-chain agent registration via `setup`. Robinhood is client mode only: pass `--client-mode`.
+- **Agent Mode**: Gnosis, Base, Polygon, Optimism and Robinhood support on-chain agent registration via `setup`.
 - **Native Payment**: Chains that support `deposit native` command for prepaid native token deposits.
 - **NVM Subscriptions**: Chains that support `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base only).
 - **OLAS/USDC Payments**: Chains that support `deposit token` command with OLAS or USDC tokens. On Robinhood the USDC payment type uses USDG, so `--token-type usdc` deposits USDG.
@@ -111,7 +111,7 @@ All commands require `--chain-config` with one of these five chain names.
 
 ### Set up agent mode for on-chain interactions
 
-There are two modes you can use the mechx for on-chain interactions. Currently `agent-mode` is supported on Gnosis, Base, Polygon and Optimism. Robinhood is client mode only.
+There are two modes you can use the mechx for on-chain interactions. Currently `agent-mode` is supported on Gnosis, Base, Polygon, Optimism and Robinhood.
 
 -   _agent mode_ (Recommended): This allows to register your on-chain interactions as agent on the olas protocol and allows for A2A activity to be reflected on the client
 -   _client mode_: Simple on-chain interations using EOA
