@@ -249,13 +249,13 @@ All commands require `--chain-config` with one of these five chain names. Arbitr
 | Base | 8453 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Polygon | 137 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
 | Optimism | 10 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
-| Robinhood | 4663 | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ (USDG) | ✅ (squid) |
+| Robinhood | 4663 | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ (USDG) | ✅ (squid) |
 | Arbitrum | 42161 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Celo | 42220 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 **Feature Definitions:**
 - **Marketplace**: Chain has `mech_marketplace_contract` deployed (non-zero address in `mechs.json`)
-- **Agent Mode**: Supports `setup` command and Safe-based agent operations (Gnosis, Base, Polygon, Optimism). Robinhood is client mode only: pass `--client-mode`
+- **Agent Mode**: Supports `setup` command and Safe-based agent operations (Gnosis, Base, Polygon, Optimism, Robinhood)
 - **Native Payment**: Supports `deposit native` command for prepaid native token deposits (Gnosis, Base, Polygon, Optimism, Robinhood)
 - **NVM Subscriptions**: Supports `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base)
 - **OLAS/USDC Token**: Payment token addresses configured in `infrastructure/config/contract_addresses.py`. On Robinhood the USDC payment type uses USDG, so `--token-type usdc` deposits USDG
@@ -267,4 +267,4 @@ All commands require `--chain-config` with one of these five chain names. Arbitr
 - `deposit native`: Requires marketplace + native payment support (Gnosis, Base, Polygon, Optimism, Robinhood)
 - `deposit token`: Requires marketplace + token addresses in config (Gnosis, Base, Polygon, Optimism; USDC type only on Robinhood, which is USDG)
 - `subscription purchase`: Requires marketplace + NVM subscription support (Gnosis, Base)
-- `setup`: Gnosis, Base, Polygon, Optimism (not Robinhood, which is client mode only)
+- `setup`: Gnosis, Base, Polygon, Optimism, Robinhood

@@ -1817,7 +1817,7 @@ wheels = [
 
 [[package]]
 name = "mech-client"
-version = "0.23.0"
+version = "0.23.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -1846,7 +1846,7 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.1,<9" },
     { name = "gql", specifier = ">=3.4.1" },
-    { name = "olas-operate-middleware", specifier = ">=0.15.38,<0.16" },
+    { name = "olas-operate-middleware", specifier = ">=0.15.39,<0.16" },
     { name = "open-aea-helpers", specifier = "==0.21.29" },
     { name = "pip", specifier = ">=24.0" },
     { name = "py-multibase", specifier = "==1.0.3" },
@@ -2092,7 +2092,7 @@ wheels = [
 
 [[package]]
 name = "olas-operate-middleware"
-version = "0.15.38"
+version = "0.15.39"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2112,9 +2112,9 @@ dependencies = [
     { name = "uvicorn" },
     { name = "werkzeug" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/74/8d/69ca70306c86f8b698ad12916d8a0753db1484855b6436919462b90cf136/olas_operate_middleware-0.15.38.tar.gz", hash = "sha256:6346ffa30dd5cbf972b1793011a26d3ca68e04faa061a12047ecb23a10640b52", size = 299370, upload-time = "2026-09-14T18:09:31.986Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/39/d6/8591a981769735b4e3bc04968e9e9ca94741b393336786e2a2a2ac43b7e8/olas_operate_middleware-0.15.39.tar.gz", hash = "sha256:7bd5c08df0a165f893dbe3ecee1505911cdd7bbbeae710c58120551a25548775", size = 299796, upload-time = "2026-09-16T12:16:31.92Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e4/44/e5404bbb84503be0609cc848a6bf5f5f4485f9c4aabfa25e2888b25f5063/olas_operate_middleware-0.15.38-py3-none-any.whl", hash = "sha256:0d0d118cd8cd3fde6f5928891df60eee915a13600753dc9aeab5f49d4887dc61", size = 358401, upload-time = "2026-09-14T18:09:30.398Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/cf/fbe91cb0d4f6d3518ff4fa8bebc9f788ee23cdff96c7bbe8c703d244262b/olas_operate_middleware-0.15.39-py3-none-any.whl", hash = "sha256:6e81d94c7289803e91eac727572649ff31d80253e06980d3f049dd3903c730e5", size = 358752, upload-time = "2026-09-16T12:16:30.125Z" },
 ]
 
 [[package]]

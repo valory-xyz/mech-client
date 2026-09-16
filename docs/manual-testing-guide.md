@@ -130,7 +130,7 @@ ls ~/.operate_mech_client/services/
 # Should show a service directory
 ```
 
-**Supported Chains**: gnosis, base, polygon, optimism
+**Supported Chains**: gnosis, base, polygon, optimism, robinhood
 
 ---
 
@@ -361,7 +361,7 @@ Deposit successful!
 - ✅ Transaction succeeds with "0x" prefix in URL
 - ✅ Balance updated for Safe address in BalanceTracker contract
 
-**Supported Chains**: gnosis, base, polygon, optimism
+**Supported Chains**: gnosis, base, polygon, optimism, robinhood
 
 ---
 
@@ -459,7 +459,7 @@ Deposit successful!
 - ✅ Both transaction URLs have "0x" prefix
 - ✅ Balance updated for Safe address in BalanceTracker contract
 
-**Supported Chains**: gnosis, base, polygon, optimism
+**Supported Chains**: gnosis, base, polygon, optimism, robinhood (`usdc` is USDG on Robinhood)
 
 ---
 
@@ -1014,7 +1014,7 @@ mechx subscription purchase --chain-config gnosis
 
 **Goal**: Verify functionality across different chains
 
-**Chains to Test**: gnosis, base, polygon, optimism, robinhood (client mode only)
+**Chains to Test**: gnosis, base, polygon, optimism, robinhood
 
 **Test per Chain**:
 - [ ] Interact command works

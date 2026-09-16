@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-09-16
+
+### ✨ Added
+
+- **Agent mode on Robinhood Chain (4663)**: `mechx setup --chain-config robinhood` creates the service and its Safe, funded with USDG (the chain's USDC payment type) for requests and ETH for the agent's gas.
+
+### 🔧 Changed
+
+- `olas-operate-middleware>=0.15.39`, the first release whose quickstart tables know Robinhood. 0.15.38 carried the chain in its ledger profiles only, so `mechx setup --chain-config robinhood` exited with a `KeyError` before printing an address.
+
 ## [0.23.0] - 2026-09-16
 
 ### ✨ Added
