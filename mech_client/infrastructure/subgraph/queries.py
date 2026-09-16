@@ -19,8 +19,10 @@
 
 """Subgraph query functions and mappings."""
 
-from typing import List, Optional
+import logging
+from typing import List
 
+from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.config.loader import get_mech_config
 from mech_client.infrastructure.subgraph.client import SubgraphClient
 from mech_client.utils.errors import SubgraphError
@@ -50,21 +52,27 @@ CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE = {
         "0x85899f9d8C058A5BBBaF344ea0f0b63c0CcBe851": "Fixed Price Token USDC",
         "0x43fB32f25dce34EB76c78C7A42C8F40F84BCD237": "NvmSubscription Token USDC",
     },
+    "robinhood": {
+        "0x04b0007b2aFb398015B76e5f22993a1fddF83644": "Fixed Price Native",
+        "0x7Fd1F4b764fA41d19fe3f63C85d12bf64d2bbf68": "Fixed Price Token USDC",
+    },
 }
 
 RESULTS_LIMIT = 20
 
+logger = logging.getLogger(__name__)
 
-def query_mm_mechs_info(chain_config: str) -> Optional[List]:
+
+def query_mm_mechs_info(chain_config: str) -> List:
     """
     Query marketplace mechs and related info from subgraph.
 
     Queries the subgraph for mech information, filtering by mechs with
     total deliveries > 0 and enriching with mech type from factory address.
 
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism)
-    :return: List of mech data dicts, or None if no mechs found
-    :raises SubgraphError: If no subgraph URL is set for the chain
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood)
+    :return: List of mech data dicts, empty if the chain has no delivering mechs
+    :raises SubgraphError: If the chain has no subgraph URL, or the response is malformed
     """
     mech_config = get_mech_config(chain_config)
     if not mech_config.subgraph_url:
@@ -73,21 +81,45 @@ def query_mm_mechs_info(chain_config: str) -> Optional[List]:
             "mech list needs a subgraph, and this chain has none configured."
         )
 
-    client = SubgraphClient(mech_config.subgraph_url)
+    if (
+        mech_config.subgraph_dialect == "squid"
+        and EnvironmentConfig.load().mechx_subgraph_url
+    ):
+        logger.warning(
+            "MECHX_SUBGRAPH_URL replaces the endpoint for %s but not its dialect: "
+            "this query uses squid syntax",
+            chain_config,
+        )
+
+    client = SubgraphClient(
+        mech_config.subgraph_url, dialect=mech_config.subgraph_dialect
+    )
     response = client.query_mechs()
 
     # Map factory addresses to mech types (case-insensitive)
     mech_factory_to_mech_type = {
         k.lower(): v
-        for k, v in CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE[chain_config].items()
+        for k, v in CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE.get(chain_config, {}).items()
     }
 
     # Filter mechs with deliveries > 0 and add mech type
     filtered_mechs_data = []
-    for item in response["meches"]:  # pylint: disable=unsubscriptable-object
-        if int(item["totalDeliveriesTransactions"]) > 0:
-            factory = item["mechFactory"].lower()
-            item["mech_type"] = mech_factory_to_mech_type.get(factory, "Unknown")
-            filtered_mechs_data.append(item)
+    try:
+        for item in response["meches"]:  # pylint: disable=unsubscriptable-object
+            if int(item["totalDeliveriesTransactions"]) > 0:
+                factory = item["mechFactory"].lower()
+                if factory not in mech_factory_to_mech_type:
+                    logger.warning(
+                        "Mech factory %s on %s is not in "
+                        "CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE; listing its mechs as Unknown",
+                        factory,
+                        chain_config,
+                    )
+                item["mech_type"] = mech_factory_to_mech_type.get(factory, "Unknown")
+                filtered_mechs_data.append(item)
+    except (AttributeError, KeyError, TypeError, ValueError) as error:
+        raise SubgraphError(
+            f"Malformed mech record from the {chain_config} subgraph: {error}"
+        ) from error
 
     return filtered_mechs_data[:RESULTS_LIMIT]

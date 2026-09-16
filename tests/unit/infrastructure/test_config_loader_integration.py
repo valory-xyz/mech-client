@@ -19,10 +19,14 @@
 
 """Integration tests for configuration loader with real mechs.json file."""
 
+import json
+from pathlib import Path
+
 import pytest
 
+import mech_client.infrastructure.config.loader as config_loader
 from mech_client.infrastructure.config import get_mech_config
-from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
+from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME, MECH_CONFIGS
 from mech_client.utils.constants import CHAIN_NAME_TO_ID
 
 
@@ -82,7 +86,7 @@ class TestGetMechConfigIntegration:
         assert config.ledger_config.chain_id == 10
 
     def test_load_robinhood_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test loading robinhood config: a client-mode chain with no subgraph."""
+        """Test loading robinhood config: its marketplace indexer is an SQD squid."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
 
         config = get_mech_config("robinhood")
@@ -96,19 +100,22 @@ class TestGetMechConfigIntegration:
             config.complementary_metadata_hash_address
             == "0xD1155408D58293BE0743225bcDe28b9FD0C12378"
         )
-        assert config.subgraph_url == ""
+        assert (
+            config.subgraph_url
+            == "https://subgraph.autonolas.tech/squid/marketplace-robinhood/graphql"
+        )
+        assert config.subgraph_dialect == "squid"
+        assert get_mech_config("gnosis").subgraph_dialect == "graph"
         assert CHAIN_ID_TO_NAME[4663] == "robinhood"
         assert CHAIN_NAME_TO_ID["robinhood"] == 4663
 
-    def test_all_chains_load_successfully(self) -> None:
-        """Test all chains in mechs.json can be loaded without errors."""
-        chains = ["gnosis", "base", "polygon", "optimism", "robinhood"]
-
-        for chain in chains:
+    def test_every_mechs_json_entry_loads_with_a_valid_dialect(self) -> None:
+        """Test every chain shipped in mechs.json loads with a known dialect."""
+        for chain in json.loads(MECH_CONFIGS.read_text()):
             config = get_mech_config(chain)
-            assert config is not None
             assert config.mech_marketplace_contract is not None
             assert config.ledger_config is not None
+            assert config.subgraph_dialect in ("graph", "squid")
 
     def test_gnosis_config_has_expected_fields(self) -> None:
         """Test gnosis config has all expected MechConfig fields."""
@@ -138,3 +145,32 @@ class TestGetMechConfigIntegration:
             assert isinstance(ledger_config.poa_chain, bool)
             assert ledger_config.default_gas_price_strategy is not None
             assert isinstance(ledger_config.is_gas_estimation_enabled, bool)
+
+    def test_unknown_subgraph_dialect_fails_when_the_config_loads(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test a mistyped subgraph_dialect in mechs.json fails at load, not at query."""
+        configs = json.loads(MECH_CONFIGS.read_text())
+        configs["robinhood"]["subgraph_dialect"] = "hasura"
+        mistyped = tmp_path / "mechs.json"
+        mistyped.write_text(json.dumps(configs))
+        monkeypatch.setattr(config_loader, "MECH_CONFIGS", mistyped)
+
+        with pytest.raises(
+            ValueError, match="Unknown subgraph_dialect 'hasura' for chain 'robinhood'"
+        ):
+            get_mech_config("robinhood")
+
+    def test_missing_subgraph_dialect_fails_when_the_config_loads(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test a chain entry without subgraph_dialect fails instead of defaulting."""
+        configs = json.loads(MECH_CONFIGS.read_text())
+        del configs["robinhood"]["subgraph_dialect"]
+        incomplete = tmp_path / "mechs.json"
+        incomplete.write_text(json.dumps(configs))
+        monkeypatch.setattr(config_loader, "MECH_CONFIGS", incomplete)
+
+        with pytest.raises(ValueError, match="'robinhood' has no subgraph_dialect"):
+            get_mech_config("robinhood")
+

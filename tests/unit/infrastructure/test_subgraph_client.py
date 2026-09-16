@@ -32,7 +32,7 @@ class TestSubgraphClientInitialization:
     def test_initialization_default_timeout(self) -> None:
         """Test client initialization with default timeout."""
         url = "https://subgraph.example.com/graphql"
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
 
         assert client.subgraph_url == url
         assert client.timeout == 600.0
@@ -42,7 +42,7 @@ class TestSubgraphClientInitialization:
         """Test client initialization with custom timeout."""
         url = "https://subgraph.example.com/graphql"
         custom_timeout = 120.0
-        client = SubgraphClient(subgraph_url=url, timeout=custom_timeout)
+        client = SubgraphClient(subgraph_url=url, dialect="graph", timeout=custom_timeout)
 
         assert client.subgraph_url == url
         assert client.timeout == custom_timeout
@@ -66,7 +66,7 @@ class TestSubgraphClientProperty:
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
 
-        client = SubgraphClient(subgraph_url=url, timeout=timeout)
+        client = SubgraphClient(subgraph_url=url, dialect="graph", timeout=timeout)
 
         # Initially, _client should be None
         assert client._client is None
@@ -97,7 +97,7 @@ class TestSubgraphClientProperty:
         mock_client_instance = MagicMock()
         mock_client_class.return_value = mock_client_instance
 
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
 
         # Access client property twice
         result1 = client.client
@@ -126,7 +126,7 @@ class TestSubgraphClientExecute:
         mock_gql.return_value = mock_document
 
         # Create client with mocked underlying client
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
         mock_client = MagicMock()
         mock_client.execute.return_value = expected_result
         client._client = mock_client
@@ -153,7 +153,7 @@ class TestSubgraphClientExecute:
         mock_gql.return_value = mock_document
 
         # Create client with mocked underlying client
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
         mock_client = MagicMock()
         mock_client.execute.side_effect = Exception("GraphQL query failed")
         client._client = mock_client
@@ -183,7 +183,7 @@ class TestSubgraphClientQueryMechs:
         mock_gql.return_value = mock_document
 
         # Create client with mocked underlying client
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
         mock_client = MagicMock()
         mock_client.execute.return_value = expected_result
         client._client = mock_client
@@ -210,7 +210,7 @@ class TestSubgraphClientQueryMechs:
         mock_gql.return_value = mock_document
 
         # Create client with mocked underlying client
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
         mock_client = MagicMock()
         mock_client.execute.return_value = expected_result
         client._client = mock_client
@@ -238,10 +238,77 @@ class TestSubgraphClientQueryMechs:
         mock_gql.return_value = mock_document
 
         # Create client with mocked underlying client
-        client = SubgraphClient(subgraph_url=url)
+        client = SubgraphClient(subgraph_url=url, dialect="graph")
         mock_client = MagicMock()
         mock_client.execute.side_effect = Exception("Subgraph unreachable")
         client._client = mock_client
 
         with pytest.raises(Exception, match="Subgraph unreachable"):
             client.query_mechs()
+
+
+class TestSubgraphClientSquidDialect:
+    """Tests for query_mechs against an SQD squid (OpenReader)."""
+
+    @pytest.mark.parametrize(
+        ("order_direction", "order_clause"),
+        [
+            pytest.param("desc", "orderBy: [totalDeliveriesTransactions_DESC]", id="desc"),
+            pytest.param("asc", "orderBy: [totalDeliveriesTransactions_ASC]", id="asc"),
+        ],
+    )
+    @patch("mech_client.infrastructure.subgraph.client.gql")
+    def test_squid_uses_openreader_sort_syntax(
+        self, mock_gql: MagicMock, order_direction: str, order_clause: str
+    ) -> None:
+        """Test the squid dialect sends OpenReader's orderBy list, no orderDirection."""
+        client = SubgraphClient(
+            subgraph_url="https://squid.example.com/graphql", dialect="squid"
+        )
+        client._client = MagicMock()
+
+        client.query_mechs(order_direction=order_direction)
+
+        query_str = mock_gql.call_args[1]["request_string"]
+        assert order_clause in query_str
+        assert "orderDirection" not in query_str
+
+    def test_unknown_dialect_is_rejected_when_built(self) -> None:
+        """Test an unknown dialect fails at construction, not at the first query."""
+        with pytest.raises(
+            ValueError, match="Unknown subgraph_dialect 'hasura' for SubgraphClient"
+        ):
+            SubgraphClient(
+                subgraph_url="https://example.com/graphql",
+                dialect="hasura",  # type: ignore[arg-type]
+            )
+
+    def test_dialect_is_required(self) -> None:
+        """Test a client can't be built without naming its dialect."""
+        with pytest.raises(TypeError, match="dialect"):
+            SubgraphClient(subgraph_url="https://example.com/graphql")  # type: ignore[call-arg]
+
+
+class TestSubgraphClientSortArguments:
+    """Tests for the sort arguments query_mechs interpolates into its query."""
+
+    @pytest.mark.parametrize(
+        ("order_by", "order_direction", "message"),
+        [
+            pytest.param("x) { id } #", "desc", "order_by must be a GraphQL field name", id="order-by-injection"),
+            pytest.param("", "desc", "order_by must be a GraphQL field name", id="order-by-empty"),
+            pytest.param("totalDeliveriesTransactions", "DESC", "order_direction must be one of", id="direction-uppercase"),
+            pytest.param("totalDeliveriesTransactions", "desc, first: 1", "order_direction must be one of", id="direction-injection"),
+        ],
+    )
+    def test_invalid_sort_arguments_are_rejected_before_querying(
+        self, order_by: str, order_direction: str, message: str
+    ) -> None:
+        """Test sort arguments outside the allow-list never reach the query string."""
+        client = SubgraphClient(subgraph_url="https://example.com/graphql", dialect="graph")
+        client._client = MagicMock()
+
+        with pytest.raises(ValueError, match=message):
+            client.query_mechs(order_by=order_by, order_direction=order_direction)
+        client._client.execute.assert_not_called()
+

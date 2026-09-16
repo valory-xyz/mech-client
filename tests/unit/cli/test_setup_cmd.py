@@ -140,7 +140,7 @@ class TestSetupCommand:
         assert "arbitrum" in result.output.lower()
 
     def test_setup_command_rejects_robinhood(self) -> None:
-        """Test setup rejects Robinhood, which is client mode only."""
+        """Test setup rejects Robinhood: the middleware has no quickstart entry yet."""
         runner = CliRunner()
         result = runner.invoke(setup_command, ["--chain-config", "robinhood"])
 
@@ -318,3 +318,20 @@ class TestSetupCommandEdgeCases:
         # Click will use the last value - should succeed with 'base'
         assert result.exit_code == 0
         assert "Setting up agent mode for base" in result.output
+
+
+class TestSetupWalletSummary:
+    """Tests for setup when the wallet summary can't be read."""
+
+    @patch("mech_client.cli.commands.setup_cmd.SetupService")
+    def test_unreadable_wallet_summary_fails_the_command(
+        self, mock_setup_service: MagicMock
+    ) -> None:
+        """Test setup exits 1 instead of 0 when display_wallets returns None."""
+        mock_setup_service.return_value.display_wallets.return_value = None
+
+        result = CliRunner().invoke(setup_command, ["--chain-config", "gnosis"])
+
+        assert result.exit_code == 1
+        assert "wallet summary could not be read" in result.output
+

@@ -41,7 +41,7 @@ def mech() -> None:
     "--chain-config",
     type=str,
     required=True,
-    help="Chain configuration name (gnosis, base, polygon, optimism).",
+    help="Chain configuration name (gnosis, base, polygon, optimism, robinhood).",
 )
 @handle_cli_errors
 def mech_list(chain_config: str) -> None:
@@ -55,14 +55,14 @@ def mech_list(chain_config: str) -> None:
 
     Example: mechx mech list --chain-config gnosis
 
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism).
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood).
     """
     # Validate chain config
     validated_chain = validate_chain_config(chain_config)
 
     # Query subgraph for mechs (uses default from config or MECHX_SUBGRAPH_URL override)
     mech_list_data = query_mm_mechs_info(chain_config=validated_chain)
-    if mech_list_data is None:
+    if not mech_list_data:
         click.echo("No mechs found")
         return
 

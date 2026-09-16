@@ -107,7 +107,7 @@ All commands require `--chain-config` with one of these five chain names.
 - **Native Payment**: Chains that support `deposit native` command for prepaid native token deposits.
 - **NVM Subscriptions**: Chains that support `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base only).
 - **OLAS/USDC Payments**: Chains that support `deposit token` command with OLAS or USDC tokens. On Robinhood the USDC payment type uses USDG, so `--token-type usdc` deposits USDG.
-- **Subgraph**: Default subgraph URLs are provided for all supported chains except Robinhood, which has no subgraph, so `mech list` is not available there. The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
+- **Subgraph**: Default subgraph URLs are provided for all supported chains. Robinhood's is the marketplace squid (SQD), which takes a different query syntax that mech-client handles for you. The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
 
 ### Set up agent mode for on-chain interactions
 
@@ -134,7 +134,7 @@ mechx setup --chain-config <chain_config>
 
 To list the top marketplace mechs based on deliveries, use the `mech list` command. You can specify the chain you want to query. Please note that only the first 20 mechs sorted by number of deliveries will be shown.
 
-**Note:** Default subgraph URLs are provided for Gnosis, Base, Polygon and Optimism. Robinhood has no subgraph, so `mech list` is not available there. You can optionally override the default by setting:
+**Note:** Default subgraph URLs are provided for all supported chains (on Robinhood, the marketplace squid). You can optionally override the default by setting:
 
 ```bash
 export MECHX_SUBGRAPH_URL=<your-custom-subgraph-url>

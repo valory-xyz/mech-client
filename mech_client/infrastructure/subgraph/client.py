@@ -19,12 +19,19 @@
 
 """GraphQL subgraph client."""
 
+import re
 from typing import Any, Dict
 
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
+from mech_client.infrastructure.config.chain_config import (
+    SubgraphDialect,
+    validate_subgraph_dialect,
+)
 
 DEFAULT_TIMEOUT = 600.0
+ORDER_DIRECTIONS = ("asc", "desc")
+_GRAPHQL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 class SubgraphClient:
@@ -34,15 +41,23 @@ class SubgraphClient:
     subgraph to retrieve mech metadata, delivery counts, and other on-chain data.
     """
 
-    def __init__(self, subgraph_url: str, timeout: float = DEFAULT_TIMEOUT):
+    def __init__(
+        self,
+        subgraph_url: str,
+        dialect: SubgraphDialect,
+        timeout: float = DEFAULT_TIMEOUT,
+    ):
         """
         Initialize subgraph client.
 
         :param subgraph_url: GraphQL endpoint URL for the subgraph
+        :param dialect: "graph" for The Graph, "squid" for an SQD squid (OpenReader)
         :param timeout: Request timeout in seconds (default: 600)
         """
+        validate_subgraph_dialect(dialect, "SubgraphClient")
         self.subgraph_url = subgraph_url
         self.timeout = timeout
+        self.dialect = dialect
         self._client: Client = None  # type: ignore
 
     @property
@@ -82,10 +97,21 @@ class SubgraphClient:
         :param order_by: Field to order by (default: totalDeliveriesTransactions)
         :param order_direction: Sort direction "asc" or "desc" (default: desc)
         :return: Query response with mech data
+        :raises ValueError: If order_by is not a field name or order_direction is not asc/desc
         """
+        if not _GRAPHQL_NAME.fullmatch(order_by):
+            raise ValueError(f"order_by must be a GraphQL field name, got {order_by!r}")
+        if order_direction not in ORDER_DIRECTIONS:
+            raise ValueError(
+                f"order_direction must be one of {ORDER_DIRECTIONS}, got {order_direction!r}"
+            )
+        if self.dialect == "squid":
+            order = f"orderBy: [{order_by}_{order_direction.upper()}]"
+        else:
+            order = f"orderBy: {order_by}, orderDirection: {order_direction}"
         query = f"""
         query MechsOrderedByServiceDeliveries {{
-          meches(orderBy: {order_by}, orderDirection: {order_direction}) {{
+          meches({order}) {{
             id
             address
             mechFactory

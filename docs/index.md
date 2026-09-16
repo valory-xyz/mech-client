@@ -83,7 +83,7 @@ All commands require `--chain-config` with one of these five chain names.
 - **OLAS/USDC Payments**: Chains supporting `deposit token` command with OLAS or USDC tokens. On Robinhood the USDC payment type uses USDG, so `--token-type usdc` deposits USDG.
 
 **Important Notes:**
-- The `mech list` command works on Gnosis, Base, Polygon and Optimism with default subgraph URLs provided. Robinhood has no subgraph, so `mech list` is not available there. The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
+- The `mech list` command works on all supported chains with default subgraph URLs provided (on Robinhood, the marketplace squid). The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
 - For other marketplace commands (`request`, deposits), subgraph is not required.
 
 ## 1. How to Send a request to a Mech (registered on the Mech MarketPlace)
@@ -104,9 +104,9 @@ Follow the instructions in the corresponding section.
 mechx mech list --chain-config <chain-config>
 ```
 
-Replace `<chain-config>` by the chosen network. Supported marketplace chains: gnosis, base, polygon, optimism.
+Replace `<chain-config>` by the chosen network. Supported marketplace chains: gnosis, base, polygon, optimism, robinhood.
 
-**Note**: Default subgraph URLs are provided for Gnosis, Base, Polygon and Optimism. Robinhood has no subgraph, so `mech list` is not available there. You can optionally override the default:
+**Note**: Default subgraph URLs are provided for all supported chains (on Robinhood, the marketplace squid). You can optionally override the default:
 ```bash
 export MECHX_SUBGRAPH_URL=<your-custom-subgraph-url>
 ```

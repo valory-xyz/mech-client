@@ -26,6 +26,7 @@ import requests
 
 from mech_client.infrastructure.config.chain_config import (
     LedgerConfig,
+    MechConfig,
     get_rpc_chain_id,
 )
 
@@ -432,6 +433,7 @@ class TestMechConfigEnvOverrides:
         )
 
         mech_config = MechConfig(
+            subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://rpc.gnosischain.com",
             ledger_config=ledger_config,
@@ -480,6 +482,7 @@ class TestMechConfigEnvOverrides:
         )
 
         mech_config = MechConfig(
+            subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://rpc.gnosischain.com",
             ledger_config=ledger_config,
@@ -528,6 +531,7 @@ class TestMechConfigEnvOverrides:
         )
 
         mech_config = MechConfig(
+            subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://rpc.gnosischain.com",
             ledger_config=ledger_config,
@@ -539,3 +543,30 @@ class TestMechConfigEnvOverrides:
         )
 
         assert mech_config.subgraph_url == "https://custom-subgraph/"
+
+
+class TestMechConfigRequiresItsDialect:
+    """Tests that a MechConfig can't be built without naming its subgraph dialect."""
+
+    def test_subgraph_dialect_is_required(self) -> None:
+        """Test construction without subgraph_dialect fails instead of defaulting."""
+        ledger_config = LedgerConfig(
+            address="https://rpc.example",
+            chain_id=1,
+            poa_chain=False,
+            default_gas_price_strategy="eip1559",
+            is_gas_estimation_enabled=True,
+        )
+
+        with pytest.raises(TypeError, match="subgraph_dialect"):
+            MechConfig(  # type: ignore[call-arg]
+                complementary_metadata_hash_address="0x" + "2" * 40,
+                rpc_url="https://rpc.example",
+                ledger_config=ledger_config,
+                gas_limit=500000,
+                transaction_url="https://explorer.example/tx/{transaction_digest}",
+                subgraph_url="",
+                price=1,
+                mech_marketplace_contract="0x" + "3" * 40,
+            )
+

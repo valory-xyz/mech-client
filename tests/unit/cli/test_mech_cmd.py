@@ -19,12 +19,14 @@
 
 """Tests for mech command."""
 
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
 from mech_client.cli.commands.mech_cmd import mech
+from mech_client.infrastructure.config import get_mech_config
 
 
 class TestMechListCommand:
@@ -200,7 +202,7 @@ class TestMechListCommand:
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
     def test_list_command_with_no_mechs(self, mock_query: MagicMock) -> None:
         """Test mech list displays message when no mechs found."""
-        mock_query.return_value = None
+        mock_query.return_value = []
 
         runner = CliRunner()
         result = runner.invoke(mech, ["list", "--chain-config", "gnosis"])
@@ -296,16 +298,21 @@ class TestMechListCommandMetadataEdgeCases:
 
 
 class TestMechListWithoutSubgraph:
-    """Tests for mech list on a chain with no subgraph."""
+    """Tests for mech list on a marketplace chain whose subgraph URL is blank."""
 
-    def test_robinhood_gets_the_subgraph_error_not_the_catch_all(
+    def test_chain_without_subgraph_gets_the_subgraph_error_not_the_catch_all(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test mech list on Robinhood shows the subgraph error message."""
+        """Test mech list on a chain with no subgraph shows the subgraph error."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        blank = replace(get_mech_config("robinhood"), subgraph_url="")
 
         runner = CliRunner()
-        result = runner.invoke(mech, ["list", "--chain-config", "robinhood"])
+        with patch(
+            "mech_client.infrastructure.subgraph.queries.get_mech_config",
+            return_value=blank,
+        ):
+            result = runner.invoke(mech, ["list", "--chain-config", "robinhood"])
 
         assert result.exit_code == 1
         assert (

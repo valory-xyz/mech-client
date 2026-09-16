@@ -144,7 +144,7 @@ class SetupService:
                     break
 
             if not service_config_id:
-                logger.warning(f"Could not find service for {self.chain_config}")
+                logger.error("Could not find a service for %s", self.chain_config)
                 return None
 
             service = service_manager.load(service_config_id)
@@ -170,14 +170,25 @@ class SetupService:
                 "agent_safe": agent_safe,
             }
 
-            # Print formatted output
-            self._print_wallet_box(wallet_info, service_token)
-
-            return wallet_info
-
         except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"Could not display wallet info: {e}")
+            logger.error(
+                "Could not read wallet info for %s: %s",
+                self.chain_config,
+                e,
+                exc_info=True,
+            )
             return None
+
+        try:
+            self._print_wallet_box(wallet_info, service_token)
+        except Exception:  # pylint: disable=broad-except
+            logger.error(
+                "Could not print the wallet summary, listing it plainly instead",
+                exc_info=True,
+            )
+            for label, value in wallet_info.items():
+                logger.error("  %s: %s", label, value)
+        return wallet_info
 
     def _print_wallet_box(
         self, wallet_info: Dict[str, str], service_token: Optional[int] = None
