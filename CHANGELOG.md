@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-09-16
+
 ### ✨ Added
 
 - **`mech list` on Robinhood** via the marketplace squid. Every chain in `mechs.json` now names its `subgraph_dialect` (`"graph"` or `"squid"`), and `mech list` sends the matching sort syntax.
