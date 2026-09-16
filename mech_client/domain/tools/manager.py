@@ -123,8 +123,22 @@ class ToolManager:
         :param service_id: The service ID of the mech
         :return: The terms URL string, or None when the metadata has none
         """
-        metadata = self.fetch_tools_metadata(service_id)
-        if not metadata:
+        return self.extract_terms_url(self.fetch_tools_metadata(service_id))
+
+    @staticmethod
+    def extract_terms_url(metadata: Any) -> Optional[str]:
+        """
+        Read the ``termsUrl`` field from an already fetched metadata document.
+
+        Shared by the request path and the mech listing so both apply the same
+        rule: the field must sit on a JSON object and be non-blank. Anything
+        else (no document, a JSON list or string, a missing or empty field)
+        is "no terms link" rather than an error.
+
+        :param metadata: the parsed metadata document, or None
+        :return: The stripped terms URL, or None
+        """
+        if not isinstance(metadata, dict):
             return None
         terms_url = (metadata.get("termsUrl") or "").strip()
         return terms_url or None

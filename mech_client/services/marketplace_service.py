@@ -217,13 +217,23 @@ class MarketplaceService(
         Log the mech's terms link before any request is signed.
 
         The link is whatever the operator published in the ``termsUrl`` field
-        of the mech's on-chain metadata. A mech without one is reported as
-        such rather than silently skipped, so a requester can tell "no terms
-        published" from "the client did not look".
+        of the mech's on-chain metadata. Three outcomes are told apart so the
+        requester is never misled right before signing: the link is shown; the
+        document was read and carries no link ("publishes no terms link"); or
+        the document could not be read at all (gateway or RPC failure), which
+        is reported as exactly that rather than as "no terms".
 
         :param service_id: The service ID of the mech about to be called
         """
-        terms_url = self.tool_manager.get_terms_url(service_id)
+        metadata = self.tool_manager.fetch_tools_metadata(service_id)
+        if metadata is None:
+            logger.warning(
+                f"Could not read the metadata for service {service_id} to check "
+                f"for a terms link; the mech operator may still have published "
+                f"terms."
+            )
+            return
+        terms_url = self.tool_manager.extract_terms_url(metadata)
         if terms_url:
             logger.info(
                 f"By sending this request you agree to the mech operator's "

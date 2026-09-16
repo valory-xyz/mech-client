@@ -19,19 +19,23 @@
 
 """Mech command for managing and querying AI mechs on the marketplace."""
 
-from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import List, Optional
 
 import click
 import requests
 from mech_client.cli.validators import validate_chain_config
+from mech_client.domain.tools.manager import ToolManager
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
 from mech_client.utils.errors.handlers import handle_cli_errors
 from tabulate import tabulate  # type: ignore
 
 # Per-mech metadata fetch for the listing; short so one slow gateway read
-# cannot stall the whole table.
+# cannot stall the whole table, and fetched in parallel so N unreachable
+# links cost about one timeout rather than N.
 METADATA_FETCH_TIMEOUT = 10
+METADATA_FETCH_WORKERS = 8
 
 
 def _fetch_terms_url(metadata_link: Optional[str]) -> Optional[str]:
@@ -47,10 +51,20 @@ def _fetch_terms_url(metadata_link: Optional[str]) -> Optional[str]:
         metadata = requests.get(metadata_link, timeout=METADATA_FETCH_TIMEOUT).json()
     except (requests.RequestException, ValueError):
         return None
-    if not isinstance(metadata, dict):
-        return None
-    terms_url = (metadata.get("termsUrl") or "").strip()
-    return terms_url or None
+    return ToolManager.extract_terms_url(metadata)
+
+
+def _fetch_terms_urls(metadata_links: List[Optional[str]]) -> List[Optional[str]]:
+    """Fetch the terms link for every metadata link, in parallel, order kept.
+
+    :param metadata_links: one gateway URL (or None) per mech, in table order
+    :return: one terms URL (or None) per mech, in the same order
+    """
+    if not metadata_links:
+        return []
+    workers = min(METADATA_FETCH_WORKERS, len(metadata_links))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        return list(executor.map(_fetch_terms_url, metadata_links))
 
 
 @click.group()
@@ -103,22 +117,27 @@ def mech_list(chain_config: str) -> None:
         "Terms",
     ]
 
-    data = []
-    for items in mech_list_data:
-        metadata_link = (
+    metadata_links = [
+        (
             IPFS_URL_TEMPLATE.format(items["service"]["metadata"][0]["metadata"][2:])
             if items["service"].get("metadata") and items["service"]["metadata"]
             else None
         )
-        data.append(
-            (
-                items["service"]["id"],
-                items["mech_type"],
-                items["address"],
-                items["service"]["totalDeliveries"],
-                metadata_link,
-                _fetch_terms_url(metadata_link),
-            )
+        for items in mech_list_data
+    ]
+    terms_urls = _fetch_terms_urls(metadata_links)
+    data = [
+        (
+            items["service"]["id"],
+            items["mech_type"],
+            items["address"],
+            items["service"]["totalDeliveries"],
+            metadata_link,
+            terms_url,
         )
+        for items, metadata_link, terms_url in zip(
+            mech_list_data, metadata_links, terms_urls
+        )
+    ]
 
     click.echo(tabulate(data, headers=headers, tablefmt="grid"))

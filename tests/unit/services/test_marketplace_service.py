@@ -31,6 +31,7 @@ from mech_client.domain.delivery import DeliveryResult
 from mech_client.domain.signing import LocalSigner
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
+from mech_client.domain.tools.manager import ToolManager
 from mech_client.services.marketplace_service import (
     MarketplaceService,
     PaymentChallenge,
@@ -2260,39 +2261,71 @@ def _build_offchain_service(
 class TestTermsNotice:
     """The requester sees the mech's terms link before anything is signed."""
 
-    def test_log_terms_notice_logs_the_published_link(self) -> None:
-        """A termsUrl in the metadata is logged with the agreement wording."""
+    @staticmethod
+    def _service_with_metadata(metadata: Any) -> MarketplaceService:
+        """Build a service whose metadata fetch yields ``metadata`` (real extractor)."""
         service = _build_offchain_service()
         service.tool_manager = MagicMock()
-        service.tool_manager.get_terms_url.return_value = (
-            "https://www.valory.xyz/terms/mechs"
+        service.tool_manager.fetch_tools_metadata.return_value = metadata
+        # Keep the real parsing rule under test rather than a mocked answer.
+        service.tool_manager.extract_terms_url = ToolManager.extract_terms_url
+        return service
+
+    def test_log_terms_notice_logs_the_published_link(self) -> None:
+        """A termsUrl in the metadata is logged with the agreement wording."""
+        service = self._service_with_metadata(
+            {"termsUrl": "https://www.valory.xyz/terms/mechs", "tools": []}
         )
         # mech_client sets propagate=False on its root logger, so patch the
         # module logger directly rather than relying on caplog.
-        with patch(
-            "mech_client.services.marketplace_service.logger.info"
-        ) as mock_info:
+        with (
+            patch("mech_client.services.marketplace_service.logger.info") as mock_info,
+            patch("mech_client.services.marketplace_service.logger.warning") as mock_warn,
+        ):
             service._log_terms_notice(7)  # pylint: disable=protected-access
-        service.tool_manager.get_terms_url.assert_called_once_with(7)
+        service.tool_manager.fetch_tools_metadata.assert_called_once_with(7)
+        mock_warn.assert_not_called()
         mock_info.assert_called_once()
         message = mock_info.call_args[0][0]
         assert "https://www.valory.xyz/terms/mechs" in message
         assert "agree" in message
 
-    def test_log_terms_notice_reports_a_mech_without_terms(self) -> None:
-        """No termsUrl is reported as such, not silently skipped."""
-        service = _build_offchain_service()
-        service.tool_manager = MagicMock()
-        service.tool_manager.get_terms_url.return_value = None
-        with patch(
-            "mech_client.services.marketplace_service.logger.info"
-        ) as mock_info:
+    @pytest.mark.parametrize(
+        "metadata",
+        [{"tools": []}, {"termsUrl": ""}, {"termsUrl": "   "}, ["not", "a", "dict"]],
+        ids=["absent", "empty", "whitespace", "non_dict"],
+    )
+    def test_log_terms_notice_reports_a_mech_without_terms(self, metadata: Any) -> None:
+        """A readable document without a link is reported as such, not skipped."""
+        service = self._service_with_metadata(metadata)
+        with (
+            patch("mech_client.services.marketplace_service.logger.info") as mock_info,
+            patch("mech_client.services.marketplace_service.logger.warning") as mock_warn,
+        ):
             service._log_terms_notice(7)  # pylint: disable=protected-access
+        mock_warn.assert_not_called()
         mock_info.assert_called_once()
         message = mock_info.call_args[0][0]
         assert "no terms" in message
         assert "7" in message
         assert "agree" not in message
+
+    def test_log_terms_notice_distinguishes_an_unreadable_document(self) -> None:
+        """A failed fetch must not be reported as "publishes no terms"."""
+        # fetch_tools_metadata returns None on a gateway or RPC failure. Saying
+        # "no terms" then would be a false statement right before signing.
+        service = self._service_with_metadata(None)
+        with (
+            patch("mech_client.services.marketplace_service.logger.info") as mock_info,
+            patch("mech_client.services.marketplace_service.logger.warning") as mock_warn,
+        ):
+            service._log_terms_notice(7)  # pylint: disable=protected-access
+        mock_info.assert_not_called()
+        mock_warn.assert_called_once()
+        message = mock_warn.call_args[0][0]
+        assert "Could not read" in message
+        assert "7" in message
+        assert "no terms" not in message
 
     @pytest.mark.asyncio
     async def test_send_request_shows_terms_before_the_offchain_send(self) -> None:
@@ -2301,9 +2334,10 @@ class TestTermsNotice:
         service.tool_manager = MagicMock()
         service.tool_manager.get_offchain_url.return_value = "https://mech.example"
         calls: list = []
-        service.tool_manager.get_terms_url.side_effect = lambda sid: calls.append(
-            "terms"
-        ) or "https://www.valory.xyz/terms/mechs"
+        service.tool_manager.fetch_tools_metadata.side_effect = (
+            lambda sid: calls.append("terms")
+            or {"termsUrl": "https://www.valory.xyz/terms/mechs"}
+        )
 
         async def fake_offchain(**_kwargs: Any) -> Dict[str, Any]:
             calls.append("send")

@@ -27,7 +27,11 @@ from click.testing import CliRunner
 
 import requests
 
-from mech_client.cli.commands.mech_cmd import _fetch_terms_url, mech
+from mech_client.cli.commands.mech_cmd import (
+    _fetch_terms_url,
+    _fetch_terms_urls,
+    mech,
+)
 from mech_client.infrastructure.config import get_mech_config
 
 TERMS_URL = "https://www.valory.xyz/terms/mechs"
@@ -98,6 +102,37 @@ class TestFetchTermsUrl:
             "mech_client.cli.commands.mech_cmd.requests.get", return_value=response
         ):
             assert _fetch_terms_url("https://gateway/ipfs/abc") is None
+
+
+class TestFetchTermsUrls:
+    """_fetch_terms_urls fans the per-mech fetches out and keeps table order."""
+
+    def test_empty_input_makes_no_calls(self) -> None:
+        """No mechs, no threads, no HTTP."""
+        with patch("mech_client.cli.commands.mech_cmd.requests.get") as mock_get:
+            assert _fetch_terms_urls([]) == []
+        mock_get.assert_not_called()
+
+    def test_results_keep_the_input_order_and_nones(self) -> None:
+        """Each output slot matches its input link even when fetches interleave."""
+        # Slow first, fast second: with unordered collection the fast one would
+        # come back first. executor.map must keep table order regardless.
+        import time  # pylint: disable=import-outside-toplevel
+
+        def fake_get(url: str, timeout: int) -> MagicMock:  # noqa: ARG001
+            response = MagicMock()
+            if url.endswith("slow"):
+                time.sleep(0.05)
+                response.json.return_value = {"termsUrl": "https://slow/terms"}
+            else:
+                response.json.return_value = {"termsUrl": "https://fast/terms"}
+            return response
+
+        with patch(
+            "mech_client.cli.commands.mech_cmd.requests.get", side_effect=fake_get
+        ):
+            out = _fetch_terms_urls(["https://g/slow", None, "https://g/fast"])
+        assert out == ["https://slow/terms", None, "https://fast/terms"]
 
 
 class TestMechListCommand:

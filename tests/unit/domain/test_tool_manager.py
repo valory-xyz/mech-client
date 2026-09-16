@@ -701,8 +701,10 @@ class TestGetTermsUrl:
             ({"termsUrl": ""}, None),  # empty string
             ({"termsUrl": "   "}, None),  # whitespace only
             ({"termsUrl": None}, None),  # explicit null
+            (["not", "a", "dict"], None),  # metadata URI served a list
+            ("just a string", None),  # metadata URI served a scalar
         ],
-        ids=["present", "stripped", "absent", "empty", "whitespace", "null"],
+        ids=["present", "stripped", "absent", "empty", "whitespace", "null", "list", "scalar"],
     )
     @patch("mech_client.domain.tools.manager.requests")
     @patch("mech_client.domain.tools.manager.get_contract")
@@ -716,10 +718,10 @@ class TestGetTermsUrl:
         _mock_get_abi: MagicMock,
         mock_get_contract: MagicMock,
         mock_requests: MagicMock,
-        metadata: Dict[str, Any],
+        metadata: Any,
         expected: Optional[str],
     ) -> None:
-        """The stripped termsUrl is returned; a missing or blank one is None."""
+        """The stripped termsUrl is returned; a missing, blank, or non-object one is None."""
         manager = self._manager_with_metadata(
             mock_config, mock_get_contract, mock_requests, metadata
         )
