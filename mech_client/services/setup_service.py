@@ -179,12 +179,15 @@ class SetupService:
             )
             return None
 
-        # Printing has its own handler: a formatting failure must not discard
-        # wallet_info that was read correctly, nor report it as unreadable.
         try:
             self._print_wallet_box(wallet_info, service_token)
         except Exception:  # pylint: disable=broad-except
-            logger.error("Could not print the wallet summary", exc_info=True)
+            logger.error(
+                "Could not print the wallet summary, listing it plainly instead",
+                exc_info=True,
+            )
+            for label, value in wallet_info.items():
+                logger.error("  %s: %s", label, value)
         return wallet_info
 
     def _print_wallet_box(

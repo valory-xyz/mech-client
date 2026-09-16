@@ -22,6 +22,7 @@
 import logging
 from typing import List
 
+from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.config.loader import get_mech_config
 from mech_client.infrastructure.subgraph.client import SubgraphClient
 from mech_client.utils.errors import SubgraphError
@@ -78,6 +79,16 @@ def query_mm_mechs_info(chain_config: str) -> List:
         raise SubgraphError(
             f"Subgraph URL not set for chain config: {chain_config}. "
             "mech list needs a subgraph, and this chain has none configured."
+        )
+
+    if (
+        mech_config.subgraph_dialect == "squid"
+        and EnvironmentConfig.load().mechx_subgraph_url
+    ):
+        logger.warning(
+            "MECHX_SUBGRAPH_URL replaces the endpoint for %s but not its dialect: "
+            "this query uses squid syntax",
+            chain_config,
         )
 
     client = SubgraphClient(

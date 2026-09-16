@@ -77,6 +77,6 @@ def setup(chain_config: str) -> None:
     if setup_service.display_wallets() is None:
         raise ClickException(
             f"Agent mode setup ran for {validated_chain}, but the wallet summary "
-            "could not be read (see the warning above). Check the Safe and agent "
+            "could not be read (see the error above). Check the Safe and agent "
             "addresses before funding them."
         )

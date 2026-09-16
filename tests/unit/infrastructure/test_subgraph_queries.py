@@ -561,15 +561,43 @@ class TestUnmappedMechFactory:
 class TestQueryMechsMalformedResponse:
     """Tests for a subgraph response mech-client can't read."""
 
+    @pytest.mark.parametrize(
+        "record",
+        [
+            pytest.param(
+                {"address": "0xabc", "totalDeliveriesTransactions": "2"}, id="factory-missing"
+            ),
+            pytest.param(
+                {
+                    "address": "0xabc",
+                    "mechFactory": None,
+                    "totalDeliveriesTransactions": "2",
+                },
+                id="factory-null",
+            ),
+            pytest.param(
+                {"address": "0xabc", "mechFactory": "0xdef"}, id="deliveries-missing"
+            ),
+            pytest.param(
+                {
+                    "address": "0xabc",
+                    "mechFactory": "0xdef",
+                    "totalDeliveriesTransactions": None,
+                },
+                id="deliveries-null",
+            ),
+        ],
+    )
     @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
-    def test_missing_field_raises_a_subgraph_error_naming_the_chain(
-        self, mock_client_class: MagicMock, monkeypatch: pytest.MonkeyPatch
+    def test_unreadable_record_raises_a_subgraph_error_naming_the_chain(
+        self,
+        mock_client_class: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+        record: dict,
     ) -> None:
-        """Test a record without mechFactory names the chain instead of crashing generically."""
+        """Test a record mech-client can't read names the chain, not a generic crash."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
-        mock_client_class.return_value.query_mechs.return_value = {
-            "meches": [{"address": "0xabc", "totalDeliveriesTransactions": "2"}]
-        }
+        mock_client_class.return_value.query_mechs.return_value = {"meches": [record]}
 
         with pytest.raises(
             SubgraphError, match="Malformed mech record from the robinhood subgraph"
@@ -600,4 +628,33 @@ class TestQueryMechsChainWithoutFactoryMapping:
         result = query_mm_mechs_info("celo")
 
         assert [m["mech_type"] for m in result] == ["Unknown"]
+
+
+class TestQueryMechsOverrideWarning:
+    """Tests for the MECHX_SUBGRAPH_URL override warning."""
+
+    @pytest.mark.parametrize(
+        ("chain", "warns"),
+        [
+            pytest.param("robinhood", True, id="squid-chain-warns"),
+            pytest.param("gnosis", False, id="graph-chain-stays-quiet"),
+        ],
+    )
+    @patch("mech_client.infrastructure.subgraph.queries.logger")
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_override_warns_only_where_a_dialect_still_applies(
+        self,
+        mock_client_class: MagicMock,
+        mock_logger: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+        chain: str,
+        warns: bool,
+    ) -> None:
+        """Test the override warns on a squid chain only, since only it keeps a dialect."""
+        monkeypatch.setenv("MECHX_SUBGRAPH_URL", "https://subgraph.example/graphql")
+        mock_client_class.return_value.query_mechs.return_value = {"meches": []}
+
+        query_mm_mechs_info(chain)
+
+        assert mock_logger.warning.called is warns
 

@@ -21,7 +21,6 @@
 
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -174,20 +173,4 @@ class TestGetMechConfigIntegration:
 
         with pytest.raises(ValueError, match="'robinhood' has no subgraph_dialect"):
             get_mech_config("robinhood")
-
-    def test_subgraph_url_override_warns_on_a_squid_chain(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Test overriding the URL of a squid chain warns that the dialect is unchanged."""
-        monkeypatch.setenv("MECHX_SUBGRAPH_URL", "https://subgraph.example/graphql")
-
-        with patch(
-            "mech_client.infrastructure.config.chain_config.logger"
-        ) as mock_logger:
-            config = get_mech_config("robinhood")
-
-        assert config.subgraph_url == "https://subgraph.example/graphql"
-        assert config.subgraph_dialect == "squid"
-        mock_logger.warning.assert_called_once()
-        assert "robinhood" in mock_logger.warning.call_args[0]
 

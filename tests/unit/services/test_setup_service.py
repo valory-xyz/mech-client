@@ -247,8 +247,12 @@ class TestDisplayWallets:
         self,
         mock_operate_manager: MagicMock,
         mock_print_wallet_box: MagicMock,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Test a printing failure doesn't discard addresses that were read fine."""
+        """Test a printing failure still shows the addresses instead of dropping them."""
+        mech_logger = logging.getLogger("mech_client")
+        mech_logger.propagate = True
+        caplog.set_level(logging.ERROR)
         mock_chain_type = MagicMock()
         mock_chain_type.value = "gnosis"
         mock_wallet = MagicMock()
@@ -275,6 +279,8 @@ class TestDisplayWallets:
 
         assert result is not None
         assert result["agent_safe"] == "0xEFGH"
+        assert "0xEFGH" in caplog.text
+        mech_logger.propagate = False
 
     @patch("mech_client.services.setup_service.OperateManager")
     def test_display_wallets_logs_a_traceback_when_reading_fails(

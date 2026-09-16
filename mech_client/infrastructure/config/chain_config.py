@@ -19,7 +19,6 @@
 
 """Chain configuration dataclasses."""
 
-import logging
 from dataclasses import dataclass, field
 from typing import Literal, Optional, get_args
 
@@ -167,8 +166,6 @@ class MechMarketplaceRequestConfig:
 
 
 # GraphQL dialect of a chain's marketplace indexer: The Graph, or an SQD squid (OpenReader).
-logger = logging.getLogger(__name__)
-
 SubgraphDialect = Literal["graph", "squid"]
 
 
@@ -255,9 +252,3 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
 
         if env_config.mechx_subgraph_url:
             self.subgraph_url = env_config.mechx_subgraph_url
-            if self.subgraph_dialect == "squid":
-                logger.warning(
-                    "MECHX_SUBGRAPH_URL replaces the endpoint for %s but not its "
-                    "dialect: mech list will send squid syntax to it",
-                    self.chain_config,
-                )
