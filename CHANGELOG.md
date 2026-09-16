@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `mechx mech list` shows a Terms column, read from the `termsUrl` field of each mech's published metadata.
 - `mechx request` logs the mech operator's terms link before anything is signed, on both the on-chain and the off-chain path, or states that the mech publishes none.
-- `ToolManager.get_terms_url()` for library users.
+- `ToolManager.extract_terms_url()` reads the link from a fetched metadata document, for library users.
+- `send_request` reads the mech's metadata once per request; the tool check, the terms notice and the off-chain URL lookup all use that one document.
 
 ### 🐛 Fixed
 

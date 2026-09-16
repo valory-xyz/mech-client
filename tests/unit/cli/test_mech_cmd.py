@@ -70,9 +70,11 @@ class TestFetchTermsUrl:
             ({"name": "Mech"}, None),
             ({"termsUrl": ""}, None),
             ({"termsUrl": None}, None),
+            ({"termsUrl": 123}, None),
+            ({"termsUrl": ["x"]}, None),
             (["not", "a", "dict"], None),
         ],
-        ids=["present", "stripped", "absent", "empty", "null", "non_dict"],
+        ids=["present", "stripped", "absent", "empty", "null", "int", "list_value", "non_dict"],
     )
     def test_reads_terms_url_from_metadata(self, body: object, expected: object) -> None:
         """Only a non-blank termsUrl on a dict body is returned."""
@@ -112,6 +114,20 @@ class TestFetchTermsUrls:
         with patch("mech_client.cli.commands.mech_cmd.requests.get") as mock_get:
             assert _fetch_terms_urls([]) == []
         mock_get.assert_not_called()
+
+    def test_one_malformed_document_does_not_fail_the_table(self) -> None:
+        """A non-string termsUrl in one document yields None for that row only."""
+        def fake_get(url: str, timeout: int) -> MagicMock:  # noqa: ARG001
+            response = MagicMock()
+            response.json.return_value = (
+                {"termsUrl": 123} if url.endswith("bad") else {"termsUrl": TERMS_URL}
+            )
+            return response
+
+        with patch(
+            "mech_client.cli.commands.mech_cmd.requests.get", side_effect=fake_get
+        ):
+            assert _fetch_terms_urls(["https://g/bad", "https://g/ok"]) == [None, TERMS_URL]
 
     def test_results_keep_the_input_order_and_nones(self) -> None:
         """Each output slot matches its input link even when fetches interleave."""

@@ -670,27 +670,8 @@ class TestGetToolSchema:
             manager.get_tool_schema("1-non-existent-tool")
 
 
-class TestGetTermsUrl:
-    """Tests for get_terms_url method."""
-
-    @staticmethod
-    def _manager_with_metadata(
-        mock_config: MagicMock,
-        mock_get_contract: MagicMock,
-        mock_requests: MagicMock,
-        metadata: Any,
-    ) -> ToolManager:
-        """Build a ToolManager whose metadata fetch returns ``metadata``."""
-        mock_config.return_value = create_mock_mech_config()
-        mock_contract = MagicMock()
-        mock_contract.functions.tokenURI.return_value.call.return_value = (
-            "https://metadata.example.com/mech.json"
-        )
-        mock_get_contract.return_value = mock_contract
-        mock_response = MagicMock()
-        mock_response.json.return_value = metadata
-        mock_requests.get.return_value = mock_response
-        return ToolManager(chain_config="gnosis")
+class TestExtractTermsUrl:
+    """extract_terms_url reads termsUrl from a document that came from a third party."""
 
     @pytest.mark.parametrize(
         ("metadata", "expected"),
@@ -701,50 +682,18 @@ class TestGetTermsUrl:
             ({"termsUrl": ""}, None),  # empty string
             ({"termsUrl": "   "}, None),  # whitespace only
             ({"termsUrl": None}, None),  # explicit null
-            (["not", "a", "dict"], None),  # metadata URI served a list
-            ("just a string", None),  # metadata URI served a scalar
+            ({"termsUrl": 123}, None),  # not a string
+            ({"termsUrl": ["x"]}, None),  # not a string
+            ({"termsUrl": {"href": "x"}}, None),  # not a string
+            (["not", "a", "dict"], None),  # document is a list
+            ("just a string", None),  # document is a scalar
+            (None, None),  # no document
         ],
-        ids=["present", "stripped", "absent", "empty", "whitespace", "null", "list", "scalar"],
+        ids=[
+            "present", "stripped", "absent", "empty", "whitespace", "null",
+            "int", "list_value", "dict_value", "list_document", "scalar_document", "none",
+        ],
     )
-    @patch("mech_client.domain.tools.manager.requests")
-    @patch("mech_client.domain.tools.manager.get_contract")
-    @patch("mech_client.domain.tools.manager.get_abi")
-    @patch("mech_client.domain.tools.manager.EthereumApi")
-    @patch("mech_client.domain.tools.manager.get_mech_config")
-    def test_get_terms_url_reads_terms_url_field(
-        self,
-        mock_config: MagicMock,
-        _mock_ledger_api: MagicMock,
-        _mock_get_abi: MagicMock,
-        mock_get_contract: MagicMock,
-        mock_requests: MagicMock,
-        metadata: Any,
-        expected: Optional[str],
-    ) -> None:
-        """The stripped termsUrl is returned; a missing, blank, or non-object one is None."""
-        manager = self._manager_with_metadata(
-            mock_config, mock_get_contract, mock_requests, metadata
-        )
-        assert manager.get_terms_url(service_id=1) == expected
-
-    @patch("mech_client.domain.tools.manager.requests")
-    @patch("mech_client.domain.tools.manager.get_contract")
-    @patch("mech_client.domain.tools.manager.get_abi")
-    @patch("mech_client.domain.tools.manager.EthereumApi")
-    @patch("mech_client.domain.tools.manager.get_mech_config")
-    def test_get_terms_url_returns_none_when_metadata_unavailable(
-        self,
-        mock_config: MagicMock,
-        _mock_ledger_api: MagicMock,
-        _mock_get_abi: MagicMock,
-        mock_get_contract: MagicMock,
-        mock_requests: MagicMock,
-    ) -> None:
-        """A failed metadata fetch yields None rather than raising."""
-        # Unlike get_offchain_url, absence of terms is not an error for the
-        # request path: the caller reports it and continues.
-        mock_config.return_value = create_mock_mech_config()
-        mock_get_contract.return_value = MagicMock()
-        mock_requests.get.side_effect = IOError("gateway down")
-        manager = ToolManager(chain_config="gnosis")
-        assert manager.get_terms_url(service_id=1) is None
+    def test_extract_terms_url(self, metadata: Any, expected: Optional[str]) -> None:
+        """Only a non-blank string on a JSON object is returned; everything else is None."""
+        assert ToolManager.extract_terms_url(metadata) == expected

@@ -31,9 +31,6 @@ from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
 from mech_client.utils.errors.handlers import handle_cli_errors
 from tabulate import tabulate  # type: ignore
 
-# Per-mech metadata fetch for the listing; short so one slow gateway read
-# cannot stall the whole table, and fetched in parallel so N unreachable
-# links cost about one timeout rather than N.
 METADATA_FETCH_TIMEOUT = 10
 METADATA_FETCH_WORKERS = 8
 
@@ -43,7 +40,7 @@ def _fetch_terms_url(metadata_link: Optional[str]) -> Optional[str]:
 
     :param metadata_link: gateway URL of the metadata document, or None
     :return: the terms URL, or None when there is no link, no field, or the
-        fetch fails (the listing must not fail because one mech is unreachable)
+        fetch fails
     """
     if not metadata_link:
         return None
@@ -120,7 +117,7 @@ def mech_list(chain_config: str) -> None:
     metadata_links = [
         (
             IPFS_URL_TEMPLATE.format(items["service"]["metadata"][0]["metadata"][2:])
-            if items["service"].get("metadata") and items["service"]["metadata"]
+            if items["service"].get("metadata")
             else None
         )
         for items in mech_list_data

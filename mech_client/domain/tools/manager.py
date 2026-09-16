@@ -89,14 +89,23 @@ class ToolManager:
         """
         Get the offchain URL from the mech's on-chain metadata.
 
-        Queries the complementary metadata hash contract and extracts the
-        ``url`` field published by the mech operator.
-
         :param service_id: The service ID of the mech
         :return: The offchain URL string
-        :raises ValueError: If metadata cannot be fetched or has no URL
         """
-        metadata = self.fetch_tools_metadata(service_id)
+        return self.offchain_url_from_metadata(
+            service_id, self.fetch_tools_metadata(service_id)
+        )
+
+    @staticmethod
+    def offchain_url_from_metadata(service_id: int, metadata: Any) -> str:
+        """
+        Read the ``url`` field from an already fetched metadata document.
+
+        :param service_id: The service ID of the mech (for error messages)
+        :param metadata: The parsed metadata document, or None
+        :return: The offchain URL string
+        :raises ValueError: If there is no document or it has no URL
+        """
         if not metadata:
             raise ValueError(
                 f"Could not fetch metadata for service {service_id}. "
@@ -112,36 +121,20 @@ class ToolManager:
 
         return url
 
-    def get_terms_url(self, service_id: int) -> Optional[str]:
-        """
-        Get the terms link from the mech's on-chain metadata.
-
-        A mech operator that publishes terms identifies them in the
-        ``termsUrl`` field of the metadata. Absence is not an error: not every
-        operator publishes terms, so the caller decides what to tell the user.
-
-        :param service_id: The service ID of the mech
-        :return: The terms URL string, or None when the metadata has none
-        """
-        return self.extract_terms_url(self.fetch_tools_metadata(service_id))
-
     @staticmethod
     def extract_terms_url(metadata: Any) -> Optional[str]:
         """
         Read the ``termsUrl`` field from an already fetched metadata document.
 
-        Shared by the request path and the mech listing so both apply the same
-        rule: the field must sit on a JSON object and be non-blank. Anything
-        else (no document, a JSON list or string, a missing or empty field)
-        is "no terms link" rather than an error.
-
-        :param metadata: the parsed metadata document, or None
+        :param metadata: The parsed metadata document, or None
         :return: The stripped terms URL, or None
         """
         if not isinstance(metadata, dict):
             return None
-        terms_url = (metadata.get("termsUrl") or "").strip()
-        return terms_url or None
+        terms_url = metadata.get("termsUrl")
+        if not isinstance(terms_url, str):
+            return None
+        return terms_url.strip() or None
 
     def get_tools(self, service_id: int) -> Optional[ToolsForMarketplaceMech]:
         """
@@ -150,7 +143,21 @@ class ToolManager:
         :param service_id: The service ID of the mech
         :return: ToolsForMarketplaceMech with tool list, or None if error
         """
-        metadata = self.fetch_tools_metadata(service_id)
+        return self.tools_from_metadata(
+            service_id, self.fetch_tools_metadata(service_id)
+        )
+
+    @staticmethod
+    def tools_from_metadata(
+        service_id: int, metadata: Any
+    ) -> Optional[ToolsForMarketplaceMech]:
+        """
+        Build the tool list from an already fetched metadata document.
+
+        :param service_id: The service ID of the mech
+        :param metadata: The parsed metadata document, or None
+        :return: ToolsForMarketplaceMech with tool list, or None if unavailable
+        """
         if not metadata:
             return None
 

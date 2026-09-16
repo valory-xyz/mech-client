@@ -366,7 +366,7 @@ class TestValidateTools:
         mock_tool2.tool_name = "1-stability-ai"
         mock_tools_info = MagicMock()
         mock_tools_info.tools = [mock_tool1, mock_tool2]
-        mock_tool_manager.get_tools.return_value = mock_tools_info
+        mock_tool_manager.tools_from_metadata.return_value = mock_tools_info
         mock_tool_manager_cls.return_value = mock_tool_manager
 
         # Create service
@@ -378,7 +378,7 @@ class TestValidateTools:
 
         # Validate tools - should not raise
         service._validate_tools(  # pylint: disable=protected-access
-            ("1-openai-gpt-4",), 1
+            ("1-openai-gpt-4",), 1, {"tools": ["1-openai-gpt-4"]}
         )
 
     @patch("mech_client.services.marketplace_service.IPFSClient")
@@ -408,7 +408,7 @@ class TestValidateTools:
         mock_tool1.tool_name = "1-openai-gpt-4"
         mock_tools_info = MagicMock()
         mock_tools_info.tools = [mock_tool1]
-        mock_tool_manager.get_tools.return_value = mock_tools_info
+        mock_tool_manager.tools_from_metadata.return_value = mock_tools_info
         mock_tool_manager_cls.return_value = mock_tool_manager
 
         # Create service
@@ -421,7 +421,7 @@ class TestValidateTools:
         # Validate invalid tool - should raise
         with pytest.raises(ValueError, match="not available"):
             service._validate_tools(  # pylint: disable=protected-access
-                ("1-invalid-tool",), 1
+                ("1-invalid-tool",), 1, {"tools": ["1-openai-gpt-4"]}
             )
 
 
@@ -680,7 +680,7 @@ class TestValidateToolsEdgeCases:
         )
 
         with pytest.raises(ValueError, match="Empty tool identifier"):
-            service._validate_tools(("",), 1)  # pylint: disable=protected-access
+            service._validate_tools(("",), 1, {})  # pylint: disable=protected-access
 
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
@@ -701,7 +701,9 @@ class TestValidateToolsEdgeCases:
         mock_config.return_value = create_mock_mech_config()
 
         mock_tool_manager = MagicMock()
-        mock_tool_manager.get_tools.side_effect = AttributeError("metadata missing")
+        mock_tool_manager.tools_from_metadata.side_effect = AttributeError(
+            "metadata missing"
+        )
         mock_tool_manager_cls.return_value = mock_tool_manager
 
         service = _build_service(
@@ -709,7 +711,7 @@ class TestValidateToolsEdgeCases:
         )
 
         # Should NOT raise — logs warning and returns silently
-        service._validate_tools(("some-tool",), 1)  # pylint: disable=protected-access
+        service._validate_tools(("some-tool",), 1, {})  # pylint: disable=protected-access
 
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
@@ -730,7 +732,7 @@ class TestValidateToolsEdgeCases:
         mock_config.return_value = create_mock_mech_config()
 
         mock_tool_manager = MagicMock()
-        mock_tool_manager.get_tools.return_value = None  # Falsy tools_info
+        mock_tool_manager.tools_from_metadata.return_value = None  # Falsy tools_info
         mock_tool_manager_cls.return_value = mock_tool_manager
 
         service = _build_service(
@@ -738,7 +740,7 @@ class TestValidateToolsEdgeCases:
         )
 
         # Should NOT raise — logs warning and returns silently
-        service._validate_tools(("some-tool",), 1)  # pylint: disable=protected-access
+        service._validate_tools(("some-tool",), 1, {})  # pylint: disable=protected-access
 
 
 class TestSendMarketplaceRequestInvalidPaymentType:
@@ -2262,28 +2264,28 @@ class TestTermsNotice:
     """The requester sees the mech's terms link before anything is signed."""
 
     @staticmethod
-    def _service_with_metadata(metadata: Any) -> MarketplaceService:
-        """Build a service whose metadata fetch yields ``metadata`` (real extractor)."""
+    def _service() -> MarketplaceService:
+        """Build a service whose tool manager applies the real parsing rule."""
         service = _build_offchain_service()
         service.tool_manager = MagicMock()
-        service.tool_manager.fetch_tools_metadata.return_value = metadata
-        # Keep the real parsing rule under test rather than a mocked answer.
         service.tool_manager.extract_terms_url = ToolManager.extract_terms_url
+        service.tool_manager.offchain_url_from_metadata = (
+            ToolManager.offchain_url_from_metadata
+        )
         return service
 
     def test_log_terms_notice_logs_the_published_link(self) -> None:
         """A termsUrl in the metadata is logged with the agreement wording."""
-        service = self._service_with_metadata(
-            {"termsUrl": "https://www.valory.xyz/terms/mechs", "tools": []}
-        )
+        service = self._service()
         # mech_client sets propagate=False on its root logger, so patch the
         # module logger directly rather than relying on caplog.
         with (
             patch("mech_client.services.marketplace_service.logger.info") as mock_info,
             patch("mech_client.services.marketplace_service.logger.warning") as mock_warn,
         ):
-            service._log_terms_notice(7)  # pylint: disable=protected-access
-        service.tool_manager.fetch_tools_metadata.assert_called_once_with(7)
+            service._log_terms_notice(  # pylint: disable=protected-access
+                7, {"termsUrl": "https://www.valory.xyz/terms/mechs", "tools": []}
+            )
         mock_warn.assert_not_called()
         mock_info.assert_called_once()
         message = mock_info.call_args[0][0]
@@ -2292,17 +2294,24 @@ class TestTermsNotice:
 
     @pytest.mark.parametrize(
         "metadata",
-        [{"tools": []}, {"termsUrl": ""}, {"termsUrl": "   "}, ["not", "a", "dict"]],
-        ids=["absent", "empty", "whitespace", "non_dict"],
+        [
+            {"tools": []},
+            {"termsUrl": ""},
+            {"termsUrl": "   "},
+            {"termsUrl": 123},
+            {"termsUrl": ["x"]},
+            ["not", "a", "dict"],
+        ],
+        ids=["absent", "empty", "whitespace", "int", "list_value", "non_dict"],
     )
     def test_log_terms_notice_reports_a_mech_without_terms(self, metadata: Any) -> None:
-        """A readable document without a link is reported as such, not skipped."""
-        service = self._service_with_metadata(metadata)
+        """A readable document without a usable link is reported, never a crash."""
+        service = self._service()
         with (
             patch("mech_client.services.marketplace_service.logger.info") as mock_info,
             patch("mech_client.services.marketplace_service.logger.warning") as mock_warn,
         ):
-            service._log_terms_notice(7)  # pylint: disable=protected-access
+            service._log_terms_notice(7, metadata)  # pylint: disable=protected-access
         mock_warn.assert_not_called()
         mock_info.assert_called_once()
         message = mock_info.call_args[0][0]
@@ -2312,14 +2321,12 @@ class TestTermsNotice:
 
     def test_log_terms_notice_distinguishes_an_unreadable_document(self) -> None:
         """A failed fetch must not be reported as "publishes no terms"."""
-        # fetch_tools_metadata returns None on a gateway or RPC failure. Saying
-        # "no terms" then would be a false statement right before signing.
-        service = self._service_with_metadata(None)
+        service = self._service()
         with (
             patch("mech_client.services.marketplace_service.logger.info") as mock_info,
             patch("mech_client.services.marketplace_service.logger.warning") as mock_warn,
         ):
-            service._log_terms_notice(7)  # pylint: disable=protected-access
+            service._log_terms_notice(7, None)  # pylint: disable=protected-access
         mock_info.assert_not_called()
         mock_warn.assert_called_once()
         message = mock_warn.call_args[0][0]
@@ -2327,20 +2334,31 @@ class TestTermsNotice:
         assert "7" in message
         assert "no terms" not in message
 
-    @pytest.mark.asyncio
-    async def test_send_request_shows_terms_before_the_offchain_send(self) -> None:
-        """The notice is emitted before the offchain path signs and posts."""
-        service = _build_offchain_service()
-        service.tool_manager = MagicMock()
-        service.tool_manager.get_offchain_url.return_value = "https://mech.example"
-        calls: list = []
-        service.tool_manager.fetch_tools_metadata.side_effect = (
-            lambda sid: calls.append("terms")
-            or {"termsUrl": "https://www.valory.xyz/terms/mechs"}
-        )
+    @staticmethod
+    def _record_terms_log(calls: list) -> Any:
+        """Return a logger.info stand-in that records the terms notice."""
 
-        async def fake_offchain(**_kwargs: Any) -> Dict[str, Any]:
+        def _info(message: str, *_args: Any) -> None:
+            if "agree" in message:
+                calls.append("terms")
+
+        return _info
+
+    @pytest.mark.asyncio
+    async def test_send_request_reads_metadata_once_and_shows_terms_before_the_offchain_send(
+        self,
+    ) -> None:
+        """One metadata fetch feeds the tool check, the notice and the url; notice precedes the send."""
+        service = self._service()
+        service.tool_manager.fetch_tools_metadata.return_value = {
+            "termsUrl": "https://www.valory.xyz/terms/mechs",
+            "url": "https://mech.example",
+        }
+        calls: list = []
+
+        async def fake_offchain(**kwargs: Any) -> Dict[str, Any]:
             calls.append("send")
+            assert kwargs["mech_offchain_url"] == "https://mech.example"
             return {"tx_hash": None, "request_ids": [], "deliveries": {}, "receipt": None}
 
         with (
@@ -2348,14 +2366,62 @@ class TestTermsNotice:
             patch.object(
                 service, "_fetch_mech_info", return_value=(PaymentType.NATIVE, 7, 1)
             ),
-            patch.object(service, "_validate_tools"),
+            patch.object(service, "_validate_tools") as mock_validate,
             patch.object(service, "_send_offchain_request", side_effect=fake_offchain),
-            patch("mech_client.services.marketplace_service.logger.info"),
+            patch(
+                "mech_client.services.marketplace_service.logger.info",
+                side_effect=self._record_terms_log(calls),
+            ),
         ):
             await service.send_request(
                 prompts=("hello",), tools=("tool",), use_offchain=True
             )
         assert calls == ["terms", "send"]
+        service.tool_manager.fetch_tools_metadata.assert_called_once_with(7)
+        # The same document reaches the tool check; no second fetch anywhere.
+        mock_validate.assert_called_once_with(
+            ("tool",), 7, service.tool_manager.fetch_tools_metadata.return_value
+        )
+        service.tool_manager.get_offchain_url.assert_not_called()
+        service.tool_manager.get_tools.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.PaymentStrategyFactory")
+    @patch("mech_client.services.marketplace_service.push_metadata_to_ipfs")
+    async def test_send_request_shows_terms_before_the_onchain_upload_and_send(
+        self, mock_push: MagicMock, _mock_factory: MagicMock
+    ) -> None:
+        """On-chain: the notice precedes the IPFS upload and the marketplace send."""
+        service = self._service()
+        service.tool_manager.fetch_tools_metadata.return_value = {
+            "termsUrl": "https://www.valory.xyz/terms/mechs"
+        }
+        calls: list = []
+
+        def fake_push(*_args: Any, **_kwargs: Any) -> tuple:
+            calls.append("ipfs")
+            return "0x" + "b" * 64, "ipfs://hash"
+
+        def fake_send(*_args: Any, **_kwargs: Any) -> str:
+            calls.append("send")
+            raise RuntimeError("stop after send")
+
+        mock_push.side_effect = fake_push
+        with (
+            patch.object(service, "_get_marketplace_contract", return_value=MagicMock()),
+            patch.object(
+                service, "_fetch_mech_info", return_value=(PaymentType.NATIVE, 7, 1)
+            ),
+            patch.object(service, "_validate_tools"),
+            patch.object(service, "_send_marketplace_request", side_effect=fake_send),
+            patch(
+                "mech_client.services.marketplace_service.logger.info",
+                side_effect=self._record_terms_log(calls),
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="stop after send"):
+                await service.send_request(prompts=("hello",), tools=("tool",))
+        assert calls == ["terms", "ipfs", "send"]
 
 
 def _mock_http_response(
