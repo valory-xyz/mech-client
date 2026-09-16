@@ -241,6 +241,61 @@ class TestDisplayWallets:
         assert "Marketplace: https://marketplace.olas.network/gnosis/ai-agents/2651" in caplog.text
         mech_logger.propagate = False
 
+    @patch("mech_client.services.setup_service.SetupService._print_wallet_box")
+    @patch("mech_client.services.setup_service.OperateManager")
+    def test_display_wallets_returns_addresses_when_printing_fails(
+        self,
+        mock_operate_manager: MagicMock,
+        mock_print_wallet_box: MagicMock,
+    ) -> None:
+        """Test a printing failure doesn't discard addresses that were read fine."""
+        mock_chain_type = MagicMock()
+        mock_chain_type.value = "gnosis"
+        mock_wallet = MagicMock()
+        mock_wallet.address = "0x1234"
+        mock_wallet.safes = {mock_chain_type: "0x5678"}
+        mock_chain_data = MagicMock()
+        mock_chain_data.multisig = "0xEFGH"
+        mock_chain_data.token = 2651
+        mock_service = MagicMock()
+        mock_service.agent_addresses = ["0xABCD"]
+        mock_service.chain_configs = {"gnosis": MagicMock(chain_data=mock_chain_data)}
+        mock_service_manager = MagicMock()
+        mock_service_manager.json = [
+            {"home_chain": "gnosis", "service_config_id": "test-id"}
+        ]
+        mock_service_manager.load.return_value = mock_service
+        mock_operate = MagicMock()
+        mock_operate.wallet_manager.load.return_value = mock_wallet
+        mock_operate.service_manager.return_value = mock_service_manager
+        mock_operate_manager.return_value.operate = mock_operate
+        mock_print_wallet_box.side_effect = RuntimeError("terminal too narrow")
+
+        result = SetupService("gnosis", Path("/path/to/template.json")).display_wallets()
+
+        assert result is not None
+        assert result["agent_safe"] == "0xEFGH"
+
+    @patch("mech_client.services.setup_service.OperateManager")
+    def test_display_wallets_logs_a_traceback_when_reading_fails(
+        self,
+        mock_operate_manager: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test a failed read logs at error level with the traceback attached."""
+        mech_logger = logging.getLogger("mech_client")
+        mech_logger.propagate = True
+        caplog.set_level(logging.ERROR)
+        mock_operate_manager.return_value.operate.wallet_manager.load.side_effect = (
+            RuntimeError("no keystore")
+        )
+
+        result = SetupService("gnosis", Path("/path/to/template.json")).display_wallets()
+
+        assert result is None
+        assert any(r.levelname == "ERROR" and r.exc_info for r in caplog.records)
+        mech_logger.propagate = False
+
     @patch("mech_client.services.setup_service.OperateManager")
     def test_display_wallets_with_undeployed_service(
         self,
@@ -338,7 +393,7 @@ class TestDisplayWallets:
 
         # Verify
         assert result is None
-        assert "Could not find service for gnosis" in caplog.text
+        assert "Could not find a service for gnosis" in caplog.text
         mech_logger.propagate = False
 
 
@@ -371,5 +426,5 @@ class TestDisplayWalletsException:
 
         # Verify the method catches the exception and returns None
         assert result is None
-        assert "Could not display wallet info" in caplog.text
+        assert "Could not read wallet info for gnosis" in caplog.text
         mech_logger.propagate = False

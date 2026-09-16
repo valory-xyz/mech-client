@@ -459,7 +459,7 @@ Deposit successful!
 - ✅ Both transaction URLs have "0x" prefix
 - ✅ Balance updated for Safe address in BalanceTracker contract
 
-**Supported Chains**: gnosis, base, polygon, optimism, robinhood
+**Supported Chains**: gnosis, base, polygon, optimism, robinhood (`usdc` is USDG on Robinhood)
 
 ---
 

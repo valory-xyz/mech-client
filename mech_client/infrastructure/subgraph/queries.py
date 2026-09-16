@@ -20,7 +20,7 @@
 """Subgraph query functions and mappings."""
 
 import logging
-from typing import List, Optional
+from typing import List
 
 from mech_client.infrastructure.config.loader import get_mech_config
 from mech_client.infrastructure.subgraph.client import SubgraphClient
@@ -62,7 +62,7 @@ RESULTS_LIMIT = 20
 logger = logging.getLogger(__name__)
 
 
-def query_mm_mechs_info(chain_config: str) -> Optional[List]:
+def query_mm_mechs_info(chain_config: str) -> List:
     """
     Query marketplace mechs and related info from subgraph.
 
@@ -70,8 +70,8 @@ def query_mm_mechs_info(chain_config: str) -> Optional[List]:
     total deliveries > 0 and enriching with mech type from factory address.
 
     :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood)
-    :return: List of mech data dicts, or None if no mechs found
-    :raises SubgraphError: If no subgraph URL is set for the chain
+    :return: List of mech data dicts, empty if the chain has no delivering mechs
+    :raises SubgraphError: If the chain has no subgraph URL, or the response is malformed
     """
     mech_config = get_mech_config(chain_config)
     if not mech_config.subgraph_url:
@@ -88,24 +88,27 @@ def query_mm_mechs_info(chain_config: str) -> Optional[List]:
     # Map factory addresses to mech types (case-insensitive)
     mech_factory_to_mech_type = {
         k.lower(): v
-        for k, v in CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE[chain_config].items()
+        for k, v in CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE.get(chain_config, {}).items()
     }
 
     # Filter mechs with deliveries > 0 and add mech type
     filtered_mechs_data = []
-    for item in response["meches"]:  # pylint: disable=unsubscriptable-object
-        if int(item["totalDeliveriesTransactions"]) > 0:
-            factory = item["mechFactory"].lower()
-            mech_type = mech_factory_to_mech_type.get(factory)
-            if mech_type is None:
-                logger.warning(
-                    "Mech factory %s on %s is not in CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE; "
-                    "listing its mechs as Unknown",
-                    factory,
-                    chain_config,
-                )
-                mech_type = "Unknown"
-            item["mech_type"] = mech_type
-            filtered_mechs_data.append(item)
+    try:
+        for item in response["meches"]:  # pylint: disable=unsubscriptable-object
+            if int(item["totalDeliveriesTransactions"]) > 0:
+                factory = item["mechFactory"].lower()
+                if factory not in mech_factory_to_mech_type:
+                    logger.warning(
+                        "Mech factory %s on %s is not in "
+                        "CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE; listing its mechs as Unknown",
+                        factory,
+                        chain_config,
+                    )
+                item["mech_type"] = mech_factory_to_mech_type.get(factory, "Unknown")
+                filtered_mechs_data.append(item)
+    except (AttributeError, KeyError, TypeError, ValueError) as error:
+        raise SubgraphError(
+            f"Malformed mech record from the {chain_config} subgraph: {error}"
+        ) from error
 
     return filtered_mechs_data[:RESULTS_LIMIT]

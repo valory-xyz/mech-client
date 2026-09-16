@@ -20,11 +20,14 @@
 """GraphQL subgraph client."""
 
 import re
-from typing import Any, Dict, get_args
+from typing import Any, Dict
 
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
-from mech_client.infrastructure.config.chain_config import SubgraphDialect
+from mech_client.infrastructure.config.chain_config import (
+    SubgraphDialect,
+    validate_subgraph_dialect,
+)
 
 DEFAULT_TIMEOUT = 600.0
 ORDER_DIRECTIONS = ("asc", "desc")
@@ -50,10 +53,8 @@ class SubgraphClient:
         :param subgraph_url: GraphQL endpoint URL for the subgraph
         :param dialect: "graph" for The Graph, "squid" for an SQD squid (OpenReader)
         :param timeout: Request timeout in seconds (default: 600)
-        :raises ValueError: If dialect is not a known dialect
         """
-        if dialect not in get_args(SubgraphDialect):
-            raise ValueError(f"Unknown subgraph dialect: {dialect}")
+        validate_subgraph_dialect(dialect, "SubgraphClient")
         self.subgraph_url = subgraph_url
         self.timeout = timeout
         self.dialect = dialect

@@ -19,6 +19,7 @@
 
 """Chain configuration dataclasses."""
 
+import logging
 from dataclasses import dataclass, field
 from typing import Literal, Optional, get_args
 
@@ -107,14 +108,14 @@ class LedgerConfig:
                     get_logger,
                 )
 
-                logger = get_logger(__name__)
+                rpc_logger = get_logger(__name__)
                 expected_chain_name = CHAIN_ID_TO_NAME.get(
                     self.chain_id, f"chain {self.chain_id}"
                 )
                 actual_chain_name = CHAIN_ID_TO_NAME.get(
                     actual_chain_id, f"chain {actual_chain_id}"
                 )
-                logger.warning(
+                rpc_logger.warning(
                     "MECHX_CHAIN_RPC mismatch detected!\n"
                     "  Expected chain: %s (ID: %d)\n"
                     "  RPC returns:    %s (ID: %d)\n"
@@ -166,7 +167,23 @@ class MechMarketplaceRequestConfig:
 
 
 # GraphQL dialect of a chain's marketplace indexer: The Graph, or an SQD squid (OpenReader).
+logger = logging.getLogger(__name__)
+
 SubgraphDialect = Literal["graph", "squid"]
+
+
+def validate_subgraph_dialect(dialect: str, context: str) -> None:
+    """Raise unless ``dialect`` is a dialect mech-client can query.
+
+    :param dialect: value to check
+    :param context: what the value belongs to, named in the error message
+    :raises ValueError: If dialect is not a known dialect
+    """
+    if dialect not in get_args(SubgraphDialect):
+        raise ValueError(
+            f"Unknown subgraph_dialect {dialect!r} for {context}; "
+            f"expected one of {get_args(SubgraphDialect)}"
+        )
 
 
 @dataclass
@@ -198,10 +215,10 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     subgraph_url: str
     price: int
     mech_marketplace_contract: str
+    subgraph_dialect: SubgraphDialect
     priority_mech_address: Optional[str] = field(default=None)
     agent_mode: bool = field(default=False)
     chain_config: Optional[str] = field(default=None)
-    subgraph_dialect: SubgraphDialect = field(default="graph")
 
     def __post_init__(self) -> None:
         """Validate the subgraph dialect, then apply environment variable overrides.
@@ -210,14 +227,8 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         1. MECHX_CHAIN_RPC environment variable (highest priority)
         2. Stored operate config (agent mode only)
         3. Default from mechs.json (lowest priority)
-
-        :raises ValueError: If subgraph_dialect is not a known dialect
         """
-        if self.subgraph_dialect not in get_args(SubgraphDialect):
-            raise ValueError(
-                f"Unknown subgraph_dialect {self.subgraph_dialect!r} for chain "
-                f"{self.chain_config!r}; expected one of {get_args(SubgraphDialect)}"
-            )
+        validate_subgraph_dialect(self.subgraph_dialect, f"chain {self.chain_config!r}")
         # Load environment configuration (centralized env var loading)
         env_config = EnvironmentConfig.load()
 
@@ -244,3 +255,9 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
 
         if env_config.mechx_subgraph_url:
             self.subgraph_url = env_config.mechx_subgraph_url
+            if self.subgraph_dialect == "squid":
+                logger.warning(
+                    "MECHX_SUBGRAPH_URL replaces the endpoint for %s but not its "
+                    "dialect: mech list will send squid syntax to it",
+                    self.chain_config,
+                )

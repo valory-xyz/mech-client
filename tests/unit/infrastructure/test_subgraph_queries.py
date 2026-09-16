@@ -557,3 +557,47 @@ class TestUnmappedMechFactory:
         assert unmapped in mock_logger.warning.call_args[0]
         assert "robinhood" in mock_logger.warning.call_args[0]
 
+
+class TestQueryMechsMalformedResponse:
+    """Tests for a subgraph response mech-client can't read."""
+
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_missing_field_raises_a_subgraph_error_naming_the_chain(
+        self, mock_client_class: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test a record without mechFactory names the chain instead of crashing generically."""
+        monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        mock_client_class.return_value.query_mechs.return_value = {
+            "meches": [{"address": "0xabc", "totalDeliveriesTransactions": "2"}]
+        }
+
+        with pytest.raises(
+            SubgraphError, match="Malformed mech record from the robinhood subgraph"
+        ):
+            query_mm_mechs_info("robinhood")
+
+
+class TestQueryMechsChainWithoutFactoryMapping:
+    """Tests for a chain reachable only because MECHX_SUBGRAPH_URL filled its URL in."""
+
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_chain_with_no_mapping_lists_mechs_as_unknown(
+        self, mock_client_class: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test an unmapped chain lists Unknown mechs instead of raising KeyError."""
+        monkeypatch.setenv("MECHX_SUBGRAPH_URL", "https://subgraph.example/graphql")
+        mock_client_class.return_value.query_mechs.return_value = {
+            "meches": [
+                {
+                    "address": "0x00000000000000000000000000000000000000cc",
+                    "mechFactory": "0x00000000000000000000000000000000000000dd",
+                    "totalDeliveriesTransactions": "4",
+                    "service": {"id": "3", "totalDeliveries": "4", "metadata": []},
+                }
+            ]
+        }
+
+        result = query_mm_mechs_info("celo")
+
+        assert [m["mech_type"] for m in result] == ["Unknown"]
+

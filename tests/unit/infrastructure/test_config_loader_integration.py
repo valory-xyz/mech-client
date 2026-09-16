@@ -21,6 +21,7 @@
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -109,15 +110,13 @@ class TestGetMechConfigIntegration:
         assert CHAIN_ID_TO_NAME[4663] == "robinhood"
         assert CHAIN_NAME_TO_ID["robinhood"] == 4663
 
-    def test_all_chains_load_successfully(self) -> None:
-        """Test all chains in mechs.json can be loaded without errors."""
-        chains = ["gnosis", "base", "polygon", "optimism", "robinhood"]
-
-        for chain in chains:
+    def test_every_mechs_json_entry_loads_with_a_valid_dialect(self) -> None:
+        """Test every chain shipped in mechs.json loads with a known dialect."""
+        for chain in json.loads(MECH_CONFIGS.read_text()):
             config = get_mech_config(chain)
-            assert config is not None
             assert config.mech_marketplace_contract is not None
             assert config.ledger_config is not None
+            assert config.subgraph_dialect in ("graph", "squid")
 
     def test_gnosis_config_has_expected_fields(self) -> None:
         """Test gnosis config has all expected MechConfig fields."""
@@ -175,4 +174,20 @@ class TestGetMechConfigIntegration:
 
         with pytest.raises(ValueError, match="'robinhood' has no subgraph_dialect"):
             get_mech_config("robinhood")
+
+    def test_subgraph_url_override_warns_on_a_squid_chain(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test overriding the URL of a squid chain warns that the dialect is unchanged."""
+        monkeypatch.setenv("MECHX_SUBGRAPH_URL", "https://subgraph.example/graphql")
+
+        with patch(
+            "mech_client.infrastructure.config.chain_config.logger"
+        ) as mock_logger:
+            config = get_mech_config("robinhood")
+
+        assert config.subgraph_url == "https://subgraph.example/graphql"
+        assert config.subgraph_dialect == "squid"
+        mock_logger.warning.assert_called_once()
+        assert "robinhood" in mock_logger.warning.call_args[0]
 

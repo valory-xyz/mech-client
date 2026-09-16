@@ -275,7 +275,9 @@ class TestSubgraphClientSquidDialect:
 
     def test_unknown_dialect_is_rejected_when_built(self) -> None:
         """Test an unknown dialect fails at construction, not at the first query."""
-        with pytest.raises(ValueError, match="Unknown subgraph dialect: hasura"):
+        with pytest.raises(
+            ValueError, match="Unknown subgraph_dialect 'hasura' for SubgraphClient"
+        ):
             SubgraphClient(
                 subgraph_url="https://example.com/graphql",
                 dialect="hasura",  # type: ignore[arg-type]

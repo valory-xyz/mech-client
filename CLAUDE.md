@@ -398,7 +398,7 @@ Version bump checklist:
 
 ## Important Notes
 
-- **Python version**: >=3.10, <3.12 (supports Python 3.10, 3.11)
+- **Python version**: >=3.10, <3.15 (CI tests 3.10 through 3.14)
 - **Supported chains**: gnosis, base, polygon, optimism, robinhood (Arbitrum and Celo not functional)
 - **Main dependencies**: `olas-operate-middleware`, `safe-eth-py`, `gql`, `click`
 - **Agent mode**: Supports gnosis, base, polygon, optimism, robinhood

@@ -109,6 +109,7 @@ class TestMechConfigDataclass:
         )
 
         config = MechConfig(
+            subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://rpc.gnosischain.com",
             ledger_config=ledger_config,
@@ -135,6 +136,7 @@ class TestMechConfigDataclass:
         )
 
         config = MechConfig(
+            subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -305,6 +307,7 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
+            subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -332,6 +335,7 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
+            subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -364,6 +368,7 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
+            subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -398,6 +403,7 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
+            subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -430,6 +436,7 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
+            subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -460,6 +467,7 @@ class TestMechConfigPriorityOrder:
         )
 
         config = MechConfig(
+            subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,

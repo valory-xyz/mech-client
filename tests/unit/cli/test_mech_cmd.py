@@ -202,7 +202,7 @@ class TestMechListCommand:
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
     def test_list_command_with_no_mechs(self, mock_query: MagicMock) -> None:
         """Test mech list displays message when no mechs found."""
-        mock_query.return_value = None
+        mock_query.return_value = []
 
         runner = CliRunner()
         result = runner.invoke(mech, ["list", "--chain-config", "gnosis"])
