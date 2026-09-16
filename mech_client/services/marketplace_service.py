@@ -212,6 +212,29 @@ class MarketplaceService(
         # Create IPFS client
         self.ipfs_client = IPFSClient()
 
+    def _log_terms_notice(self, service_id: int) -> None:
+        """
+        Log the mech's terms link before any request is signed.
+
+        The link is whatever the operator published in the ``termsUrl`` field
+        of the mech's on-chain metadata. A mech without one is reported as
+        such rather than silently skipped, so a requester can tell "no terms
+        published" from "the client did not look".
+
+        :param service_id: The service ID of the mech about to be called
+        """
+        terms_url = self.tool_manager.get_terms_url(service_id)
+        if terms_url:
+            logger.info(
+                f"By sending this request you agree to the mech operator's "
+                f"terms: {terms_url}"
+            )
+        else:
+            logger.info(
+                f"The mech for service {service_id} publishes no terms link "
+                f"in its metadata."
+            )
+
     async def send_request(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         prompts: Tuple[str, ...],
@@ -267,6 +290,9 @@ class MarketplaceService(
 
         # Response timeout (5 minutes, matching historic default)
         response_timeout = 300
+
+        # Both flows sign below this point; the requester sees the terms first.
+        self._log_terms_notice(service_id)
 
         # Branch between on-chain and off-chain flows
         if use_offchain:
@@ -456,8 +482,11 @@ class MarketplaceService(
             data_hash, data_hash_full, ipfs_data = fetch_ipfs_hash(
                 prompt, tool, extra_attributes or {}
             )
+            # The offchain path never publishes the prompt: the mech receives
+            # it directly and recomputes this CID locally to verify the
+            # signature. Log the CID, not a gateway URL that will never resolve.
             logger.info(
-                f"Prompt will be uploaded to: https://gateway.autonolas.tech/ipfs/{data_hash_full}"
+                f"Prompt stays local (offchain request); content CID {data_hash_full}"
             )
 
             # Calculate request ID

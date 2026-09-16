@@ -19,12 +19,38 @@
 
 """Mech command for managing and querying AI mechs on the marketplace."""
 
+from typing import Optional
+
 import click
+import requests
 from mech_client.cli.validators import validate_chain_config
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
 from mech_client.utils.errors.handlers import handle_cli_errors
 from tabulate import tabulate  # type: ignore
+
+# Per-mech metadata fetch for the listing; short so one slow gateway read
+# cannot stall the whole table.
+METADATA_FETCH_TIMEOUT = 10
+
+
+def _fetch_terms_url(metadata_link: Optional[str]) -> Optional[str]:
+    """Read the ``termsUrl`` field from a mech's published metadata.
+
+    :param metadata_link: gateway URL of the metadata document, or None
+    :return: the terms URL, or None when there is no link, no field, or the
+        fetch fails (the listing must not fail because one mech is unreachable)
+    """
+    if not metadata_link:
+        return None
+    try:
+        metadata = requests.get(metadata_link, timeout=METADATA_FETCH_TIMEOUT).json()
+    except (requests.RequestException, ValueError):
+        return None
+    if not isinstance(metadata, dict):
+        return None
+    terms_url = (metadata.get("termsUrl") or "").strip()
+    return terms_url or None
 
 
 @click.group()
@@ -48,7 +74,8 @@ def mech_list(chain_config: str) -> None:
     """List available mechs on the marketplace.
 
     Fetches information about all mechs from the marketplace subgraph,
-    including service IDs, addresses, delivery counts, and metadata links.
+    including service IDs, addresses, delivery counts, and metadata links,
+    and reads each mech's terms link from its published metadata.
 
     Uses default subgraph URL from configuration. Can be overridden with
     MECHX_SUBGRAPH_URL environment variable.
@@ -73,23 +100,25 @@ def mech_list(chain_config: str) -> None:
         "Mech Address",
         "Total Deliveries",
         "Metadata Link",
+        "Terms",
     ]
 
-    data = [
-        (
-            items["service"]["id"],
-            items["mech_type"],
-            items["address"],
-            items["service"]["totalDeliveries"],
-            (
-                IPFS_URL_TEMPLATE.format(
-                    items["service"]["metadata"][0]["metadata"][2:]
-                )
-                if items["service"].get("metadata") and items["service"]["metadata"]
-                else None
-            ),
+    data = []
+    for items in mech_list_data:
+        metadata_link = (
+            IPFS_URL_TEMPLATE.format(items["service"]["metadata"][0]["metadata"][2:])
+            if items["service"].get("metadata") and items["service"]["metadata"]
+            else None
         )
-        for items in mech_list_data
-    ]
+        data.append(
+            (
+                items["service"]["id"],
+                items["mech_type"],
+                items["address"],
+                items["service"]["totalDeliveries"],
+                metadata_link,
+                _fetch_terms_url(metadata_link),
+            )
+        )
 
     click.echo(tabulate(data, headers=headers, tablefmt="grid"))

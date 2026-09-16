@@ -87,6 +87,10 @@ Commands:
 
 Learn more about mech marketplace [here](https://olas.network/mech-marketplace)
 
+### Terms
+
+Each Mech is run by its own operator. An operator that publishes terms identifies them in the `termsUrl` field of the Mech's on-chain metadata; `mechx mech list` shows that link in its Terms column, and `mechx request` prints it before anything is signed. Mechs operated by Valory are subject to the [Valory Mech Terms](https://www.valory.xyz/terms/mechs). Sending a request to a Mech means you accept its operator's terms.
+
 ### Supported Chains
 
 **Supported chains:** `gnosis`, `base`, `polygon`, `optimism`, `robinhood`

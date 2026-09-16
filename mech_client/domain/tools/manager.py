@@ -112,6 +112,23 @@ class ToolManager:
 
         return url
 
+    def get_terms_url(self, service_id: int) -> Optional[str]:
+        """
+        Get the terms link from the mech's on-chain metadata.
+
+        A mech operator that publishes terms identifies them in the
+        ``termsUrl`` field of the metadata. Absence is not an error: not every
+        operator publishes terms, so the caller decides what to tell the user.
+
+        :param service_id: The service ID of the mech
+        :return: The terms URL string, or None when the metadata has none
+        """
+        metadata = self.fetch_tools_metadata(service_id)
+        if not metadata:
+            return None
+        terms_url = (metadata.get("termsUrl") or "").strip()
+        return terms_url or None
+
     def get_tools(self, service_id: int) -> Optional[ToolsForMarketplaceMech]:
         """
         Get list of tools for a marketplace mech.

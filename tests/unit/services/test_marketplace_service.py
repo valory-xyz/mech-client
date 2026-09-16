@@ -2257,6 +2257,73 @@ def _build_offchain_service(
         return MarketplaceService(**kwargs)
 
 
+class TestTermsNotice:
+    """The requester sees the mech's terms link before anything is signed."""
+
+    def test_log_terms_notice_logs_the_published_link(self) -> None:
+        """A termsUrl in the metadata is logged with the agreement wording."""
+        service = _build_offchain_service()
+        service.tool_manager = MagicMock()
+        service.tool_manager.get_terms_url.return_value = (
+            "https://www.valory.xyz/terms/mechs"
+        )
+        # mech_client sets propagate=False on its root logger, so patch the
+        # module logger directly rather than relying on caplog.
+        with patch(
+            "mech_client.services.marketplace_service.logger.info"
+        ) as mock_info:
+            service._log_terms_notice(7)  # pylint: disable=protected-access
+        service.tool_manager.get_terms_url.assert_called_once_with(7)
+        mock_info.assert_called_once()
+        message = mock_info.call_args[0][0]
+        assert "https://www.valory.xyz/terms/mechs" in message
+        assert "agree" in message
+
+    def test_log_terms_notice_reports_a_mech_without_terms(self) -> None:
+        """No termsUrl is reported as such, not silently skipped."""
+        service = _build_offchain_service()
+        service.tool_manager = MagicMock()
+        service.tool_manager.get_terms_url.return_value = None
+        with patch(
+            "mech_client.services.marketplace_service.logger.info"
+        ) as mock_info:
+            service._log_terms_notice(7)  # pylint: disable=protected-access
+        mock_info.assert_called_once()
+        message = mock_info.call_args[0][0]
+        assert "no terms" in message
+        assert "7" in message
+        assert "agree" not in message
+
+    @pytest.mark.asyncio
+    async def test_send_request_shows_terms_before_the_offchain_send(self) -> None:
+        """The notice is emitted before the offchain path signs and posts."""
+        service = _build_offchain_service()
+        service.tool_manager = MagicMock()
+        service.tool_manager.get_offchain_url.return_value = "https://mech.example"
+        calls: list = []
+        service.tool_manager.get_terms_url.side_effect = lambda sid: calls.append(
+            "terms"
+        ) or "https://www.valory.xyz/terms/mechs"
+
+        async def fake_offchain(**_kwargs: Any) -> Dict[str, Any]:
+            calls.append("send")
+            return {"tx_hash": None, "request_ids": [], "deliveries": {}, "receipt": None}
+
+        with (
+            patch.object(service, "_get_marketplace_contract", return_value=MagicMock()),
+            patch.object(
+                service, "_fetch_mech_info", return_value=(PaymentType.NATIVE, 7, 1)
+            ),
+            patch.object(service, "_validate_tools"),
+            patch.object(service, "_send_offchain_request", side_effect=fake_offchain),
+            patch("mech_client.services.marketplace_service.logger.info"),
+        ):
+            await service.send_request(
+                prompts=("hello",), tools=("tool",), use_offchain=True
+            )
+        assert calls == ["terms", "send"]
+
+
 def _mock_http_response(
     status_code: int,
     json_body: Optional[Dict[str, Any]] = None,
