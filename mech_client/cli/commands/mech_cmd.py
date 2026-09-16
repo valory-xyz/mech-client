@@ -19,12 +19,49 @@
 
 """Mech command for managing and querying AI mechs on the marketplace."""
 
+from concurrent.futures import ThreadPoolExecutor
+from typing import List, Optional
+
 import click
+import requests
 from mech_client.cli.validators import validate_chain_config
+from mech_client.domain.tools.manager import ToolManager
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
 from mech_client.utils.errors.handlers import handle_cli_errors
 from tabulate import tabulate  # type: ignore
+
+METADATA_FETCH_TIMEOUT = 10
+METADATA_FETCH_WORKERS = 8
+
+
+def _fetch_terms_url(metadata_link: Optional[str]) -> Optional[str]:
+    """Read the ``termsUrl`` field from a mech's published metadata.
+
+    :param metadata_link: gateway URL of the metadata document, or None
+    :return: the terms URL, or None when there is no link, no field, or the
+        fetch fails
+    """
+    if not metadata_link:
+        return None
+    try:
+        metadata = requests.get(metadata_link, timeout=METADATA_FETCH_TIMEOUT).json()
+    except (requests.RequestException, ValueError):
+        return None
+    return ToolManager.extract_terms_url(metadata)
+
+
+def _fetch_terms_urls(metadata_links: List[Optional[str]]) -> List[Optional[str]]:
+    """Fetch the terms link for every metadata link, in parallel, order kept.
+
+    :param metadata_links: one gateway URL (or None) per mech, in table order
+    :return: one terms URL (or None) per mech, in the same order
+    """
+    if not metadata_links:
+        return []
+    workers = min(METADATA_FETCH_WORKERS, len(metadata_links))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        return list(executor.map(_fetch_terms_url, metadata_links))
 
 
 @click.group()
@@ -48,7 +85,8 @@ def mech_list(chain_config: str) -> None:
     """List available mechs on the marketplace.
 
     Fetches information about all mechs from the marketplace subgraph,
-    including service IDs, addresses, delivery counts, and metadata links.
+    including service IDs, addresses, delivery counts, and metadata links,
+    and reads each mech's terms link from its published metadata.
 
     Uses default subgraph URL from configuration. Can be overridden with
     MECHX_SUBGRAPH_URL environment variable.
@@ -73,23 +111,30 @@ def mech_list(chain_config: str) -> None:
         "Mech Address",
         "Total Deliveries",
         "Metadata Link",
+        "Terms",
     ]
 
+    metadata_links = [
+        (
+            IPFS_URL_TEMPLATE.format(items["service"]["metadata"][0]["metadata"][2:])
+            if items["service"].get("metadata")
+            else None
+        )
+        for items in mech_list_data
+    ]
+    terms_urls = _fetch_terms_urls(metadata_links)
     data = [
         (
             items["service"]["id"],
             items["mech_type"],
             items["address"],
             items["service"]["totalDeliveries"],
-            (
-                IPFS_URL_TEMPLATE.format(
-                    items["service"]["metadata"][0]["metadata"][2:]
-                )
-                if items["service"].get("metadata") and items["service"]["metadata"]
-                else None
-            ),
+            metadata_link,
+            terms_url,
         )
-        for items in mech_list_data
+        for items, metadata_link, terms_url in zip(
+            mech_list_data, metadata_links, terms_urls
+        )
     ]
 
     click.echo(tabulate(data, headers=headers, tablefmt="grid"))

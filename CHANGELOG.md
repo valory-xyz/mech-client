@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.2] - 2026-09-16
+
+### ✨ Added
+
+- `mechx mech list` shows a Terms column, read from the `termsUrl` field of each mech's published metadata.
+- `mechx request` logs the mech operator's terms link before anything is signed, on both the on-chain and the off-chain path, or states that the mech publishes none.
+- `ToolManager.extract_terms_url()` reads the link from a fetched metadata document, for library users.
+- `send_request` reads the mech's metadata once per request; the tool check, the terms notice and the off-chain URL lookup all use that one document.
+
+### 🐛 Fixed
+
+- The off-chain path logged that the prompt would be uploaded to a gateway. It never leaves the requester on that path; only its content CID is signed. The log now says so.
+
 ## [0.23.1] - 2026-09-16
 
 ### ✨ Added

@@ -212,6 +212,32 @@ class MarketplaceService(
         # Create IPFS client
         self.ipfs_client = IPFSClient()
 
+    def _log_terms_notice(self, service_id: int, metadata: Any) -> None:
+        """
+        Log the mech's terms link before any request is signed.
+
+        :param service_id: The service ID of the mech about to be called
+        :param metadata: The mech's metadata document, or None if unreadable
+        """
+        if metadata is None:
+            logger.warning(
+                f"Could not read the metadata for service {service_id} to check "
+                f"for a terms link; the mech operator may still have published "
+                f"terms."
+            )
+            return
+        terms_url = self.tool_manager.extract_terms_url(metadata)
+        if terms_url:
+            logger.info(
+                f"By sending this request you agree to the mech operator's "
+                f"terms: {terms_url}"
+            )
+        else:
+            logger.info(
+                f"The mech for service {service_id} publishes no terms link "
+                f"in its metadata."
+            )
+
     async def send_request(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         prompts: Tuple[str, ...],
@@ -257,8 +283,10 @@ class MarketplaceService(
             priority_mech
         )
 
-        # Validate tools exist for this service
-        self._validate_tools(tools, service_id)
+        # One metadata read per request: the tool check, the terms notice and
+        # the offchain URL lookup all derive from this document.
+        metadata = self.tool_manager.fetch_tools_metadata(service_id)
+        self._validate_tools(tools, service_id, metadata)
 
         # Get priority mech address (use configured or provided)
         priority_mech_address = priority_mech or self.mech_config.priority_mech_address
@@ -268,10 +296,13 @@ class MarketplaceService(
         # Response timeout (5 minutes, matching historic default)
         response_timeout = 300
 
+        self._log_terms_notice(service_id, metadata)
+
         # Branch between on-chain and off-chain flows
         if use_offchain:
-            # Auto-discover offchain URL from on-chain metadata
-            offchain_url = self.tool_manager.get_offchain_url(service_id)
+            offchain_url = self.tool_manager.offchain_url_from_metadata(
+                service_id, metadata
+            )
             logger.info(f"Discovered offchain URL for the mech: {offchain_url}")
 
             return await self._send_offchain_request(
@@ -457,7 +488,8 @@ class MarketplaceService(
                 prompt, tool, extra_attributes or {}
             )
             logger.info(
-                f"Prompt will be uploaded to: https://gateway.autonolas.tech/ipfs/{data_hash_full}"
+                f"Prompt sent directly to the mech (not published to IPFS); "
+                f"content CID {data_hash_full}"
             )
 
             # Calculate request ID
@@ -851,15 +883,18 @@ class MarketplaceService(
         if receipt:
             logger.info(f"Payment-Receipt: {receipt}")
 
-    def _validate_tools(self, tools: Tuple[str, ...], service_id: int) -> None:
+    def _validate_tools(
+        self, tools: Tuple[str, ...], service_id: int, metadata: Any
+    ) -> None:
         """
         Validate that tools exist for the service.
 
-        Fetches the available tools for the service from metadata and validates
-        that all requested tools are available.
+        Reads the available tools from the mech's metadata document and
+        validates that all requested tools are available.
 
         :param tools: Tuple of tool identifiers
         :param service_id: Service ID of the mech
+        :param metadata: The mech's metadata document, or None if unreadable
         :raises ValueError: If any tool is invalid or not available
         """
         # Basic validation - check for empty tools
@@ -867,9 +902,8 @@ class MarketplaceService(
             if not tool:
                 raise ValueError("Empty tool identifier")
 
-        # Fetch available tools for this service
         try:
-            tools_info = self.tool_manager.get_tools(service_id)
+            tools_info = self.tool_manager.tools_from_metadata(service_id, metadata)
         except (AttributeError, KeyError, TypeError) as e:
             # If fetching fails due to unexpected metadata structure,
             # warn but allow request to proceed

@@ -19,6 +19,7 @@
 
 """Tests for tool manager."""
 
+from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -667,3 +668,32 @@ class TestGetToolSchema:
         # Get schema for non-existent tool should raise
         with pytest.raises(ValueError, match="not found in metadata"):
             manager.get_tool_schema("1-non-existent-tool")
+
+
+class TestExtractTermsUrl:
+    """extract_terms_url reads termsUrl from a document that came from a third party."""
+
+    @pytest.mark.parametrize(
+        ("metadata", "expected"),
+        [
+            ({"termsUrl": "https://www.valory.xyz/terms/mechs"}, "https://www.valory.xyz/terms/mechs"),
+            ({"termsUrl": "  https://example.test/terms  "}, "https://example.test/terms"),
+            ({"tools": []}, None),  # field absent
+            ({"termsUrl": ""}, None),  # empty string
+            ({"termsUrl": "   "}, None),  # whitespace only
+            ({"termsUrl": None}, None),  # explicit null
+            ({"termsUrl": 123}, None),  # not a string
+            ({"termsUrl": ["x"]}, None),  # not a string
+            ({"termsUrl": {"href": "x"}}, None),  # not a string
+            (["not", "a", "dict"], None),  # document is a list
+            ("just a string", None),  # document is a scalar
+            (None, None),  # no document
+        ],
+        ids=[
+            "present", "stripped", "absent", "empty", "whitespace", "null",
+            "int", "list_value", "dict_value", "list_document", "scalar_document", "none",
+        ],
+    )
+    def test_extract_terms_url(self, metadata: Any, expected: Optional[str]) -> None:
+        """Only a non-blank string on a JSON object is returned; everything else is None."""
+        assert ToolManager.extract_terms_url(metadata) == expected

@@ -25,12 +25,164 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from mech_client.cli.commands.mech_cmd import mech
+import requests
+
+from mech_client.cli.commands.mech_cmd import (
+    _fetch_terms_url,
+    _fetch_terms_urls,
+    mech,
+)
 from mech_client.infrastructure.config import get_mech_config
+
+TERMS_URL = "https://www.valory.xyz/terms/mechs"
+
+
+@pytest.fixture(autouse=True)
+def _no_metadata_network() -> None:
+    """Keep the listing tests off the network: metadata fetches fail fast.
+
+    The Terms column reads each mech's metadata over HTTP. Existing listing
+    tests only care about the subgraph shape, so by default every fetch
+    raises and the column renders as None. Tests that exercise the column
+    patch ``requests.get`` themselves.
+    """
+    with patch(
+        "mech_client.cli.commands.mech_cmd.requests.get",
+        side_effect=requests.ConnectionError("no network in tests"),
+    ):
+        yield
+
+
+class TestFetchTermsUrl:
+    """_fetch_terms_url reads termsUrl from a metadata document, or gives None."""
+
+    def test_returns_none_without_a_metadata_link(self) -> None:
+        """No link means nothing to fetch; no HTTP call is made."""
+        with patch("mech_client.cli.commands.mech_cmd.requests.get") as mock_get:
+            assert _fetch_terms_url(None) is None
+        mock_get.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("body", "expected"),
+        [
+            ({"termsUrl": TERMS_URL}, TERMS_URL),
+            ({"termsUrl": f"  {TERMS_URL}  "}, TERMS_URL),
+            ({"name": "Mech"}, None),
+            ({"termsUrl": ""}, None),
+            ({"termsUrl": None}, None),
+            ({"termsUrl": 123}, None),
+            ({"termsUrl": ["x"]}, None),
+            (["not", "a", "dict"], None),
+        ],
+        ids=["present", "stripped", "absent", "empty", "null", "int", "list_value", "non_dict"],
+    )
+    def test_reads_terms_url_from_metadata(self, body: object, expected: object) -> None:
+        """Only a non-blank termsUrl on a dict body is returned."""
+        response = MagicMock()
+        response.json.return_value = body
+        with patch(
+            "mech_client.cli.commands.mech_cmd.requests.get", return_value=response
+        ) as mock_get:
+            assert _fetch_terms_url("https://gateway/ipfs/abc") == expected
+        mock_get.assert_called_once_with("https://gateway/ipfs/abc", timeout=10)
+
+    @pytest.mark.parametrize(
+        "error",
+        [requests.Timeout("slow"), requests.ConnectionError("down")],
+        ids=["timeout", "connection"],
+    )
+    def test_transport_failure_yields_none(self, error: Exception) -> None:
+        """A slow or unreachable gateway must not break the listing."""
+        with patch("mech_client.cli.commands.mech_cmd.requests.get", side_effect=error):
+            assert _fetch_terms_url("https://gateway/ipfs/abc") is None
+
+    def test_invalid_json_body_yields_none(self) -> None:
+        """A gateway body that is not JSON must not break the listing."""
+        response = MagicMock()
+        response.json.side_effect = ValueError("bad json")
+        with patch(
+            "mech_client.cli.commands.mech_cmd.requests.get", return_value=response
+        ):
+            assert _fetch_terms_url("https://gateway/ipfs/abc") is None
+
+
+class TestFetchTermsUrls:
+    """_fetch_terms_urls fans the per-mech fetches out and keeps table order."""
+
+    def test_empty_input_makes_no_calls(self) -> None:
+        """No mechs, no threads, no HTTP."""
+        with patch("mech_client.cli.commands.mech_cmd.requests.get") as mock_get:
+            assert _fetch_terms_urls([]) == []
+        mock_get.assert_not_called()
+
+    def test_one_malformed_document_does_not_fail_the_table(self) -> None:
+        """A non-string termsUrl in one document yields None for that row only."""
+        def fake_get(url: str, timeout: int) -> MagicMock:  # noqa: ARG001
+            response = MagicMock()
+            response.json.return_value = (
+                {"termsUrl": 123} if url.endswith("bad") else {"termsUrl": TERMS_URL}
+            )
+            return response
+
+        with patch(
+            "mech_client.cli.commands.mech_cmd.requests.get", side_effect=fake_get
+        ):
+            assert _fetch_terms_urls(["https://g/bad", "https://g/ok"]) == [None, TERMS_URL]
+
+    def test_results_keep_the_input_order_and_nones(self) -> None:
+        """Each output slot matches its input link even when fetches interleave."""
+        # Slow first, fast second: with unordered collection the fast one would
+        # come back first. executor.map must keep table order regardless.
+        import time  # pylint: disable=import-outside-toplevel
+
+        def fake_get(url: str, timeout: int) -> MagicMock:  # noqa: ARG001
+            response = MagicMock()
+            if url.endswith("slow"):
+                time.sleep(0.05)
+                response.json.return_value = {"termsUrl": "https://slow/terms"}
+            else:
+                response.json.return_value = {"termsUrl": "https://fast/terms"}
+            return response
+
+        with patch(
+            "mech_client.cli.commands.mech_cmd.requests.get", side_effect=fake_get
+        ):
+            out = _fetch_terms_urls(["https://g/slow", None, "https://g/fast"])
+        assert out == ["https://slow/terms", None, "https://fast/terms"]
 
 
 class TestMechListCommand:
     """Tests for mech list command."""
+
+    @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
+    def test_list_command_shows_terms_column(self, mock_query: MagicMock) -> None:
+        """The Terms column carries the termsUrl read from each mech's metadata."""
+        mock_query.return_value = [
+            {
+                "id": "1",
+                "address": "0x" + "a" * 40,
+                "mechFactory": "0x" + "b" * 40,
+                "totalDeliveriesTransactions": "1",
+                "service": {
+                    "id": "1",
+                    "totalDeliveries": "1",
+                    "metadata": [{"metadata": "0x" + "c" * 64}],
+                },
+                "mech_type": "Fixed Price Native",
+            }
+        ]
+        response = MagicMock()
+        response.json.return_value = {"termsUrl": TERMS_URL}
+        with patch(
+            "mech_client.cli.commands.mech_cmd.requests.get", return_value=response
+        ) as mock_get:
+            result = CliRunner().invoke(mech, ["list", "--chain-config", "gnosis"])
+        assert result.exit_code == 0
+        assert "Terms" in result.output
+        assert TERMS_URL in result.output
+        # The fetch targets the same gateway link shown in the Metadata Link column.
+        fetched_url = mock_get.call_args[0][0]
+        assert "c" * 64 in fetched_url
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
     def test_list_command_with_realistic_metadata_structure(
