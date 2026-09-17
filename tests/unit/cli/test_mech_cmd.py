@@ -23,18 +23,31 @@ from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import pytest
-from click.testing import CliRunner
-
 import requests
-
+from click.testing import CliRunner
 from mech_client.cli.commands.mech_cmd import (
     _fetch_terms_url,
     _fetch_terms_urls,
+    _valory_operated_labels,
     mech,
 )
 from mech_client.infrastructure.config import get_mech_config
 
 TERMS_URL = "https://www.valory.xyz/terms/mechs"
+
+
+@pytest.fixture(autouse=True)
+def _no_identification_network() -> None:
+    """Keep the listing tests off the network for the Operator column too.
+
+    The column asks the identification check per mech. Existing listing tests
+    only care about the subgraph shape, so by default every mech is
+    unconfirmed and the column renders blank.
+    """
+    with patch(
+        "mech_client.cli.commands.mech_cmd.is_valory_operated", return_value=False
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -74,9 +87,20 @@ class TestFetchTermsUrl:
             ({"termsUrl": ["x"]}, None),
             (["not", "a", "dict"], None),
         ],
-        ids=["present", "stripped", "absent", "empty", "null", "int", "list_value", "non_dict"],
+        ids=[
+            "present",
+            "stripped",
+            "absent",
+            "empty",
+            "null",
+            "int",
+            "list_value",
+            "non_dict",
+        ],
     )
-    def test_reads_terms_url_from_metadata(self, body: object, expected: object) -> None:
+    def test_reads_terms_url_from_metadata(
+        self, body: object, expected: object
+    ) -> None:
         """Only a non-blank termsUrl on a dict body is returned."""
         response = MagicMock()
         response.json.return_value = body
@@ -117,6 +141,7 @@ class TestFetchTermsUrls:
 
     def test_one_malformed_document_does_not_fail_the_table(self) -> None:
         """A non-string termsUrl in one document yields None for that row only."""
+
         def fake_get(url: str, timeout: int) -> MagicMock:  # noqa: ARG001
             response = MagicMock()
             response.json.return_value = (
@@ -127,7 +152,10 @@ class TestFetchTermsUrls:
         with patch(
             "mech_client.cli.commands.mech_cmd.requests.get", side_effect=fake_get
         ):
-            assert _fetch_terms_urls(["https://g/bad", "https://g/ok"]) == [None, TERMS_URL]
+            assert _fetch_terms_urls(["https://g/bad", "https://g/ok"]) == [
+                None,
+                TERMS_URL,
+            ]
 
     def test_results_keep_the_input_order_and_nones(self) -> None:
         """Each output slot matches its input link even when fetches interleave."""
@@ -151,8 +179,83 @@ class TestFetchTermsUrls:
         assert out == ["https://slow/terms", None, "https://fast/terms"]
 
 
+class TestValoryOperatedLabels:
+    """The Operator column names only the mechs the check confirms."""
+
+    def test_no_mechs_makes_no_calls(self) -> None:
+        """An empty table asks nothing."""
+        with patch("mech_client.cli.commands.mech_cmd.is_valory_operated") as check:
+            assert _valory_operated_labels([], 100) == []
+        check.assert_not_called()
+
+    def test_only_confirmed_mechs_are_labelled(self) -> None:
+        """A confirmed mech reads Valory; anything else stays blank."""
+        # Blank rather than "independent": the check fails closed, so an
+        # unreachable mech and an independent one are indistinguishable here,
+        # and labelling both would state something we have not established.
+        addresses = ["0xaaa", "0xbbb", "0xccc"]
+        with patch(
+            "mech_client.cli.commands.mech_cmd.is_valory_operated",
+            side_effect=[True, False, True],
+        ):
+            assert _valory_operated_labels(addresses, 100) == ["Valory", "", "Valory"]
+
+    def test_labels_keep_the_table_order(self) -> None:
+        """Each label belongs to its own row even when checks interleave."""
+        import time  # pylint: disable=import-outside-toplevel
+
+        def slow_first(address: str, _chain_id: int) -> bool:
+            if address == "0xslow":
+                time.sleep(0.05)
+                return True
+            return False
+
+        with patch(
+            "mech_client.cli.commands.mech_cmd.is_valory_operated",
+            side_effect=slow_first,
+        ):
+            assert _valory_operated_labels(["0xslow", "0xfast"], 100) == ["Valory", ""]
+
+    def test_the_chain_id_reaches_the_check(self) -> None:
+        """A mech is identified per chain, so the chain id must be passed on."""
+        with patch(
+            "mech_client.cli.commands.mech_cmd.is_valory_operated", return_value=False
+        ) as check:
+            _valory_operated_labels(["0xaaa"], 137)
+        check.assert_called_once_with("0xaaa", 137)
+
+
 class TestMechListCommand:
     """Tests for mech list command."""
+
+    @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
+    def test_list_command_marks_a_valory_operated_mech(
+        self, mock_query: MagicMock
+    ) -> None:
+        """The Operator column shows Valory for a mech the check confirms."""
+        mock_query.return_value = [
+            {
+                "id": "1",
+                "address": "0x" + "a" * 40,
+                "mechFactory": "0x" + "b" * 40,
+                "totalDeliveriesTransactions": "1",
+                "service": {
+                    "id": "1",
+                    "totalDeliveries": "1",
+                    "metadata": [{"metadata": "0x" + "c" * 64}],
+                },
+                "mech_type": "Fixed Price Native",
+            }
+        ]
+        with patch(
+            "mech_client.cli.commands.mech_cmd.is_valory_operated", return_value=True
+        ) as check:
+            result = CliRunner().invoke(mech, ["list", "--chain-config", "gnosis"])
+        assert result.exit_code == 0
+        assert "Operator" in result.output
+        assert "Valory" in result.output
+        # Gnosis is chain 100; the listing must identify per chain.
+        check.assert_called_once_with("0x" + "a" * 40, 100)
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
     def test_list_command_shows_terms_column(self, mock_query: MagicMock) -> None:
@@ -207,7 +310,9 @@ class TestMechListCommand:
                     "id": "2182",
                     "totalDeliveries": "781673",
                     "metadata": [
-                        {"metadata": "0x4d82a931d803e2b46b0dcd53f558f8de8305fd44b36288b42287ef1450a6611f"}
+                        {
+                            "metadata": "0x4d82a931d803e2b46b0dcd53f558f8de8305fd44b36288b42287ef1450a6611f"
+                        }
                     ],  # LIST of dicts!
                 },
                 "mech_type": "Fixed Price Native",
@@ -223,7 +328,10 @@ class TestMechListCommand:
         assert "Fixed Price Native" in result.output
         assert "781673" in result.output
         # Verify IPFS URL was formatted correctly
-        assert "4d82a931d803e2b46b0dcd53f558f8de8305fd44b36288b42287ef1450a6611f" in result.output
+        assert (
+            "4d82a931d803e2b46b0dcd53f558f8de8305fd44b36288b42287ef1450a6611f"
+            in result.output
+        )
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
     def test_list_command_with_empty_metadata(self, mock_query: MagicMock) -> None:
@@ -252,9 +360,7 @@ class TestMechListCommand:
         assert "253" in result.output
 
     @patch("mech_client.cli.commands.mech_cmd.query_mm_mechs_info")
-    def test_list_command_with_empty_metadata_list(
-        self, mock_query: MagicMock
-    ) -> None:
+    def test_list_command_with_empty_metadata_list(self, mock_query: MagicMock) -> None:
         """Test mech list handles empty metadata list gracefully."""
         mock_query.return_value = [
             {
@@ -291,7 +397,9 @@ class TestMechListCommand:
                     "id": "2182",
                     "totalDeliveries": "781673",
                     "metadata": [
-                        {"metadata": "0x4d82a931d803e2b46b0dcd53f558f8de8305fd44b36288b42287ef1450a6611f"}
+                        {
+                            "metadata": "0x4d82a931d803e2b46b0dcd53f558f8de8305fd44b36288b42287ef1450a6611f"
+                        }
                     ],
                 },
                 "mech_type": "Fixed Price Native",
@@ -305,7 +413,9 @@ class TestMechListCommand:
                     "id": "2469",
                     "totalDeliveries": "1425",
                     "metadata": [
-                        {"metadata": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"}
+                        {
+                            "metadata": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+                        }
                     ],
                 },
                 "mech_type": "NvmSubscription Native",
@@ -376,7 +486,9 @@ class TestMechListCommand:
                     "id": "100",
                     "totalDeliveries": "500",
                     "metadata": [
-                        {"metadata": "0x1111111111111111111111111111111111111111111111111111111111111111"}
+                        {
+                            "metadata": "0x1111111111111111111111111111111111111111111111111111111111111111"
+                        }
                     ],
                 },
                 "mech_type": "Fixed Price Native",
@@ -407,7 +519,9 @@ class TestMechListCommandMetadataEdgeCases:
                     "id": "2182",
                     "totalDeliveries": "100",
                     "metadata": [
-                        {"metadata": "4d82a931d803e2b46b0dcd53f558f8de8305fd44b36288b42287ef1450a6611f"}
+                        {
+                            "metadata": "4d82a931d803e2b46b0dcd53f558f8de8305fd44b36288b42287ef1450a6611f"
+                        }
                     ],  # No 0x prefix
                 },
                 "mech_type": "Fixed Price Native",

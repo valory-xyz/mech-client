@@ -25,14 +25,20 @@ from typing import List, Optional
 import click
 import requests
 from mech_client.cli.validators import validate_chain_config
+from mech_client.domain.identification import is_valory_operated
 from mech_client.domain.tools.manager import ToolManager
-from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
+from mech_client.infrastructure.config import IPFS_URL_TEMPLATE, get_mech_config
 from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
 from mech_client.utils.errors.handlers import handle_cli_errors
 from tabulate import tabulate  # type: ignore
 
 METADATA_FETCH_TIMEOUT = 10
 METADATA_FETCH_WORKERS = 8
+# Shown in the Operator column for a mech the identification check confirms.
+# Anything else is left blank rather than labelled: the check fails closed, so
+# "not confirmed" covers both an independent mech and one we could not reach,
+# and naming an operator we have not identified would be a claim we cannot make.
+VALORY_OPERATOR_LABEL = "Valory"
 
 
 def _fetch_terms_url(metadata_link: Optional[str]) -> Optional[str]:
@@ -49,6 +55,23 @@ def _fetch_terms_url(metadata_link: Optional[str]) -> Optional[str]:
     except (requests.RequestException, ValueError):
         return None
     return ToolManager.extract_terms_url(metadata)
+
+
+def _valory_operated_labels(addresses: List[str], chain_id: int) -> List[str]:
+    """Label each mech the identification check confirms, in parallel, order kept.
+
+    :param addresses: one mech address per row, in table order
+    :param chain_id: the chain the listed mechs are deployed on
+    :return: the operator label per row, blank where not confirmed
+    """
+    if not addresses:
+        return []
+    workers = min(METADATA_FETCH_WORKERS, len(addresses))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        confirmed = executor.map(
+            lambda address: is_valory_operated(address, chain_id), addresses
+        )
+    return [VALORY_OPERATOR_LABEL if is_valory else "" for is_valory in confirmed]
 
 
 def _fetch_terms_urls(metadata_links: List[Optional[str]]) -> List[Optional[str]]:
@@ -86,7 +109,8 @@ def mech_list(chain_config: str) -> None:
 
     Fetches information about all mechs from the marketplace subgraph,
     including service IDs, addresses, delivery counts, and metadata links,
-    and reads each mech's terms link from its published metadata.
+    reads each mech's terms link from its published metadata, and marks the
+    mechs the identification check confirms as Valory operated.
 
     Uses default subgraph URL from configuration. Can be overridden with
     MECHX_SUBGRAPH_URL environment variable.
@@ -112,6 +136,7 @@ def mech_list(chain_config: str) -> None:
         "Total Deliveries",
         "Metadata Link",
         "Terms",
+        "Operator",
     ]
 
     metadata_links = [
@@ -123,6 +148,10 @@ def mech_list(chain_config: str) -> None:
         for items in mech_list_data
     ]
     terms_urls = _fetch_terms_urls(metadata_links)
+    chain_id = get_mech_config(validated_chain).ledger_config.chain_id
+    operators = _valory_operated_labels(
+        [items["address"] for items in mech_list_data], chain_id
+    )
     data = [
         (
             items["service"]["id"],
@@ -131,9 +160,10 @@ def mech_list(chain_config: str) -> None:
             items["service"]["totalDeliveries"],
             metadata_link,
             terms_url,
+            operator,
         )
-        for items, metadata_link, terms_url in zip(
-            mech_list_data, metadata_links, terms_urls
+        for items, metadata_link, terms_url, operator in zip(
+            mech_list_data, metadata_links, terms_urls, operators
         )
     ]
 
