@@ -89,7 +89,9 @@ Learn more about mech marketplace [here](https://olas.network/mech-marketplace)
 
 ### Terms
 
-Each Mech is run by its own operator. An operator that publishes terms identifies them in the `termsUrl` field of the Mech's on-chain metadata; `mechx mech list` shows that link in its Terms column, and `mechx request` prints it before anything is signed. Mechs operated by Valory are subject to the [Valory Mech Terms](https://www.valory.xyz/terms/mechs). Sending a request to a Mech means you accept its operator's terms.
+Each Mech is run by its own operator, and you agree to that operator's terms by submitting a request to their Mech.
+
+Mechs operated by Valory are subject to the [Valory Mech Terms](https://www.valory.xyz/terms/mechs). When you send a request to one, `mechx request` states this before anything is signed. It says nothing for a Mech run by someone else, because those terms are that operator's to state, not ours. Whatever terms link a Mech publishes in the `termsUrl` field of its on-chain metadata is shown in the Terms column of `mechx mech list`.
 
 ### Supported Chains
 

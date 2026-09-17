@@ -41,6 +41,10 @@ from mech_client.domain.delivery import (
     OffchainDeliveryWatcher,
     OnchainDeliveryWatcher,
 )
+from mech_client.domain.identification import (
+    VALORY_TERMS_NOTICE,
+    is_valory_operated,
+)
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
@@ -212,31 +216,21 @@ class MarketplaceService(
         # Create IPFS client
         self.ipfs_client = IPFSClient()
 
-    def _log_terms_notice(self, service_id: int, metadata: Any) -> None:
+    def _log_terms_notice(self, mech_address: str) -> None:
         """
-        Log the mech's terms link before any request is signed.
+        State the terms before the request is signed, for a Valory mech.
 
-        :param service_id: The service ID of the mech about to be called
-        :param metadata: The mech's metadata document, or None if unreadable
+        Nothing is shown for a mech Valory does not operate: its terms are its
+        own operator's to state, and echoing them here would speak for an
+        operator this client has no relationship with. The check fails closed,
+        so an unreachable identification endpoint means no notice rather than
+        a wrong one.
+
+        :param mech_address: The address of the mech about to be called
         """
-        if metadata is None:
-            logger.warning(
-                f"Could not read the metadata for service {service_id} to check "
-                f"for a terms link; the mech operator may still have published "
-                f"terms."
-            )
-            return
-        terms_url = self.tool_manager.extract_terms_url(metadata)
-        if terms_url:
-            logger.info(
-                f"By sending this request you agree to the mech operator's "
-                f"terms: {terms_url}"
-            )
-        else:
-            logger.info(
-                f"The mech for service {service_id} publishes no terms link "
-                f"in its metadata."
-            )
+        chain_id = self.mech_config.ledger_config.chain_id
+        if is_valory_operated(mech_address, chain_id):
+            logger.info(VALORY_TERMS_NOTICE)
 
     async def send_request(  # pylint: disable=too-many-arguments,too-many-locals
         self,
@@ -296,7 +290,7 @@ class MarketplaceService(
         # Response timeout (5 minutes, matching historic default)
         response_timeout = 300
 
-        self._log_terms_notice(service_id, metadata)
+        self._log_terms_notice(priority_mech_address)
 
         # Branch between on-chain and off-chain flows
         if use_offchain:

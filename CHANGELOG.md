@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.3] - 2026-09-17
+
+### ✨ Added
+
+- `mechx request` states the Valory Mech Terms before anything is signed, when the Mech is operated by Valory. Identification is a request to the Mech's own name under `mechs.valory.xyz`, and it fails closed: a timeout, a 404 or any other non-2xx answer means the Mech is not identified as Valory operated.
+
+### 🔧 Changed
+
+- Nothing is printed for a Mech operated by someone else. Those terms are that operator's to state. The `termsUrl` a Mech publishes is still shown in the Terms column of `mechx mech list`.
+
 ## [0.23.2] - 2026-09-16
 
 ### ✨ Added
