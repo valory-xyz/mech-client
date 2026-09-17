@@ -193,12 +193,19 @@ class TestValoryOperatedLabels:
         # Blank rather than "independent": the check fails closed, so an
         # unreachable mech and an independent one are indistinguishable here,
         # and labelling both would state something we have not established.
-        addresses = ["0xaaa", "0xbbb", "0xccc"]
+        # Keyed on the address, not positional: the checks run in a thread
+        # pool, so a positional side_effect list would hand answers out in
+        # whatever order the threads happen to call, not in table order.
+        confirmed = {"0xaaa": True, "0xbbb": False, "0xccc": True}
         with patch(
             "mech_client.cli.commands.mech_cmd.is_valory_operated",
-            side_effect=[True, False, True],
+            side_effect=lambda address, _chain_id: confirmed[address],
         ):
-            assert _valory_operated_labels(addresses, 100) == ["Valory", "", "Valory"]
+            assert _valory_operated_labels(list(confirmed), 100) == [
+                "Valory",
+                "",
+                "Valory",
+            ]
 
     def test_labels_keep_the_table_order(self) -> None:
         """Each label belongs to its own row even when checks interleave."""
