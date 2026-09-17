@@ -93,10 +93,10 @@ Each Mech is run by its own operator, and you agree to that operator's terms by 
 
 Mechs operated by Valory are subject to the [Valory Mech Terms](https://www.valory.xyz/terms/mechs). When you send a request to one, `mechx request` states this before anything is signed. It says nothing for a Mech run by someone else, because those terms are that operator's to state, not ours. Whatever terms link a Mech publishes in the `termsUrl` field of its on-chain metadata is shown in the Terms column of `mechx mech list`.
 
-**Checking who operates a Mech.** A Mech is operated by Valory if its own name under `mechs.valory.xyz` answers. The name is the Mech address without `0x`, then the chain id:
+**Checking who operates a Mech.** A Mech is operated by Valory if its own name under `mech.valory.xyz` answers. The name is the Mech address without `0x`, then the chain id:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' https://c05e7412439bd7e91730a6880e18d5d5873f632c.100.mechs.valory.xyz/healthcheck
+curl -s -o /dev/null -w '%{http_code}\n' https://c05e7412439bd7e91730a6880e18d5d5873f632c.100.mech.valory.xyz/healthcheck
 ```
 
 A success means Valory operates that Mech. Anything else, including a timeout or a 404, means it does not, or that the check could not complete. `mechx mech list` runs this for you and marks the confirmed ones in its Operator column.

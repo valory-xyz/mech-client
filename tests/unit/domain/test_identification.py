@@ -33,7 +33,7 @@ from mech_client.domain.identification import (
 MODULE = "mech_client.domain.identification"
 GNOSIS_MECH = "0xC05e7412439bD7e91730a6880E18d5D5873F632C"
 GNOSIS_NAME = (
-    "https://c05e7412439bd7e91730a6880e18d5d5873f632c.100.mechs.valory.xyz/healthcheck"
+    "https://c05e7412439bd7e91730a6880e18d5d5873f632c.100.mech.valory.xyz/healthcheck"
 )
 
 
@@ -53,7 +53,7 @@ class TestIdentificationUrl:
     def test_chain_id_is_a_label_of_its_own(self, chain_id: int) -> None:
         """The chain id sits between the address and the zone."""
         url = identification_url(GNOSIS_MECH, chain_id)
-        assert f".{chain_id}.mechs.valory.xyz" in url
+        assert f".{chain_id}.mech.valory.xyz" in url
 
 
 class TestIsValoryOperated:

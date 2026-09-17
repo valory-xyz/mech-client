@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 # A Valory operated mech answers on a name under this zone. The zone is a
 # wildcard record, so the name resolving proves nothing: only a successful
 # HTTP response does, because the route exists per mech.
-IDENTIFICATION_ZONE = "mechs.valory.xyz"
+IDENTIFICATION_ZONE = "mech.valory.xyz"
 # Path requested on that name. The mech root replies 400, so ask for the
 # endpoint that answers 200 on a healthy mech.
 IDENTIFICATION_PATH = "/healthcheck"
