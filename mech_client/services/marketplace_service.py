@@ -223,7 +223,7 @@ class MarketplaceService(
         Nothing is shown for a mech Valory does not operate: its terms are its
         own operator's to state, and echoing them here would speak for an
         operator this client has no relationship with. The check fails closed,
-        so an unreachable identification endpoint means no notice rather than
+        so a lookup that cannot complete means no notice rather than
         a wrong one.
 
         :param mech_address: The address of the mech about to be called

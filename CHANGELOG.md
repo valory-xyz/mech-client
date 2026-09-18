@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
-- `mechx request` states the Valory Mech Terms before anything is signed, when the Mech is operated by Valory. Identification is a request to the Mech's own name under `mech.valory.xyz`, and it fails closed: a timeout, a 404 or any other non-2xx answer means the Mech is not identified as Valory operated.
-- `mechx mech list` gains an Operator column, marking the Mechs the same check confirms. A Mech that is not confirmed is left blank rather than labelled, since an independent Mech and an unreachable one are indistinguishable to the check.
+- `mechx request` states the Valory Mech Terms before anything is signed, when the Mech is operated by Valory. Identification is a DNS lookup of the Mech's own name under `mech.valory.xyz`, so the answer does not depend on the Mech being up. It fails closed: a name that does not resolve, a timed-out lookup, or a zone that answers every name all mean the Mech is not identified as Valory operated.
+- `mechx mech list` gains an Operator column, marking the Mechs the same check confirms. A Mech that is not confirmed is left blank rather than labelled, since an independent Mech and a lookup that could not complete are indistinguishable to the check.
 
 ### 🔧 Changed
 

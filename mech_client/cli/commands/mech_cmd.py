@@ -36,7 +36,7 @@ METADATA_FETCH_TIMEOUT = 10
 METADATA_FETCH_WORKERS = 8
 # Shown in the Operator column for a mech the identification check confirms.
 # Anything else is left blank rather than labelled: the check fails closed, so
-# "not confirmed" covers both an independent mech and one we could not reach,
+# "not confirmed" covers both an independent mech and a lookup that failed,
 # and naming an operator we have not identified would be a claim we cannot make.
 VALORY_OPERATOR_LABEL = "Valory"
 
