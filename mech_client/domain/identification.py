@@ -57,7 +57,10 @@ def identification_name(mech_address: str, chain_id: int) -> str:
     address = mech_address.lower()
     if address.startswith("0x"):
         address = address[2:]
-    return f"{address}.{chain_id}.{IDENTIFICATION_ZONE}"
+    # One label, joined by a hyphen, so a single wildcard certificate on the
+    # zone covers every mech on every chain. An address is hex and a chain id
+    # is digits, so the hyphen is unambiguous.
+    return f"{address}-{chain_id}.{IDENTIFICATION_ZONE}"
 
 
 def _resolves(name: str) -> bool:
@@ -102,5 +105,5 @@ def is_valory_operated(mech_address: str, chain_id: int) -> bool:
     if not _resolves(identification_name(mech_address, chain_id)):
         return False
     # 32 hex characters, so it can never be a 40-character mech address.
-    probe = f"{secrets.token_hex(16)}.{chain_id}.{IDENTIFICATION_ZONE}"
+    probe = f"{secrets.token_hex(16)}-{chain_id}.{IDENTIFICATION_ZONE}"
     return not _resolves(probe)

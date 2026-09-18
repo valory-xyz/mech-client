@@ -37,7 +37,7 @@ from mech_client.domain.identification import (
 
 MODULE = "mech_client.domain.identification"
 GNOSIS_MECH = "0xC05e7412439bD7e91730a6880E18d5D5873F632C"
-GNOSIS_NAME = "c05e7412439bd7e91730a6880e18d5d5873f632c.100.mech.valory.xyz"
+GNOSIS_NAME = "c05e7412439bd7e91730a6880e18d5d5873f632c-100.mech.valory.xyz"
 
 
 def _dns(resolving: set) -> Any:
@@ -66,12 +66,15 @@ class TestIdentificationName:
         """Every way of writing the same address yields one name."""
         assert identification_name(address, 100) == GNOSIS_NAME
 
-    @pytest.mark.parametrize("chain_id", [100, 137, 8453, 10, 4663])
-    def test_chain_id_is_a_label_of_its_own(self, chain_id: int) -> None:
-        """A mech is identified per chain, so the chain id is part of the name."""
-        assert identification_name(GNOSIS_MECH, chain_id).endswith(
-            f".{chain_id}.mech.valory.xyz"
-        )
+    @pytest.mark.parametrize("chain_id", [100, 137, 8453, 10, 4663, 11155111])
+    def test_address_and_chain_share_one_label(self, chain_id: int) -> None:
+        """One label, so a single wildcard certificate covers every mech."""
+        name = identification_name(GNOSIS_MECH, chain_id)
+        label, zone = name.split(".", 1)
+        assert zone == "mech.valory.xyz"
+        assert label == f"c05e7412439bd7e91730a6880e18d5d5873f632c-{chain_id}"
+        # DNS caps a label at 63 characters.
+        assert len(label) <= 63
 
 
 class TestIsValoryOperated:
@@ -104,9 +107,9 @@ class TestIsValoryOperated:
         with patch(f"{MODULE}.socket.getaddrinfo", side_effect=dns):
             is_valory_operated(GNOSIS_MECH, 100)
         probe = dns.looked_up[1]
-        label = probe.split(".", 1)[0]
-        assert re.fullmatch(r"[0-9a-f]{32}", label)
-        assert probe.endswith(".100.mech.valory.xyz")
+        label, zone = probe.split(".", 1)
+        assert re.fullmatch(r"[0-9a-f]{32}-100", label)
+        assert zone == "mech.valory.xyz"
 
     def test_each_check_uses_a_fresh_probe(self) -> None:
         """A fixed probe name could be registered to defeat the wildcard guard."""
