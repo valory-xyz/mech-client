@@ -21,8 +21,10 @@
 
 import secrets
 import socket
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
+from enum import Enum
+from typing import Any, Optional
 
 from mech_client.utils.logger import get_logger
 
@@ -30,10 +32,14 @@ logger = get_logger(__name__)
 
 # Valory creates one DNS record per mech it operates under this zone, and only
 # Valory can, so a mech's name resolving is what identifies it. The answer does
-# not depend on the mech being up.
+# not depend on the mech being up. The lookup goes through the system resolver
+# and is not DNSSEC-validated, so it trusts that resolver's answer.
 IDENTIFICATION_ZONE = "mech.valory.xyz"
 # Kept short: this runs on the request path and must never hold up a request.
 IDENTIFICATION_TIMEOUT = 3
+# Lookups share one capped pool. A lookup that hangs keeps its thread until the
+# resolver gives up, so the cap bounds how many threads hung lookups can hold.
+IDENTIFICATION_MAX_WORKERS = 8
 
 # The notice shown to a requester calling a Valory operated mech. Fixed
 # wording: a requester agrees by submitting the request, so this states what
@@ -44,6 +50,35 @@ VALORY_TERMS_NOTICE = (
     f"By submitting a request to this Mech, you agree to be bound by "
     f"Valory AG's Mech Terms ({MECH_TERMS_VERSION}), available at {MECH_TERMS_URL}."
 )
+
+# getaddrinfo errors that mean the name does not exist, as opposed to the
+# lookup failing. EAI_NODATA is not defined on every platform.
+_NO_SUCH_NAME = frozenset(
+    code
+    for code in (
+        getattr(socket, "EAI_NONAME", None),
+        getattr(socket, "EAI_NODATA", None),
+    )
+    if code is not None
+)
+
+_EXECUTOR = ThreadPoolExecutor(
+    max_workers=IDENTIFICATION_MAX_WORKERS,
+    thread_name_prefix="mech-identification",
+)
+
+
+class Identification(Enum):
+    """The outcome of checking who operates a mech."""
+
+    VALORY = "valory"
+    """The mech's own name resolves and an arbitrary name does not."""
+
+    NOT_VALORY = "not_valory"
+    """The mech's own name does not exist under the zone."""
+
+    UNKNOWN = "unknown"
+    """The check could not complete, or the zone answers every name."""
 
 
 def identification_name(mech_address: str, chain_id: int) -> str:
@@ -63,47 +98,94 @@ def identification_name(mech_address: str, chain_id: int) -> str:
     return f"{address}-{chain_id}.{IDENTIFICATION_ZONE}"
 
 
-def _resolves(name: str) -> bool:
+def _log_late_lookup(name: str, future: "Future[Any]") -> None:
     """
-    Report whether a DNS name resolves, giving up after the timeout.
+    Log how a lookup the caller stopped waiting for eventually ended.
+
+    :param name: The DNS name that was looked up
+    :param future: The finished lookup
+    """
+    error = future.exception()
+    if error is not None:
+        logger.debug(f"Abandoned lookup of {name} failed late: {error}")
+
+
+def _lookup(name: str) -> Optional[bool]:
+    """
+    Look up a DNS name, giving up after the timeout.
 
     :param name: The DNS name to look up
-    :return: True if the name resolved within the timeout
+    :return: True if it resolved, False if it does not exist, None if the
+        lookup could not complete
     """
-    # The lookup has no timeout of its own, so run it in a thread and stop
-    # waiting after IDENTIFICATION_TIMEOUT. The pool is not used as a context
-    # manager: that would wait for a hung lookup, defeating the timeout.
-    executor = ThreadPoolExecutor(max_workers=1)
+    # The lookup has no timeout of its own, so run it on the pool and stop
+    # waiting after IDENTIFICATION_TIMEOUT. A running lookup cannot be
+    # stopped; a queued one is cancelled so it never takes a thread.
+    future = _EXECUTOR.submit(socket.getaddrinfo, name, None)
     try:
-        executor.submit(socket.getaddrinfo, name, None).result(
-            timeout=IDENTIFICATION_TIMEOUT
+        future.result(timeout=IDENTIFICATION_TIMEOUT)
+    except FuturesTimeoutError:
+        if not future.cancel():
+            future.add_done_callback(lambda done: _log_late_lookup(name, done))
+        logger.warning(
+            f"Looking up {name} took longer than {IDENTIFICATION_TIMEOUT}s; "
+            f"could not check whether Valory operates this mech."
         )
-    except (OSError, UnicodeError, FuturesTimeoutError) as exc:
-        logger.debug(f"{name} did not resolve: {exc}")
-        return False
-    finally:
-        executor.shutdown(wait=False)
+        return None
+    except socket.gaierror as exc:
+        if exc.errno in _NO_SUCH_NAME:
+            logger.debug(f"{name} does not exist: {exc}")
+            return False
+        logger.warning(f"Could not look up {name}: {exc}")
+        return None
+    except (OSError, UnicodeError) as exc:
+        logger.warning(f"Could not look up {name}: {exc}")
+        return None
     return True
+
+
+def identify(mech_address: str, chain_id: int) -> Identification:
+    """
+    Check who operates a mech.
+
+    A positive answer is also checked against a name that cannot belong to any
+    mech. If that resolves too, the zone answers every name, as a wildcard
+    record would, and the positive answer proves nothing.
+
+    :param mech_address: The mech contract address, with or without `0x`
+    :param chain_id: The chain the mech is deployed on
+    :return: VALORY, NOT_VALORY, or UNKNOWN when the check could not tell
+    """
+    found = _lookup(identification_name(mech_address, chain_id))
+    if found is None:
+        return Identification.UNKNOWN
+    if not found:
+        return Identification.NOT_VALORY
+    # 32 hex characters, so it can never be a 40-character mech address.
+    probe = f"{secrets.token_hex(16)}-{chain_id}.{IDENTIFICATION_ZONE}"
+    probe_found = _lookup(probe)
+    if probe_found is None:
+        return Identification.UNKNOWN
+    if probe_found:
+        logger.warning(
+            f"{IDENTIFICATION_ZONE} resolved an arbitrary name, so a resolving "
+            f"name identifies nothing; could not check who operates this mech."
+        )
+        return Identification.UNKNOWN
+    return Identification.VALORY
 
 
 def is_valory_operated(mech_address: str, chain_id: int) -> bool:
     """
     Check whether a mech is operated by Valory.
 
-    Fails closed. A name that does not resolve, a lookup that times out, or no
-    network at all each mean "not identified as Valory operated". Claiming a
-    mech is Valory's when it is not would be the harmful direction.
-
-    A positive answer is also checked against a name that cannot belong to any
-    mech. If that resolves too, the zone answers every name, as a wildcard
-    record would, and the positive answer proves nothing, so the check says no.
+    Fails closed. A name that does not resolve, a lookup that cannot complete,
+    or a zone that answers every name each mean "not identified as Valory
+    operated". Claiming a mech is Valory's when it is not would be the harmful
+    direction. Use identify() to tell "not Valory" from "could not check".
 
     :param mech_address: The mech contract address, with or without `0x`
     :param chain_id: The chain the mech is deployed on
-    :return: True only if the mech's own name resolves and an arbitrary one does not
+    :return: True only if the mech is identified as Valory operated
     """
-    if not _resolves(identification_name(mech_address, chain_id)):
-        return False
-    # 32 hex characters, so it can never be a 40-character mech address.
-    probe = f"{secrets.token_hex(16)}-{chain_id}.{IDENTIFICATION_ZONE}"
-    return not _resolves(probe)
+    return identify(mech_address, chain_id) is Identification.VALORY

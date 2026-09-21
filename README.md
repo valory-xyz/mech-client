@@ -89,9 +89,9 @@ Learn more about mech marketplace [here](https://olas.network/mech-marketplace)
 
 ### Terms
 
-Each Mech is run by its own operator, and you agree to that operator's terms by submitting a request to their Mech.
+Each Mech is run by its own operator.
 
-Mechs operated by Valory are subject to the [Valory Mech Terms](https://www.valory.xyz/terms/mechs). When you send a request to one, `mechx request` states this before anything is signed. It says nothing for a Mech run by someone else, because those terms are that operator's to state, not ours. Whatever terms link a Mech publishes in the `termsUrl` field of its on-chain metadata is shown in the Terms column of `mechx mech list`.
+Mechs operated by Valory are subject to the [Valory Mech Terms](https://www.valory.xyz/terms/mechs). When you send a request to one, `mechx request` states this before anything is signed. It says nothing for a Mech run by someone else, because those terms are that operator's to state, not ours. The terms link a Mech publishes in the `termsUrl` field of its on-chain metadata is shown in the Terms column of `mechx mech list`, as published and not endorsed, when it is a plain `https` link.
 
 **Checking who operates a Mech.** Valory creates one DNS record under `mech.valory.xyz` for each Mech it operates, so a Mech is operated by Valory if its own name there resolves. The name is the Mech address without `0x`, a hyphen, then the chain id:
 
@@ -99,7 +99,9 @@ Mechs operated by Valory are subject to the [Valory Mech Terms](https://www.valo
 dig +short c05e7412439bd7e91730a6880e18d5d5873f632c-100.mech.valory.xyz
 ```
 
-An address back means Valory operates that Mech, and no answer means it does not. The answer does not depend on the Mech being up. If a name you make up at random also resolves, the zone is answering every name and the result tells you nothing; `mechx` checks for this and treats it as a no. `mechx mech list` runs the check for you and marks the confirmed ones in its Operator column.
+An address back means Valory operates that Mech, and no such name means it does not. The answer does not depend on the Mech being up. If a name you make up at random also resolves, the zone is answering every name and the result tells you nothing; `mechx` checks for this and treats it as a no. A lookup that fails or times out is also a no, and `mechx` logs a warning so it is not mistaken for a real answer. `mechx mech list` runs the check for you and marks the confirmed ones in its Operator column.
+
+The check trusts your DNS resolver. The lookup is not DNSSEC-validated, so a resolver or network that forges the answer for that one name could make a Mech look Valory operated.
 
 ### Supported Chains
 

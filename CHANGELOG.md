@@ -7,16 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.23.3] - 2026-09-17
+## [0.23.3] - 2026-09-21
 
 ### ✨ Added
 
 - `mechx request` states the Valory Mech Terms before anything is signed, when the Mech is operated by Valory. Identification is a DNS lookup of the Mech's own name under `mech.valory.xyz`, so the answer does not depend on the Mech being up. It fails closed: a name that does not resolve, a timed-out lookup, or a zone that answers every name all mean the Mech is not identified as Valory operated.
 - `mechx mech list` gains an Operator column, marking the Mechs the same check confirms. A Mech that is not confirmed is left blank rather than labelled, since an independent Mech and a lookup that could not complete are indistinguishable to the check.
+- `identify()` in `mech_client.domain.identification` returns `VALORY`, `NOT_VALORY` or `UNKNOWN`, so a caller can tell a Mech Valory does not operate from a check that could not complete. `is_valory_operated()` is unchanged.
+- `ToolManager.terms_report(mech_address, metadata)` returns, for an already fetched metadata document, `valory_operated`, the Valory terms statement as `terms` for a Valory Mech, an `identification_note` when the check could not tell, and the operator's published link as `terms_url`. The chain comes from the manager, and the rule that only a Valory Mech gets the statement lives here, so integrations do not reimplement it.
 
 ### 🔧 Changed
 
 - Nothing is printed for a Mech operated by someone else. Those terms are that operator's to state. The `termsUrl` a Mech publishes is still shown in the Terms column of `mechx mech list`.
+- `ToolManager.extract_terms_url()` only returns an `https` link with a host, no whitespace or control characters, and at most 2048 characters. Anything else in an operator's `termsUrl` is dropped, including in the Terms column of `mechx mech list`.
+- A lookup that fails or times out now logs a warning; only a name that does not exist stays at debug level. Lookups share one pool capped at 8 threads, and a lookup still queued when its caller gives up is cancelled.
 
 ## [0.23.2] - 2026-09-16
 

@@ -27,11 +27,13 @@ from typing import Any, List
 from unittest.mock import patch
 
 import pytest
-
 from mech_client.domain import identification
 from mech_client.domain.identification import (
+    IDENTIFICATION_MAX_WORKERS,
     IDENTIFICATION_TIMEOUT,
+    Identification,
     identification_name,
+    identify,
     is_valory_operated,
 )
 
@@ -99,7 +101,30 @@ class TestIsValoryOperated:
         # A wildcard record answers every name under the zone, including other
         # operators' mechs. The check must say no rather than claim them all.
         with patch(f"{MODULE}.socket.getaddrinfo", return_value=[("ok",)]):
+            assert identify(GNOSIS_MECH, 100) is Identification.UNKNOWN
             assert is_valory_operated(GNOSIS_MECH, 100) is False
+
+    def test_a_probe_that_cannot_complete_confirms_nothing(self) -> None:
+        """The mech's name resolving is not enough if the probe lookup fails."""
+
+        def getaddrinfo(name: str, _port: Any) -> list:
+            if name == GNOSIS_NAME:
+                return [("ok",)]
+            raise socket.gaierror(socket.EAI_AGAIN, "temporary failure")
+
+        with patch(f"{MODULE}.socket.getaddrinfo", side_effect=getaddrinfo):
+            assert identify(GNOSIS_MECH, 100) is Identification.UNKNOWN
+            assert is_valory_operated(GNOSIS_MECH, 100) is False
+
+    def test_a_confirmed_mech_is_identified_as_valory(self) -> None:
+        """Own name resolves, probe does not exist: the mech is Valory's."""
+        with patch(f"{MODULE}.socket.getaddrinfo", side_effect=_dns({GNOSIS_NAME})):
+            assert identify(GNOSIS_MECH, 100) is Identification.VALORY
+
+    def test_a_missing_name_is_identified_as_not_valory(self) -> None:
+        """A name that does not exist is a real answer, not a failed check."""
+        with patch(f"{MODULE}.socket.getaddrinfo", side_effect=_dns(set())):
+            assert identify(GNOSIS_MECH, 100) is Identification.NOT_VALORY
 
     def test_the_probe_can_never_be_a_mech_and_stays_in_the_same_chain(self) -> None:
         """The probe name is not 40 hex characters and sits beside the real name."""
@@ -120,30 +145,51 @@ class TestIsValoryOperated:
         assert dns.looked_up[1] != dns.looked_up[3]
 
     @pytest.mark.parametrize(
-        "error",
+        ("error", "expected", "level"),
         [
-            socket.gaierror(socket.EAI_NONAME, "not known"),
-            socket.gaierror(socket.EAI_AGAIN, "temporary failure"),
-            OSError("network unreachable"),
-            UnicodeError("label too long"),
+            (
+                socket.gaierror(socket.EAI_NONAME, "not known"),
+                Identification.NOT_VALORY,
+                "DEBUG",
+            ),
+            (
+                socket.gaierror(socket.EAI_AGAIN, "temporary failure"),
+                Identification.UNKNOWN,
+                "WARNING",
+            ),
+            (OSError("network unreachable"), Identification.UNKNOWN, "WARNING"),
+            (UnicodeError("label too long"), Identification.UNKNOWN, "WARNING"),
         ],
         ids=["no_such_name", "resolver_unavailable", "no_network", "bad_label"],
     )
-    def test_a_failed_lookup_is_not_identified(self, error: Exception) -> None:
-        """Fails closed: a lookup that cannot complete must never claim Valory."""
-        with patch(f"{MODULE}.socket.getaddrinfo", side_effect=error):
+    def test_a_failed_lookup_is_not_identified(
+        self,
+        error: Exception,
+        expected: Identification,
+        level: str,
+    ) -> None:
+        """Fails closed, and only a missing name is quiet; a broken check warns."""
+        with (
+            patch(f"{MODULE}.socket.getaddrinfo", side_effect=error),
+            patch(f"{MODULE}.logger") as logger,
+        ):
+            assert identify(GNOSIS_MECH, 100) is expected
             assert is_valory_operated(GNOSIS_MECH, 100) is False
+        quiet, loud = logger.debug.called, logger.warning.called
+        assert (quiet, loud) == ((True, False) if level == "DEBUG" else (False, True))
 
     def test_a_slow_lookup_gives_up_rather_than_holding_the_request(self) -> None:
-        """A hung resolver must not stall the request; it times out to a no."""
-        with patch(
-            f"{MODULE}.ThreadPoolExecutor.submit",
-        ) as submit:
+        """A hung resolver must not stall the request; it times out, warning."""
+        with (
+            patch.object(identification._EXECUTOR, "submit") as submit,  # pylint: disable=protected-access
+            patch(f"{MODULE}.logger") as logger,
+        ):
             submit.return_value.result.side_effect = FuturesTimeoutError()
-            assert is_valory_operated(GNOSIS_MECH, 100) is False
+            assert identify(GNOSIS_MECH, 100) is Identification.UNKNOWN
         submit.return_value.result.assert_called_once_with(
             timeout=IDENTIFICATION_TIMEOUT
         )
+        assert "took longer than" in logger.warning.call_args.args[0]
 
     def test_the_timeout_does_not_wait_for_a_hung_lookup(self) -> None:
         """Giving up must return straight away, not block on the stuck thread."""
@@ -158,9 +204,69 @@ class TestIsValoryOperated:
             patch(f"{MODULE}.socket.getaddrinfo", side_effect=hang),
         ):
             assert (
-                identification._resolves(GNOSIS_NAME) is False
+                identification._lookup(GNOSIS_NAME) is None
             )  # pylint: disable=protected-access
         release.set()
+
+    def test_hung_lookups_cannot_take_more_than_the_capped_threads(self) -> None:
+        """Lookups queued behind hung ones are cancelled, not left to pile up."""
+        release = threading.Event()
+        started: List[str] = []
+
+        def hang(name: str, _port: Any) -> list:
+            started.append(name)
+            release.wait(5)
+            return [("ok",)]
+
+        executor = identification.ThreadPoolExecutor(max_workers=2)
+        try:
+            with (
+                patch.object(identification, "_EXECUTOR", executor),
+                patch(f"{MODULE}.IDENTIFICATION_TIMEOUT", 0.05),
+                patch(f"{MODULE}.socket.getaddrinfo", side_effect=hang),
+                patch(f"{MODULE}.logger"),
+            ):
+                for index in range(5):
+                    assert identification._lookup(f"n{index}") is None  # pylint: disable=protected-access
+            release.set()
+            executor.shutdown(wait=True)
+            # Only the two lookups that got a thread ever ran; the three queued
+            # behind them were cancelled and never took a thread.
+            assert started == ["n0", "n1"]
+        finally:
+            release.set()
+            executor.shutdown(wait=True)
+
+    def test_a_lookup_that_fails_after_the_timeout_is_logged(self) -> None:
+        """An abandoned lookup's late error is recorded, not lost."""
+        release = threading.Event()
+
+        def fail_late(_name: str, _port: Any) -> list:
+            release.wait(5)
+            raise socket.gaierror(socket.EAI_AGAIN, "late failure")
+
+        executor = identification.ThreadPoolExecutor(max_workers=1)
+        try:
+            with (
+                patch.object(identification, "_EXECUTOR", executor),
+                patch(f"{MODULE}.IDENTIFICATION_TIMEOUT", 0.05),
+                patch(f"{MODULE}.socket.getaddrinfo", side_effect=fail_late),
+                patch(f"{MODULE}.logger") as logger,
+            ):
+                assert identification._lookup(GNOSIS_NAME) is None  # pylint: disable=protected-access
+                release.set()
+                executor.shutdown(wait=True)
+            assert "failed late" in logger.debug.call_args.args[0]
+        finally:
+            release.set()
+
+    def test_the_pool_is_capped(self) -> None:
+        """A fixed cap bounds the threads hung lookups can hold."""
+        assert 1 <= IDENTIFICATION_MAX_WORKERS <= 16
+        assert (
+            identification._EXECUTOR._max_workers  # pylint: disable=protected-access
+            == IDENTIFICATION_MAX_WORKERS
+        )
 
     def test_the_check_cannot_hold_up_a_request(self) -> None:
         """The timeout is short, since this runs before every request."""
