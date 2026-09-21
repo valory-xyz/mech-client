@@ -19,13 +19,14 @@
 
 """Tests for tool manager."""
 
+import socket
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-
-from mech_client.domain.tools.manager import ToolManager
+from mech_client.domain.identification import VALORY_TERMS_NOTICE
+from mech_client.domain.tools.manager import IDENTIFICATION_NOTE, ToolManager
 from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
 from mech_client.infrastructure.config.chain_config import LedgerConfig
 
@@ -688,12 +689,133 @@ class TestExtractTermsUrl:
             (["not", "a", "dict"], None),  # document is a list
             ("just a string", None),  # document is a scalar
             (None, None),  # no document
+            ({"termsUrl": "http://example.test/terms"}, None),  # not https
+            ({"termsUrl": "javascript:alert(1)"}, None),  # not a web URL
+            ({"termsUrl": "https:///terms"}, None),  # no host
+            ({"termsUrl": "example.test/terms"}, None),  # no scheme
+            ({"termsUrl": "https://example.test/a b"}, None),  # inner space
+            ({"termsUrl": "https://example.test/\x1b[31m"}, None),  # control char
+            ({"termsUrl": "https://example.test/\u202e"}, None),  # bidi override
+            ({"termsUrl": "https://[::1/terms"}, None),  # unparseable host
+            ({"termsUrl": "https://example.test/" + "a" * 2027}, "https://example.test/" + "a" * 2027),  # at the cap
+            ({"termsUrl": "https://example.test/" + "a" * 2028}, None),  # over the cap
         ],
         ids=[
             "present", "stripped", "absent", "empty", "whitespace", "null",
             "int", "list_value", "dict_value", "list_document", "scalar_document", "none",
+            "http", "javascript", "no_host", "no_scheme", "inner_space",
+            "control_char", "bidi_override", "bad_ipv6", "at_cap", "over_cap",
         ],
     )
     def test_extract_terms_url(self, metadata: Any, expected: Optional[str]) -> None:
-        """Only a non-blank string on a JSON object is returned; everything else is None."""
+        """Only a plain https link on a JSON object is returned; everything else is None."""
         assert ToolManager.extract_terms_url(metadata) == expected
+
+
+IDENTIFICATION = "mech_client.domain.identification"
+GNOSIS_MECH = "0xC05e7412439bD7e91730a6880E18d5D5873F632C"
+GNOSIS_NAME = "c05e7412439bd7e91730a6880e18d5d5873f632c-100.mech.valory.xyz"
+OPERATOR_TERMS = "https://operator.test/terms"
+
+
+def _resolver(outcome: str) -> Any:
+    """
+    Build a getaddrinfo stand-in for one identification outcome.
+
+    :param outcome: "valory", "not_valory" or "broken"
+    :return: A side effect for socket.getaddrinfo
+    """
+
+    def getaddrinfo(name: str, _port: Any) -> list:
+        if outcome == "broken":
+            raise OSError("network unreachable")
+        if outcome == "valory" and name == GNOSIS_NAME:
+            return [("ok",)]
+        raise socket.gaierror(socket.EAI_NONAME, "not known")
+
+    return getaddrinfo
+
+
+class TestTermsReport:
+    """terms_report says whose terms apply, keyed on the manager's own chain."""
+
+    @pytest.fixture
+    def manager(self) -> ToolManager:
+        """A manager on Gnosis, with no network behind it."""
+        with (
+            patch("mech_client.domain.tools.manager.EthereumApi"),
+            patch(
+                "mech_client.domain.tools.manager.get_mech_config",
+                return_value=create_mock_mech_config(),
+            ),
+        ):
+            return ToolManager(chain_config="gnosis")
+
+    @pytest.mark.parametrize(
+        ("outcome", "metadata", "expected"),
+        [
+            (
+                "valory",
+                {"termsUrl": OPERATOR_TERMS},
+                {
+                    "valory_operated": True,
+                    "terms": VALORY_TERMS_NOTICE,
+                    "terms_url": OPERATOR_TERMS,
+                },
+            ),
+            ("valory", {}, {"valory_operated": True, "terms": VALORY_TERMS_NOTICE}),
+            (
+                "not_valory",
+                {"termsUrl": OPERATOR_TERMS},
+                {"valory_operated": False, "terms_url": OPERATOR_TERMS},
+            ),
+            ("not_valory", None, {"valory_operated": False}),
+            (
+                "broken",
+                {"termsUrl": OPERATOR_TERMS},
+                {
+                    "valory_operated": False,
+                    "identification_note": IDENTIFICATION_NOTE,
+                    "terms_url": OPERATOR_TERMS,
+                },
+            ),
+            (
+                "not_valory",
+                {"termsUrl": "http://operator.test/terms"},
+                {"valory_operated": False},
+            ),
+        ],
+        ids=[
+            "valory_with_link",
+            "valory_without_link",
+            "other_with_link",
+            "other_without_document",
+            "check_failed",
+            "invalid_link_dropped",
+        ],
+    )
+    def test_report(
+        self,
+        manager: ToolManager,
+        outcome: str,
+        metadata: Any,
+        expected: Dict[str, Any],
+    ) -> None:
+        """Only a confirmed Valory mech gets the statement; a published link always passes."""
+        with (
+            patch(f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=_resolver(outcome)),
+            patch(f"{IDENTIFICATION}.logger"),
+        ):
+            assert manager.terms_report(GNOSIS_MECH, metadata) == expected
+
+    def test_the_chain_comes_from_the_manager(self, manager: ToolManager) -> None:
+        """The caller passes no chain; the lookup uses the manager's chain id."""
+        looked_up: list = []
+
+        def getaddrinfo(name: str, _port: Any) -> list:
+            looked_up.append(name)
+            raise socket.gaierror(socket.EAI_NONAME, "not known")
+
+        with patch(f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=getaddrinfo):
+            manager.terms_report(GNOSIS_MECH, None)
+        assert looked_up == [GNOSIS_NAME]

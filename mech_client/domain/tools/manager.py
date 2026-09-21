@@ -21,11 +21,18 @@
 
 import json
 import logging
+import unicodedata
 from dataclasses import asdict
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import requests
 from aea_ledger_ethereum import EthereumApi
+from mech_client.domain.identification import (
+    Identification,
+    VALORY_TERMS_NOTICE,
+    identify,
+)
 from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
@@ -37,6 +44,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 10
 TOOLS = "tools"
 TOOL_METADATA = "toolMetadata"
+# A terms link comes from an operator's own document, so it is only passed on
+# when it is a plain https URL of a sane length.
+TERMS_URL_MAX_LENGTH = 2048
+IDENTIFICATION_NOTE = "Could not check whether Valory operates this mech."
 
 
 class ToolManager:
@@ -126,6 +137,10 @@ class ToolManager:
         """
         Read the ``termsUrl`` field from an already fetched metadata document.
 
+        The document is the operator's own, so the value is only returned when
+        it is an https URL with a host, no whitespace or control characters,
+        and at most TERMS_URL_MAX_LENGTH characters.
+
         :param metadata: The parsed metadata document, or None
         :return: The stripped terms URL, or None
         """
@@ -134,7 +149,50 @@ class ToolManager:
         terms_url = metadata.get("termsUrl")
         if not isinstance(terms_url, str):
             return None
-        return terms_url.strip() or None
+        terms_url = terms_url.strip()
+        if not terms_url or len(terms_url) > TERMS_URL_MAX_LENGTH:
+            return None
+        if any(
+            char.isspace() or unicodedata.category(char).startswith("C")
+            for char in terms_url
+        ):
+            return None
+        try:
+            parsed = urlparse(terms_url)
+            host = parsed.hostname
+        except ValueError:
+            return None
+        if parsed.scheme != "https" or not host:
+            return None
+        return terms_url
+
+    def terms_report(self, mech_address: str, metadata: Any) -> Dict[str, Any]:
+        """
+        Say whose terms a request to this mech falls under.
+
+        Keeps the legal rule in one place: only a mech identified as Valory
+        operated gets the Valory terms statement. The operator's own link is
+        passed on as published, not endorsed.
+
+        :param mech_address: The address of the mech about to be called
+        :param metadata: The mech's already fetched metadata document, or None
+        :return: ``valory_operated`` always; ``terms`` for a Valory mech;
+            ``identification_note`` when the check could not tell; and
+            ``terms_url`` when the operator published a valid link
+        """
+        chain_id = self.mech_config.ledger_config.chain_id
+        identification = identify(mech_address, chain_id)
+        report: Dict[str, Any] = {
+            "valory_operated": identification is Identification.VALORY
+        }
+        if identification is Identification.VALORY:
+            report["terms"] = VALORY_TERMS_NOTICE
+        elif identification is Identification.UNKNOWN:
+            report["identification_note"] = IDENTIFICATION_NOTE
+        terms_url = self.extract_terms_url(metadata)
+        if terms_url:
+            report["terms_url"] = terms_url
+        return report
 
     def get_tools(self, service_id: int) -> Optional[ToolsForMarketplaceMech]:
         """

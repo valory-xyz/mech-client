@@ -212,31 +212,29 @@ class MarketplaceService(
         # Create IPFS client
         self.ipfs_client = IPFSClient()
 
-    def _log_terms_notice(self, service_id: int, metadata: Any) -> None:
+    def _log_terms_notice(self, mech_address: str, metadata: Any) -> None:
         """
-        Log the mech's terms link before any request is signed.
+        State whose terms apply before the request is signed.
 
-        :param service_id: The service ID of the mech about to be called
-        :param metadata: The mech's metadata document, or None if unreadable
+        A Valory mech gets the approved Valory notice. Any other mech, or one
+        the check could not identify, gets the terms link its operator
+        published, passed on as published: this client states no terms on
+        that operator's behalf. A check that could not complete is logged as
+        a warning.
+
+        :param mech_address: The address of the mech about to be called
+        :param metadata: The mech's already fetched metadata document, or None
         """
-        if metadata is None:
-            logger.warning(
-                f"Could not read the metadata for service {service_id} to check "
-                f"for a terms link; the mech operator may still have published "
-                f"terms."
-            )
+        report = self.tool_manager.terms_report(mech_address, metadata)
+        if report["valory_operated"]:
+            logger.info(report["terms"])
             return
-        terms_url = self.tool_manager.extract_terms_url(metadata)
+        note = report.get("identification_note")
+        if note:
+            logger.warning(note)
+        terms_url = report.get("terms_url")
         if terms_url:
-            logger.info(
-                f"By sending this request you agree to the mech operator's "
-                f"terms: {terms_url}"
-            )
-        else:
-            logger.info(
-                f"The mech for service {service_id} publishes no terms link "
-                f"in its metadata."
-            )
+            logger.info(f"The operator of this Mech publishes terms at {terms_url}")
 
     async def send_request(  # pylint: disable=too-many-arguments,too-many-locals
         self,
@@ -296,7 +294,7 @@ class MarketplaceService(
         # Response timeout (5 minutes, matching historic default)
         response_timeout = 300
 
-        self._log_terms_notice(service_id, metadata)
+        self._log_terms_notice(priority_mech_address, metadata)
 
         # Branch between on-chain and off-chain flows
         if use_offchain:
