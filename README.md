@@ -91,7 +91,7 @@ Learn more about mech marketplace [here](https://olas.network/mech-marketplace)
 
 Each Mech is run by its own operator.
 
-Mechs operated by Valory are subject to the [Valory Mech Terms](https://www.valory.xyz/terms/mechs). When you send a request to one, `mechx request` states this before anything is signed. It says nothing for a Mech run by someone else, because those terms are that operator's to state, not ours. The terms link a Mech publishes in the `termsUrl` field of its on-chain metadata is shown in the Terms column of `mechx mech list`, as published and not endorsed, when it is a plain `https` link.
+Mechs operated by Valory are subject to the [Valory Mech Terms](https://www.valory.xyz/terms/mechs). When you send a request to one, `mechx request` states this before anything is signed. For a Mech run by someone else, or one the check could not identify, it shows the terms link that Mech's operator published, as published: those terms are that operator's to state, not ours. A check that could not complete is logged as a warning. The terms link a Mech publishes in the `termsUrl` field of its on-chain metadata is shown in the Terms column of `mechx mech list`, as published and not endorsed, when it is a plain `https` link.
 
 **Checking who operates a Mech.** Valory creates one DNS record under `mech.valory.xyz` for each Mech it operates, so a Mech is operated by Valory if its own name there resolves. The name is the Mech address without `0x`, a hyphen, then the chain id:
 

@@ -47,10 +47,7 @@ TOOL_METADATA = "toolMetadata"
 # A terms link comes from an operator's own document, so it is only passed on
 # when it is a plain https URL of a sane length.
 TERMS_URL_MAX_LENGTH = 2048
-IDENTIFICATION_NOTE = (
-    "Could not check whether Valory operates this mech, so no terms are "
-    "stated for it."
-)
+IDENTIFICATION_NOTE = "Could not check whether Valory operates this mech."
 
 
 class ToolManager:

@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔧 Changed
 
-- Nothing is printed for a Mech operated by someone else. Those terms are that operator's to state. The `termsUrl` a Mech publishes is still shown in the Terms column of `mechx mech list`.
+- For a Mech operated by someone else, or one the check could not identify, `mechx request` shows the terms link the operator published in `termsUrl`, as published, instead of stating that sending the request means agreeing to it. Those terms are that operator's to state. The link is also still shown in the Terms column of `mechx mech list`.
 - `ToolManager.extract_terms_url()` only returns an `https` link with a host, no whitespace or control characters, and at most 2048 characters. Anything else in an operator's `termsUrl` is dropped, including in the Terms column of `mechx mech list`.
 - A lookup that fails or times out now logs a warning; only a name that does not exist stays at debug level. Lookups share one pool capped at 8 threads, and a lookup still queued when its caller gives up is cancelled.
 
