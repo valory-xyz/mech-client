@@ -118,7 +118,7 @@ The report is built from the Mech's published manifest and the marketplace subgr
 - **Delivery record.** `receivedRequests`, `selfDeliveredFromReceived` and `deliveredByOthersFromReceived` from the marketplace subgraph, plus the Mech's age from its creation block. The counters cover requests made on-chain and off-chain requests the Mech settled on-chain, and cannot be split by path. An off-chain request that was never delivered appears nowhere on-chain.
 - **Payment.** The payment method (native, OLAS, USDC, or a subscription), with no price. The Mech contract quotes the charge at request time, and its maximum delivery rate is only a ceiling a Mech may charge less than.
 
-`mechx mech info` prints the report as JSON. For library users, `ToolManager.mech_report(mech_address, metadata)` returns the same report as data, a superset of `terms_report`. The subgraph reads a report makes time out after 10 seconds each, and each read of the domain proof after 5.
+`mechx mech info` prints the report as JSON. For library users, `ToolManager.mech_report(mech_address, metadata)` returns the same report as data, a superset of `terms_report`. `ToolManager.mech_report_or_terms(mech_address, metadata)` is the one to call before paying: it falls back to the terms alone, with `report_note`, when the manifest or the Mech's record cannot be read. The subgraph reads a report makes time out after 10 seconds each, and each read of the domain proof after 5.
 
 The service registry subgraph has a default endpoint per chain and can be overridden with `MECHX_REGISTRY_SUBGRAPH_URL`.
 

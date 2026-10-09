@@ -35,6 +35,7 @@ from mech_client.domain.operator import (
 from mech_client.domain.tools.manager import (
     DELIVERY_NOTE,
     DOMAIN_CHECK_FAILED_NOTE,
+    MANIFEST_UNREADABLE_NOTE,
     NAME_NOTE,
     IDENTIFICATION_NOTE,
     PAYMENT_NOTE,
@@ -1125,6 +1126,82 @@ class TestMechReport:
             report = manager.mech_report(GNOSIS_MECH, {}, _record())
         assert report["valory_operated"] is True
         assert report["terms"] == VALORY_TERMS_NOTICE
+
+
+class TestMechReportOrTerms:
+    """Before paying, the terms always come back; the rest only when it can be read."""
+
+    @pytest.fixture
+    def manager(self) -> ToolManager:
+        """A manager on Gnosis, with no network behind it."""
+        with (
+            patch(f"{MANAGER}.EthereumApi"),
+            patch(
+                f"{MANAGER}.get_mech_config",
+                return_value=create_mock_mech_config(),
+            ),
+        ):
+            return ToolManager(chain_config="gnosis")
+
+    @pytest.fixture(autouse=True)
+    def offline(self) -> Any:
+        """A resolver that says the mech is not Valory operated."""
+        with patch(
+            f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=_resolver("not_valory")
+        ):
+            yield
+
+    @pytest.mark.parametrize(
+        "metadata", [None, [], "manifest"], ids=["none", "list", "string"]
+    )
+    def test_an_unreadable_manifest_gives_the_terms_and_a_note(
+        self, manager: ToolManager, metadata: Any
+    ) -> None:
+        """No manifest means no operator or record, but the terms and why."""
+        with patch(f"{MANAGER}.query_mech_record") as query:
+            report = manager.mech_report_or_terms(GNOSIS_MECH, metadata)
+        assert report == {
+            "valory_operated": False,
+            "report_note": MANIFEST_UNREADABLE_NOTE,
+        }
+        query.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "error",
+        [SubgraphError("not indexed"), TimeoutError(), RuntimeError("transport")],
+        ids=["subgraph_error", "timeout", "transport"],
+    )
+    def test_an_unreadable_record_gives_the_terms_and_a_note(
+        self, manager: ToolManager, error: Exception
+    ) -> None:
+        """An indexer failure keeps the terms, including the operator's link."""
+        with (
+            patch(f"{MANAGER}.query_mech_record", side_effect=error),
+            patch(f"{MANAGER}.claimed_operator") as claim,
+            patch(f"{MANAGER}.logger") as logger,
+        ):
+            report = manager.mech_report_or_terms(GNOSIS_MECH, OPERATOR_MANIFEST)
+        assert report["valory_operated"] is False
+        assert report["terms_url"] == OPERATOR_TERMS
+        assert type(error).__name__ in report["report_note"]
+        assert "only the terms are reported" in report["report_note"]
+        assert "delivery" not in report and "operator" not in report
+        claim.assert_not_called()
+        logger.warning.assert_called_once()
+
+    def test_a_readable_record_gives_the_full_report(self, manager: ToolManager) -> None:
+        """With the record in hand it is the full report, queried once."""
+        with (
+            patch(f"{MANAGER}.query_mech_record", return_value=_record()) as query,
+            patch(f"{MANAGER}.claimed_operator", return_value=None),
+        ):
+            report = manager.mech_report_or_terms(
+                GNOSIS_MECH, {"termsUrl": OPERATOR_TERMS}
+            )
+        query.assert_called_once_with("gnosis", GNOSIS_MECH)
+        assert report["delivery"]["received_requests"] == 1020284
+        assert report["payment"]["type"] == "native"
+        assert "report_note" not in report
 
 
 class TestDeliveryRecord:

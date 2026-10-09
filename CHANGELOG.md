@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `benchmarks`: each tool's benchmark link, as the operator's claim, with `benchmark_note`. No figure is reported.
   - `delivery`: `received_requests`, `self_delivered` and `delivered_by_others` from the marketplace subgraph, `since` and `age_days` from the Mech's creation block, and a `note` that the counts cover on-chain and settled off-chain requests, not split by path.
   - `payment`: the payment method, with no price. The contract quotes the charge at request time, and `maxDeliveryRate` is only a ceiling.
+- `ToolManager.mech_report_or_terms(mech_address, metadata)` is the report to read before paying: `mech_report` when the manifest and the mech's record can be read, otherwise the terms alone with `report_note` saying why, so an unreadable manifest or indexer never hides the terms or blocks a request. `mech_report` itself stays fail-closed.
 - A service registry subgraph endpoint per chain, `registry_subgraph_url`, with the `MECHX_REGISTRY_SUBGRAPH_URL` override. The ERC-8004 agent id is read from it; it is not the Olas service id except by coincidence.
 - `ManifestError`, raised when a Mech's manifest cannot be read. The report fails closed: an unreadable manifest gives no report.
 
