@@ -332,22 +332,6 @@ def _query_sent(mock_gql: MagicMock) -> str:
 MECH_ADDRESS = "0xC05e7412439bD7e91730a6880E18d5D5873F632C"
 
 
-class TestQueryMechsCarriesTheDeliveryRecord:
-    """The listing query asks for the per-mech counters the table shows."""
-
-    @patch("mech_client.infrastructure.subgraph.client.gql")
-    def test_counters_are_requested(self, mock_gql: MagicMock) -> None:
-        """All three counters are part of the listing selection."""
-        _client_with({"meches": []}).query_mechs()
-        query = _query_sent(mock_gql)
-        for field in (
-            "receivedRequests",
-            "selfDeliveredFromReceived",
-            "deliveredByOthersFromReceived",
-        ):
-            assert field in query
-
-
 class TestQueryMech:
     """One mech's record and creation row, filtered in the indexer's own dialect."""
 
@@ -397,32 +381,6 @@ class TestQueryMech:
         client = _client_with({})
         with pytest.raises(ValueError, match="0x hex address"):
             client.query_mech(address)
-        client._client.execute.assert_not_called()  # pylint: disable=protected-access
-
-
-class TestQueryMechCreations:
-    """Several mechs' creation rows in one request."""
-
-    @patch("mech_client.infrastructure.subgraph.client.gql")
-    def test_lists_every_address_lowercased(self, mock_gql: MagicMock) -> None:
-        """The ``mech_in`` filter names each address, lowercased, in order."""
-        other = "0x" + "A" * 40
-        result = {"createMeches": []}
-        assert (
-            _client_with(result).query_mech_creations([MECH_ADDRESS, other]) == result
-        )
-        query = _query_sent(mock_gql)
-        assert (
-            f'createMeches(where: {{mech_in: ["{MECH_ADDRESS.lower()}", "{other.lower()}"]}})'
-            in query
-        )
-        assert "blockTimestamp" in query
-
-    def test_one_bad_address_rejects_the_whole_request(self) -> None:
-        """No query goes out with a non-address in the list."""
-        client = _client_with({})
-        with pytest.raises(ValueError, match="0x hex address"):
-            client.query_mech_creations([MECH_ADDRESS, "0xnope"])
         client._client.execute.assert_not_called()  # pylint: disable=protected-access
 
 

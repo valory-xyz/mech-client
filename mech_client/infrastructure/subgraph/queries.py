@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional
 
 from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.config.loader import get_mech_config
-from mech_client.infrastructure.subgraph.client import DEFAULT_TIMEOUT, SubgraphClient
+from mech_client.infrastructure.subgraph.client import SubgraphClient
 from mech_client.utils.errors import SubgraphError
 
 # Mapping of mech factory addresses to mech types per chain
@@ -62,7 +62,7 @@ CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE = {
 
 RESULTS_LIMIT = 20
 # Reads a mech report makes before a request: kept short so a stalled indexer
-# cannot hold the request up. The listing keeps the client default.
+# cannot hold the request up.
 REPORT_QUERY_TIMEOUT = 10.0
 # Fields a mech record must carry, and the error raised when it does not.
 RECORD_DECODE_ERRORS = (AttributeError, IndexError, KeyError, TypeError, ValueError)
@@ -90,14 +90,12 @@ class MechRecord:
     metadata_hash: Optional[str]
 
 
-def _subgraph_client(
-    chain_config: str, timeout: float = DEFAULT_TIMEOUT
-) -> SubgraphClient:
+def _subgraph_client(chain_config: str, **client_options: Any) -> SubgraphClient:
     """
     Build the marketplace client for a chain.
 
     :param chain_config: Chain configuration name
-    :param timeout: Seconds the whole query may take
+    :param client_options: Extra SubgraphClient arguments, such as ``timeout``
     :return: A client on the chain's marketplace indexer
     :raises SubgraphError: If the chain has no subgraph URL
     """
@@ -119,7 +117,9 @@ def _subgraph_client(
         )
 
     return SubgraphClient(
-        mech_config.subgraph_url, dialect=mech_config.subgraph_dialect, timeout=timeout
+        mech_config.subgraph_url,
+        dialect=mech_config.subgraph_dialect,
+        **client_options,
     )
 
 
@@ -190,9 +190,9 @@ def query_mech_record(chain_config: str, mech_address: str) -> MechRecord:
         indexed there, or the record cannot be read
     """
     try:
-        response = _subgraph_client(chain_config, REPORT_QUERY_TIMEOUT).query_mech(
-            mech_address
-        )
+        response = _subgraph_client(
+            chain_config, timeout=REPORT_QUERY_TIMEOUT
+        ).query_mech(mech_address)
     except TimeoutError as error:
         raise SubgraphError(
             f"The {chain_config} subgraph did not answer within "
@@ -223,36 +223,6 @@ def query_mech_record(chain_config: str, mech_address: str) -> MechRecord:
         raise SubgraphError(
             f"Malformed mech record from the {chain_config} subgraph: {error}"
         ) from error
-
-
-def query_mech_creations(
-    chain_config: str, mech_addresses: List[str]
-) -> Dict[str, datetime]:
-    """
-    Query when several mechs were created, in one request.
-
-    :param chain_config: Chain configuration name
-    :param mech_addresses: The mech contract addresses
-    :return: Creation time (UTC) by lowercase address; a mech the indexer has
-        no creation row for is left out
-    :raises SubgraphError: If the chain has no subgraph URL, or a row cannot be read
-    """
-    if not mech_addresses:
-        return {}
-    response = _subgraph_client(
-        chain_config, REPORT_QUERY_TIMEOUT
-    ).query_mech_creations(mech_addresses)
-    created_at: Dict[str, datetime] = {}
-    try:
-        for row in response["createMeches"]:  # pylint: disable=unsubscriptable-object
-            created_at[str(row["mech"]).lower()] = datetime.fromtimestamp(
-                int(row["blockTimestamp"]), tz=timezone.utc
-            )
-    except RECORD_DECODE_ERRORS as error:
-        raise SubgraphError(
-            f"Malformed mech creation row from the {chain_config} subgraph: {error}"
-        ) from error
-    return created_at
 
 
 def query_erc8004_agent_id(chain_config: str, service_id: int) -> Optional[int]:

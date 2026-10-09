@@ -20,18 +20,12 @@
 """Tests for the operator claim and its domain check."""
 
 import json
-import socket
-import threading
-import time
-from contextlib import contextmanager
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-import urllib3
 from mech_client.domain.operator import (
-    BENCHMARK_WINDOWS,
     IDENTITY_REGISTRY,
     AGENT_ID_MAX_DIGITS,
     NO_AGENT_ID_NOTE,
@@ -42,7 +36,7 @@ from mech_client.domain.operator import (
     PROOF_NOT_FOUND_NOTE,
     PROOF_REDIRECTED_NOTE,
     PROOF_UNAVAILABLE_NOTE,
-    Benchmark,
+    TEXT_MAX_LENGTH,
     DomainVerification,
     Operator,
     ProofStatus,
@@ -50,7 +44,6 @@ from mech_client.domain.operator import (
     fetch_domain_proof,
     hostname,
     https_url,
-    _fetch_proof,
     proof_matches,
     proof_url,
     read_benchmarks,
@@ -86,39 +79,10 @@ def _response(
     response.__enter__.return_value = response
     if raw is None:
         raw = b"not json" if bad_json else json.dumps(body).encode()
-    response.raw.read1.side_effect = [
+    response.iter_content.return_value = [
         raw[i : i + PROOF_CHUNK_BYTES] for i in range(0, len(raw), PROOF_CHUNK_BYTES)
-    ] + [b""]
+    ]
     return response
-
-
-@contextmanager
-def _dripping_server(interval: float) -> Iterator[str]:
-    """Serve a 200 whose body arrives one byte per ``interval``, until closed."""
-    listener = socket.socket()
-    listener.bind(("127.0.0.1", 0))
-    listener.listen(1)
-    stop = threading.Event()
-
-    def serve() -> None:
-        conn, _ = listener.accept()
-        conn.recv(4096)
-        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n")
-        try:
-            while not stop.wait(interval):
-                conn.sendall(b" ")
-        except OSError:
-            pass
-        conn.close()
-
-    thread = threading.Thread(target=serve, daemon=True)
-    thread.start()
-    try:
-        yield f"http://127.0.0.1:{listener.getsockname()[1]}/proof"
-    finally:
-        stop.set()
-        thread.join(timeout=5)
-        listener.close()
 
 
 class TestCleanText:
@@ -137,8 +101,8 @@ class TestCleanText:
             ("Val\x00ory", None),
             ("Valory\n", "Valory"),
             ("Val\nory", None),
-            ("x" * 201, None),
-            ("x" * 200, "x" * 200),
+            ("x" * (TEXT_MAX_LENGTH + 1), None),
+            ("x" * TEXT_MAX_LENGTH, "x" * TEXT_MAX_LENGTH),
         ],
         ids=[
             "plain",
@@ -343,10 +307,10 @@ class TestReadOperator:
 
 
 class TestReadBenchmarks:
-    """Each tool's benchmark is a link with a metric and window, never a figure."""
+    """Each tool's benchmark is its https link, passed on as the operator's claim."""
 
-    def test_reads_one_benchmark_per_valid_tool(self) -> None:
-        """Valid blocks are keyed by tool; a published value is dropped."""
+    def test_reads_the_link_of_each_tool(self) -> None:
+        """The link is kept; any metric, window or figure beside it is not reported."""
         manifest = {
             "toolMetadata": {
                 "tool-a": {
@@ -357,31 +321,13 @@ class TestReadBenchmarks:
                         "url": BENCHMARK_URL,
                     }
                 },
-                "tool-b": {
-                    "benchmark": {
-                        "metric": "brier",
-                        "window": "all",
-                        "url": BENCHMARK_URL,
-                    }
-                },
+                "tool-b": {"benchmark": {"url": f"  {BENCHMARK_URL}/b  "}},
             }
         }
         assert read_benchmarks(manifest) == {
-            "tool-a": Benchmark(metric="accuracy", window="30d", url=BENCHMARK_URL),
-            "tool-b": Benchmark(metric="brier", window="all", url=BENCHMARK_URL),
+            "tool-a": BENCHMARK_URL,
+            "tool-b": f"{BENCHMARK_URL}/b",
         }
-
-    @pytest.mark.parametrize("window", BENCHMARK_WINDOWS)
-    def test_every_window_is_accepted(self, window: str) -> None:
-        """The four spec windows all pass."""
-        manifest = {
-            "toolMetadata": {
-                "t": {
-                    "benchmark": {"metric": "m", "window": window, "url": BENCHMARK_URL}
-                }
-            }
-        }
-        assert read_benchmarks(manifest)["t"].window == window
 
     @pytest.mark.parametrize(
         "manifest",
@@ -391,64 +337,12 @@ class TestReadBenchmarks:
             {"toolMetadata": ["t"]},
             {"toolMetadata": {"t": None}},
             {"toolMetadata": {"t": {}}},
-            {"toolMetadata": {"t": {"benchmark": "see site"}}},
-            {
-                "toolMetadata": {
-                    "t": {"benchmark": {"window": "30d", "url": BENCHMARK_URL}}
-                }
-            },
-            {
-                "toolMetadata": {
-                    "t": {
-                        "benchmark": {
-                            "metric": "",
-                            "window": "30d",
-                            "url": BENCHMARK_URL,
-                        }
-                    }
-                }
-            },
-            {
-                "toolMetadata": {
-                    "t": {
-                        "benchmark": {
-                            "metric": "m",
-                            "window": "1y",
-                            "url": BENCHMARK_URL,
-                        }
-                    }
-                }
-            },
-            {"toolMetadata": {"t": {"benchmark": {"metric": "m", "window": "30d"}}}},
-            {
-                "toolMetadata": {
-                    "t": {
-                        "benchmark": {
-                            "metric": "m",
-                            "window": "30d",
-                            "url": "http://x.test",
-                        }
-                    }
-                }
-            },
-            {
-                "toolMetadata": {
-                    "t": {
-                        "benchmark": {"metric": "m", "window": "30d", "url": "https://"}
-                    }
-                }
-            },
-            {
-                "toolMetadata": {
-                    5: {
-                        "benchmark": {
-                            "metric": "m",
-                            "window": "30d",
-                            "url": BENCHMARK_URL,
-                        }
-                    }
-                }
-            },
+            {"toolMetadata": {"t": {"benchmark": BENCHMARK_URL}}},
+            {"toolMetadata": {"t": {"benchmark": {}}}},
+            {"toolMetadata": {"t": {"benchmark": {"url": "http://x.test"}}}},
+            {"toolMetadata": {"t": {"benchmark": {"url": "https://"}}}},
+            {"toolMetadata": {"t": {"benchmark": {"url": 7}}}},
+            {"toolMetadata": {5: {"benchmark": {"url": BENCHMARK_URL}}}},
         ],
         ids=[
             "no_tool_metadata",
@@ -456,18 +350,18 @@ class TestReadBenchmarks:
             "list_tool_metadata",
             "null_entry",
             "no_benchmark",
-            "benchmark_string",
-            "no_metric",
-            "blank_metric",
-            "bad_window",
+            "benchmark_is_a_bare_string",
             "no_url",
             "http_url",
             "scheme_only_url",
+            "url_not_string",
             "tool_not_string",
         ],
     )
-    def test_unusable_blocks_are_left_out(self, manifest: Dict[str, Any]) -> None:
-        """A tool with an unusable block is absent rather than partial."""
+    def test_a_tool_without_an_https_link_is_left_out(
+        self, manifest: Dict[str, Any]
+    ) -> None:
+        """No usable link means no entry for that tool."""
         assert read_benchmarks(manifest) == {}
 
 
@@ -521,68 +415,20 @@ class TestFetchDomainProof:
             outcome = fetch_domain_proof(DOMAIN)
         assert outcome.status is ProofStatus.NOT_FOUND
 
-    def test_a_worker_past_its_deadline_stops_reading(self) -> None:
-        """The worker checks the deadline after every read and gives up by itself."""
-        response = _response(200, {"registrations": [_registration()]})
-        with (
-            patch(f"{MODULE}.requests.get", return_value=response),
-            patch(f"{MODULE}.logger"),
-        ):
-            outcome = _fetch_proof(PROOF_URL, deadline=time.monotonic() - 1)
-        assert outcome.status is ProofStatus.UNAVAILABLE
-        assert response.raw.read1.call_count == 1
-
-    def test_the_caller_stops_waiting_at_the_timeout(self) -> None:
-        """However long the fetch blocks, the caller returns at the timeout."""
-        release = threading.Event()
-
-        def blocked_get(*_args: Any, **_kwargs: Any) -> MagicMock:
-            release.wait(10)
-            return _response(200, {"registrations": [_registration()]})
-
-        try:
-            with (
-                patch(f"{MODULE}.PROOF_FETCH_TIMEOUT", 0.2),
-                patch(f"{MODULE}.requests.get", side_effect=blocked_get),
-                patch(f"{MODULE}.logger") as logger,
-            ):
-                start = time.monotonic()
-                outcome = fetch_domain_proof(DOMAIN)
-                elapsed = time.monotonic() - start
-        finally:
-            release.set()
-        assert outcome.status is ProofStatus.UNAVAILABLE
-        assert elapsed < 2
-        logger.warning.assert_called_once()
-
-    def test_a_body_that_trickles_in_is_cut_off_at_the_timeout(self) -> None:
-        """A real server sending a byte at a time cannot hold the caller past the limit."""
-        with (
-            _dripping_server(interval=0.1) as url,
-            patch(f"{MODULE}.proof_url", return_value=url),
-            patch(f"{MODULE}.PROOF_FETCH_TIMEOUT", 1),
-            patch(f"{MODULE}.logger"),
-        ):
-            start = time.monotonic()
-            outcome = fetch_domain_proof(DOMAIN)
-            elapsed = time.monotonic() - start
-        assert outcome.status is ProofStatus.UNAVAILABLE
-        assert elapsed < 3
-
     @pytest.mark.parametrize(
         "error",
         [
             requests.ConnectionError("reset"),
-            urllib3.exceptions.ProtocolError("reset"),
-            urllib3.exceptions.ReadTimeoutError(None, PROOF_URL, "slow"),
-            urllib3.exceptions.DecodeError("bad gzip"),
+            requests.exceptions.ChunkedEncodingError("cut"),
+            requests.exceptions.ContentDecodingError("bad gzip"),
+            requests.exceptions.ReadTimeout("slow"),
         ],
-        ids=["requests", "protocol", "read_timeout", "decode"],
+        ids=["connection", "chunked", "decode", "read_timeout"],
     )
     def test_a_read_that_breaks_midway_is_an_outage(self, error: Exception) -> None:
         """A transport failure while streaming the body is not a verdict."""
         response = _response(200, {})
-        response.raw.read1.side_effect = error
+        response.iter_content.side_effect = error
         with (
             patch(f"{MODULE}.requests.get", return_value=response),
             patch(f"{MODULE}.logger"),
@@ -633,7 +479,7 @@ class TestFetchDomainProof:
             outcome = fetch_domain_proof(DOMAIN)
         assert outcome.status is ProofStatus.REDIRECTED
         assert outcome.proof is None
-        response.raw.read1.assert_not_called()
+        response.iter_content.assert_not_called()
 
     @pytest.mark.parametrize(
         "status_code",

@@ -20,7 +20,7 @@
 """GraphQL subgraph client."""
 
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
@@ -117,9 +117,6 @@ class SubgraphClient:
             address
             mechFactory
             totalDeliveriesTransactions
-            receivedRequests
-            selfDeliveredFromReceived
-            deliveredByOthersFromReceived
             service {{
               id
               totalDeliveries
@@ -166,28 +163,6 @@ class SubgraphClient:
             }}
           }}
           createMeches({by_mech}) {{
-            blockTimestamp
-          }}
-        }}
-        """
-        return self.execute(query)
-
-    def query_mech_creations(self, addresses: List[str]) -> Dict[str, Any]:
-        """
-        Query the creation rows of several mechs in one request.
-
-        :param addresses: The mech contract addresses
-        :return: Query response with a ``createMeches`` list
-        :raises ValueError: If any address is not a 0x-prefixed 40-hex-digit address
-        """
-        for address in addresses:
-            if not _ADDRESS.fullmatch(address):
-                raise ValueError(f"address must be a 0x hex address, got {address!r}")
-        listed = ", ".join(f'"{address.lower()}"' for address in addresses)
-        query = f"""
-        query MechCreations {{
-          createMeches(where: {{mech_in: [{listed}]}}) {{
-            mech
             blockTimestamp
           }}
         }}

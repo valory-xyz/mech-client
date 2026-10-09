@@ -72,22 +72,11 @@ PAYMENT_NOTE = (
     "No price is quoted here: the mech contract quotes the charge at request "
     "time, and its maximum delivery rate is only a ceiling."
 )
-AGENT_ID_LOOKUP_NOTE = (
-    "The mech's ERC-8004 identity could not be looked up; the operator's "
-    "domain will be checked again next time."
-)
 NAME_NOTE = (
     "The name is the operator's own text and is not checked; only the domain is."
 )
 DOMAIN_CHECK_FAILED_NOTE = (
     "The operator's domain could not be checked; it will be checked again next time."
-)
-MANIFEST_UNREADABLE_NOTE = (
-    "The mech's manifest could not be read; only the terms are reported."
-)
-RECORD_UNAVAILABLE_NOTE = (
-    "The operator and delivery record could not be read ({reason}); only the "
-    "terms are reported."
 )
 PAYMENT_LABELS = {
     PaymentType.NATIVE: "native",
@@ -115,41 +104,6 @@ def payment_label(payment_type: str) -> str:
         return UNKNOWN_PAYMENT
 
 
-def _lookup_agent_id(chain_config: str, service_id: int) -> Optional[int]:
-    """
-    Look up a service's ERC-8004 agent id, treating any failure as not found.
-
-    :param chain_config: Chain configuration name
-    :param service_id: The Olas service id
-    :return: The agent id, or None when there is none or the lookup failed
-    """
-    # Any failure here leaves the domain unverified; it never withholds the report.
-    try:
-        return query_erc8004_agent_id(chain_config, service_id)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.warning(
-            f"Could not look up the ERC-8004 agent id of service {service_id} "
-            f"on {chain_config}: {exc}"
-        )
-        return None
-
-
-def _verify_domain(domain: str, chain_id: int, agent_id: int) -> DomainVerification:
-    """
-    Check the operator's domain, treating any failure as unverified.
-
-    :param domain: The operator domain from the manifest
-    :param chain_id: The chain the mech is deployed on
-    :param agent_id: The mech's ERC-8004 agent id
-    :return: Verified, or unverified with the reason
-    """
-    try:
-        return verify_domain(domain, chain_id, agent_id)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.warning(f"Could not check the operator domain {domain}: {exc}")
-        return DomainVerification(False, DOMAIN_CHECK_FAILED_NOTE)
-
-
 def claimed_operator(
     chain_config: str, chain_id: int, service_id: int, manifest: Dict[str, Any]
 ) -> Optional[Dict[str, Any]]:
@@ -170,11 +124,14 @@ def claimed_operator(
     operator = read_operator(manifest)
     if operator is None:
         return None
-    agent_id = _lookup_agent_id(chain_config, service_id)
-    if agent_id is None:
-        verification = DomainVerification(False, AGENT_ID_LOOKUP_NOTE)
-    else:
-        verification = _verify_domain(operator.domain, chain_id, agent_id)
+    # Any failure in the lookup or the check leaves the domain unverified; it
+    # never withholds the rest of the report.
+    try:
+        agent_id = query_erc8004_agent_id(chain_config, service_id)
+        verification = verify_domain(operator.domain, chain_id, agent_id)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning(f"Could not check the operator domain {operator.domain}: {exc}")
+        verification = DomainVerification(False, DOMAIN_CHECK_FAILED_NOTE)
     block: Dict[str, Any] = {
         "domain": operator.domain,
         "url": operator.url,
@@ -369,10 +326,7 @@ class ToolManager:
             report["operator"] = operator
         benchmarks = read_benchmarks(metadata)
         if benchmarks:
-            report["benchmarks"] = {
-                tool: {"metric": b.metric, "window": b.window, "url": b.url}
-                for tool, b in benchmarks.items()
-            }
+            report["benchmarks"] = benchmarks
             report["benchmark_note"] = BENCHMARK_NOTE
         report["delivery"] = self.delivery_record(record)
         report["payment"] = {
@@ -380,38 +334,6 @@ class ToolManager:
             "note": PAYMENT_NOTE,
         }
         return report
-
-    def mech_report_or_terms(self, mech_address: str, metadata: Any) -> Dict[str, Any]:
-        """
-        Report on a mech before paying it, falling back to the terms alone.
-
-        The terms decide what a request agrees to; the operator and record only
-        inform the choice. So an unreadable manifest or an indexer that cannot
-        be read never hides the terms or blocks the request: the report is the
-        terms with ``report_note`` saying why the rest is missing. Otherwise it
-        is ``mech_report``.
-
-        :param mech_address: The address of the mech about to be called
-        :param metadata: The mech's already fetched manifest document, or None
-        :return: ``mech_report``, or ``terms_report`` plus ``report_note``
-        """
-        if not isinstance(metadata, dict):
-            report = self.terms_report(mech_address, None)
-            report["report_note"] = MANIFEST_UNREADABLE_NOTE
-            return report
-        try:
-            record = query_mech_record(self.chain_config, mech_address)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            logger.warning(
-                f"Mech record unavailable for {mech_address} on "
-                f"{self.chain_config}: {exc}"
-            )
-            report = self.terms_report(mech_address, metadata)
-            report["report_note"] = RECORD_UNAVAILABLE_NOTE.format(
-                reason=type(exc).__name__
-            )
-            return report
-        return self.mech_report(mech_address, metadata, record=record)
 
     @staticmethod
     def delivery_record(record: MechRecord) -> Dict[str, Any]:

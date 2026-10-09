@@ -11,21 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
-- `mechx mech info --chain-config <chain> --address <mech>` reports who runs a Mech and how it has behaved, for a buyer deciding whether to pay: the operator domain the manifest claims and whether `https://<domain>/.well-known/agent-registration.json` lists the Mech's ERC-8004 agent id for the chain's identity registry, with the name the operator calls itself reported as an unchecked claim; the terms that apply; the delivery record (`receivedRequests`, `selfDeliveredFromReceived`, `deliveredByOthersFromReceived`) and the Mech's age from its creation block; the payment method; and the benchmark link the operator publishes per tool. It fails closed: an unreadable manifest gives no report, and a claim that could not be verified says so and why.
-- `ToolManager.mech_report(mech_address, metadata)` returns that report as data, a superset of `terms_report`: `operator` (`domain`, `url`, `domain_verified`, `verification_note` when unverified, `claimed_name` and `name_note`), `benchmarks` and `benchmark_note`, `delivery` and `payment`, in addition to the terms keys.
-- `mechx mech list` gains `Claimed Operator`, `Received`, `Self-delivered`, `By others` and `Since` columns, after the existing ones. The operator's domain proof is read with a size cap, and the caller waits at most 5 seconds of wall-clock time however slowly the host sends the body, and a creation-time query that fails leaves `Since` blank rather than failing the listing.
-- The domain proof must be served by the exact host the manifest names. A redirect is reported as such (`The operator's domain redirects the proof request to another host`), not as a missing proof. The subgraph reads a report makes time out after 10 seconds each.
-- `ToolManager.mech_report_or_terms(mech_address, metadata)` is the report to read before paying: `mech_report` when the manifest and the mech's record can be read, otherwise the terms alone with `report_note` saying why, so an unreadable manifest or indexer never hides the terms or blocks a request. It replaces the wrapper Pearl Connect carried.
+- `mechx mech info --chain-config <chain> --address <mech>` prints, as JSON, who runs a Mech and how it has behaved, for a buyer deciding whether to pay.
+- `ToolManager.mech_report(mech_address, metadata)` returns that report as data, a superset of `terms_report`:
+  - `operator`: the domain the manifest claims, as `domain` and `url`, with `domain_verified` true only when `https://<domain>/.well-known/agent-registration.json` lists the Mech's ERC-8004 agent id for the chain's identity registry, and `verification_note` when not. The name is `claimed_name`, with `name_note` saying it is not checked.
+  - `benchmarks`: each tool's benchmark link, as the operator's claim, with `benchmark_note`. No figure is reported.
+  - `delivery`: `received_requests`, `self_delivered` and `delivered_by_others` from the marketplace subgraph, `since` and `age_days` from the Mech's creation block, and a `note` that the counts cover on-chain and settled off-chain requests, not split by path.
+  - `payment`: the payment method, with no price. The contract quotes the charge at request time, and `maxDeliveryRate` is only a ceiling.
 - A service registry subgraph endpoint per chain, `registry_subgraph_url`, with the `MECHX_REGISTRY_SUBGRAPH_URL` override. The ERC-8004 agent id is read from it; it is not the Olas service id except by coincidence.
-- `ManifestError`, raised when a Mech's manifest cannot be read.
+- `ManifestError`, raised when a Mech's manifest cannot be read. The report fails closed: an unreadable manifest gives no report.
 
 ### 🔧 Changed
 
-- Benchmark links are reported as the operator's own claim and never with a figure, checked or not. No price is reported: the Mech contract quotes the charge at request time, and `maxDeliveryRate` is only a ceiling.
-- The delivery counters cover requests made on-chain and off-chain requests settled on-chain, and are labelled so; an off-chain request that was never delivered appears nowhere on-chain.
-- An operator domain must be a bare lowercase hostname and a manifest link an `https` URL with a host, parsed rather than prefix-tested; anything else is treated as unpublished. Manifest text is passed on as data and never followed.
-- `urllib3>=2.6.0,<3` is a direct dependency: the domain proof is streamed with `HTTPResponse.read1`, whose decompressed reads are bounded from 2.6.0.
-- `tomte` pinned to `0.7.3` from PyPI in CI, the dev group and the tox template pin.
+- The domain proof must be served by the exact host the manifest names. Redirects are not followed, and a redirect gets its own note. The body is capped at 64 KB, each read times out after 5 seconds, and a proof that could not be fetched is fetched again next time rather than remembered as a no.
+- An operator domain must be a bare lowercase hostname ending in a top-level domain, and a manifest link an `https` URL with a host, parsed rather than prefix-tested; anything else is treated as unpublished. Manifest text is passed on as data and never followed.
+- The subgraph reads a report makes time out after 10 seconds each.
 
 ## [0.23.3] - 2026-09-21
 

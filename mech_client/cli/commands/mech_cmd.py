@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
 #
-#   Copyright 2025-2026 Valory AG
+#   Copyright 2025 Valory AG
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -19,27 +19,23 @@
 
 """Mech command for managing and querying AI mechs on the marketplace."""
 
+import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import click
 import requests
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
 from mech_client.domain.identification import is_valory_operated
-from mech_client.domain.tools.manager import ToolManager, claimed_operator
+from mech_client.domain.tools.manager import ToolManager
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE, get_mech_config
 from mech_client.infrastructure.subgraph.queries import (
-    query_mech_creations,
     query_mech_record,
     query_mm_mechs_info,
 )
 from mech_client.utils.errors.exceptions import ManifestError
 from mech_client.utils.errors.handlers import handle_cli_errors
-from mech_client.utils.logger import get_logger
 from tabulate import tabulate  # type: ignore
-
-logger = get_logger(__name__)
 
 METADATA_FETCH_TIMEOUT = 10
 METADATA_FETCH_WORKERS = 8
@@ -48,39 +44,36 @@ METADATA_FETCH_WORKERS = 8
 # "not confirmed" covers both an independent mech and a lookup that failed,
 # and naming an operator we have not identified would be a claim we cannot make.
 VALORY_OPERATOR_LABEL = "Valory"
-VERIFIED_LABEL = "verified"
-UNVERIFIED_LABEL = "unverified"
 
 
-def _fetch_manifest(metadata_link: Optional[str]) -> Optional[Dict[str, Any]]:
-    """Read a mech's published manifest document.
+def _fetch_terms_url(metadata_link: Optional[str]) -> Optional[str]:
+    """Read the ``termsUrl`` field from a mech's published metadata.
 
-    :param metadata_link: gateway URL of the manifest document, or None
-    :return: the parsed document, or None when there is no link, the fetch
-        fails, or the body is not a JSON object
+    :param metadata_link: gateway URL of the metadata document, or None
+    :return: the terms URL, or None when there is no link, no field, or the
+        fetch fails
     """
     if not metadata_link:
         return None
+    try:
+        metadata = requests.get(metadata_link, timeout=METADATA_FETCH_TIMEOUT).json()
+    except (requests.RequestException, ValueError):
+        return None
+    return ToolManager.extract_terms_url(metadata)
+
+
+def _fetch_manifest(metadata_link: str) -> Optional[Dict[str, Any]]:
+    """Read a mech's published manifest document.
+
+    :param metadata_link: gateway URL of the manifest document
+    :return: the parsed document, or None when the fetch fails or the body is
+        not a JSON object
+    """
     try:
         document = requests.get(metadata_link, timeout=METADATA_FETCH_TIMEOUT).json()
     except (requests.RequestException, ValueError):
         return None
     return document if isinstance(document, dict) else None
-
-
-def _fetch_manifests(
-    metadata_links: List[Optional[str]],
-) -> List[Optional[Dict[str, Any]]]:
-    """Fetch the manifest for every metadata link, in parallel, order kept.
-
-    :param metadata_links: one gateway URL (or None) per mech, in table order
-    :return: one parsed document (or None) per mech, in the same order
-    """
-    if not metadata_links:
-        return []
-    workers = min(METADATA_FETCH_WORKERS, len(metadata_links))
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        return list(executor.map(_fetch_manifest, metadata_links))
 
 
 def _valory_operated_labels(addresses: List[str], chain_id: int) -> List[str]:
@@ -100,71 +93,17 @@ def _valory_operated_labels(addresses: List[str], chain_id: int) -> List[str]:
     return [VALORY_OPERATOR_LABEL if is_valory else "" for is_valory in confirmed]
 
 
-def _operator_claim_label(operator: Optional[Dict[str, Any]]) -> str:
-    """Render an operator claim for a table cell, domain first.
+def _fetch_terms_urls(metadata_links: List[Optional[str]]) -> List[Optional[str]]:
+    """Fetch the terms link for every metadata link, in parallel, order kept.
 
-    :param operator: the operator block of a report, or None
-    :return: ``domain (verified|unverified), calls itself "name"``, blank when
-        none is published
+    :param metadata_links: one gateway URL (or None) per mech, in table order
+    :return: one terms URL (or None) per mech, in the same order
     """
-    if operator is None:
-        return ""
-    status = VERIFIED_LABEL if operator["domain_verified"] else UNVERIFIED_LABEL
-    return f'{operator["domain"]} ({status}), calls itself "{operator["claimed_name"]}"'
-
-
-def _claimed_operator_labels(
-    chain_config: str,
-    chain_id: int,
-    service_ids: List[int],
-    manifests: List[Optional[Dict[str, Any]]],
-) -> List[str]:
-    """Label the operator each manifest claims, checked, in parallel, order kept.
-
-    :param chain_config: the chain configuration name
-    :param chain_id: the chain the listed mechs are deployed on
-    :param service_ids: one service id per row, in table order
-    :param manifests: one parsed manifest (or None) per row, in table order
-    :return: the claim label per row, blank where the manifest publishes none
-        or could not be read
-    """
-    if not manifests:
+    if not metadata_links:
         return []
-
-    def label(row: Any) -> str:
-        service_id, manifest = row
-        if manifest is None:
-            return ""
-        return _operator_claim_label(
-            claimed_operator(chain_config, chain_id, service_id, manifest)
-        )
-
-    workers = min(METADATA_FETCH_WORKERS, len(manifests))
+    workers = min(METADATA_FETCH_WORKERS, len(metadata_links))
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        return list(executor.map(label, zip(service_ids, manifests)))
-
-
-def _creation_dates(chain_config: str, addresses: List[str]) -> Dict[str, datetime]:
-    """Read the mechs' creation times, giving up rather than failing the listing.
-
-    :param chain_config: the chain configuration name
-    :param addresses: the listed mech addresses
-    :return: creation time by lowercase address; empty when the query failed
-    """
-    try:
-        return query_mech_creations(chain_config, addresses)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.warning(f"Could not read the mechs' creation times: {exc}")
-        return {}
-
-
-def _since(created_at: Optional[datetime]) -> str:
-    """Render a creation time as a UTC date for a table cell.
-
-    :param created_at: the creation time, or None when the indexer has no row
-    :return: the date in ISO 8601, blank when unknown
-    """
-    return created_at.date().isoformat() if created_at else ""
+        return list(executor.map(_fetch_terms_url, metadata_links))
 
 
 @click.group()
@@ -184,17 +123,13 @@ def mech() -> None:
     help="Chain configuration name (gnosis, base, polygon, optimism, robinhood).",
 )
 @handle_cli_errors
-def mech_list(  # pylint: disable=too-many-locals  # one local per column source
-    chain_config: str,
-) -> None:
+def mech_list(chain_config: str) -> None:
     """List available mechs on the marketplace.
 
     Fetches information about all mechs from the marketplace subgraph,
-    including service IDs, addresses, delivery counts, delivery record and
-    metadata links, reads each mech's terms link and operator claim from its
-    published manifest, checks the claimed domain against the mech's ERC-8004
-    identity, and marks the mechs the identification check confirms as Valory
-    operated.
+    including service IDs, addresses, delivery counts, and metadata links,
+    reads each mech's terms link from its published metadata, and marks the
+    mechs the identification check confirms as Valory operated.
 
     Uses default subgraph URL from configuration. Can be overridden with
     MECHX_SUBGRAPH_URL environment variable.
@@ -221,11 +156,6 @@ def mech_list(  # pylint: disable=too-many-locals  # one local per column source
         "Metadata Link",
         "Terms",
         "Operator",
-        "Claimed Operator",
-        "Received",
-        "Self-delivered",
-        "By others",
-        "Since",
     ]
 
     metadata_links = [
@@ -236,18 +166,11 @@ def mech_list(  # pylint: disable=too-many-locals  # one local per column source
         )
         for items in mech_list_data
     ]
-    manifests = _fetch_manifests(metadata_links)
-    terms_urls = [ToolManager.extract_terms_url(manifest) for manifest in manifests]
+    terms_urls = _fetch_terms_urls(metadata_links)
     chain_id = get_mech_config(validated_chain).ledger_config.chain_id
-    addresses = [items["address"] for items in mech_list_data]
-    operators = _valory_operated_labels(addresses, chain_id)
-    claims = _claimed_operator_labels(
-        validated_chain,
-        chain_id,
-        [int(items["service"]["id"]) for items in mech_list_data],
-        manifests,
+    operators = _valory_operated_labels(
+        [items["address"] for items in mech_list_data], chain_id
     )
-    created_at = _creation_dates(validated_chain, addresses)
     data = [
         (
             items["service"]["id"],
@@ -257,75 +180,13 @@ def mech_list(  # pylint: disable=too-many-locals  # one local per column source
             metadata_link,
             terms_url,
             operator,
-            claim,
-            items.get("receivedRequests", ""),
-            items.get("selfDeliveredFromReceived", ""),
-            items.get("deliveredByOthersFromReceived", ""),
-            _since(created_at.get(items["address"].lower())),
         )
-        for items, metadata_link, terms_url, operator, claim in zip(
-            mech_list_data, metadata_links, terms_urls, operators, claims
+        for items, metadata_link, terms_url, operator in zip(
+            mech_list_data, metadata_links, terms_urls, operators
         )
     ]
 
     click.echo(tabulate(data, headers=headers, tablefmt="grid"))
-    click.echo(
-        "Received, Self-delivered and By others count on-chain requests and "
-        "off-chain requests settled on-chain; an off-chain request that was "
-        "never delivered is not counted. A claimed operator is the manifest's "
-        "own statement: only its domain is checked, verified when it publishes "
-        "the mech's ERC-8004 identity; the name is never checked."
-    )
-
-
-def _render_report(mech_address: str, report: Dict[str, Any]) -> List[str]:
-    """Lay a mech report out as labelled lines.
-
-    :param mech_address: the address the report is about
-    :param report: the report from ``ToolManager.mech_report``
-    :return: the lines to print, in order
-    """
-    lines = [f"Mech {mech_address}"]
-    operator = report.get("operator")
-    if operator is None:
-        lines.append("Operator: not published in the mech's manifest")
-    else:
-        status = (
-            f"domain {VERIFIED_LABEL}"
-            if operator["domain_verified"]
-            else f"domain {UNVERIFIED_LABEL}: {operator['verification_note']}"
-        )
-        lines.append(f"Operator: {operator['url']}, {status}")
-        lines.append(
-            f'  Calls itself "{operator["claimed_name"]}". {operator["name_note"]}'
-        )
-    if report["valory_operated"]:
-        lines.append(f"Terms: {report['terms']}")
-    elif "identification_note" in report:
-        lines.append(f"Terms: {report['identification_note']}")
-    if "terms_url" in report:
-        lines.append(f"Terms link: {report['terms_url']}")
-    delivery = report["delivery"]
-    lines.append(
-        f"Delivery record: {delivery['received_requests']} received, "
-        f"{delivery['self_delivered']} self-delivered, "
-        f"{delivery['delivered_by_others']} delivered by others, "
-        f"since {delivery['since']} ({delivery['age_days']} days)"
-    )
-    lines.append(f"  {delivery['note']}")
-    payment = report["payment"]
-    lines.append(f"Payment: {payment['type']}. {payment['note']}")
-    benchmarks = report.get("benchmarks")
-    if benchmarks:
-        lines.append(f"Benchmarks: {report['benchmark_note']}")
-        for tool, benchmark in benchmarks.items():
-            lines.append(
-                f"  {tool}: {benchmark['metric']} over {benchmark['window']}, "
-                f"{benchmark['url']}"
-            )
-    else:
-        lines.append("Benchmarks: none published in the mech's manifest")
-    return lines
 
 
 @mech.command(name="info")
@@ -344,15 +205,13 @@ def _render_report(mech_address: str, report: Dict[str, Any]) -> List[str]:
 )
 @handle_cli_errors
 def mech_info(chain_config: str, mech_address: str) -> None:
-    """Report who runs a mech and how it has behaved.
+    """Report who runs a mech and how it has behaved, as JSON.
 
     Reads the mech's record from the marketplace subgraph and its manifest
-    from IPFS, then reports the operator the manifest claims and whether the
-    claimed domain publishes the mech's ERC-8004 identity, the terms that
-    apply, the delivery record and age, the payment method, and the
-    benchmark link the operator publishes per tool. Benchmark links are the
-    operator's claim and are not checked. No price is shown: the mech
-    contract quotes it at request time.
+    from IPFS, and prints ``ToolManager.mech_report``: the terms that apply,
+    the operator domain the manifest claims and whether it publishes the
+    mech's ERC-8004 identity, the delivery record and age, the payment
+    method, and each tool's benchmark link as the operator's claim.
 
     Example: mechx mech info --chain-config gnosis --address 0x...
 
@@ -368,5 +227,4 @@ def mech_info(chain_config: str, mech_address: str) -> None:
         )
     manifest = _fetch_manifest(IPFS_URL_TEMPLATE.format(record.metadata_hash[2:]))
     report = ToolManager(validated_chain).mech_report(address, manifest, record)
-    for line in _render_report(address, report):
-        click.echo(line)
+    click.echo(json.dumps(report, indent=2))

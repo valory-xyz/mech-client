@@ -36,7 +36,6 @@ from mech_client.infrastructure.subgraph.queries import (
     RESULTS_LIMIT,
     MechRecord,
     query_erc8004_agent_id,
-    query_mech_creations,
     query_mech_record,
     query_mm_mechs_info,
 )
@@ -205,9 +204,7 @@ class TestQueryMmMechsInfo:
         assert result[1]["mech_type"] == "Fixed Price Token"
         mock_get_config.assert_called_once_with("gnosis")
         mock_subgraph_client.assert_called_once_with(
-            "https://subgraph.example.com/gnosis",
-            dialect="graph",
-            timeout=DEFAULT_TIMEOUT,
+            "https://subgraph.example.com/gnosis", dialect="graph"
         )
 
     @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
@@ -526,10 +523,7 @@ class TestQueryMechsRobinhoodSquid:
         assert mock_client_class.call_args[0] == (
             "https://subgraph.autonolas.tech/squid/marketplace-robinhood/graphql",
         )
-        assert mock_client_class.call_args[1] == {
-            "dialect": "squid",
-            "timeout": DEFAULT_TIMEOUT,
-        }
+        assert mock_client_class.call_args[1] == {"dialect": "squid"}
         assert result is not None
         assert [m["mech_type"] for m in result] == [
             "Fixed Price Token USDC",
@@ -823,17 +817,6 @@ class TestReportReadsAreShort:
         assert REPORT_QUERY_TIMEOUT < DEFAULT_TIMEOUT
 
     @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
-    def test_the_creation_read_uses_the_short_timeout(
-        self, mock_client: MagicMock
-    ) -> None:
-        """The listing's creation query is built with the report timeout."""
-        mock_client.return_value.query_mech_creations.return_value = {
-            "createMeches": []
-        }
-        query_mech_creations("gnosis", [MECH_ADDRESS])
-        assert mock_client.call_args[1]["timeout"] == REPORT_QUERY_TIMEOUT
-
-    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
     def test_a_record_read_that_times_out_is_a_subgraph_error(
         self, mock_client: MagicMock
     ) -> None:
@@ -843,51 +826,6 @@ class TestReportReadsAreShort:
             SubgraphError, match="gnosis subgraph did not answer within 10s"
         ):
             query_mech_record("gnosis", MECH_ADDRESS)
-
-
-class TestQueryMechCreations:
-    """Creation times for a listing, keyed by lowercase address."""
-
-    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
-    def test_reads_rows_by_lowercase_address(self, mock_client: MagicMock) -> None:
-        """Rows map to UTC times under the lowercase address; missing mechs are absent."""
-        mock_client.return_value.query_mech_creations.return_value = {
-            "createMeches": [{"mech": MECH_ADDRESS.upper(), "blockTimestamp": CREATED}]
-        }
-        assert query_mech_creations("gnosis", [MECH_ADDRESS, "0x" + "e" * 40]) == {
-            MECH_ADDRESS: datetime(2025, 6, 4, 16, 35, 20, tzinfo=timezone.utc)
-        }
-        mock_client.return_value.query_mech_creations.assert_called_once_with(
-            [MECH_ADDRESS, "0x" + "e" * 40]
-        )
-
-    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
-    def test_no_addresses_means_no_query(self, mock_client: MagicMock) -> None:
-        """An empty listing asks the indexer nothing."""
-        assert query_mech_creations("gnosis", []) == {}
-        mock_client.assert_not_called()
-
-    @pytest.mark.parametrize(
-        "response",
-        [
-            {},
-            {"createMeches": None},
-            {"createMeches": [{"mech": MECH_ADDRESS}]},
-            {"createMeches": [{"mech": MECH_ADDRESS, "blockTimestamp": "later"}]},
-            {"createMeches": [None]},
-        ],
-        ids=["no_list", "null_list", "no_timestamp", "bad_timestamp", "null_row"],
-    )
-    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
-    def test_a_malformed_row_is_a_subgraph_error(
-        self, mock_client: MagicMock, response: Any
-    ) -> None:
-        """An unreadable creation row is reported, naming the chain."""
-        mock_client.return_value.query_mech_creations.return_value = response
-        with pytest.raises(
-            SubgraphError, match="Malformed mech creation row from the gnosis"
-        ):
-            query_mech_creations("gnosis", [MECH_ADDRESS])
 
 
 class TestQueryErc8004AgentId:

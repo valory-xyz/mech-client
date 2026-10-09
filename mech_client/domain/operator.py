@@ -17,30 +17,26 @@
 #
 # ------------------------------------------------------------------------------
 
+
 """Who runs a mech, as its manifest claims, and whether the domain backs the claim."""
 
 import json
 import re
-import time
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import requests
-import urllib3
 from mech_client.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 # Manifest values are operator-written data: type-checked, stripped, capped, never followed.
-OPERATOR_NAME_MAX_LENGTH = 200
-TEXT_MAX_LENGTH = 200
-URL_MAX_LENGTH = 2048
-HOSTNAME_MAX_LENGTH = 253
+TEXT_MAX_LENGTH = 2048
+# The longest name DNS allows; part of what a hostname is, not a cap of ours.
+DNS_NAME_MAX_LENGTH = 253
 # One hostname label: lowercase ASCII letters and digits, inner hyphens only.
 _HOSTNAME_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 # The last label is a top-level domain: letters only, or punycode. This keeps
@@ -48,69 +44,47 @@ _HOSTNAME_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _TOP_LABEL = re.compile(r"[a-z]{1,63}|xn--[a-z0-9-]{1,59}")
 # Widest agent id accepted from a proof: a uint256 has at most 78 digits.
 AGENT_ID_MAX_DIGITS = 78
-BENCHMARK_WINDOWS = ("7d", "30d", "90d", "all")
 
 # ERC-8004 IdentityRegistry. One address on every chain the mechs run on.
 IDENTITY_REGISTRY = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
 PROOF_PATH = "/.well-known/agent-registration.json"
-# Kept short: a report is read before a request, and must not hold one up.
-# The caller waits at most this long on the wall clock, and the body is capped.
+# Per read, not in total: a host that trickles its body stalls only the report
+# on its own mech, which is the operator's to fix.
 PROOF_FETCH_TIMEOUT = 5
 PROOF_MAX_BYTES = 64 * 1024
 PROOF_CHUNK_BYTES = 8 * 1024
-# Fetches share one capped pool. A fetch the caller stopped waiting for checks
-# the same deadline after every read and stops by itself, so it frees its
-# thread within one read timeout.
-PROOF_MAX_WORKERS = 8
-
-_EXECUTOR = ThreadPoolExecutor(
-    max_workers=PROOF_MAX_WORKERS, thread_name_prefix="mech-domain-proof"
-)
 
 BENCHMARK_NOTE = (
     "Benchmark links are the operator's own claim. This client does not check them."
 )
 
 
-def _is_clean_text(value: str) -> bool:
+def clean_text(value: Any) -> Optional[str]:
     """
-    Tell whether a string holds no control characters.
-
-    :param value: The string to check
-    :return: True when every character is printable
-    """
-    return not any(unicodedata.category(char).startswith("C") for char in value)
-
-
-def clean_text(value: Any, max_length: int = TEXT_MAX_LENGTH) -> Optional[str]:
-    """
-    Read a short free-text field from the manifest.
+    Read a free-text field from the manifest: a stripped, printable, capped string.
 
     :param value: The raw manifest value
-    :param max_length: The longest text passed on
     :return: The stripped text, or None when it is not a usable string
     """
     if not isinstance(value, str):
         return None
     text = value.strip()
-    if not text or len(text) > max_length or not _is_clean_text(text):
+    if not text or len(text) > TEXT_MAX_LENGTH:
+        return None
+    if any(unicodedata.category(char).startswith("C") for char in text):
         return None
     return text
 
 
 def https_url(value: Any) -> Optional[str]:
     """
-    Read a URL field from the manifest: parsed, https, with a host.
+    Read a URL field from the manifest: clean text, parsed, https, with a host.
 
     :param value: The raw manifest value
-    :return: The stripped URL, or None when it is not an https URL with a host
+    :return: The URL, or None when it is not an https URL with a host
     """
-    if not isinstance(value, str):
-        return None
-    url = value.strip()
-    if not url or len(url) > URL_MAX_LENGTH:
-        return None
-    if any(char.isspace() for char in url) or not _is_clean_text(url):
+    url = clean_text(value)
+    if url is None or any(char.isspace() for char in url):
         return None
     try:
         parsed = urlparse(url)
@@ -136,7 +110,7 @@ def hostname(value: Any) -> Optional[str]:
     if not isinstance(value, str):
         return None
     domain = value.strip()
-    if not domain or len(domain) > HOSTNAME_MAX_LENGTH or "." not in domain:
+    if len(domain) > DNS_NAME_MAX_LENGTH or "." not in domain:
         return None
     labels = domain.split(".")
     if not all(_HOSTNAME_LABEL.fullmatch(label) for label in labels):
@@ -163,15 +137,6 @@ class Operator:
         return f"https://{self.domain}"
 
 
-@dataclass(frozen=True)
-class Benchmark:
-    """A tool's score link, as the manifest claims; the link only, never its ``value``."""
-
-    metric: str
-    window: str
-    url: str
-
-
 def read_operator(manifest: Dict[str, Any]) -> Optional[Operator]:
     """
     Read the ``operator`` block from a manifest.
@@ -182,37 +147,32 @@ def read_operator(manifest: Dict[str, Any]) -> Optional[Operator]:
     block = manifest.get("operator")
     if not isinstance(block, dict):
         return None
-    name = clean_text(block.get("name"), OPERATOR_NAME_MAX_LENGTH)
+    name = clean_text(block.get("name"))
     domain = hostname(block.get("domain"))
     if name is None or domain is None:
         return None
     return Operator(name=name, domain=domain)
 
 
-def read_benchmarks(manifest: Dict[str, Any]) -> Dict[str, Benchmark]:
+def read_benchmarks(manifest: Dict[str, Any]) -> Dict[str, str]:
     """
-    Read every tool's ``benchmark`` block from a manifest.
+    Read the benchmark link each tool's manifest entry publishes.
 
     :param manifest: The parsed manifest document
-    :return: Benchmarks keyed by tool name; a tool with an unusable block is left out
+    :return: The https link by tool name; a tool without one is left out
     """
     tool_metadata = manifest.get("toolMetadata")
     if not isinstance(tool_metadata, dict):
         return {}
-    benchmarks: Dict[str, Benchmark] = {}
+    links: Dict[str, str] = {}
     for tool, entry in tool_metadata.items():
         if not isinstance(tool, str) or not isinstance(entry, dict):
             continue
         block = entry.get("benchmark")
-        if not isinstance(block, dict):
-            continue
-        metric = clean_text(block.get("metric"))
-        window = block.get("window")
-        url = https_url(block.get("url"))
-        if metric is None or window not in BENCHMARK_WINDOWS or url is None:
-            continue
-        benchmarks[tool] = Benchmark(metric=metric, window=window, url=url)
-    return benchmarks
+        url = https_url(block.get("url")) if isinstance(block, dict) else None
+        if url is not None:
+            links[tool] = url
+    return links
 
 
 def proof_url(domain: str) -> str:
@@ -249,22 +209,16 @@ class ProofOutcome:
     proof: Optional[Dict[str, Any]] = None
 
 
-def _read_proof_body(response: Any, url: str, deadline: float) -> ProofOutcome:
+def _read_proof_body(response: Any, url: str) -> ProofOutcome:
     """
-    Read a 2xx proof body within the size cap and the deadline, then parse it.
+    Read a 2xx proof body within the size cap, then parse it.
 
     :param response: The streaming response
     :param url: The proof URL, for the log
-    :param deadline: The monotonic time the whole fetch must finish by
     :return: The outcome, with the parsed document when one was found
     """
     body = bytearray()
-    # read1 returns as soon as any bytes arrive, so a body that trickles in
-    # still reaches the deadline check after every arrival.
-    while chunk := response.raw.read1(PROOF_CHUNK_BYTES, decode_content=True):
-        if time.monotonic() > deadline:
-            logger.debug(f"Stopped reading the domain proof at {url}: past deadline")
-            return ProofOutcome(ProofStatus.UNAVAILABLE)
+    for chunk in response.iter_content(PROOF_CHUNK_BYTES):
         body.extend(chunk)
         if len(body) > PROOF_MAX_BYTES:
             logger.debug(f"The domain proof at {url} exceeds {PROOF_MAX_BYTES} bytes")
@@ -280,14 +234,17 @@ def _read_proof_body(response: Any, url: str, deadline: float) -> ProofOutcome:
     return ProofOutcome(ProofStatus.FOUND, document)
 
 
-def _fetch_proof(url: str, deadline: float) -> ProofOutcome:
+def fetch_domain_proof(domain: str) -> ProofOutcome:
     """
-    Fetch and read a proof, giving up at the first read past the deadline.
+    Fetch the proof file from the exact host named in the manifest.
 
-    :param url: The proof URL
-    :param deadline: The monotonic time the fetch must finish by
+    Redirects are not followed: the proof must come from the named host. The
+    body is capped. Nothing is cached.
+
+    :param domain: The operator domain
     :return: The outcome, with the parsed document when one was found
     """
+    url = proof_url(domain)
     try:
         with requests.get(
             url, timeout=PROOF_FETCH_TIMEOUT, allow_redirects=False, stream=True
@@ -304,34 +261,9 @@ def _fetch_proof(url: str, deadline: float) -> ProofOutcome:
             if not 200 <= response.status_code < 300:
                 logger.debug(f"No domain proof at {url}: HTTP {response.status_code}")
                 return ProofOutcome(ProofStatus.NOT_FOUND)
-            return _read_proof_body(response, url, deadline)
-    except (requests.RequestException, urllib3.exceptions.HTTPError) as exc:
+            return _read_proof_body(response, url)
+    except requests.RequestException as exc:
         logger.warning(f"Could not fetch the domain proof at {url}: {exc}")
-        return ProofOutcome(ProofStatus.UNAVAILABLE)
-
-
-def fetch_domain_proof(domain: str) -> ProofOutcome:
-    """
-    Fetch the proof file from the exact host named in the manifest.
-
-    Redirects are not followed: the proof must come from the named host. The
-    body is capped, and the caller waits at most PROOF_FETCH_TIMEOUT seconds
-    of wall-clock time however slowly the host answers. Nothing is cached.
-
-    :param domain: The operator domain
-    :return: The outcome, with the parsed document when one was found
-    """
-    url = proof_url(domain)
-    deadline = time.monotonic() + PROOF_FETCH_TIMEOUT
-    future = _EXECUTOR.submit(_fetch_proof, url, deadline)
-    try:
-        return future.result(timeout=PROOF_FETCH_TIMEOUT)
-    except FuturesTimeoutError:
-        future.cancel()
-        logger.warning(
-            f"Fetching the domain proof at {url} took longer than "
-            f"{PROOF_FETCH_TIMEOUT}s; could not check the operator's domain."
-        )
         return ProofOutcome(ProofStatus.UNAVAILABLE)
 
 
