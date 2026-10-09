@@ -221,7 +221,10 @@ class ProofStatus(Enum):
     """The domain served a JSON object."""
 
     NOT_FOUND = "not_found"
-    """The domain answered, and the answer is not a proof: 3xx, 4xx, or not JSON."""
+    """The domain answered, and the answer is not a proof: 4xx, or not JSON."""
+
+    REDIRECTED = "redirected"
+    """The domain answered 3xx: the proof, if any, is served by another host."""
 
     UNAVAILABLE = "unavailable"
     """The domain could not be reached or answered 5xx, so nothing is known."""
@@ -271,8 +274,8 @@ def fetch_domain_proof(domain: str) -> ProofOutcome:
     """
     Fetch the proof file from the exact host named in the manifest.
 
-    Redirects are not followed, so a 3xx is a verdict. The body is capped and
-    the deadline covers the whole fetch. Nothing is cached.
+    Redirects are not followed: the proof must come from the named host. The
+    body is capped and the deadline covers the whole fetch. Nothing is cached.
 
     :param domain: The operator domain
     :return: The outcome, with the parsed document when one was found
@@ -289,6 +292,9 @@ def fetch_domain_proof(domain: str) -> ProofOutcome:
                     f"could not check the operator's domain."
                 )
                 return ProofOutcome(ProofStatus.UNAVAILABLE)
+            if 300 <= response.status_code < 400:
+                logger.debug(f"The domain proof at {url} redirects elsewhere")
+                return ProofOutcome(ProofStatus.REDIRECTED)
             if not 200 <= response.status_code < 300:
                 logger.debug(f"No domain proof at {url}: HTTP {response.status_code}")
                 return ProofOutcome(ProofStatus.NOT_FOUND)
@@ -358,6 +364,10 @@ PROOF_UNAVAILABLE_NOTE = (
     "checked again next time."
 )
 PROOF_NOT_FOUND_NOTE = "The operator's domain publishes no proof for this mech."
+PROOF_REDIRECTED_NOTE = (
+    "The operator's domain redirects the proof request to another host. The "
+    "manifest must name the exact host that serves the proof."
+)
 PROOF_MISMATCH_NOTE = "The operator's domain proof does not list this mech."
 
 
@@ -380,6 +390,8 @@ def verify_domain(
     outcome = fetch_domain_proof(domain)
     if outcome.status is ProofStatus.UNAVAILABLE:
         return DomainVerification(False, PROOF_UNAVAILABLE_NOTE)
+    if outcome.status is ProofStatus.REDIRECTED:
+        return DomainVerification(False, PROOF_REDIRECTED_NOTE)
     if outcome.proof is None:
         return DomainVerification(False, PROOF_NOT_FOUND_NOTE)
     if not proof_matches(outcome.proof, chain_id, agent_id):

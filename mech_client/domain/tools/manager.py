@@ -76,6 +76,9 @@ AGENT_ID_LOOKUP_NOTE = (
     "The mech's ERC-8004 identity could not be looked up; the operator's "
     "domain will be checked again next time."
 )
+NAME_NOTE = (
+    "The name is the operator's own text and is not checked; only the domain is."
+)
 DOMAIN_CHECK_FAILED_NOTE = (
     "The operator's domain could not be checked; it will be checked again next time."
 )
@@ -145,12 +148,12 @@ def claimed_operator(
     chain_config: str, chain_id: int, service_id: int, manifest: Dict[str, Any]
 ) -> Optional[Dict[str, Any]]:
     """
-    Report who the manifest says runs the mech, and whether the domain agrees.
+    Report the operator's domain, whether it backs the mech, and the name it claims.
 
-    The claim is the operator's own text, passed on as data. It is verified
-    only when the domain named in the claim publishes the mech's ERC-8004
-    identity in its proof file. Everything short of that is unverified, with
-    the reason.
+    The domain is the identity: it is verified only when it publishes the
+    mech's ERC-8004 identity in its proof file, and anything short of that is
+    unverified with the reason. The name is never checked and is reported as
+    the operator's own claim.
 
     :param chain_config: Chain configuration name
     :param chain_id: The chain the mech is deployed on
@@ -167,13 +170,14 @@ def claimed_operator(
     else:
         verification = _verify_domain(operator.domain, chain_id, agent_id)
     block: Dict[str, Any] = {
-        "name": operator.name,
         "domain": operator.domain,
         "url": operator.url,
         "domain_verified": verification.verified,
     }
     if verification.note:
         block["verification_note"] = verification.note
+    block["claimed_name"] = operator.name
+    block["name_note"] = NAME_NOTE
     return block
 
 

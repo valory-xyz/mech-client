@@ -35,6 +35,7 @@ from mech_client.domain.operator import (
     PROOF_MAX_BYTES,
     PROOF_MISMATCH_NOTE,
     PROOF_NOT_FOUND_NOTE,
+    PROOF_REDIRECTED_NOTE,
     PROOF_UNAVAILABLE_NOTE,
     Benchmark,
     DomainVerification,
@@ -511,8 +512,6 @@ class TestFetchDomainProof:
     @pytest.mark.parametrize(
         "response",
         [
-            _response(301, {"registrations": [_registration()]}),
-            _response(302, {"registrations": [_registration()]}),
             _response(404, {}),
             _response(403, {}),
             _response(200, bad_json=True),
@@ -521,8 +520,6 @@ class TestFetchDomainProof:
             _response(200, None),
         ],
         ids=[
-            "moved",
-            "found_redirect",
             "not_found",
             "forbidden",
             "not_json",
@@ -540,6 +537,23 @@ class TestFetchDomainProof:
             outcome = fetch_domain_proof(DOMAIN)
         assert outcome.status is ProofStatus.NOT_FOUND
         assert outcome.proof is None
+
+    @pytest.mark.parametrize(
+        "status_code",
+        [301, 302, 307, 308],
+        ids=["moved", "found", "temporary", "permanent"],
+    )
+    def test_a_redirect_is_its_own_verdict(self, status_code: int) -> None:
+        """A 3xx is neither a proof nor an absence: the proof lives on another host."""
+        response = _response(status_code, {"registrations": [_registration()]})
+        with (
+            patch(f"{MODULE}.requests.get", return_value=response),
+            patch(f"{MODULE}.logger"),
+        ):
+            outcome = fetch_domain_proof(DOMAIN)
+        assert outcome.status is ProofStatus.REDIRECTED
+        assert outcome.proof is None
+        response.iter_content.assert_not_called()
 
     @pytest.mark.parametrize(
         "status_code",
@@ -683,7 +697,7 @@ class TestVerifyDomain:
             ({"side_effect": requests.ConnectionError("down")}, PROOF_UNAVAILABLE_NOTE),
             ({"return_value": _response(503, {})}, PROOF_UNAVAILABLE_NOTE),
             ({"return_value": _response(404, {})}, PROOF_NOT_FOUND_NOTE),
-            ({"return_value": _response(301, {})}, PROOF_NOT_FOUND_NOTE),
+            ({"return_value": _response(308, {})}, PROOF_REDIRECTED_NOTE),
             (
                 {
                     "return_value": _response(

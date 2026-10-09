@@ -43,6 +43,7 @@ from mech_client.domain.identification import VALORY_TERMS_NOTICE
 from mech_client.domain.tools.manager import (
     DELIVERY_NOTE,
     IDENTIFICATION_NOTE,
+    NAME_NOTE,
     PAYMENT_NOTE,
 )
 from mech_client.infrastructure.config import get_mech_config
@@ -57,10 +58,11 @@ MECH_ADDRESS_CHECKSUMMED = "0xC05e7412439bD7e91730a6880E18d5D5873F632C"
 METADATA_HASH = "0x" + "c" * 64
 CREATED_AT = datetime(2025, 6, 4, 16, 35, 20, tzinfo=timezone.utc)
 VERIFIED_OPERATOR = {
-    "name": "Valory",
     "domain": "www.valory.xyz",
     "url": "https://www.valory.xyz",
     "domain_verified": True,
+    "claimed_name": "Valory AG",
+    "name_note": NAME_NOTE,
 }
 UNVERIFIED_OPERATOR = {
     **VERIFIED_OPERATOR,
@@ -292,13 +294,20 @@ class TestOperatorClaimLabel:
         ("operator", "expected"),
         [
             (None, ""),
-            (VERIFIED_OPERATOR, "Valory (www.valory.xyz, verified)"),
-            (UNVERIFIED_OPERATOR, "Valory (www.valory.xyz, unverified)"),
+            (VERIFIED_OPERATOR, 'www.valory.xyz (verified), calls itself "Valory AG"'),
+            (
+                UNVERIFIED_OPERATOR,
+                'www.valory.xyz (unverified), calls itself "Valory AG"',
+            ),
+            (
+                {**VERIFIED_OPERATOR, "domain": "valory-mechs.xyz"},
+                'valory-mechs.xyz (verified), calls itself "Valory AG"',
+            ),
         ],
-        ids=["unpublished", "verified", "unverified"],
+        ids=["unpublished", "verified", "unverified", "lookalike_domain"],
     )
     def test_label(self, operator: Optional[Dict[str, Any]], expected: str) -> None:
-        """A claim reads name, domain and status; no claim reads blank."""
+        """The domain leads and carries the status; the name is quoted as a claim."""
         assert _operator_claim_label(operator) == expected
 
 
@@ -336,7 +345,7 @@ class TestClaimedOperatorLabels:
 
         with patch(f"{MODULE}.claimed_operator", side_effect=claim):
             assert _claimed_operator_labels("gnosis", 100, [2, 1], manifests[::-1]) == [
-                "Valory (www.valory.xyz, verified)",
+                'www.valory.xyz (verified), calls itself "Valory AG"',
                 "",
             ]
 
@@ -493,7 +502,7 @@ class TestMechListCommand:
             result = CliRunner().invoke(mech, ["list", "--chain-config", "gnosis"])
         assert result.exit_code == 0
         assert "Claimed Operator" in result.output
-        assert "Valory (www.valory.xyz, unverified)" in result.output
+        assert 'www.valory.xyz (unverified), calls itself "Valory AG"' in result.output
         claim.assert_called_once_with(
             "gnosis", 100, 2182, {"operator": {"name": "Valory", "domain": "x"}}
         )
@@ -659,7 +668,9 @@ class TestRenderReport:
         )
         lines = _render_report(MECH_ADDRESS, report)
         assert lines[0] == f"Mech {MECH_ADDRESS}"
-        assert "Operator: Valory (https://www.valory.xyz), domain verified" in lines
+        assert "Operator: https://www.valory.xyz, domain verified" in lines
+        assert f'  Calls itself "Valory AG". {NAME_NOTE}' in lines
+        assert not any(line.startswith("Operator: Valory") for line in lines)
         assert f"Terms: {VALORY_TERMS_NOTICE}" in lines
         assert f"Terms link: {TERMS_URL}" in lines
         assert (
@@ -675,7 +686,7 @@ class TestRenderReport:
         """An unverified claim carries its note on the same line."""
         lines = _render_report(MECH_ADDRESS, _report(operator=UNVERIFIED_OPERATOR))
         assert (
-            "Operator: Valory (https://www.valory.xyz), domain unverified: "
+            "Operator: https://www.valory.xyz, domain unverified: "
             "The operator's domain publishes no proof for this mech." in lines
         )
 

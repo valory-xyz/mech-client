@@ -32,6 +32,7 @@ from mech_client.domain.tools.manager import (
     AGENT_ID_LOOKUP_NOTE,
     DELIVERY_NOTE,
     DOMAIN_CHECK_FAILED_NOTE,
+    NAME_NOTE,
     IDENTIFICATION_NOTE,
     PAYMENT_NOTE,
     ToolManager,
@@ -933,13 +934,29 @@ class TestClaimedOperator:
         ):
             block = claimed_operator("optimism", 10, 195, OPERATOR_MANIFEST)
         assert block == {
-            "name": "Valory",
             "domain": "www.valory.xyz",
             "url": "https://www.valory.xyz",
             "domain_verified": True,
+            "claimed_name": "Valory",
+            "name_note": NAME_NOTE,
         }
+        assert "name" not in block
         lookup.assert_called_once_with("optimism", 195)
         verify.assert_called_once_with("www.valory.xyz", 10, 516)
+
+    def test_a_lookalike_domain_is_verified_only_as_itself(self) -> None:
+        """A verified domain proves the domain; the name it claims stays a claim."""
+        manifest = {"operator": {"name": "Valory AG", "domain": "valory-mechs.xyz"}}
+        with (
+            patch(f"{MANAGER}.query_erc8004_agent_id", return_value=2182),
+            patch(f"{MANAGER}.verify_domain", return_value=DomainVerification(True)),
+        ):
+            block = claimed_operator("gnosis", 100, 2182, manifest)
+        assert block is not None
+        assert block["domain"] == "valory-mechs.xyz"
+        assert block["domain_verified"] is True
+        assert block["claimed_name"] == "Valory AG"
+        assert block["name_note"] == NAME_NOTE
 
     def test_an_unverified_claim_carries_the_reason(self) -> None:
         """The domain check's note reaches the report."""
@@ -982,7 +999,7 @@ class TestClaimedOperator:
         ):
             block = claimed_operator("gnosis", 100, 2182, OPERATOR_MANIFEST)
         assert block is not None
-        assert block["name"] == "Valory"
+        assert block["claimed_name"] == "Valory"
         assert block["domain_verified"] is False
         assert block["verification_note"] == AGENT_ID_LOOKUP_NOTE
         verify.assert_not_called()
@@ -1003,7 +1020,7 @@ class TestClaimedOperator:
         ), patch(f"{MANAGER}.logger") as logger:
             block = claimed_operator("gnosis", 100, 2182, OPERATOR_MANIFEST)
         assert block is not None
-        assert block["name"] == "Valory"
+        assert block["claimed_name"] == "Valory"
         assert block["domain_verified"] is False
         assert block["verification_note"] == DOMAIN_CHECK_FAILED_NOTE
         logger.warning.assert_called_once()
@@ -1039,7 +1056,7 @@ class TestMechReport:
             patch(f"{MANAGER}.query_mech_record", return_value=_record()) as record,
             patch(
                 f"{MANAGER}.claimed_operator",
-                return_value={"name": "Valory", "domain_verified": True},
+                return_value={"claimed_name": "Valory", "domain_verified": True},
             ) as claim,
         ):
             report = manager.mech_report(GNOSIS_MECH, OPERATOR_MANIFEST)
@@ -1047,7 +1064,7 @@ class TestMechReport:
         claim.assert_called_once_with("gnosis", 100, 2182, OPERATOR_MANIFEST)
         assert report["valory_operated"] is False
         assert report["terms_url"] == OPERATOR_TERMS
-        assert report["operator"] == {"name": "Valory", "domain_verified": True}
+        assert report["operator"] == {"claimed_name": "Valory", "domain_verified": True}
         assert report["benchmarks"] == {
             "tool-a": {
                 "metric": "accuracy",

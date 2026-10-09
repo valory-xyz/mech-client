@@ -101,15 +101,16 @@ def _valory_operated_labels(addresses: List[str], chain_id: int) -> List[str]:
 
 
 def _operator_claim_label(operator: Optional[Dict[str, Any]]) -> str:
-    """Render an operator claim for a table cell.
+    """Render an operator claim for a table cell, domain first.
 
     :param operator: the operator block of a report, or None
-    :return: ``name (domain, verified|unverified)``, blank when none is published
+    :return: ``domain (verified|unverified), calls itself "name"``, blank when
+        none is published
     """
     if operator is None:
         return ""
     status = VERIFIED_LABEL if operator["domain_verified"] else UNVERIFIED_LABEL
-    return f"{operator['name']} ({operator['domain']}, {status})"
+    return f'{operator["domain"]} ({status}), calls itself "{operator["claimed_name"]}"'
 
 
 def _claimed_operator_labels(
@@ -273,8 +274,8 @@ def mech_list(  # pylint: disable=too-many-locals  # one local per column source
         "Received, Self-delivered and By others count on-chain requests and "
         "off-chain requests settled on-chain; an off-chain request that was "
         "never delivered is not counted. A claimed operator is the manifest's "
-        "own statement, verified only when its domain publishes the mech's "
-        "ERC-8004 identity."
+        "own statement: only its domain is checked, verified when it publishes "
+        "the mech's ERC-8004 identity; the name is never checked."
     )
 
 
@@ -295,7 +296,10 @@ def _render_report(mech_address: str, report: Dict[str, Any]) -> List[str]:
             if operator["domain_verified"]
             else f"domain {UNVERIFIED_LABEL}: {operator['verification_note']}"
         )
-        lines.append(f"Operator: {operator['name']} ({operator['url']}), {status}")
+        lines.append(f"Operator: {operator['url']}, {status}")
+        lines.append(
+            f'  Calls itself "{operator["claimed_name"]}". {operator["name_note"]}'
+        )
     if report["valory_operated"]:
         lines.append(f"Terms: {report['terms']}")
     elif "identification_note" in report:

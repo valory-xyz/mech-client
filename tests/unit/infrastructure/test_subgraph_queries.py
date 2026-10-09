@@ -29,8 +29,10 @@ import pytest
 
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.config.constants import MECH_CONFIGS
+from mech_client.infrastructure.subgraph.client import DEFAULT_TIMEOUT
 from mech_client.infrastructure.subgraph.queries import (
     CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE,
+    REPORT_QUERY_TIMEOUT,
     RESULTS_LIMIT,
     MechRecord,
     query_erc8004_agent_id,
@@ -203,7 +205,9 @@ class TestQueryMmMechsInfo:
         assert result[1]["mech_type"] == "Fixed Price Token"
         mock_get_config.assert_called_once_with("gnosis")
         mock_subgraph_client.assert_called_once_with(
-            "https://subgraph.example.com/gnosis", dialect="graph"
+            "https://subgraph.example.com/gnosis",
+            dialect="graph",
+            timeout=DEFAULT_TIMEOUT,
         )
 
     @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
@@ -522,7 +526,10 @@ class TestQueryMechsRobinhoodSquid:
         assert mock_client_class.call_args[0] == (
             "https://subgraph.autonolas.tech/squid/marketplace-robinhood/graphql",
         )
-        assert mock_client_class.call_args[1] == {"dialect": "squid"}
+        assert mock_client_class.call_args[1] == {
+            "dialect": "squid",
+            "timeout": DEFAULT_TIMEOUT,
+        }
         assert result is not None
         assert [m["mech_type"] for m in result] == [
             "Fixed Price Token USDC",
@@ -802,6 +809,42 @@ class TestQueryMechRecord:
             query_mech_record("gnosis", MECH_ADDRESS)
 
 
+class TestReportReadsAreShort:
+    """The reads a report makes before a request use the short timeout."""
+
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_the_record_read_uses_the_short_timeout(
+        self, mock_client: MagicMock
+    ) -> None:
+        """The record query is built with the report timeout, not the client default."""
+        mock_client.return_value.query_mech.return_value = _mech_response()
+        query_mech_record("gnosis", MECH_ADDRESS)
+        assert mock_client.call_args[1]["timeout"] == REPORT_QUERY_TIMEOUT
+        assert REPORT_QUERY_TIMEOUT < DEFAULT_TIMEOUT
+
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_the_creation_read_uses_the_short_timeout(
+        self, mock_client: MagicMock
+    ) -> None:
+        """The listing's creation query is built with the report timeout."""
+        mock_client.return_value.query_mech_creations.return_value = {
+            "createMeches": []
+        }
+        query_mech_creations("gnosis", [MECH_ADDRESS])
+        assert mock_client.call_args[1]["timeout"] == REPORT_QUERY_TIMEOUT
+
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_a_record_read_that_times_out_is_a_subgraph_error(
+        self, mock_client: MagicMock
+    ) -> None:
+        """A stalled indexer surfaces as a subgraph error naming the chain and limit."""
+        mock_client.return_value.query_mech.side_effect = TimeoutError()
+        with pytest.raises(
+            SubgraphError, match="gnosis subgraph did not answer within 10s"
+        ):
+            query_mech_record("gnosis", MECH_ADDRESS)
+
+
 class TestQueryMechCreations:
     """Creation times for a listing, keyed by lowercase address."""
 
@@ -866,7 +909,9 @@ class TestQueryErc8004AgentId:
         assert query_erc8004_agent_id(chain, 195) == 516
         config = get_mech_config(chain)
         mock_client.assert_called_once_with(
-            config.registry_subgraph_url, dialect=expected_dialect
+            config.registry_subgraph_url,
+            dialect=expected_dialect,
+            timeout=REPORT_QUERY_TIMEOUT,
         )
         assert config.registry_subgraph_url != config.subgraph_url
         mock_client.return_value.query_service_agent_id.assert_called_once_with(195)
