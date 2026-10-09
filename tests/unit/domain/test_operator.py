@@ -19,6 +19,7 @@
 
 """Tests for the operator claim and its domain check."""
 
+import json
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
@@ -27,8 +28,11 @@ import requests
 from mech_client.domain.operator import (
     BENCHMARK_WINDOWS,
     IDENTITY_REGISTRY,
+    AGENT_ID_MAX_DIGITS,
     NO_AGENT_ID_NOTE,
+    PROOF_CHUNK_BYTES,
     PROOF_FETCH_TIMEOUT,
+    PROOF_MAX_BYTES,
     PROOF_MISMATCH_NOTE,
     PROOF_NOT_FOUND_NOTE,
     PROOF_UNAVAILABLE_NOTE,
@@ -63,14 +67,21 @@ def _registration(chain_id: int = GNOSIS, agent_id: Any = AGENT_ID) -> Dict[str,
     }
 
 
-def _response(status_code: int, body: Any = None, bad_json: bool = False) -> MagicMock:
-    """Build a stand-in for a requests response."""
+def _response(
+    status_code: int,
+    body: Any = None,
+    bad_json: bool = False,
+    raw: Optional[bytes] = None,
+) -> MagicMock:
+    """Build a stand-in for a streaming requests response."""
     response = MagicMock()
     response.status_code = status_code
-    if bad_json:
-        response.json.side_effect = ValueError("not json")
-    else:
-        response.json.return_value = body
+    response.__enter__.return_value = response
+    if raw is None:
+        raw = b"not json" if bad_json else json.dumps(body).encode()
+    response.iter_content.return_value = [
+        raw[i : i + PROOF_CHUNK_BYTES] for i in range(0, len(raw), PROOF_CHUNK_BYTES)
+    ]
     return response
 
 
@@ -170,8 +181,17 @@ class TestHostname:
             "  valory.xyz  ",
             "x" * 63 + ".example",
             "1.2.3.example",
+            "example.xn--p1ai",
         ],
-        ids=["www", "apex", "hyphens", "stripped", "max_label", "digit_labels"],
+        ids=[
+            "www",
+            "apex",
+            "hyphens",
+            "stripped",
+            "max_label",
+            "digit_labels",
+            "punycode_tld",
+        ],
     )
     def test_accepts_bare_lowercase_hostnames(self, value: str) -> None:
         """A dotted name of valid labels is accepted, stripped."""
@@ -194,6 +214,12 @@ class TestHostname:
             "valory-.xyz",
             "x" * 64 + ".example",
             "192.168.0.1",
+            "0x7f.0x1",
+            "0x7f.0x0.0x0.0x1",
+            "example.0x1",
+            "example.c0m",
+            "example.123",
+            "example.xn--",
             "valory.xyz?x=1",
             "valory.xyz#frag",
             "ｖalory.xyz",
@@ -217,6 +243,12 @@ class TestHostname:
             "trailing_hyphen",
             "label_too_long",
             "ipv4",
+            "hex_ipv4_short",
+            "hex_ipv4",
+            "hex_tld",
+            "digit_in_tld",
+            "numeric_tld",
+            "empty_punycode",
             "query",
             "fragment",
             "non_ascii",
@@ -422,8 +454,59 @@ class TestFetchDomainProof:
         assert outcome.status is ProofStatus.FOUND
         assert outcome.proof == proof
         get.assert_called_once_with(
-            PROOF_URL, timeout=PROOF_FETCH_TIMEOUT, allow_redirects=False
+            PROOF_URL, timeout=PROOF_FETCH_TIMEOUT, allow_redirects=False, stream=True
         )
+
+    def test_a_proof_at_the_size_cap_is_read_whole(self) -> None:
+        """A body of exactly the cap, spread over chunks, is still parsed."""
+        padding = PROOF_MAX_BYTES - len(json.dumps({"registrations": [], "pad": ""}))
+        proof = {"registrations": [], "pad": "x" * padding}
+        raw = json.dumps(proof).encode()
+        assert len(raw) == PROOF_MAX_BYTES
+        with patch(f"{MODULE}.requests.get", return_value=_response(200, raw=raw)):
+            outcome = fetch_domain_proof(DOMAIN)
+        assert outcome.status is ProofStatus.FOUND
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            b"[" * 100_000,
+            b"{" + b"x" * PROOF_MAX_BYTES,
+            b'{"registrations": []}' + b" " * PROOF_MAX_BYTES,
+        ],
+        ids=["deeply_nested", "oversize_garbage", "oversize_valid"],
+    )
+    def test_a_body_over_the_cap_or_too_deep_is_not_a_proof(self, raw: bytes) -> None:
+        """Reading stops at the cap, and a parse that would recurse is not a proof."""
+        with (
+            patch(f"{MODULE}.requests.get", return_value=_response(200, raw=raw)),
+            patch(f"{MODULE}.logger"),
+        ):
+            outcome = fetch_domain_proof(DOMAIN)
+        assert outcome.status is ProofStatus.NOT_FOUND
+
+    def test_a_slow_body_is_an_outage(self) -> None:
+        """The deadline covers the whole fetch, so a body that dribbles in gives up."""
+        proof = {"registrations": [_registration()]}
+        clock = iter([0.0, PROOF_FETCH_TIMEOUT + 1.0])
+        with (
+            patch(f"{MODULE}.requests.get", return_value=_response(200, proof)),
+            patch(f"{MODULE}.time.monotonic", side_effect=lambda: next(clock)),
+            patch(f"{MODULE}.logger") as logger,
+        ):
+            outcome = fetch_domain_proof(DOMAIN)
+        assert outcome.status is ProofStatus.UNAVAILABLE
+        logger.warning.assert_called_once()
+
+    def test_a_read_that_breaks_midway_is_an_outage(self) -> None:
+        """A transport failure while streaming the body is not a verdict."""
+        response = _response(200, {})
+        response.iter_content.side_effect = requests.ConnectionError("reset")
+        with (
+            patch(f"{MODULE}.requests.get", return_value=response),
+            patch(f"{MODULE}.logger"),
+        ):
+            assert fetch_domain_proof(DOMAIN).status is ProofStatus.UNAVAILABLE
 
     @pytest.mark.parametrize(
         "response",
@@ -533,6 +616,13 @@ class TestProofMatches:
             {"registrations": [_registration(agent_id=True)]},
             {"registrations": [_registration(agent_id=float(AGENT_ID))]},
             {"registrations": [_registration(agent_id=f"{AGENT_ID}x")]},
+            {"registrations": [_registration(agent_id="²")]},
+            {"registrations": [_registration(agent_id="١")]},
+            {
+                "registrations": [
+                    _registration(agent_id="1" * (AGENT_ID_MAX_DIGITS + 1))
+                ]
+            },
             {"registrations": [_registration(agent_id=None)]},
             {"registrations": [{"agentId": AGENT_ID}]},
             {"registrations": [{"agentId": AGENT_ID, "agentRegistry": 5}]},
@@ -557,6 +647,9 @@ class TestProofMatches:
             "bool_id",
             "float_id",
             "non_digit_id",
+            "superscript_id",
+            "arabic_indic_id",
+            "overlong_id",
             "null_id",
             "no_registry",
             "registry_not_string",

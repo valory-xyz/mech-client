@@ -76,6 +76,9 @@ AGENT_ID_LOOKUP_NOTE = (
     "The mech's ERC-8004 identity could not be looked up; the operator's "
     "domain will be checked again next time."
 )
+DOMAIN_CHECK_FAILED_NOTE = (
+    "The operator's domain could not be checked; it will be checked again next time."
+)
 PAYMENT_LABELS = {
     PaymentType.NATIVE: "native",
     PaymentType.OLAS_TOKEN: "olas",
@@ -110,9 +113,7 @@ def _lookup_agent_id(chain_config: str, service_id: int) -> Optional[int]:
     :param service_id: The Olas service id
     :return: The agent id, or None when there is none or the lookup failed
     """
-    # A failed lookup must not withhold the rest of the report; it only
-    # leaves the domain unverified. The indexer client raises transport and
-    # GraphQL errors of its own types, so anything it raises is a failed lookup.
+    # Any failure here leaves the domain unverified; it never withholds the report.
     try:
         return query_erc8004_agent_id(chain_config, service_id)
     except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -121,6 +122,23 @@ def _lookup_agent_id(chain_config: str, service_id: int) -> Optional[int]:
             f"on {chain_config}: {exc}"
         )
         return None
+
+
+def _verify_domain(domain: str, chain_id: int, agent_id: int) -> DomainVerification:
+    """
+    Check the operator's domain, treating any failure as unverified.
+
+    :param domain: The operator domain from the manifest
+    :param chain_id: The chain the mech is deployed on
+    :param agent_id: The mech's ERC-8004 agent id
+    :return: Verified, or unverified with the reason
+    """
+    # Any failure here leaves the domain unverified; it never withholds the report.
+    try:
+        return verify_domain(domain, chain_id, agent_id)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning(f"Could not check the operator domain {domain}: {exc}")
+        return DomainVerification(False, DOMAIN_CHECK_FAILED_NOTE)
 
 
 def claimed_operator(
@@ -147,7 +165,7 @@ def claimed_operator(
     if agent_id is None:
         verification = DomainVerification(False, AGENT_ID_LOOKUP_NOTE)
     else:
-        verification = verify_domain(operator.domain, chain_id, agent_id)
+        verification = _verify_domain(operator.domain, chain_id, agent_id)
     block: Dict[str, Any] = {
         "name": operator.name,
         "domain": operator.domain,

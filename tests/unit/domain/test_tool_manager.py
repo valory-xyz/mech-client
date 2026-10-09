@@ -31,6 +31,7 @@ from mech_client.domain.operator import BENCHMARK_NOTE, DomainVerification
 from mech_client.domain.tools.manager import (
     AGENT_ID_LOOKUP_NOTE,
     DELIVERY_NOTE,
+    DOMAIN_CHECK_FAILED_NOTE,
     IDENTIFICATION_NOTE,
     PAYMENT_NOTE,
     ToolManager,
@@ -985,6 +986,26 @@ class TestClaimedOperator:
         assert block["domain_verified"] is False
         assert block["verification_note"] == AGENT_ID_LOOKUP_NOTE
         verify.assert_not_called()
+        logger.warning.assert_called_once()
+
+
+    @pytest.mark.parametrize(
+        "error",
+        [RecursionError("too deep"), RuntimeError("boom"), ValueError("bad")],
+        ids=["recursion", "runtime", "value"],
+    )
+    def test_a_domain_check_that_blows_up_is_unverified_not_an_error(
+        self, error: Exception
+    ) -> None:
+        """Nothing the proof fetch raises escapes; the claim stays, unverified, with the note."""
+        with patch(f"{MANAGER}.query_erc8004_agent_id", return_value=2182), patch(
+            f"{MANAGER}.verify_domain", side_effect=error
+        ), patch(f"{MANAGER}.logger") as logger:
+            block = claimed_operator("gnosis", 100, 2182, OPERATOR_MANIFEST)
+        assert block is not None
+        assert block["name"] == "Valory"
+        assert block["domain_verified"] is False
+        assert block["verification_note"] == DOMAIN_CHECK_FAILED_NOTE
         logger.warning.assert_called_once()
 
 

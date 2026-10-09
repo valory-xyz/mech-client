@@ -36,7 +36,10 @@ from mech_client.infrastructure.subgraph.queries import (
 )
 from mech_client.utils.errors.exceptions import ManifestError
 from mech_client.utils.errors.handlers import handle_cli_errors
+from mech_client.utils.logger import get_logger
 from tabulate import tabulate  # type: ignore
+
+logger = get_logger(__name__)
 
 METADATA_FETCH_TIMEOUT = 10
 METADATA_FETCH_WORKERS = 8
@@ -140,6 +143,21 @@ def _claimed_operator_labels(
         return list(executor.map(label, zip(service_ids, manifests)))
 
 
+def _creation_dates(chain_config: str, addresses: List[str]) -> Dict[str, datetime]:
+    """Read the mechs' creation times, giving up rather than failing the listing.
+
+    :param chain_config: the chain configuration name
+    :param addresses: the listed mech addresses
+    :return: creation time by lowercase address; empty when the query failed
+    """
+    # The Since column never fails the listing; a failed query leaves it blank.
+    try:
+        return query_mech_creations(chain_config, addresses)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning(f"Could not read the mechs' creation times: {exc}")
+        return {}
+
+
 def _since(created_at: Optional[datetime]) -> str:
     """Render a creation time as a UTC date for a table cell.
 
@@ -200,14 +218,14 @@ def mech_list(  # pylint: disable=too-many-locals  # one local per column source
         "Mech Type",
         "Mech Address",
         "Total Deliveries",
-        "Received",
-        "Self-delivered",
-        "By others",
-        "Since",
         "Metadata Link",
         "Terms",
         "Operator",
         "Claimed Operator",
+        "Received",
+        "Self-delivered",
+        "By others",
+        "Since",
     ]
 
     metadata_links = [
@@ -229,21 +247,21 @@ def mech_list(  # pylint: disable=too-many-locals  # one local per column source
         [int(items["service"]["id"]) for items in mech_list_data],
         manifests,
     )
-    created_at = query_mech_creations(validated_chain, addresses)
+    created_at = _creation_dates(validated_chain, addresses)
     data = [
         (
             items["service"]["id"],
             items["mech_type"],
             items["address"],
             items["service"]["totalDeliveries"],
-            items.get("receivedRequests", ""),
-            items.get("selfDeliveredFromReceived", ""),
-            items.get("deliveredByOthersFromReceived", ""),
-            _since(created_at.get(items["address"].lower())),
             metadata_link,
             terms_url,
             operator,
             claim,
+            items.get("receivedRequests", ""),
+            items.get("selfDeliveredFromReceived", ""),
+            items.get("deliveredByOthersFromReceived", ""),
+            _since(created_at.get(items["address"].lower())),
         )
         for items, metadata_link, terms_url, operator, claim in zip(
             mech_list_data, metadata_links, terms_urls, operators, claims

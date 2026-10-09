@@ -30,6 +30,7 @@ import requests
 from click.testing import CliRunner
 from mech_client.cli.commands.mech_cmd import (
     _claimed_operator_labels,
+    _creation_dates,
     _fetch_manifest,
     _fetch_manifests,
     _operator_claim_label,
@@ -340,6 +341,32 @@ class TestClaimedOperatorLabels:
             ]
 
 
+class TestCreationDates:
+    """The Since column never fails the listing."""
+
+    def test_passes_the_query_result_through(self) -> None:
+        """A working query gives the dates, keyed as the query keys them."""
+        with patch(
+            f"{MODULE}.query_mech_creations", return_value={"0xabc": CREATED_AT}
+        ) as query:
+            assert _creation_dates("gnosis", ["0xabc"]) == {"0xabc": CREATED_AT}
+        query.assert_called_once_with("gnosis", ["0xabc"])
+
+    @pytest.mark.parametrize(
+        "error",
+        [SubgraphError("malformed"), RuntimeError("transport down")],
+        ids=["subgraph_error", "transport_error"],
+    )
+    def test_a_failed_query_leaves_every_date_blank(self, error: Exception) -> None:
+        """A failed creation query is logged and the column stays blank."""
+        with (
+            patch(f"{MODULE}.query_mech_creations", side_effect=error),
+            patch(f"{MODULE}.logger") as logger,
+        ):
+            assert _creation_dates("gnosis", ["0xabc"]) == {}
+        logger.warning.assert_called_once()
+
+
 class TestSince:
     """The Since column is a UTC date, or blank."""
 
@@ -407,6 +434,47 @@ class TestMechListCommand:
             assert value in result.output
         assert "settled on-chain" in result.output
         creations.assert_called_once_with("gnosis", ["0x" + "a" * 40])
+
+    @patch(f"{MODULE}.query_mm_mechs_info")
+    def test_list_command_survives_a_failed_creation_query(
+        self, mock_query: MagicMock
+    ) -> None:
+        """The table still prints, with Since blank, when the creation query fails."""
+        mock_query.return_value = [_mech_row(receivedRequests="7")]
+        with (
+            patch(f"{MODULE}.query_mech_creations", side_effect=SubgraphError("down")),
+            patch(f"{MODULE}.logger"),
+        ):
+            result = CliRunner().invoke(mech, ["list", "--chain-config", "gnosis"])
+        assert result.exit_code == 0, result.output
+        assert "7" in result.output
+
+    @patch(f"{MODULE}.query_mm_mechs_info")
+    def test_list_command_keeps_the_existing_columns_in_place(
+        self, mock_query: MagicMock
+    ) -> None:
+        """The new columns come last, so readers keyed by position are unchanged."""
+        mock_query.return_value = [_mech_row()]
+        result = CliRunner().invoke(mech, ["list", "--chain-config", "gnosis"])
+        assert result.exit_code == 0
+        header = next(
+            line for line in result.output.splitlines() if "AI Agent Id" in line
+        )
+        columns = [cell.strip() for cell in header.strip("|").split("|")]
+        assert columns == [
+            "AI Agent Id",
+            "Mech Type",
+            "Mech Address",
+            "Total Deliveries",
+            "Metadata Link",
+            "Terms",
+            "Operator",
+            "Claimed Operator",
+            "Received",
+            "Self-delivered",
+            "By others",
+            "Since",
+        ]
 
     @patch(f"{MODULE}.query_mm_mechs_info")
     def test_list_command_shows_the_claimed_operator(
