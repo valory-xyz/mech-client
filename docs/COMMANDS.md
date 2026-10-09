@@ -133,20 +133,56 @@ ENV VARS:
 ```
 mechx mech list --chain-config gnosis
 ├─ Subgraph GraphQL API (MECHX_SUBGRAPH_URL) ← Optional override
-│  └─ Query: MechsOrderedByServiceDeliveries
-│     ├─ Returns: service IDs, addresses, delivery counts
-│     └─ Filters: totalDeliveries > 0
+│  ├─ Query: MechsOrderedByServiceDeliveries
+│  │  ├─ Returns: service IDs, addresses, delivery counts and record
+│  │  └─ Filters: totalDeliveries > 0
+│  └─ Query: MechCreations (creation block timestamps, one request)
+├─ IPFS Gateway
+│  └─ Fetch each mech's manifest (termsUrl, operator claim)
+├─ Registry subgraph (MECHX_REGISTRY_SUBGRAPH_URL) ← Optional override
+│  └─ Query: ServiceAgentId (only for mechs whose manifest names an operator)
+├─ Operator domain
+│  └─ Fetch https://<domain>/.well-known/agent-registration.json (no redirects)
+├─ DNS
+│  └─ Resolve <address>-<chain id>.mech.valory.xyz (Operator column)
 └─ [Output references]
    └─ IPFS Gateway links (metadata URLs)
 
 ENV VARS:
   MECHX_SUBGRAPH_URL (optional - defaults provided for gnosis, base, polygon, optimism, robinhood)
+  MECHX_REGISTRY_SUBGRAPH_URL (optional - defaults provided for the same chains)
 
 NOTES:
   - Read-only command, no transactions
   - Does NOT use HTTP RPC
   - Default subgraph URLs provided for gnosis, base, polygon, optimism, robinhood (the marketplace squid)
   - Override with MECHX_SUBGRAPH_URL only if using custom subgraph (on robinhood, it must also be a squid)
+  - Received / Self-delivered / By others count on-chain and settled off-chain requests, not split by path
+  - Claimed Operator is the manifest's statement; verified only when the domain proof lists the mech's ERC-8004 agent id
+```
+
+### 6b. mech info
+
+```
+mechx mech info --chain-config gnosis --address 0x...
+├─ Subgraph GraphQL API (MECHX_SUBGRAPH_URL) ← Optional override
+│  └─ Query: MechRecord (delivery record, payment type, creation block, manifest hash)
+├─ IPFS Gateway
+│  └─ Fetch the mech's manifest
+├─ Registry subgraph (MECHX_REGISTRY_SUBGRAPH_URL) ← Optional override
+│  └─ Query: ServiceAgentId (only when the manifest names an operator)
+├─ Operator domain
+│  └─ Fetch https://<domain>/.well-known/agent-registration.json (no redirects)
+└─ DNS
+   └─ Resolve <address>-<chain id>.mech.valory.xyz (terms)
+
+ENV VARS:
+  MECHX_SUBGRAPH_URL, MECHX_REGISTRY_SUBGRAPH_URL (optional - defaults provided)
+
+NOTES:
+  - Read-only command, no transactions; does NOT use HTTP RPC
+  - Fails closed: no manifest, or one that cannot be read, means no report
+  - Benchmark links are the operator's claim and are not checked; no price is shown
 ```
 
 ### 7. tool list
@@ -226,6 +262,7 @@ NOTES:
 | deposit token | ✓ | | |
 | subscription purchase | ✓ | | |
 | mech list | | ○ | |
+| mech info | | ○ | |
 | tool list | ✓ | | |
 | tool describe | ✓ | | |
 | tool schema | ✓ | | |

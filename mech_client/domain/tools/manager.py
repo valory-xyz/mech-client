@@ -23,6 +23,7 @@ import json
 import logging
 import unicodedata
 from dataclasses import asdict
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
@@ -33,10 +34,24 @@ from mech_client.domain.identification import (
     VALORY_TERMS_NOTICE,
     identify,
 )
+from mech_client.domain.operator import (
+    BENCHMARK_NOTE,
+    DomainVerification,
+    read_benchmarks,
+    read_operator,
+    verify_domain,
+)
 from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.config.loader import get_mech_config
+from mech_client.infrastructure.config.payment_config import PaymentType
+from mech_client.infrastructure.subgraph.queries import (
+    MechRecord,
+    query_erc8004_agent_id,
+    query_mech_record,
+)
+from mech_client.utils.errors.exceptions import ManifestError
 from web3.constants import ADDRESS_ZERO
 
 logger = logging.getLogger(__name__)
@@ -48,6 +63,100 @@ TOOL_METADATA = "toolMetadata"
 # when it is a plain https URL of a sane length.
 TERMS_URL_MAX_LENGTH = 2048
 IDENTIFICATION_NOTE = "Could not check whether Valory operates this mech."
+DELIVERY_NOTE = (
+    "Counts cover requests made on-chain and off-chain requests the mech "
+    "settled on-chain, not split by path. An off-chain request that was never "
+    "delivered appears nowhere on-chain."
+)
+PAYMENT_NOTE = (
+    "No price is quoted here: the mech contract quotes the charge at request "
+    "time, and its maximum delivery rate is only a ceiling."
+)
+AGENT_ID_LOOKUP_NOTE = (
+    "The mech's ERC-8004 identity could not be looked up; the operator's "
+    "domain will be checked again next time."
+)
+PAYMENT_LABELS = {
+    PaymentType.NATIVE: "native",
+    PaymentType.OLAS_TOKEN: "olas",
+    PaymentType.USDC_TOKEN: "usdc",
+    PaymentType.NATIVE_NVM: "native_nvm",
+    PaymentType.TOKEN_NVM_USDC: "usdc_nvm",
+}
+UNKNOWN_PAYMENT = "unknown"
+
+
+def payment_label(payment_type: str) -> str:
+    """
+    Name the payment method behind a mech's on-chain payment type.
+
+    :param payment_type: The bytes32 payment type as the indexer stores it
+    :return: The method name, or "unknown" for a payment type this client does not know
+    """
+    value = payment_type.lower()
+    if value.startswith("0x"):
+        value = value[2:]
+    try:
+        return PAYMENT_LABELS[PaymentType.from_value(value)]
+    except ValueError:
+        return UNKNOWN_PAYMENT
+
+
+def _lookup_agent_id(chain_config: str, service_id: int) -> Optional[int]:
+    """
+    Look up a service's ERC-8004 agent id, treating any failure as not found.
+
+    :param chain_config: Chain configuration name
+    :param service_id: The Olas service id
+    :return: The agent id, or None when there is none or the lookup failed
+    """
+    # A failed lookup must not withhold the rest of the report; it only
+    # leaves the domain unverified. The indexer client raises transport and
+    # GraphQL errors of its own types, so anything it raises is a failed lookup.
+    try:
+        return query_erc8004_agent_id(chain_config, service_id)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning(
+            f"Could not look up the ERC-8004 agent id of service {service_id} "
+            f"on {chain_config}: {exc}"
+        )
+        return None
+
+
+def claimed_operator(
+    chain_config: str, chain_id: int, service_id: int, manifest: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
+    """
+    Report who the manifest says runs the mech, and whether the domain agrees.
+
+    The claim is the operator's own text, passed on as data. It is verified
+    only when the domain named in the claim publishes the mech's ERC-8004
+    identity in its proof file. Everything short of that is unverified, with
+    the reason.
+
+    :param chain_config: Chain configuration name
+    :param chain_id: The chain the mech is deployed on
+    :param service_id: The mech's Olas service id
+    :param manifest: The mech's parsed manifest document
+    :return: The operator block, or None when the manifest publishes no usable one
+    """
+    operator = read_operator(manifest)
+    if operator is None:
+        return None
+    agent_id = _lookup_agent_id(chain_config, service_id)
+    if agent_id is None:
+        verification = DomainVerification(False, AGENT_ID_LOOKUP_NOTE)
+    else:
+        verification = verify_domain(operator.domain, chain_id, agent_id)
+    block: Dict[str, Any] = {
+        "name": operator.name,
+        "domain": operator.domain,
+        "url": operator.url,
+        "domain_verified": verification.verified,
+    }
+    if verification.note:
+        block["verification_note"] = verification.note
+    return block
 
 
 class ToolManager:
@@ -193,6 +302,75 @@ class ToolManager:
         if terms_url:
             report["terms_url"] = terms_url
         return report
+
+    def mech_report(
+        self, mech_address: str, metadata: Any, record: Optional[MechRecord] = None
+    ) -> Dict[str, Any]:
+        """
+        Report who runs a mech and how it has behaved, for a buyer deciding to pay.
+
+        Everything ``terms_report`` says, plus the operator the manifest
+        claims and whether its domain backs the claim, the benchmark link
+        the operator publishes per tool, the mech's on-chain delivery record
+        and age, and its payment method. Fails closed: an unreadable manifest
+        means no report, and anything not verified says so.
+
+        :param mech_address: The address of the mech
+        :param metadata: The mech's already fetched manifest document, or None
+        :param record: The mech's already fetched on-chain record, or None to query it
+        :return: The terms report keys; ``operator`` when the manifest names
+            one; ``benchmarks`` and ``benchmark_note`` when a tool links one;
+            ``delivery`` and ``payment`` always
+        :raises ManifestError: If the manifest could not be read
+        """
+        if not isinstance(metadata, dict):
+            raise ManifestError(
+                f"The manifest of mech {mech_address} could not be read, "
+                f"so no report is made for it."
+            )
+        report = self.terms_report(mech_address, metadata)
+        if record is None:
+            record = query_mech_record(self.chain_config, mech_address)
+        operator = claimed_operator(
+            self.chain_config,
+            self.mech_config.ledger_config.chain_id,
+            record.service_id,
+            metadata,
+        )
+        if operator is not None:
+            report["operator"] = operator
+        benchmarks = read_benchmarks(metadata)
+        if benchmarks:
+            report["benchmarks"] = {
+                tool: {"metric": b.metric, "window": b.window, "url": b.url}
+                for tool, b in benchmarks.items()
+            }
+            report["benchmark_note"] = BENCHMARK_NOTE
+        report["delivery"] = self.delivery_record(record)
+        report["payment"] = {
+            "type": payment_label(record.payment_type),
+            "note": PAYMENT_NOTE,
+        }
+        return report
+
+    @staticmethod
+    def delivery_record(record: MechRecord) -> Dict[str, Any]:
+        """
+        Shape a mech's on-chain record for a report.
+
+        :param record: The mech's record from the marketplace indexer
+        :return: The counters, the creation time in ISO 8601 UTC, the age in
+            whole days, and the note on what the counters cover
+        """
+        now = datetime.now(timezone.utc)
+        return {
+            "received_requests": record.received_requests,
+            "self_delivered": record.self_delivered,
+            "delivered_by_others": record.delivered_by_others,
+            "since": record.created_at.isoformat(),
+            "age_days": max((now - record.created_at).days, 0),
+            "note": DELIVERY_NOTE,
+        }
 
     def get_tools(self, service_id: int) -> Optional[ToolsForMarketplaceMech]:
         """

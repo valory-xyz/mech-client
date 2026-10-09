@@ -19,6 +19,7 @@
 
 """Tests for chain configuration and RPC validation."""
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -543,6 +544,74 @@ class TestMechConfigEnvOverrides:
         )
 
         assert mech_config.subgraph_url == "https://custom-subgraph/"
+
+
+class TestMechConfigRegistrySubgraphUrl:
+    """The registry endpoint defaults blank and follows its own override."""
+
+    @staticmethod
+    def _env(registry_url: Any) -> MagicMock:
+        """Build an environment with every override off but the registry one."""
+        mock_env = MagicMock()
+        for name in (
+            "mechx_chain_rpc",
+            "mechx_gas_limit",
+            "mechx_transaction_url",
+            "mechx_subgraph_url",
+            "mechx_ledger_chain_id",
+            "mechx_ledger_poa_chain",
+            "mechx_ledger_default_gas_price_strategy",
+            "mechx_ledger_is_gas_estimation_enabled",
+        ):
+            setattr(mock_env, name, None)
+        mock_env.mechx_registry_subgraph_url = registry_url
+        return mock_env
+
+    @staticmethod
+    def _config(**overrides: Any) -> "MechConfig":
+        """Build a config with the registry field left to its default unless given."""
+        from mech_client.infrastructure.config.chain_config import (  # pylint: disable=import-outside-toplevel
+            LedgerConfig,
+            MechConfig,
+        )
+
+        ledger_config = LedgerConfig(
+            address="https://rpc.gnosischain.com",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="eip1559",
+            is_gas_estimation_enabled=False,
+        )
+        return MechConfig(
+            subgraph_dialect="graph",
+            complementary_metadata_hash_address="0x" + "2" * 40,
+            rpc_url="https://rpc.gnosischain.com",
+            ledger_config=ledger_config,
+            gas_limit=500000,
+            transaction_url="https://gnosisscan.io/tx/{transaction_digest}",
+            subgraph_url="https://api.subgraph.autonolas.tech/gnosis",
+            price=10000000000000000,
+            mech_marketplace_contract="0x" + "3" * 40,
+            **overrides,
+        )
+
+    @patch("mech_client.infrastructure.config.chain_config.EnvironmentConfig.load")
+    def test_defaults_to_blank_so_older_callers_still_build(
+        self, mock_env_load: MagicMock
+    ) -> None:
+        """A config built without the field reads as a chain with no registry."""
+        mock_env_load.return_value = self._env(None)
+        assert self._config().registry_subgraph_url == ""
+
+    @patch("mech_client.infrastructure.config.chain_config.EnvironmentConfig.load")
+    def test_env_override_replaces_the_registry_url_only(
+        self, mock_env_load: MagicMock
+    ) -> None:
+        """MECHX_REGISTRY_SUBGRAPH_URL changes the registry endpoint, not the marketplace one."""
+        mock_env_load.return_value = self._env("https://custom-registry/")
+        config = self._config(registry_subgraph_url="https://registry.default/")
+        assert config.registry_subgraph_url == "https://custom-registry/"
+        assert config.subgraph_url == "https://api.subgraph.autonolas.tech/gnosis"
 
 
 class TestMechConfigRequiresItsDialect:

@@ -96,6 +96,14 @@ class SubgraphError(MechClientError):
         super().__init__(message, details)
 
 
+class ManifestError(MechClientError):
+    """Exception raised when a mech's published manifest cannot be read.
+
+    A mech report is built from the manifest, so an unreadable one means no
+    report rather than a partial one.
+    """
+
+
 class ContractError(MechClientError):
     """Exception raised for smart contract interaction errors.
 

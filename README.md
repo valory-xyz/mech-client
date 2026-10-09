@@ -103,6 +103,25 @@ An address back means Valory operates that Mech, and no such name means it does 
 
 The check trusts your DNS resolver. The lookup is not DNSSEC-validated, so a resolver or network that forges the answer for that one name could make a Mech look Valory operated.
 
+### Who runs a Mech, and how it has behaved
+
+Before paying a Mech you can ask who runs it and what its record is:
+
+```bash
+mechx mech info --chain-config gnosis --address 0xc05e7412439bd7e91730a6880e18d5d5873f632c
+```
+
+The report is built from the Mech's published manifest and the marketplace subgraph, and it fails closed: a manifest that cannot be read gives no report rather than a partial one, and anything not verified says so.
+
+- **Operator.** The manifest may name its operator (`operator.name` and `operator.domain`). That is the operator's own statement, passed on as data. It is marked verified only when `https://<domain>/.well-known/agent-registration.json` lists the Mech's ERC-8004 agent id for the chain's identity registry. The agent id comes from the service registry subgraph; it is not the Olas service id except by coincidence. A proof that cannot be fetched leaves the domain unverified, with the reason, and is fetched again next time rather than remembered as a no. The domain must be a bare lowercase hostname and every link an `https` URL with a host, or the field is treated as unpublished.
+- **Benchmarks.** Each tool may carry a benchmark link (`toolMetadata.<tool>.benchmark`). The report passes the metric, window and link on as the operator's claim. It never shows a figure, checked or not.
+- **Delivery record.** `receivedRequests`, `selfDeliveredFromReceived` and `deliveredByOthersFromReceived` from the marketplace subgraph, plus the Mech's age from its creation block. The counters cover requests made on-chain and off-chain requests the Mech settled on-chain, and cannot be split by path. An off-chain request that was never delivered appears nowhere on-chain.
+- **Payment.** The payment method (native, OLAS, USDC, or a subscription), with no price. The Mech contract quotes the charge at request time, and its maximum delivery rate is only a ceiling a Mech may charge less than.
+
+`mechx mech list` shows the delivery counters, the Mech's creation date and the claimed operator (with `verified` or `unverified`) as columns. For library users, `ToolManager.mech_report(mech_address, metadata)` returns the same report as data, a superset of `terms_report`.
+
+The service registry subgraph has a default endpoint per chain and can be overridden with `MECHX_REGISTRY_SUBGRAPH_URL`.
+
 ### Supported Chains
 
 **Supported chains:** `gnosis`, `base`, `polygon`, `optimism`, `robinhood`

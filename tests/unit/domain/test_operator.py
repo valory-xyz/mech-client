@@ -1,0 +1,636 @@
+# -*- coding: utf-8 -*-
+# ------------------------------------------------------------------------------
+#
+#   Copyright 2026 Valory AG
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+# ------------------------------------------------------------------------------
+
+"""Tests for the operator claim and its domain check."""
+
+from typing import Any, Dict, Optional
+from unittest.mock import MagicMock, patch
+
+import pytest
+import requests
+from mech_client.domain.operator import (
+    BENCHMARK_WINDOWS,
+    IDENTITY_REGISTRY,
+    NO_AGENT_ID_NOTE,
+    PROOF_FETCH_TIMEOUT,
+    PROOF_MISMATCH_NOTE,
+    PROOF_NOT_FOUND_NOTE,
+    PROOF_UNAVAILABLE_NOTE,
+    Benchmark,
+    DomainVerification,
+    Operator,
+    ProofStatus,
+    clean_text,
+    fetch_domain_proof,
+    hostname,
+    https_url,
+    proof_matches,
+    proof_url,
+    read_benchmarks,
+    read_operator,
+    verify_domain,
+)
+
+MODULE = "mech_client.domain.operator"
+DOMAIN = "www.valory.xyz"
+PROOF_URL = f"https://{DOMAIN}/.well-known/agent-registration.json"
+GNOSIS = 100
+AGENT_ID = 2182
+BENCHMARK_URL = "https://analytics.test/v1/metrics/mech/100/0xabc"
+
+
+def _registration(chain_id: int = GNOSIS, agent_id: Any = AGENT_ID) -> Dict[str, Any]:
+    """Build one proof registration entry."""
+    return {
+        "agentRegistry": f"eip155:{chain_id}:{IDENTITY_REGISTRY}",
+        "agentId": agent_id,
+    }
+
+
+def _response(status_code: int, body: Any = None, bad_json: bool = False) -> MagicMock:
+    """Build a stand-in for a requests response."""
+    response = MagicMock()
+    response.status_code = status_code
+    if bad_json:
+        response.json.side_effect = ValueError("not json")
+    else:
+        response.json.return_value = body
+    return response
+
+
+class TestCleanText:
+    """A text field is passed on stripped, or not at all."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("Valory", "Valory"),
+            ("  Valory AG  ", "Valory AG"),
+            ("", None),
+            ("   ", None),
+            (None, None),
+            (12, None),
+            (["Valory"], None),
+            ("Val\x00ory", None),
+            ("Valory\n", "Valory"),
+            ("Val\nory", None),
+            ("x" * 201, None),
+            ("x" * 200, "x" * 200),
+        ],
+        ids=[
+            "plain",
+            "stripped",
+            "empty",
+            "blank",
+            "none",
+            "int",
+            "list",
+            "nul_byte",
+            "trailing_newline_stripped",
+            "newline_inside",
+            "over_cap",
+            "at_cap",
+        ],
+    )
+    def test_reads_only_printable_bounded_strings(
+        self, value: Any, expected: Optional[str]
+    ) -> None:
+        """Only a non-blank printable string within the cap is returned."""
+        assert clean_text(value) == expected
+
+
+class TestHttpsUrl:
+    """A URL is parsed, not prefix-tested."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (BENCHMARK_URL, BENCHMARK_URL),
+            (f"  {BENCHMARK_URL}  ", BENCHMARK_URL),
+            ("https://", None),
+            ("https:///path", None),
+            ("http://analytics.test/x", None),
+            ("analytics.test/x", None),
+            ("https://analytics.test/a b", None),
+            ("https://analytics.test/a\x07", None),
+            ("https://[::1", None),
+            ("", None),
+            (None, None),
+            (7, None),
+            ("https://h/" + "x" * 2040, None),
+        ],
+        ids=[
+            "plain",
+            "stripped",
+            "scheme_only",
+            "no_host",
+            "http",
+            "no_scheme",
+            "space",
+            "control_char",
+            "unparseable",
+            "empty",
+            "none",
+            "int",
+            "over_cap",
+        ],
+    )
+    def test_requires_https_with_a_host(
+        self, value: Any, expected: Optional[str]
+    ) -> None:
+        """Only an https URL with a host and no whitespace is returned."""
+        assert https_url(value) == expected
+
+
+class TestHostname:
+    """The operator domain is a bare lowercase hostname."""
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            DOMAIN,
+            "valory.xyz",
+            "a-b.c-d.example",
+            "  valory.xyz  ",
+            "x" * 63 + ".example",
+            "1.2.3.example",
+        ],
+        ids=["www", "apex", "hyphens", "stripped", "max_label", "digit_labels"],
+    )
+    def test_accepts_bare_lowercase_hostnames(self, value: str) -> None:
+        """A dotted name of valid labels is accepted, stripped."""
+        assert hostname(value) == value.strip()
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "https://valory.xyz",
+            "valory.xyz/",
+            "valory.xyz/path",
+            "valory.xyz:443",
+            "user@valory.xyz",
+            "valory.xyz.",
+            ".valory.xyz",
+            "Valory.xyz",
+            "valory",
+            "val ory.xyz",
+            "-valory.xyz",
+            "valory-.xyz",
+            "x" * 64 + ".example",
+            "192.168.0.1",
+            "valory.xyz?x=1",
+            "valory.xyz#frag",
+            "ｖalory.xyz",
+            "",
+            None,
+            5,
+            ("a." * 127) + "example",
+        ],
+        ids=[
+            "scheme",
+            "trailing_slash",
+            "path",
+            "port",
+            "credentials",
+            "trailing_dot",
+            "leading_dot",
+            "uppercase",
+            "no_dot",
+            "space",
+            "leading_hyphen",
+            "trailing_hyphen",
+            "label_too_long",
+            "ipv4",
+            "query",
+            "fragment",
+            "non_ascii",
+            "empty",
+            "none",
+            "int",
+            "too_long",
+        ],
+    )
+    def test_rejects_anything_but_a_bare_hostname(self, value: Any) -> None:
+        """A scheme, path, port, case, bad label or IPv4 literal is rejected."""
+        assert hostname(value) is None
+
+
+class TestReadOperator:
+    """The operator block needs a usable name and domain, or it is unpublished."""
+
+    def test_reads_name_and_domain(self) -> None:
+        """A valid block yields the operator and its https URL."""
+        operator = read_operator(
+            {"operator": {"name": " Valory ", "domain": DOMAIN, "contact": "x@y"}}
+        )
+        assert operator == Operator(name="Valory", domain=DOMAIN)
+        assert operator is not None and operator.url == f"https://{DOMAIN}"
+
+    @pytest.mark.parametrize(
+        "manifest",
+        [
+            {},
+            {"operator": None},
+            {"operator": "Valory"},
+            {"operator": ["Valory", DOMAIN]},
+            {"operator": {"name": "Valory"}},
+            {"operator": {"domain": DOMAIN}},
+            {"operator": {"name": "", "domain": DOMAIN}},
+            {"operator": {"name": "Valory", "domain": "https://valory.xyz"}},
+            {"operator": {"name": 1, "domain": DOMAIN}},
+        ],
+        ids=[
+            "absent",
+            "null",
+            "string",
+            "list",
+            "no_domain",
+            "no_name",
+            "blank_name",
+            "domain_with_scheme",
+            "name_not_string",
+        ],
+    )
+    def test_unusable_block_reads_as_unpublished(
+        self, manifest: Dict[str, Any]
+    ) -> None:
+        """Anything short of a name and a bare domain is None."""
+        assert read_operator(manifest) is None
+
+
+class TestReadBenchmarks:
+    """Each tool's benchmark is a link with a metric and window, never a figure."""
+
+    def test_reads_one_benchmark_per_valid_tool(self) -> None:
+        """Valid blocks are keyed by tool; a published value is dropped."""
+        manifest = {
+            "toolMetadata": {
+                "tool-a": {
+                    "benchmark": {
+                        "metric": "accuracy",
+                        "value": 0.9,
+                        "window": "30d",
+                        "url": BENCHMARK_URL,
+                    }
+                },
+                "tool-b": {
+                    "benchmark": {
+                        "metric": "brier",
+                        "window": "all",
+                        "url": BENCHMARK_URL,
+                    }
+                },
+            }
+        }
+        assert read_benchmarks(manifest) == {
+            "tool-a": Benchmark(metric="accuracy", window="30d", url=BENCHMARK_URL),
+            "tool-b": Benchmark(metric="brier", window="all", url=BENCHMARK_URL),
+        }
+
+    @pytest.mark.parametrize("window", BENCHMARK_WINDOWS)
+    def test_every_window_is_accepted(self, window: str) -> None:
+        """The four spec windows all pass."""
+        manifest = {
+            "toolMetadata": {
+                "t": {
+                    "benchmark": {"metric": "m", "window": window, "url": BENCHMARK_URL}
+                }
+            }
+        }
+        assert read_benchmarks(manifest)["t"].window == window
+
+    @pytest.mark.parametrize(
+        "manifest",
+        [
+            {},
+            {"toolMetadata": None},
+            {"toolMetadata": ["t"]},
+            {"toolMetadata": {"t": None}},
+            {"toolMetadata": {"t": {}}},
+            {"toolMetadata": {"t": {"benchmark": "see site"}}},
+            {
+                "toolMetadata": {
+                    "t": {"benchmark": {"window": "30d", "url": BENCHMARK_URL}}
+                }
+            },
+            {
+                "toolMetadata": {
+                    "t": {
+                        "benchmark": {
+                            "metric": "",
+                            "window": "30d",
+                            "url": BENCHMARK_URL,
+                        }
+                    }
+                }
+            },
+            {
+                "toolMetadata": {
+                    "t": {
+                        "benchmark": {
+                            "metric": "m",
+                            "window": "1y",
+                            "url": BENCHMARK_URL,
+                        }
+                    }
+                }
+            },
+            {"toolMetadata": {"t": {"benchmark": {"metric": "m", "window": "30d"}}}},
+            {
+                "toolMetadata": {
+                    "t": {
+                        "benchmark": {
+                            "metric": "m",
+                            "window": "30d",
+                            "url": "http://x.test",
+                        }
+                    }
+                }
+            },
+            {
+                "toolMetadata": {
+                    "t": {
+                        "benchmark": {"metric": "m", "window": "30d", "url": "https://"}
+                    }
+                }
+            },
+            {
+                "toolMetadata": {
+                    5: {
+                        "benchmark": {
+                            "metric": "m",
+                            "window": "30d",
+                            "url": BENCHMARK_URL,
+                        }
+                    }
+                }
+            },
+        ],
+        ids=[
+            "no_tool_metadata",
+            "null_tool_metadata",
+            "list_tool_metadata",
+            "null_entry",
+            "no_benchmark",
+            "benchmark_string",
+            "no_metric",
+            "blank_metric",
+            "bad_window",
+            "no_url",
+            "http_url",
+            "scheme_only_url",
+            "tool_not_string",
+        ],
+    )
+    def test_unusable_blocks_are_left_out(self, manifest: Dict[str, Any]) -> None:
+        """A tool with an unusable block is absent rather than partial."""
+        assert read_benchmarks(manifest) == {}
+
+
+class TestProofUrl:
+    """The proof lives at the well-known path on the exact domain."""
+
+    def test_builds_the_well_known_url(self) -> None:
+        """The URL is https on the domain, at the ERC-8004 path."""
+        assert proof_url(DOMAIN) == PROOF_URL
+
+
+class TestFetchDomainProof:
+    """Fetching the proof tells a verdict from an outage, and follows nothing."""
+
+    def test_a_json_object_is_found(self) -> None:
+        """A 2xx JSON object is the proof, fetched without following redirects."""
+        proof = {"registrations": [_registration()]}
+        with patch(f"{MODULE}.requests.get", return_value=_response(200, proof)) as get:
+            outcome = fetch_domain_proof(DOMAIN)
+        assert outcome.status is ProofStatus.FOUND
+        assert outcome.proof == proof
+        get.assert_called_once_with(
+            PROOF_URL, timeout=PROOF_FETCH_TIMEOUT, allow_redirects=False
+        )
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            _response(301, {"registrations": [_registration()]}),
+            _response(302, {"registrations": [_registration()]}),
+            _response(404, {}),
+            _response(403, {}),
+            _response(200, bad_json=True),
+            _response(200, [_registration()]),
+            _response(200, "proof"),
+            _response(200, None),
+        ],
+        ids=[
+            "moved",
+            "found_redirect",
+            "not_found",
+            "forbidden",
+            "not_json",
+            "json_list",
+            "json_string",
+            "json_null",
+        ],
+    )
+    def test_an_answer_without_a_proof_is_a_verdict(self, response: MagicMock) -> None:
+        """A redirect, a 4xx, or a non-object body means no proof, not an outage."""
+        with (
+            patch(f"{MODULE}.requests.get", return_value=response),
+            patch(f"{MODULE}.logger"),
+        ):
+            outcome = fetch_domain_proof(DOMAIN)
+        assert outcome.status is ProofStatus.NOT_FOUND
+        assert outcome.proof is None
+
+    @pytest.mark.parametrize(
+        "status_code",
+        [500, 502, 503],
+        ids=["server_error", "bad_gateway", "unavailable"],
+    )
+    def test_a_server_error_is_an_outage(self, status_code: int) -> None:
+        """A 5xx says nothing about the proof, and is logged as a warning."""
+        with (
+            patch(f"{MODULE}.requests.get", return_value=_response(status_code, {})),
+            patch(f"{MODULE}.logger") as logger,
+        ):
+            outcome = fetch_domain_proof(DOMAIN)
+        assert outcome.status is ProofStatus.UNAVAILABLE
+        logger.warning.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            requests.Timeout("slow"),
+            requests.ConnectionError("down"),
+            requests.TooManyRedirects("loop"),
+        ],
+        ids=["timeout", "connection", "redirects"],
+    )
+    def test_a_transport_failure_is_an_outage(self, error: Exception) -> None:
+        """A failed fetch says nothing about the proof, and is logged as a warning."""
+        with (
+            patch(f"{MODULE}.requests.get", side_effect=error),
+            patch(f"{MODULE}.logger") as logger,
+        ):
+            outcome = fetch_domain_proof(DOMAIN)
+        assert outcome.status is ProofStatus.UNAVAILABLE
+        logger.warning.assert_called_once()
+
+
+class TestProofMatches:
+    """A proof matches on this chain's registry and this agent id, nothing less."""
+
+    @pytest.mark.parametrize(
+        "entry",
+        [
+            _registration(),
+            _registration(agent_id=str(AGENT_ID)),
+            {
+                "agentRegistry": f"eip155:{GNOSIS}:{IDENTITY_REGISTRY.lower()}",
+                "agentId": AGENT_ID,
+            },
+            {
+                "agentRegistry": f"EIP155:{GNOSIS}:{IDENTITY_REGISTRY.upper()}",
+                "agentId": AGENT_ID,
+            },
+        ],
+        ids=["int_id", "digit_string_id", "lowercase_registry", "uppercase_registry"],
+    )
+    def test_matches_registry_case_insensitively_and_numeric_ids(
+        self, entry: Dict[str, Any]
+    ) -> None:
+        """Registry case and the id's spelling do not matter; the values do."""
+        proof = {"registrations": [_registration(agent_id=1), entry]}
+        assert proof_matches(proof, GNOSIS, AGENT_ID) is True
+
+    @pytest.mark.parametrize(
+        "proof",
+        [
+            {},
+            {"registrations": None},
+            {"registrations": {}},
+            {"registrations": []},
+            {"registrations": [None]},
+            {"registrations": ["eip155:100:x"]},
+            {"registrations": [_registration(agent_id=AGENT_ID + 1)]},
+            {"registrations": [_registration(chain_id=137)]},
+            {"registrations": [_registration(agent_id=True)]},
+            {"registrations": [_registration(agent_id=float(AGENT_ID))]},
+            {"registrations": [_registration(agent_id=f"{AGENT_ID}x")]},
+            {"registrations": [_registration(agent_id=None)]},
+            {"registrations": [{"agentId": AGENT_ID}]},
+            {"registrations": [{"agentId": AGENT_ID, "agentRegistry": 5}]},
+            {
+                "registrations": [
+                    {
+                        "agentId": AGENT_ID,
+                        "agentRegistry": f"eip155:{GNOSIS}:0x{'1' * 40}",
+                    }
+                ]
+            },
+        ],
+        ids=[
+            "no_registrations",
+            "null_registrations",
+            "dict_registrations",
+            "empty",
+            "null_entry",
+            "string_entry",
+            "other_agent",
+            "other_chain",
+            "bool_id",
+            "float_id",
+            "non_digit_id",
+            "null_id",
+            "no_registry",
+            "registry_not_string",
+            "other_registry",
+        ],
+    )
+    def test_anything_else_does_not_match(self, proof: Dict[str, Any]) -> None:
+        """A missing, mistyped or different entry is no match."""
+        assert proof_matches(proof, GNOSIS, AGENT_ID) is False
+
+
+class TestVerifyDomain:
+    """The domain check fails closed, and says why."""
+
+    def test_no_agent_id_is_unverified_without_a_fetch(self) -> None:
+        """Without an identity there is nothing to match, so nothing is fetched."""
+        with patch(f"{MODULE}.requests.get") as get:
+            result = verify_domain(DOMAIN, GNOSIS, None)
+        assert result == DomainVerification(False, NO_AGENT_ID_NOTE)
+        get.assert_not_called()
+
+    def test_a_matching_proof_verifies(self) -> None:
+        """A fetched proof listing this chain and agent id verifies the domain."""
+        proof = {"registrations": [_registration()]}
+        with patch(f"{MODULE}.requests.get", return_value=_response(200, proof)):
+            assert verify_domain(DOMAIN, GNOSIS, AGENT_ID) == DomainVerification(True)
+
+    @pytest.mark.parametrize(
+        ("get", "note"),
+        [
+            ({"side_effect": requests.ConnectionError("down")}, PROOF_UNAVAILABLE_NOTE),
+            ({"return_value": _response(503, {})}, PROOF_UNAVAILABLE_NOTE),
+            ({"return_value": _response(404, {})}, PROOF_NOT_FOUND_NOTE),
+            ({"return_value": _response(301, {})}, PROOF_NOT_FOUND_NOTE),
+            (
+                {
+                    "return_value": _response(
+                        200, {"registrations": [_registration(137)]}
+                    )
+                },
+                PROOF_MISMATCH_NOTE,
+            ),
+            ({"return_value": _response(200, {})}, PROOF_MISMATCH_NOTE),
+        ],
+        ids=[
+            "unreachable",
+            "server_error",
+            "missing",
+            "redirect",
+            "other_chain",
+            "no_list",
+        ],
+    )
+    def test_everything_short_of_a_match_is_unverified_with_the_reason(
+        self, get: Dict[str, Any], note: str
+    ) -> None:
+        """Outage, absence and mismatch are each unverified, each with its own note."""
+        with patch(f"{MODULE}.requests.get", **get), patch(f"{MODULE}.logger"):
+            assert verify_domain(DOMAIN, GNOSIS, AGENT_ID) == DomainVerification(
+                False, note
+            )
+
+    def test_an_outage_is_not_remembered(self) -> None:
+        """The next call fetches again; nothing caches a failed proof as a no."""
+        proof = {"registrations": [_registration()]}
+        with (
+            patch(
+                f"{MODULE}.requests.get",
+                side_effect=[requests.Timeout("slow"), _response(200, proof)],
+            ) as get,
+            patch(f"{MODULE}.logger"),
+        ):
+            first = verify_domain(DOMAIN, GNOSIS, AGENT_ID)
+            second = verify_domain(DOMAIN, GNOSIS, AGENT_ID)
+        assert first.verified is False
+        assert second.verified is True
+        assert get.call_count == 2

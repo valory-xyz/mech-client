@@ -312,3 +312,150 @@ class TestSubgraphClientSortArguments:
             client.query_mechs(order_by=order_by, order_direction=order_direction)
         client._client.execute.assert_not_called()
 
+
+
+def _client_with(result: dict, dialect: str = "graph") -> SubgraphClient:
+    """Build a client whose underlying gql client answers with ``result``."""
+    client = SubgraphClient(
+        subgraph_url="https://subgraph.example.com", dialect=dialect
+    )
+    client._client = MagicMock()  # pylint: disable=protected-access
+    client._client.execute.return_value = result  # pylint: disable=protected-access
+    return client
+
+
+def _query_sent(mock_gql: MagicMock) -> str:
+    """Return the query string the client handed to gql."""
+    return mock_gql.call_args[1]["request_string"]
+
+
+MECH_ADDRESS = "0xC05e7412439bD7e91730a6880E18d5D5873F632C"
+
+
+class TestQueryMechsCarriesTheDeliveryRecord:
+    """The listing query asks for the per-mech counters the table shows."""
+
+    @patch("mech_client.infrastructure.subgraph.client.gql")
+    def test_counters_are_requested(self, mock_gql: MagicMock) -> None:
+        """All three counters are part of the listing selection."""
+        _client_with({"meches": []}).query_mechs()
+        query = _query_sent(mock_gql)
+        for field in (
+            "receivedRequests",
+            "selfDeliveredFromReceived",
+            "deliveredByOthersFromReceived",
+        ):
+            assert field in query
+
+
+class TestQueryMech:
+    """One mech's record and creation row, filtered in the indexer's own dialect."""
+
+    @patch("mech_client.infrastructure.subgraph.client.gql")
+    def test_graph_filters_by_address_and_mech(self, mock_gql: MagicMock) -> None:
+        """The Graph takes ``address:`` and ``mech:`` filters, lowercased."""
+        result = {"meches": [{"id": "1"}], "createMeches": [{"blockTimestamp": "1"}]}
+        assert _client_with(result).query_mech(MECH_ADDRESS) == result
+        query = _query_sent(mock_gql)
+        assert f'meches(where: {{address: "{MECH_ADDRESS.lower()}"}})' in query
+        assert f'createMeches(where: {{mech: "{MECH_ADDRESS.lower()}"}})' in query
+        for field in (
+            "receivedRequests",
+            "selfDeliveredFromReceived",
+            "deliveredByOthersFromReceived",
+            "paymentType",
+            "blockTimestamp",
+        ):
+            assert field in query
+
+    @patch("mech_client.infrastructure.subgraph.client.gql")
+    def test_squid_filters_with_eq(self, mock_gql: MagicMock) -> None:
+        """OpenReader takes ``address_eq:`` and ``mech_eq:`` filters."""
+        _client_with({"meches": [], "createMeches": []}, "squid").query_mech(
+            MECH_ADDRESS
+        )
+        query = _query_sent(mock_gql)
+        assert f'meches(where: {{address_eq: "{MECH_ADDRESS.lower()}"}})' in query
+        assert f'createMeches(where: {{mech_eq: "{MECH_ADDRESS.lower()}"}})' in query
+
+    @pytest.mark.parametrize(
+        "address",
+        [
+            "",
+            "0x",
+            "c05e7412439bd7e91730a6880e18d5d5873f632c",
+            "0x" + "g" * 40,
+            "0x" + "a" * 39,
+            '0x" + "a" * 40 + "\\"}) { id }',
+        ],
+        ids=["empty", "prefix_only", "no_prefix", "non_hex", "short", "injection"],
+    )
+    def test_anything_but_an_address_is_rejected_before_querying(
+        self, address: str
+    ) -> None:
+        """The address is interpolated into the query, so only a real one passes."""
+        client = _client_with({})
+        with pytest.raises(ValueError, match="0x hex address"):
+            client.query_mech(address)
+        client._client.execute.assert_not_called()  # pylint: disable=protected-access
+
+
+class TestQueryMechCreations:
+    """Several mechs' creation rows in one request."""
+
+    @patch("mech_client.infrastructure.subgraph.client.gql")
+    def test_lists_every_address_lowercased(self, mock_gql: MagicMock) -> None:
+        """The ``mech_in`` filter names each address, lowercased, in order."""
+        other = "0x" + "A" * 40
+        result = {"createMeches": []}
+        assert (
+            _client_with(result).query_mech_creations([MECH_ADDRESS, other]) == result
+        )
+        query = _query_sent(mock_gql)
+        assert (
+            f'createMeches(where: {{mech_in: ["{MECH_ADDRESS.lower()}", "{other.lower()}"]}})'
+            in query
+        )
+        assert "blockTimestamp" in query
+
+    def test_one_bad_address_rejects_the_whole_request(self) -> None:
+        """No query goes out with a non-address in the list."""
+        client = _client_with({})
+        with pytest.raises(ValueError, match="0x hex address"):
+            client.query_mech_creations([MECH_ADDRESS, "0xnope"])
+        client._client.execute.assert_not_called()  # pylint: disable=protected-access
+
+
+class TestQueryServiceAgentId:
+    """A service's ERC-8004 agent id, from either registry dialect."""
+
+    @patch("mech_client.infrastructure.subgraph.client.gql")
+    def test_graph_looks_the_service_up_by_id(self, mock_gql: MagicMock) -> None:
+        """The Graph exposes ``service(id:)``."""
+        result = {"service": {"id": "195", "erc8004Agent": {"id": "516"}}}
+        assert _client_with(result).query_service_agent_id(195) == result
+        query = _query_sent(mock_gql)
+        assert 'service(id: "195")' in query
+        assert "erc8004Agent" in query
+
+    @patch("mech_client.infrastructure.subgraph.client.gql")
+    def test_squid_looks_the_service_up_with_service_by_id(
+        self, mock_gql: MagicMock
+    ) -> None:
+        """OpenReader exposes ``serviceById(id:)``."""
+        _client_with({"serviceById": None}, "squid").query_service_agent_id(1)
+        assert 'serviceById(id: "1")' in _query_sent(mock_gql)
+
+    @pytest.mark.parametrize(
+        "service_id",
+        [-1, True, "1", 1.5, '1") { id } x("'],
+        ids=["negative", "bool", "string", "float", "injection"],
+    )
+    def test_anything_but_a_whole_number_is_rejected_before_querying(
+        self, service_id: object
+    ) -> None:
+        """The id is interpolated into the query, so only digits pass."""
+        client = _client_with({})
+        with pytest.raises(ValueError, match="non-negative integer"):
+            client.query_service_agent_id(service_id)  # type: ignore[arg-type]
+        client._client.execute.assert_not_called()  # pylint: disable=protected-access

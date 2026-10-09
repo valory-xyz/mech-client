@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ Added
+
+- `mechx mech info --chain-config <chain> --address <mech>` reports who runs a Mech and how it has behaved, for a buyer deciding whether to pay: the operator the manifest claims (`operator.name`, `operator.domain`) and whether `https://<domain>/.well-known/agent-registration.json` lists the Mech's ERC-8004 agent id for the chain's identity registry; the terms that apply; the delivery record (`receivedRequests`, `selfDeliveredFromReceived`, `deliveredByOthersFromReceived`) and the Mech's age from its creation block; the payment method; and the benchmark link the operator publishes per tool. It fails closed: an unreadable manifest gives no report, and a claim that could not be verified says so and why.
+- `ToolManager.mech_report(mech_address, metadata)` returns that report as data, a superset of `terms_report`: `operator`, `benchmarks` and `benchmark_note`, `delivery` and `payment`, in addition to the terms keys.
+- `mechx mech list` gains `Received`, `Self-delivered`, `By others`, `Since` and `Claimed Operator` columns.
+- A service registry subgraph endpoint per chain, `registry_subgraph_url`, with the `MECHX_REGISTRY_SUBGRAPH_URL` override. The ERC-8004 agent id is read from it; it is not the Olas service id except by coincidence.
+- `ManifestError`, raised when a Mech's manifest cannot be read.
+
+### 🔧 Changed
+
+- Benchmark links are reported as the operator's own claim and never with a figure, checked or not. No price is reported: the Mech contract quotes the charge at request time, and `maxDeliveryRate` is only a ceiling.
+- The delivery counters cover requests made on-chain and off-chain requests settled on-chain, and are labelled so; an off-chain request that was never delivered appears nowhere on-chain.
+- An operator domain must be a bare lowercase hostname and a manifest link an `https` URL with a host, parsed rather than prefix-tested; anything else is treated as unpublished. Manifest text is passed on as data and never followed.
+- `tomte` pinned to `0.7.3` from PyPI in CI, the dev group and the tox template pin.
+
 ## [0.23.3] - 2026-09-21
 
 ### ✨ Added

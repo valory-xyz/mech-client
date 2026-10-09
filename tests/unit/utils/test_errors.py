@@ -33,6 +33,7 @@ from mech_client.utils.errors import (
     DeliveryTimeoutError,
     ErrorMessages,
     IPFSError,
+    ManifestError,
     MechClientError,
     PaymentError,
     RpcError,
@@ -141,6 +142,17 @@ class TestToolError:
         error = ToolError("Tool not found", tool_id="1-openai-gpt-4")
         assert error.message == "Tool not found"
         assert error.tool_id == "1-openai-gpt-4"
+
+
+class TestManifestError:
+    """Tests for ManifestError exception."""
+
+    def test_manifest_error_is_a_mech_client_error(self) -> None:
+        """An unreadable manifest is reported through the common base."""
+        error = ManifestError("could not be read", details="HTTP 502")
+        assert isinstance(error, MechClientError)
+        assert error.message == "could not be read"
+        assert "HTTP 502" in str(error)
 
 
 class TestPaymentError:
@@ -471,6 +483,18 @@ class TestHandleCliErrors:
         with pytest.raises(ClickException) as exc_info:
             func()
         assert "Tool error" in exc_info.value.message
+
+    def test_handles_manifest_error(self) -> None:
+        """A ManifestError is a named CLI error, not the catch-all."""
+        handle_cli_errors = self._make_handler()
+
+        @handle_cli_errors
+        def func() -> None:
+            raise ManifestError("could not be read")
+
+        with pytest.raises(ClickException) as exc_info:
+            func()
+        assert exc_info.value.message == "Manifest error: could not be read"
 
     def test_handles_agent_mode_error(self) -> None:
         """Test AgentModeError is converted to ClickException."""

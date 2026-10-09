@@ -112,3 +112,24 @@ class TestEnvironmentConfigLoading:
         env_config = EnvironmentConfig.load()
 
         assert env_config.operate_password is None
+
+    @patch.dict(
+        "os.environ",
+        {"MECHX_REGISTRY_SUBGRAPH_URL": "https://custom-registry.example.com/"},
+        clear=True,
+    )
+    def test_registry_subgraph_url_loaded_from_env(self) -> None:
+        """MECHX_REGISTRY_SUBGRAPH_URL lands in mechx_registry_subgraph_url."""
+        env_config = EnvironmentConfig.load()
+
+        assert (
+            env_config.mechx_registry_subgraph_url
+            == "https://custom-registry.example.com/"
+        )
+
+    @patch.dict("os.environ", {"MECHX_REGISTRY_SUBGRAPH_URL": ""}, clear=True)
+    def test_registry_subgraph_url_empty_string_treated_as_unset(self) -> None:
+        """An empty override leaves the chain's default registry endpoint in place."""
+        env_config = EnvironmentConfig.load()
+
+        assert env_config.mechx_registry_subgraph_url is None
