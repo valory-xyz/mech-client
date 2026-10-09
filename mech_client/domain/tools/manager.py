@@ -82,6 +82,13 @@ NAME_NOTE = (
 DOMAIN_CHECK_FAILED_NOTE = (
     "The operator's domain could not be checked; it will be checked again next time."
 )
+MANIFEST_UNREADABLE_NOTE = (
+    "The mech's manifest could not be read; only the terms are reported."
+)
+RECORD_UNAVAILABLE_NOTE = (
+    "The operator and delivery record could not be read ({reason}); only the "
+    "terms are reported."
+)
 PAYMENT_LABELS = {
     PaymentType.NATIVE: "native",
     PaymentType.OLAS_TOKEN: "olas",
@@ -136,7 +143,6 @@ def _verify_domain(domain: str, chain_id: int, agent_id: int) -> DomainVerificat
     :param agent_id: The mech's ERC-8004 agent id
     :return: Verified, or unverified with the reason
     """
-    # Any failure here leaves the domain unverified; it never withholds the report.
     try:
         return verify_domain(domain, chain_id, agent_id)
     except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -374,6 +380,38 @@ class ToolManager:
             "note": PAYMENT_NOTE,
         }
         return report
+
+    def mech_report_or_terms(self, mech_address: str, metadata: Any) -> Dict[str, Any]:
+        """
+        Report on a mech before paying it, falling back to the terms alone.
+
+        The terms decide what a request agrees to; the operator and record only
+        inform the choice. So an unreadable manifest or an indexer that cannot
+        be read never hides the terms or blocks the request: the report is the
+        terms with ``report_note`` saying why the rest is missing. Otherwise it
+        is ``mech_report``.
+
+        :param mech_address: The address of the mech about to be called
+        :param metadata: The mech's already fetched manifest document, or None
+        :return: ``mech_report``, or ``terms_report`` plus ``report_note``
+        """
+        if not isinstance(metadata, dict):
+            report = self.terms_report(mech_address, None)
+            report["report_note"] = MANIFEST_UNREADABLE_NOTE
+            return report
+        try:
+            record = query_mech_record(self.chain_config, mech_address)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.warning(
+                f"Mech record unavailable for {mech_address} on "
+                f"{self.chain_config}: {exc}"
+            )
+            report = self.terms_report(mech_address, metadata)
+            report["report_note"] = RECORD_UNAVAILABLE_NOTE.format(
+                reason=type(exc).__name__
+            )
+            return report
+        return self.mech_report(mech_address, metadata, record=record)
 
     @staticmethod
     def delivery_record(record: MechRecord) -> Dict[str, Any]:

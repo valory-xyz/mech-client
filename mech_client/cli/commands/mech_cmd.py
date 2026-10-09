@@ -151,7 +151,6 @@ def _creation_dates(chain_config: str, addresses: List[str]) -> Dict[str, dateti
     :param addresses: the listed mech addresses
     :return: creation time by lowercase address; empty when the query failed
     """
-    # The Since column never fails the listing; a failed query leaves it blank.
     try:
         return query_mech_creations(chain_config, addresses)
     except Exception as exc:  # pylint: disable=broad-exception-caught

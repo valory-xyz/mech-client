@@ -20,11 +20,16 @@
 """Tests for the operator claim and its domain check."""
 
 import json
-from typing import Any, Dict, Optional
+import socket
+import threading
+import time
+from contextlib import contextmanager
+from typing import Any, Dict, Iterator, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+import urllib3
 from mech_client.domain.operator import (
     BENCHMARK_WINDOWS,
     IDENTITY_REGISTRY,
@@ -45,6 +50,7 @@ from mech_client.domain.operator import (
     fetch_domain_proof,
     hostname,
     https_url,
+    _fetch_proof,
     proof_matches,
     proof_url,
     read_benchmarks,
@@ -80,10 +86,39 @@ def _response(
     response.__enter__.return_value = response
     if raw is None:
         raw = b"not json" if bad_json else json.dumps(body).encode()
-    response.iter_content.return_value = [
+    response.raw.read1.side_effect = [
         raw[i : i + PROOF_CHUNK_BYTES] for i in range(0, len(raw), PROOF_CHUNK_BYTES)
-    ]
+    ] + [b""]
     return response
+
+
+@contextmanager
+def _dripping_server(interval: float) -> Iterator[str]:
+    """Serve a 200 whose body arrives one byte per ``interval``, until closed."""
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    stop = threading.Event()
+
+    def serve() -> None:
+        conn, _ = listener.accept()
+        conn.recv(4096)
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n")
+        try:
+            while not stop.wait(interval):
+                conn.sendall(b" ")
+        except OSError:
+            pass
+        conn.close()
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{listener.getsockname()[1]}/proof"
+    finally:
+        stop.set()
+        thread.join(timeout=5)
+        listener.close()
 
 
 class TestCleanText:
@@ -486,23 +521,68 @@ class TestFetchDomainProof:
             outcome = fetch_domain_proof(DOMAIN)
         assert outcome.status is ProofStatus.NOT_FOUND
 
-    def test_a_slow_body_is_an_outage(self) -> None:
-        """The deadline covers the whole fetch, so a body that dribbles in gives up."""
-        proof = {"registrations": [_registration()]}
-        clock = iter([0.0, PROOF_FETCH_TIMEOUT + 1.0])
+    def test_a_worker_past_its_deadline_stops_reading(self) -> None:
+        """The worker checks the deadline after every read and gives up by itself."""
+        response = _response(200, {"registrations": [_registration()]})
         with (
-            patch(f"{MODULE}.requests.get", return_value=_response(200, proof)),
-            patch(f"{MODULE}.time.monotonic", side_effect=lambda: next(clock)),
-            patch(f"{MODULE}.logger") as logger,
+            patch(f"{MODULE}.requests.get", return_value=response),
+            patch(f"{MODULE}.logger"),
         ):
-            outcome = fetch_domain_proof(DOMAIN)
+            outcome = _fetch_proof(PROOF_URL, deadline=time.monotonic() - 1)
         assert outcome.status is ProofStatus.UNAVAILABLE
+        assert response.raw.read1.call_count == 1
+
+    def test_the_caller_stops_waiting_at_the_timeout(self) -> None:
+        """However long the fetch blocks, the caller returns at the timeout."""
+        release = threading.Event()
+
+        def blocked_get(*_args: Any, **_kwargs: Any) -> MagicMock:
+            release.wait(10)
+            return _response(200, {"registrations": [_registration()]})
+
+        try:
+            with (
+                patch(f"{MODULE}.PROOF_FETCH_TIMEOUT", 0.2),
+                patch(f"{MODULE}.requests.get", side_effect=blocked_get),
+                patch(f"{MODULE}.logger") as logger,
+            ):
+                start = time.monotonic()
+                outcome = fetch_domain_proof(DOMAIN)
+                elapsed = time.monotonic() - start
+        finally:
+            release.set()
+        assert outcome.status is ProofStatus.UNAVAILABLE
+        assert elapsed < 2
         logger.warning.assert_called_once()
 
-    def test_a_read_that_breaks_midway_is_an_outage(self) -> None:
+    def test_a_body_that_trickles_in_is_cut_off_at_the_timeout(self) -> None:
+        """A real server sending a byte at a time cannot hold the caller past the limit."""
+        with (
+            _dripping_server(interval=0.1) as url,
+            patch(f"{MODULE}.proof_url", return_value=url),
+            patch(f"{MODULE}.PROOF_FETCH_TIMEOUT", 1),
+            patch(f"{MODULE}.logger"),
+        ):
+            start = time.monotonic()
+            outcome = fetch_domain_proof(DOMAIN)
+            elapsed = time.monotonic() - start
+        assert outcome.status is ProofStatus.UNAVAILABLE
+        assert elapsed < 3
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            requests.ConnectionError("reset"),
+            urllib3.exceptions.ProtocolError("reset"),
+            urllib3.exceptions.ReadTimeoutError(None, PROOF_URL, "slow"),
+            urllib3.exceptions.DecodeError("bad gzip"),
+        ],
+        ids=["requests", "protocol", "read_timeout", "decode"],
+    )
+    def test_a_read_that_breaks_midway_is_an_outage(self, error: Exception) -> None:
         """A transport failure while streaming the body is not a verdict."""
         response = _response(200, {})
-        response.iter_content.side_effect = requests.ConnectionError("reset")
+        response.raw.read1.side_effect = error
         with (
             patch(f"{MODULE}.requests.get", return_value=response),
             patch(f"{MODULE}.logger"),
@@ -553,7 +633,7 @@ class TestFetchDomainProof:
             outcome = fetch_domain_proof(DOMAIN)
         assert outcome.status is ProofStatus.REDIRECTED
         assert outcome.proof is None
-        response.iter_content.assert_not_called()
+        response.raw.read1.assert_not_called()
 
     @pytest.mark.parametrize(
         "status_code",

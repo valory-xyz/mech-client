@@ -23,12 +23,15 @@ import json
 import re
 import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import requests
+import urllib3
 from mech_client.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -51,10 +54,18 @@ BENCHMARK_WINDOWS = ("7d", "30d", "90d", "all")
 IDENTITY_REGISTRY = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
 PROOF_PATH = "/.well-known/agent-registration.json"
 # Kept short: a report is read before a request, and must not hold one up.
-# The timeout is the whole fetch, not one read, and the body is capped.
+# The caller waits at most this long on the wall clock, and the body is capped.
 PROOF_FETCH_TIMEOUT = 5
 PROOF_MAX_BYTES = 64 * 1024
 PROOF_CHUNK_BYTES = 8 * 1024
+# Fetches share one capped pool. A fetch the caller stopped waiting for checks
+# the same deadline after every read and stops by itself, so it frees its
+# thread within one read timeout.
+PROOF_MAX_WORKERS = 8
+
+_EXECUTOR = ThreadPoolExecutor(
+    max_workers=PROOF_MAX_WORKERS, thread_name_prefix="mech-domain-proof"
+)
 
 BENCHMARK_NOTE = (
     "Benchmark links are the operator's own claim. This client does not check them."
@@ -248,12 +259,11 @@ def _read_proof_body(response: Any, url: str, deadline: float) -> ProofOutcome:
     :return: The outcome, with the parsed document when one was found
     """
     body = bytearray()
-    for chunk in response.iter_content(PROOF_CHUNK_BYTES):
+    # read1 returns as soon as any bytes arrive, so a body that trickles in
+    # still reaches the deadline check after every arrival.
+    while chunk := response.raw.read1(PROOF_CHUNK_BYTES, decode_content=True):
         if time.monotonic() > deadline:
-            logger.warning(
-                f"Reading the domain proof at {url} took longer than "
-                f"{PROOF_FETCH_TIMEOUT}s; could not check the operator's domain."
-            )
+            logger.debug(f"Stopped reading the domain proof at {url}: past deadline")
             return ProofOutcome(ProofStatus.UNAVAILABLE)
         body.extend(chunk)
         if len(body) > PROOF_MAX_BYTES:
@@ -270,18 +280,14 @@ def _read_proof_body(response: Any, url: str, deadline: float) -> ProofOutcome:
     return ProofOutcome(ProofStatus.FOUND, document)
 
 
-def fetch_domain_proof(domain: str) -> ProofOutcome:
+def _fetch_proof(url: str, deadline: float) -> ProofOutcome:
     """
-    Fetch the proof file from the exact host named in the manifest.
+    Fetch and read a proof, giving up at the first read past the deadline.
 
-    Redirects are not followed: the proof must come from the named host. The
-    body is capped and the deadline covers the whole fetch. Nothing is cached.
-
-    :param domain: The operator domain
+    :param url: The proof URL
+    :param deadline: The monotonic time the fetch must finish by
     :return: The outcome, with the parsed document when one was found
     """
-    url = proof_url(domain)
-    deadline = time.monotonic() + PROOF_FETCH_TIMEOUT
     try:
         with requests.get(
             url, timeout=PROOF_FETCH_TIMEOUT, allow_redirects=False, stream=True
@@ -299,8 +305,33 @@ def fetch_domain_proof(domain: str) -> ProofOutcome:
                 logger.debug(f"No domain proof at {url}: HTTP {response.status_code}")
                 return ProofOutcome(ProofStatus.NOT_FOUND)
             return _read_proof_body(response, url, deadline)
-    except requests.RequestException as exc:
+    except (requests.RequestException, urllib3.exceptions.HTTPError) as exc:
         logger.warning(f"Could not fetch the domain proof at {url}: {exc}")
+        return ProofOutcome(ProofStatus.UNAVAILABLE)
+
+
+def fetch_domain_proof(domain: str) -> ProofOutcome:
+    """
+    Fetch the proof file from the exact host named in the manifest.
+
+    Redirects are not followed: the proof must come from the named host. The
+    body is capped, and the caller waits at most PROOF_FETCH_TIMEOUT seconds
+    of wall-clock time however slowly the host answers. Nothing is cached.
+
+    :param domain: The operator domain
+    :return: The outcome, with the parsed document when one was found
+    """
+    url = proof_url(domain)
+    deadline = time.monotonic() + PROOF_FETCH_TIMEOUT
+    future = _EXECUTOR.submit(_fetch_proof, url, deadline)
+    try:
+        return future.result(timeout=PROOF_FETCH_TIMEOUT)
+    except FuturesTimeoutError:
+        future.cancel()
+        logger.warning(
+            f"Fetching the domain proof at {url} took longer than "
+            f"{PROOF_FETCH_TIMEOUT}s; could not check the operator's domain."
+        )
         return ProofOutcome(ProofStatus.UNAVAILABLE)
 
 

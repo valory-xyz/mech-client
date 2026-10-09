@@ -19,6 +19,9 @@ dependencies = [
     # them but `mech_client/infrastructure/ipfs/client.py` still imports them.
     "py-multibase==1.0.3",
     "py-multicodec==0.2.1",
+    # The domain proof is streamed with HTTPResponse.read1 (2.2.0), whose
+    # decompressed reads are bounded from 2.6.0.
+    "urllib3>=2.6.0,<3",
 ]
 
 [project.scripts]

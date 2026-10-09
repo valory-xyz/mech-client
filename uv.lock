@@ -1831,6 +1831,7 @@ dependencies = [
     { name = "safe-eth-py" },
     { name = "setuptools" },
     { name = "tabulate" },
+    { name = "urllib3" },
 ]
 
 [package.dev-dependencies]
@@ -1855,6 +1856,7 @@ requires-dist = [
     { name = "safe-eth-py", specifier = ">=7.18.0,<8" },
     { name = "setuptools", specifier = ">=78.1.1,<82" },
     { name = "tabulate", specifier = ">=0.9.0,<0.10" },
+    { name = "urllib3", specifier = ">=2.6.0,<3" },
 ]
 
 [package.metadata.requires-dev]
