@@ -20,7 +20,9 @@
 """Subgraph query functions and mappings."""
 
 import logging
-from typing import List
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.config.loader import get_mech_config
@@ -59,20 +61,43 @@ CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE = {
 }
 
 RESULTS_LIMIT = 20
+# Reads a mech report makes before a request: kept short so a stalled indexer
+# cannot hold the request up.
+REPORT_QUERY_TIMEOUT = 10.0
+# Fields a mech record must carry, and the error raised when it does not.
+RECORD_DECODE_ERRORS = (AttributeError, IndexError, KeyError, TypeError, ValueError)
 
 logger = logging.getLogger(__name__)
 
 
-def query_mm_mechs_info(chain_config: str) -> List:
+@dataclass(frozen=True)
+class MechRecord:
     """
-    Query marketplace mechs and related info from subgraph.
+    One mech's on-chain record, as the marketplace indexer counts it.
 
-    Queries the subgraph for mech information, filtering by mechs with
-    total deliveries > 0 and enriching with mech type from factory address.
+    The counters cover requests made on-chain and off-chain requests the mech
+    settled on-chain; both paths increment the same counters, so the figures
+    cannot be split by path, and an off-chain request that was never
+    delivered appears nowhere here.
+    """
 
-    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood)
-    :return: List of mech data dicts, empty if the chain has no delivering mechs
-    :raises SubgraphError: If the chain has no subgraph URL, or the response is malformed
+    service_id: int
+    received_requests: int
+    self_delivered: int
+    delivered_by_others: int
+    created_at: datetime
+    payment_type: str
+    metadata_hash: Optional[str]
+
+
+def _subgraph_client(chain_config: str, **client_options: Any) -> SubgraphClient:
+    """
+    Build the marketplace client for a chain.
+
+    :param chain_config: Chain configuration name
+    :param client_options: Extra SubgraphClient arguments, such as ``timeout``
+    :return: A client on the chain's marketplace indexer
+    :raises SubgraphError: If the chain has no subgraph URL
     """
     mech_config = get_mech_config(chain_config)
     if not mech_config.subgraph_url:
@@ -91,10 +116,25 @@ def query_mm_mechs_info(chain_config: str) -> List:
             chain_config,
         )
 
-    client = SubgraphClient(
-        mech_config.subgraph_url, dialect=mech_config.subgraph_dialect
+    return SubgraphClient(
+        mech_config.subgraph_url,
+        dialect=mech_config.subgraph_dialect,
+        **client_options,
     )
-    response = client.query_mechs()
+
+
+def query_mm_mechs_info(chain_config: str) -> List:
+    """
+    Query marketplace mechs and related info from subgraph.
+
+    Queries the subgraph for mech information, filtering by mechs with
+    total deliveries > 0 and enriching with mech type from factory address.
+
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood)
+    :return: List of mech data dicts, empty if the chain has no delivering mechs
+    :raises SubgraphError: If the chain has no subgraph URL, or the response is malformed
+    """
+    response = _subgraph_client(chain_config).query_mechs()
 
     # Map factory addresses to mech types (case-insensitive)
     mech_factory_to_mech_type = {
@@ -123,3 +163,103 @@ def query_mm_mechs_info(chain_config: str) -> List:
         ) from error
 
     return filtered_mechs_data[:RESULTS_LIMIT]
+
+
+def _metadata_hash(service: Dict[str, Any]) -> Optional[str]:
+    """
+    Read the manifest hash a service publishes, if any.
+
+    :param service: The ``service`` object of a mech record
+    :return: The hash as the indexer stores it, or None when none is published
+    """
+    metadata = service.get("metadata")
+    if not metadata:
+        return None
+    value = metadata[0]["metadata"]
+    return value if isinstance(value, str) and value else None
+
+
+def query_mech_record(chain_config: str, mech_address: str) -> MechRecord:
+    """
+    Query one mech's on-chain record from the marketplace indexer.
+
+    :param chain_config: Chain configuration name
+    :param mech_address: The mech contract address
+    :return: The mech's record
+    :raises SubgraphError: If the chain has no subgraph URL, the mech is not
+        indexed there, or the record cannot be read
+    """
+    try:
+        response = _subgraph_client(
+            chain_config, timeout=REPORT_QUERY_TIMEOUT
+        ).query_mech(mech_address)
+    except TimeoutError as error:
+        raise SubgraphError(
+            f"The {chain_config} subgraph did not answer within "
+            f"{REPORT_QUERY_TIMEOUT:g}s."
+        ) from error
+    try:
+        mechs = response["meches"]  # pylint: disable=unsubscriptable-object
+        creations = response["createMeches"]  # pylint: disable=unsubscriptable-object
+        if not isinstance(mechs, list) or not isinstance(creations, list):
+            raise TypeError("meches and createMeches must be lists")
+        if not mechs or not creations:
+            raise SubgraphError(
+                f"Mech {mech_address} is not indexed by the {chain_config} subgraph."
+            )
+        mech = mechs[0]
+        return MechRecord(
+            service_id=int(mech["service"]["id"]),
+            received_requests=int(mech["receivedRequests"]),
+            self_delivered=int(mech["selfDeliveredFromReceived"]),
+            delivered_by_others=int(mech["deliveredByOthersFromReceived"]),
+            created_at=datetime.fromtimestamp(
+                int(creations[0]["blockTimestamp"]), tz=timezone.utc
+            ),
+            payment_type=str(mech["paymentType"]),
+            metadata_hash=_metadata_hash(mech["service"]),
+        )
+    except RECORD_DECODE_ERRORS as error:
+        raise SubgraphError(
+            f"Malformed mech record from the {chain_config} subgraph: {error}"
+        ) from error
+
+
+def query_erc8004_agent_id(chain_config: str, service_id: int) -> Optional[int]:
+    """
+    Query a service's ERC-8004 agent id from the chain's service registry indexer.
+
+    The agent id is not the Olas service id, except by coincidence.
+
+    :param chain_config: Chain configuration name
+    :param service_id: The Olas service id
+    :return: The agent id, or None when the service has no ERC-8004 identity
+    :raises SubgraphError: If the chain has no registry subgraph URL, or the
+        response cannot be read
+    """
+    mech_config = get_mech_config(chain_config)
+    if not mech_config.registry_subgraph_url:
+        raise SubgraphError(
+            f"Registry subgraph URL not set for chain config: {chain_config}. "
+            "Checking an operator's domain needs the service registry indexer."
+        )
+    client = SubgraphClient(
+        mech_config.registry_subgraph_url,
+        dialect=mech_config.subgraph_dialect,
+        timeout=REPORT_QUERY_TIMEOUT,
+    )
+    response = client.query_service_agent_id(service_id)
+    lookup = "serviceById" if mech_config.subgraph_dialect == "squid" else "service"
+    try:
+        service = response[lookup]  # pylint: disable=unsubscriptable-object
+        if service is None:
+            return None
+        agent = service["erc8004Agent"]
+        if agent is None:
+            return None
+        return int(agent["id"])
+    except RECORD_DECODE_ERRORS as error:
+        raise SubgraphError(
+            f"Malformed service record from the {chain_config} registry subgraph: "
+            f"{error}"
+        ) from error

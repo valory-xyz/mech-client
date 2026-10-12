@@ -202,6 +202,8 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         agent_mode: Whether running in agent mode (default: False)
         chain_config: Chain configuration name (e.g., 'gnosis')
         subgraph_dialect: GraphQL dialect of subgraph_url ("graph" or "squid")
+        registry_subgraph_url: Service registry GraphQL endpoint, same dialect
+            as subgraph_url; blank when the chain has none
     """
 
     complementary_metadata_hash_address: str
@@ -213,6 +215,7 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     price: int
     mech_marketplace_contract: str
     subgraph_dialect: SubgraphDialect
+    registry_subgraph_url: str = field(default="")
     priority_mech_address: Optional[str] = field(default=None)
     agent_mode: bool = field(default=False)
     chain_config: Optional[str] = field(default=None)
@@ -252,3 +255,6 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
 
         if env_config.mechx_subgraph_url:
             self.subgraph_url = env_config.mechx_subgraph_url
+
+        if env_config.mechx_registry_subgraph_url:
+            self.registry_subgraph_url = env_config.mechx_registry_subgraph_url

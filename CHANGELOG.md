@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-09
+
+### ✨ Added
+
+- `mechx mech info --chain-config <chain> --address <mech>` prints, as JSON, who runs a Mech and how it has behaved, for a buyer deciding whether to pay.
+- `ToolManager.mech_report(mech_address, metadata)` returns that report as data, a superset of `terms_report`:
+  - `operator`: the domain the manifest claims, as `domain` and `url`, with `domain_verified` true only when `https://<domain>/.well-known/agent-registration.json` lists the Mech's ERC-8004 agent id for the chain's identity registry, and `verification_note` when not. The name is `claimed_name`, with `name_note` saying it is not checked.
+  - `benchmarks`: each tool's benchmark link, as the operator's claim, with `benchmark_note`. No figure is reported.
+  - `delivery`: `received_requests`, `self_delivered` and `delivered_by_others` from the marketplace subgraph, `since` and `age_days` from the Mech's creation block, and a `note` that the counts cover on-chain and settled off-chain requests, not split by path.
+  - `payment`: the payment method, with no price. The contract quotes the charge at request time, and `maxDeliveryRate` is only a ceiling.
+- `ToolManager.mech_report_or_terms(mech_address, metadata)` is the report to read before paying: `mech_report` when the manifest and the mech's record can be read, otherwise the terms alone with `report_note` saying why, so an unreadable manifest or indexer never hides the terms or blocks a request. `mech_report` itself stays fail-closed.
+- A service registry subgraph endpoint per chain, `registry_subgraph_url`, with the `MECHX_REGISTRY_SUBGRAPH_URL` override. The ERC-8004 agent id is read from it; it is not the Olas service id except by coincidence.
+- `ManifestError`, raised when a Mech's manifest cannot be read. The report fails closed: an unreadable manifest gives no report.
+
+### 🔧 Changed
+
+- The domain proof must be served by the exact host the manifest names. Redirects are not followed, and a redirect gets its own note. The body is capped at 64 KB, each read times out after 5 seconds, and a proof that could not be fetched is fetched again next time rather than remembered as a no.
+- An operator domain must be a bare lowercase hostname ending in a top-level domain, and a manifest link an `https` URL with a host, parsed rather than prefix-tested; anything else is treated as unpublished. Manifest text is passed on as data and never followed.
+- The subgraph reads a report makes time out after 10 seconds each.
+
 ## [0.23.3] - 2026-09-21
 
 ### ✨ Added

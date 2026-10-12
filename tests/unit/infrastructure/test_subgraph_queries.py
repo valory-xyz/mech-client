@@ -21,15 +21,22 @@
 
 import json
 from dataclasses import replace
+from datetime import datetime, timezone
+from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.config.constants import MECH_CONFIGS
+from mech_client.infrastructure.subgraph.client import DEFAULT_TIMEOUT
 from mech_client.infrastructure.subgraph.queries import (
     CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE,
+    REPORT_QUERY_TIMEOUT,
     RESULTS_LIMIT,
+    MechRecord,
+    query_erc8004_agent_id,
+    query_mech_record,
     query_mm_mechs_info,
 )
 from mech_client.utils.constants import CHAIN_NAME_TO_ID
@@ -658,3 +665,254 @@ class TestQueryMechsOverrideWarning:
 
         assert mock_logger.warning.called is warns
 
+
+
+MECH_ADDRESS = "0xc05e7412439bd7e91730a6880e18d5d5873f632c"
+CREATED = "1749054920"
+METADATA_HASH = "0x" + "d" * 64
+NATIVE = "0xba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"
+
+
+def _mech_response(**overrides: Any) -> Dict[str, Any]:
+    """Build a query_mech response for one indexed mech."""
+    mech: Dict[str, Any] = {
+        "id": "2182",
+        "address": MECH_ADDRESS,
+        "receivedRequests": "1020284",
+        "selfDeliveredFromReceived": "896660",
+        "deliveredByOthersFromReceived": "123617",
+        "paymentType": NATIVE,
+        "service": {"id": "2182", "metadata": [{"metadata": METADATA_HASH}]},
+    }
+    mech.update(overrides)
+    return {"meches": [mech], "createMeches": [{"blockTimestamp": CREATED}]}
+
+
+class TestQueryMechRecord:
+    """One mech's on-chain record, read strictly."""
+
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_reads_the_record(self, mock_client: MagicMock) -> None:
+        """Counters are ints, the creation time is UTC, the hash is passed on."""
+        mock_client.return_value.query_mech.return_value = _mech_response()
+        record = query_mech_record("gnosis", MECH_ADDRESS)
+        assert record == MechRecord(
+            service_id=2182,
+            received_requests=1020284,
+            self_delivered=896660,
+            delivered_by_others=123617,
+            created_at=datetime(2025, 6, 4, 16, 35, 20, tzinfo=timezone.utc),
+            payment_type=NATIVE,
+            metadata_hash=METADATA_HASH,
+        )
+        assert record.created_at.tzinfo is timezone.utc
+        mock_client.return_value.query_mech.assert_called_once_with(MECH_ADDRESS)
+
+    @pytest.mark.parametrize(
+        "service",
+        [
+            {"id": "2182"},
+            {"id": "2182", "metadata": None},
+            {"id": "2182", "metadata": []},
+            {"id": "2182", "metadata": [{"metadata": ""}]},
+            {"id": "2182", "metadata": [{"metadata": None}]},
+        ],
+        ids=["no_field", "null", "empty", "blank_hash", "null_hash"],
+    )
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_a_mech_without_a_published_hash_has_none(
+        self, mock_client: MagicMock, service: Dict[str, Any]
+    ) -> None:
+        """No manifest hash is None, not an error: the record itself is readable."""
+        mock_client.return_value.query_mech.return_value = _mech_response(
+            service=service
+        )
+        assert query_mech_record("gnosis", MECH_ADDRESS).metadata_hash is None
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            {"meches": [], "createMeches": [{"blockTimestamp": CREATED}]},
+            {"meches": _mech_response()["meches"], "createMeches": []},
+        ],
+        ids=["no_mech", "no_creation"],
+    )
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_an_unindexed_mech_is_a_subgraph_error(
+        self, mock_client: MagicMock, response: Dict[str, Any]
+    ) -> None:
+        """A mech the indexer has no row for is named, with its chain."""
+        mock_client.return_value.query_mech.return_value = response
+        with pytest.raises(SubgraphError, match=f"{MECH_ADDRESS} is not indexed"):
+            query_mech_record("gnosis", MECH_ADDRESS)
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            {"meches": None, "createMeches": []},
+            {"createMeches": []},
+            _mech_response(receivedRequests="many"),
+            _mech_response(receivedRequests=None),
+            _mech_response(service=None),
+            _mech_response(service={"metadata": []}),
+            {"meches": [{}], "createMeches": [{"blockTimestamp": CREATED}]},
+            {"meches": _mech_response()["meches"], "createMeches": [{}]},
+            {
+                "meches": _mech_response()["meches"],
+                "createMeches": [{"blockTimestamp": "soon"}],
+            },
+            "not a mapping",
+        ],
+        ids=[
+            "null_list",
+            "no_list",
+            "counter_not_a_number",
+            "counter_null",
+            "service_null",
+            "service_without_id",
+            "empty_mech",
+            "empty_creation",
+            "timestamp_not_a_number",
+            "not_a_mapping",
+        ],
+    )
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_a_malformed_record_is_a_subgraph_error(
+        self, mock_client: MagicMock, response: Any
+    ) -> None:
+        """Every unreadable shape is reported as malformed, naming the chain."""
+        mock_client.return_value.query_mech.return_value = response
+        with pytest.raises(
+            SubgraphError, match="Malformed mech record from the gnosis"
+        ):
+            query_mech_record("gnosis", MECH_ADDRESS)
+
+    def test_a_chain_without_a_subgraph_is_a_subgraph_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The marketplace record needs the marketplace indexer."""
+        monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        blank = replace(get_mech_config("gnosis"), subgraph_url="")
+        with (
+            patch(
+                "mech_client.infrastructure.subgraph.queries.get_mech_config",
+                return_value=blank,
+            ),
+            pytest.raises(SubgraphError, match="Subgraph URL not set"),
+        ):
+            query_mech_record("gnosis", MECH_ADDRESS)
+
+
+class TestReportReadsAreShort:
+    """The reads a report makes before a request use the short timeout."""
+
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_the_record_read_uses_the_short_timeout(
+        self, mock_client: MagicMock
+    ) -> None:
+        """The record query is built with the report timeout, not the client default."""
+        mock_client.return_value.query_mech.return_value = _mech_response()
+        query_mech_record("gnosis", MECH_ADDRESS)
+        assert mock_client.call_args[1]["timeout"] == REPORT_QUERY_TIMEOUT
+        assert REPORT_QUERY_TIMEOUT < DEFAULT_TIMEOUT
+
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_a_record_read_that_times_out_is_a_subgraph_error(
+        self, mock_client: MagicMock
+    ) -> None:
+        """A stalled indexer surfaces as a subgraph error naming the chain and limit."""
+        mock_client.return_value.query_mech.side_effect = TimeoutError()
+        with pytest.raises(
+            SubgraphError, match="gnosis subgraph did not answer within 10s"
+        ):
+            query_mech_record("gnosis", MECH_ADDRESS)
+
+
+class TestQueryErc8004AgentId:
+    """The agent id comes from the registry indexer, in its own dialect."""
+
+    @pytest.mark.parametrize(
+        ("chain", "lookup", "expected_dialect"),
+        [("optimism", "service", "graph"), ("robinhood", "serviceById", "squid")],
+        ids=["graph", "squid"],
+    )
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_reads_the_agent_id_from_the_registry_endpoint(
+        self, mock_client: MagicMock, chain: str, lookup: str, expected_dialect: str
+    ) -> None:
+        """The chain's registry URL and dialect are used; the id comes back as an int."""
+        mock_client.return_value.query_service_agent_id.return_value = {
+            lookup: {"id": "195", "erc8004Agent": {"id": "516"}}
+        }
+        assert query_erc8004_agent_id(chain, 195) == 516
+        config = get_mech_config(chain)
+        mock_client.assert_called_once_with(
+            config.registry_subgraph_url,
+            dialect=expected_dialect,
+            timeout=REPORT_QUERY_TIMEOUT,
+        )
+        assert config.registry_subgraph_url != config.subgraph_url
+        mock_client.return_value.query_service_agent_id.assert_called_once_with(195)
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            {"service": None},
+            {"service": {"id": "195", "erc8004Agent": None}},
+        ],
+        ids=["unknown_service", "no_identity"],
+    )
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_a_service_without_an_identity_is_none(
+        self, mock_client: MagicMock, response: Dict[str, Any]
+    ) -> None:
+        """No identity is a known answer, not an error."""
+        mock_client.return_value.query_service_agent_id.return_value = response
+        assert query_erc8004_agent_id("gnosis", 195) is None
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            {},
+            {"service": {"id": "195"}},
+            {"service": {"id": "195", "erc8004Agent": {}}},
+            {"service": {"id": "195", "erc8004Agent": {"id": "five"}}},
+            {"service": {"id": "195", "erc8004Agent": "516"}},
+        ],
+        ids=["no_service", "no_agent_field", "no_id", "bad_id", "agent_not_object"],
+    )
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_a_malformed_service_is_a_subgraph_error(
+        self, mock_client: MagicMock, response: Any
+    ) -> None:
+        """An unreadable registry answer is reported, naming the chain."""
+        mock_client.return_value.query_service_agent_id.return_value = response
+        with pytest.raises(
+            SubgraphError, match="Malformed service record from the gnosis registry"
+        ):
+            query_erc8004_agent_id("gnosis", 195)
+
+    def test_a_chain_without_a_registry_is_a_subgraph_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The domain check needs the registry indexer, and says so."""
+        monkeypatch.delenv("MECHX_REGISTRY_SUBGRAPH_URL", raising=False)
+        blank = replace(get_mech_config("gnosis"), registry_subgraph_url="")
+        with (
+            patch(
+                "mech_client.infrastructure.subgraph.queries.get_mech_config",
+                return_value=blank,
+            ),
+            pytest.raises(SubgraphError, match="Registry subgraph URL not set"),
+        ):
+            query_erc8004_agent_id("gnosis", 195)
+
+
+class TestEveryMarketplaceChainHasARegistry:
+    """A chain the listing can query can also check an operator's domain."""
+
+    def test_registry_urls_cover_every_chain_with_a_subgraph(self) -> None:
+        """Both endpoints are configured together, or neither."""
+        configs = json.loads(MECH_CONFIGS.read_text())
+        for name, cfg in configs.items():
+            assert bool(cfg["registry_subgraph_url"]) == bool(cfg["subgraph_url"]), name

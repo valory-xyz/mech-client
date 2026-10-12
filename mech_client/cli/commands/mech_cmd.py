@@ -19,16 +19,21 @@
 
 """Mech command for managing and querying AI mechs on the marketplace."""
 
+import json
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import click
 import requests
-from mech_client.cli.validators import validate_chain_config
+from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
 from mech_client.domain.identification import is_valory_operated
 from mech_client.domain.tools.manager import ToolManager
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE, get_mech_config
-from mech_client.infrastructure.subgraph.queries import query_mm_mechs_info
+from mech_client.infrastructure.subgraph.queries import (
+    query_mech_record,
+    query_mm_mechs_info,
+)
+from mech_client.utils.errors.exceptions import ManifestError
 from mech_client.utils.errors.handlers import handle_cli_errors
 from tabulate import tabulate  # type: ignore
 
@@ -55,6 +60,20 @@ def _fetch_terms_url(metadata_link: Optional[str]) -> Optional[str]:
     except (requests.RequestException, ValueError):
         return None
     return ToolManager.extract_terms_url(metadata)
+
+
+def _fetch_manifest(metadata_link: str) -> Optional[Dict[str, Any]]:
+    """Read a mech's published manifest document.
+
+    :param metadata_link: gateway URL of the manifest document
+    :return: the parsed document, or None when the fetch fails or the body is
+        not a JSON object
+    """
+    try:
+        document = requests.get(metadata_link, timeout=METADATA_FETCH_TIMEOUT).json()
+    except (requests.RequestException, ValueError):
+        return None
+    return document if isinstance(document, dict) else None
 
 
 def _valory_operated_labels(addresses: List[str], chain_id: int) -> List[str]:
@@ -168,3 +187,44 @@ def mech_list(chain_config: str) -> None:
     ]
 
     click.echo(tabulate(data, headers=headers, tablefmt="grid"))
+
+
+@mech.command(name="info")
+@click.option(
+    "--chain-config",
+    type=str,
+    required=True,
+    help="Chain configuration name (gnosis, base, polygon, optimism, robinhood).",
+)
+@click.option(
+    "--address",
+    "mech_address",
+    type=str,
+    required=True,
+    help="Address of the mech to report on.",
+)
+@handle_cli_errors
+def mech_info(chain_config: str, mech_address: str) -> None:
+    """Report who runs a mech and how it has behaved, as JSON.
+
+    Reads the mech's record from the marketplace subgraph and its manifest
+    from IPFS, and prints ``ToolManager.mech_report``: the terms that apply,
+    the operator domain the manifest claims and whether it publishes the
+    mech's ERC-8004 identity, the delivery record and age, the payment
+    method, and each tool's benchmark link as the operator's claim.
+
+    Example: mechx mech info --chain-config gnosis --address 0x...
+
+    :param chain_config: Chain configuration name (gnosis, base, polygon, optimism, robinhood).
+    :param mech_address: Address of the mech to report on.
+    """
+    validated_chain = validate_chain_config(chain_config)
+    address = validate_ethereum_address(mech_address, "Mech address")
+    record = query_mech_record(validated_chain, address)
+    if record.metadata_hash is None:
+        raise ManifestError(
+            f"Mech {address} publishes no manifest, so no report is made for it."
+        )
+    manifest = _fetch_manifest(IPFS_URL_TEMPLATE.format(record.metadata_hash[2:]))
+    report = ToolManager(validated_chain).mech_report(address, manifest, record)
+    click.echo(json.dumps(report, indent=2))

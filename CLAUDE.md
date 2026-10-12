@@ -10,7 +10,7 @@ Mech Client is a Python CLI tool and library for interacting with AI Mechs (on-c
 
 **Testing:** Comprehensive unit test suite (689 tests, 100% coverage). See [docs/TESTING.md](./docs/TESTING.md) for testing guidelines.
 
-**Commands:** 11 CLI commands with detailed dependency diagrams. See [docs/COMMANDS.md](./docs/COMMANDS.md) for command reference.
+**Commands:** 12 CLI commands with detailed dependency diagrams. See [docs/COMMANDS.md](./docs/COMMANDS.md) for command reference.
 
 ## Quick Start for Development
 
@@ -136,6 +136,7 @@ if env_config.mechx_chain_rpc:
 **Available Environment Variables (see `EnvironmentConfig` for full list):**
 - `MECHX_CHAIN_RPC` - Chain RPC endpoint (most critical)
 - `MECHX_SUBGRAPH_URL` - Subgraph GraphQL endpoint (optional, defaults provided)
+- `MECHX_REGISTRY_SUBGRAPH_URL` - Service registry GraphQL endpoint for the ERC-8004 agent id (optional, defaults provided)
 - `MECHX_GAS_LIMIT` - Gas limit override
 - `MECHX_TRANSACTION_URL` - Block explorer URL template
 - `MECHX_LEDGER_CHAIN_ID` - Override chain ID
@@ -307,6 +308,7 @@ def __post_init__(self) -> None:
 **Key variables:**
 - `MECHX_CHAIN_RPC`: Override RPC endpoint (most important)
 - `MECHX_SUBGRAPH_URL`: Override subgraph URL (optional, defaults provided)
+- `MECHX_REGISTRY_SUBGRAPH_URL`: Override the service registry subgraph URL the operator domain check reads the ERC-8004 agent id from (optional, defaults provided)
 
 **Note:** The offchain mech URL is auto-discovered from on-chain metadata when `--use-offchain` is used. No environment variable is needed.
 

@@ -20,15 +20,34 @@
 """Tests for tool manager."""
 
 import socket
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 from mech_client.domain.identification import VALORY_TERMS_NOTICE
-from mech_client.domain.tools.manager import IDENTIFICATION_NOTE, ToolManager
+from mech_client.domain.operator import (
+    BENCHMARK_NOTE,
+    NO_AGENT_ID_NOTE,
+    DomainVerification,
+)
+from mech_client.domain.tools.manager import (
+    DELIVERY_NOTE,
+    DOMAIN_CHECK_FAILED_NOTE,
+    MANIFEST_UNREADABLE_NOTE,
+    NAME_NOTE,
+    IDENTIFICATION_NOTE,
+    PAYMENT_NOTE,
+    ToolManager,
+    claimed_operator,
+    payment_label,
+)
 from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
 from mech_client.infrastructure.config.chain_config import LedgerConfig
+from mech_client.infrastructure.subgraph.queries import MechRecord
+from mech_client.utils.errors import SubgraphError
+from mech_client.utils.errors.exceptions import ManifestError
 
 
 def create_mock_mech_config() -> MagicMock:
@@ -819,3 +838,392 @@ class TestTermsReport:
         with patch(f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=getaddrinfo):
             manager.terms_report(GNOSIS_MECH, None)
         assert looked_up == [GNOSIS_NAME]
+
+
+MANAGER = "mech_client.domain.tools.manager"
+NATIVE = "0xba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"
+USDC = "0x6406bb5f31a732f898e1ce9fdd988a80a808d36ab5d9a4a4805a8be8d197d5e3"
+CREATED_AT = datetime(2025, 6, 4, 16, 35, 20, tzinfo=timezone.utc)
+OPERATOR_MANIFEST = {
+    "termsUrl": OPERATOR_TERMS,
+    "operator": {"name": "Valory", "domain": "www.valory.xyz"},
+    "toolMetadata": {
+        "tool-a": {
+            "benchmark": {
+                "metric": "accuracy",
+                "value": 0.9,
+                "window": "30d",
+                "url": "https://analytics.test/a",
+            }
+        },
+        "tool-b": {"benchmark": {"url": "http://a/b"}},
+    },
+}
+
+
+def _record(payment_type: str = NATIVE) -> MechRecord:
+    """Build a mech record as the indexer returns it."""
+    return MechRecord(
+        service_id=2182,
+        received_requests=1020284,
+        self_delivered=896660,
+        delivered_by_others=123617,
+        created_at=CREATED_AT,
+        payment_type=payment_type,
+        metadata_hash="0x" + "d" * 64,
+    )
+
+
+class TestPaymentLabel:
+    """A payment type hash names its method, or "unknown"."""
+
+    @pytest.mark.parametrize(
+        ("payment_type", "expected"),
+        [
+            (NATIVE, "native"),
+            (NATIVE[2:], "native"),
+            (NATIVE.upper(), "native"),
+            (USDC, "usdc"),
+            (
+                "0x3679d66ef546e66ce9057c4a052f317b135bc8e8c509638f7966edfd4fcf45e9",
+                "olas",
+            ),
+            (
+                "0x803dd08fe79d91027fc9024e254a0942372b92f3ccabc1bd19f4a5c2b251c316",
+                "native_nvm",
+            ),
+            (
+                "0x0d6fd99afa9c4c580fab5e341922c2a5c4b61d880da60506193d7bf88944dd14",
+                "usdc_nvm",
+            ),
+            ("0x" + "0" * 64, "unknown"),
+            ("", "unknown"),
+        ],
+        ids=[
+            "native",
+            "native_no_prefix",
+            "native_upper",
+            "usdc",
+            "olas",
+            "native_nvm",
+            "usdc_nvm",
+            "unknown_hash",
+            "empty",
+        ],
+    )
+    def test_label(self, payment_type: str, expected: str) -> None:
+        """Every known type has a name; anything else is unknown, never a guess."""
+        assert payment_label(payment_type) == expected
+
+
+class TestClaimedOperator:
+    """The operator claim is passed on as data and checked against the domain."""
+
+    def test_no_operator_block_means_no_claim_and_no_lookup(self) -> None:
+        """Without a claim there is nothing to check, so no registry call is made."""
+        with patch(f"{MANAGER}.query_erc8004_agent_id") as lookup:
+            assert (
+                claimed_operator("gnosis", 100, 2182, {"termsUrl": OPERATOR_TERMS})
+                is None
+            )
+        lookup.assert_not_called()
+
+    def test_a_verified_claim(self) -> None:
+        """The agent id is looked up by service, and the domain checked with it."""
+        with (
+            patch(f"{MANAGER}.query_erc8004_agent_id", return_value=516) as lookup,
+            patch(
+                f"{MANAGER}.verify_domain", return_value=DomainVerification(True)
+            ) as verify,
+        ):
+            block = claimed_operator("optimism", 10, 195, OPERATOR_MANIFEST)
+        assert block == {
+            "domain": "www.valory.xyz",
+            "url": "https://www.valory.xyz",
+            "domain_verified": True,
+            "claimed_name": "Valory",
+            "name_note": NAME_NOTE,
+        }
+        assert "name" not in block
+        lookup.assert_called_once_with("optimism", 195)
+        verify.assert_called_once_with("www.valory.xyz", 10, 516)
+
+    def test_a_lookalike_domain_is_verified_only_as_itself(self) -> None:
+        """A verified domain proves the domain; the name it claims stays a claim."""
+        manifest = {"operator": {"name": "Valory AG", "domain": "valory-mechs.xyz"}}
+        with (
+            patch(f"{MANAGER}.query_erc8004_agent_id", return_value=2182),
+            patch(f"{MANAGER}.verify_domain", return_value=DomainVerification(True)),
+        ):
+            block = claimed_operator("gnosis", 100, 2182, manifest)
+        assert block is not None
+        assert block["domain"] == "valory-mechs.xyz"
+        assert block["domain_verified"] is True
+        assert block["claimed_name"] == "Valory AG"
+        assert block["name_note"] == NAME_NOTE
+
+    def test_an_unverified_claim_carries_the_reason(self) -> None:
+        """The domain check's note reaches the report."""
+        with (
+            patch(f"{MANAGER}.query_erc8004_agent_id", return_value=2182),
+            patch(
+                f"{MANAGER}.verify_domain",
+                return_value=DomainVerification(False, "no proof"),
+            ),
+        ):
+            block = claimed_operator("gnosis", 100, 2182, OPERATOR_MANIFEST)
+        assert block is not None
+        assert block["domain_verified"] is False
+        assert block["verification_note"] == "no proof"
+
+    def test_a_service_without_an_identity_says_so_without_a_fetch(self) -> None:
+        """No agent id is a known answer: the note says there is no identity."""
+        with (
+            patch(f"{MANAGER}.query_erc8004_agent_id", return_value=None),
+            patch("mech_client.domain.operator.requests.get") as get,
+        ):
+            block = claimed_operator("gnosis", 100, 2182, OPERATOR_MANIFEST)
+        assert block is not None
+        assert block["domain_verified"] is False
+        assert block["verification_note"] == NO_AGENT_ID_NOTE
+        get.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "error",
+        [SubgraphError("no registry"), RuntimeError("transport down")],
+        ids=["subgraph_error", "transport_error"],
+    )
+    def test_a_failed_lookup_is_unverified_not_an_error(self, error: Exception) -> None:
+        """A registry outage leaves the domain unverified and logs why; the claim stays."""
+        with (
+            patch(f"{MANAGER}.query_erc8004_agent_id", side_effect=error),
+            patch(f"{MANAGER}.verify_domain") as verify,
+            patch(f"{MANAGER}.logger") as logger,
+        ):
+            block = claimed_operator("gnosis", 100, 2182, OPERATOR_MANIFEST)
+        assert block is not None
+        assert block["claimed_name"] == "Valory"
+        assert block["domain_verified"] is False
+        assert block["verification_note"] == DOMAIN_CHECK_FAILED_NOTE
+        assert block["verification_note"] != NO_AGENT_ID_NOTE
+        verify.assert_not_called()
+        logger.warning.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "error",
+        [RecursionError("too deep"), RuntimeError("boom"), ValueError("bad")],
+        ids=["recursion", "runtime", "value"],
+    )
+    def test_a_domain_check_that_blows_up_is_unverified_not_an_error(
+        self, error: Exception
+    ) -> None:
+        """Nothing the proof fetch raises escapes; the claim stays, unverified, with the note."""
+        with patch(f"{MANAGER}.query_erc8004_agent_id", return_value=2182), patch(
+            f"{MANAGER}.verify_domain", side_effect=error
+        ), patch(f"{MANAGER}.logger") as logger:
+            block = claimed_operator("gnosis", 100, 2182, OPERATOR_MANIFEST)
+        assert block is not None
+        assert block["claimed_name"] == "Valory"
+        assert block["domain_verified"] is False
+        assert block["verification_note"] == DOMAIN_CHECK_FAILED_NOTE
+        logger.warning.assert_called_once()
+
+
+class TestMechReport:
+    """mech_report extends terms_report with the operator, benchmarks, record and payment."""
+
+    @pytest.fixture
+    def manager(self) -> ToolManager:
+        """A manager on Gnosis, with no network behind it."""
+        with (
+            patch(f"{MANAGER}.EthereumApi"),
+            patch(
+                f"{MANAGER}.get_mech_config",
+                return_value=create_mock_mech_config(),
+            ),
+        ):
+            return ToolManager(chain_config="gnosis")
+
+    @pytest.fixture
+    def offline(self) -> Any:
+        """A resolver that says the mech is not Valory operated."""
+        with patch(
+            f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=_resolver("not_valory")
+        ):
+            yield
+
+    @pytest.mark.usefixtures("offline")
+    def test_full_report(self, manager: ToolManager) -> None:
+        """Every section is present, and the benchmark value is dropped."""
+        with (
+            patch(f"{MANAGER}.query_mech_record", return_value=_record()) as record,
+            patch(
+                f"{MANAGER}.claimed_operator",
+                return_value={"claimed_name": "Valory", "domain_verified": True},
+            ) as claim,
+        ):
+            report = manager.mech_report(GNOSIS_MECH, OPERATOR_MANIFEST)
+        record.assert_called_once_with("gnosis", GNOSIS_MECH)
+        claim.assert_called_once_with("gnosis", 100, 2182, OPERATOR_MANIFEST)
+        assert report["valory_operated"] is False
+        assert report["terms_url"] == OPERATOR_TERMS
+        assert report["operator"] == {"claimed_name": "Valory", "domain_verified": True}
+        assert report["benchmarks"] == {"tool-a": "https://analytics.test/a"}
+        assert report["benchmark_note"] == BENCHMARK_NOTE
+        assert report["delivery"]["received_requests"] == 1020284
+        assert report["delivery"]["note"] == DELIVERY_NOTE
+        assert report["payment"] == {"type": "native", "note": PAYMENT_NOTE}
+
+    @pytest.mark.usefixtures("offline")
+    def test_a_given_record_is_not_queried_again(self, manager: ToolManager) -> None:
+        """A caller that already has the record hands it in; no second query."""
+        with (
+            patch(f"{MANAGER}.query_mech_record") as query,
+            patch(f"{MANAGER}.claimed_operator", return_value=None),
+        ):
+            report = manager.mech_report(GNOSIS_MECH, {}, _record(USDC))
+        query.assert_not_called()
+        assert report["payment"]["type"] == "usdc"
+        assert "operator" not in report
+        assert "benchmarks" not in report
+        assert "benchmark_note" not in report
+
+    @pytest.mark.parametrize(
+        "metadata", [None, [], "manifest", 7], ids=["none", "list", "string", "int"]
+    )
+    def test_an_unreadable_manifest_means_no_report(
+        self, manager: ToolManager, metadata: Any
+    ) -> None:
+        """Nothing is reported from a document that is not an object, not even the record."""
+        with (
+            patch(f"{MANAGER}.query_mech_record") as query,
+            pytest.raises(ManifestError, match=f"{GNOSIS_MECH} could not be read"),
+        ):
+            manager.mech_report(GNOSIS_MECH, metadata)
+        query.assert_not_called()
+
+    @pytest.mark.usefixtures("offline")
+    def test_a_record_that_cannot_be_read_propagates(
+        self, manager: ToolManager
+    ) -> None:
+        """A subgraph failure is the caller's to handle; no partial report is made."""
+        with (
+            patch(
+                f"{MANAGER}.query_mech_record", side_effect=SubgraphError("not indexed")
+            ),
+            pytest.raises(SubgraphError, match="not indexed"),
+        ):
+            manager.mech_report(GNOSIS_MECH, {})
+
+    def test_the_terms_keys_are_unchanged(self, manager: ToolManager) -> None:
+        """A Valory mech still gets the statement, exactly as terms_report gives it."""
+        with (
+            patch(
+                f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=_resolver("valory")
+            ),
+            patch(f"{MANAGER}.claimed_operator", return_value=None),
+        ):
+            report = manager.mech_report(GNOSIS_MECH, {}, _record())
+        assert report["valory_operated"] is True
+        assert report["terms"] == VALORY_TERMS_NOTICE
+
+
+class TestMechReportOrTerms:
+    """Before paying, the terms always come back; the rest only when it can be read."""
+
+    @pytest.fixture
+    def manager(self) -> ToolManager:
+        """A manager on Gnosis, with no network behind it."""
+        with (
+            patch(f"{MANAGER}.EthereumApi"),
+            patch(
+                f"{MANAGER}.get_mech_config",
+                return_value=create_mock_mech_config(),
+            ),
+        ):
+            return ToolManager(chain_config="gnosis")
+
+    @pytest.fixture(autouse=True)
+    def offline(self) -> Any:
+        """A resolver that says the mech is not Valory operated."""
+        with patch(
+            f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=_resolver("not_valory")
+        ):
+            yield
+
+    @pytest.mark.parametrize(
+        "metadata", [None, [], "manifest"], ids=["none", "list", "string"]
+    )
+    def test_an_unreadable_manifest_gives_the_terms_and_a_note(
+        self, manager: ToolManager, metadata: Any
+    ) -> None:
+        """No manifest means no operator or record, but the terms and why."""
+        with patch(f"{MANAGER}.query_mech_record") as query:
+            report = manager.mech_report_or_terms(GNOSIS_MECH, metadata)
+        assert report == {
+            "valory_operated": False,
+            "report_note": MANIFEST_UNREADABLE_NOTE,
+        }
+        query.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "error",
+        [SubgraphError("not indexed"), TimeoutError(), RuntimeError("transport")],
+        ids=["subgraph_error", "timeout", "transport"],
+    )
+    def test_an_unreadable_record_gives_the_terms_and_a_note(
+        self, manager: ToolManager, error: Exception
+    ) -> None:
+        """An indexer failure keeps the terms, including the operator's link."""
+        with (
+            patch(f"{MANAGER}.query_mech_record", side_effect=error),
+            patch(f"{MANAGER}.claimed_operator") as claim,
+            patch(f"{MANAGER}.logger") as logger,
+        ):
+            report = manager.mech_report_or_terms(GNOSIS_MECH, OPERATOR_MANIFEST)
+        assert report["valory_operated"] is False
+        assert report["terms_url"] == OPERATOR_TERMS
+        assert type(error).__name__ in report["report_note"]
+        assert "only the terms are reported" in report["report_note"]
+        assert "delivery" not in report and "operator" not in report
+        claim.assert_not_called()
+        logger.warning.assert_called_once()
+
+    def test_a_readable_record_gives_the_full_report(self, manager: ToolManager) -> None:
+        """With the record in hand it is the full report, queried once."""
+        with (
+            patch(f"{MANAGER}.query_mech_record", return_value=_record()) as query,
+            patch(f"{MANAGER}.claimed_operator", return_value=None),
+        ):
+            report = manager.mech_report_or_terms(
+                GNOSIS_MECH, {"termsUrl": OPERATOR_TERMS}
+            )
+        query.assert_called_once_with("gnosis", GNOSIS_MECH)
+        assert report["delivery"]["received_requests"] == 1020284
+        assert report["payment"]["type"] == "native"
+        assert "report_note" not in report
+
+
+class TestDeliveryRecord:
+    """The record is shaped with an ISO 8601 UTC time and a whole-day age."""
+
+    def test_shape(self) -> None:
+        """Counters pass through, the time is ISO UTC, the age counts whole days."""
+        now = CREATED_AT + timedelta(days=491, hours=5)
+        with patch(f"{MANAGER}.datetime") as clock:
+            clock.now.return_value = now
+            delivery = ToolManager.delivery_record(_record())
+        assert delivery == {
+            "received_requests": 1020284,
+            "self_delivered": 896660,
+            "delivered_by_others": 123617,
+            "since": "2025-06-04T16:35:20+00:00",
+            "age_days": 491,
+            "note": DELIVERY_NOTE,
+        }
+
+    def test_a_future_creation_time_is_not_a_negative_age(self) -> None:
+        """A clock behind the chain yields zero days, never a negative count."""
+        with patch(f"{MANAGER}.datetime") as clock:
+            clock.now.return_value = CREATED_AT - timedelta(days=2)
+            assert ToolManager.delivery_record(_record())["age_days"] == 0

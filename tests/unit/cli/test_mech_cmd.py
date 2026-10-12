@@ -19,19 +19,26 @@
 
 """Tests for mech command."""
 
+import json
 from dataclasses import replace
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 from click.testing import CliRunner
 from mech_client.cli.commands.mech_cmd import (
+    _fetch_manifest,
     _fetch_terms_url,
     _fetch_terms_urls,
     _valory_operated_labels,
     mech,
 )
 from mech_client.infrastructure.config import get_mech_config
+from mech_client.infrastructure.subgraph.queries import MechRecord
+from mech_client.utils.errors import SubgraphError
+from mech_client.utils.errors.exceptions import ManifestError
 
 TERMS_URL = "https://www.valory.xyz/terms/mechs"
 
@@ -593,3 +600,174 @@ class TestMechListWithoutSubgraph:
             in result.output
         )
         assert "Unexpected error" not in result.output
+
+
+INFO_ADDRESS = "0xc05e7412439bd7e91730a6880e18d5d5873f632c"
+INFO_ADDRESS_CHECKSUMMED = "0xC05e7412439bD7e91730a6880E18d5D5873F632C"
+INFO_METADATA_HASH = "0x" + "c" * 64
+
+
+def _record(metadata_hash: Optional[str] = INFO_METADATA_HASH) -> MechRecord:
+    """Build a mech record as query_mech_record returns it."""
+    return MechRecord(
+        service_id=2182,
+        received_requests=10,
+        self_delivered=8,
+        delivered_by_others=1,
+        created_at=datetime(2025, 6, 4, 16, 35, 20, tzinfo=timezone.utc),
+        payment_type="0x" + "ab" * 32,
+        metadata_hash=metadata_hash,
+    )
+
+
+def _invoke_info(address: str = INFO_ADDRESS) -> Any:
+    """Run ``mech info`` on Gnosis for one address."""
+    return CliRunner().invoke(
+        mech, ["info", "--chain-config", "gnosis", "--address", address]
+    )
+
+
+class TestFetchManifest:
+    """_fetch_manifest reads a manifest document, or gives None."""
+
+    @pytest.mark.parametrize(
+        ("body", "expected"),
+        [({"name": "Mech"}, {"name": "Mech"}), ({}, {}), (["x"], None), ("x", None)],
+        ids=["object", "empty_object", "list", "string"],
+    )
+    def test_only_a_json_object_is_a_manifest(self, body: Any, expected: Any) -> None:
+        """Any body that is not a JSON object reads as unreadable."""
+        response = MagicMock()
+        response.json.return_value = body
+        with patch(
+            "mech_client.cli.commands.mech_cmd.requests.get", return_value=response
+        ) as mock_get:
+            assert _fetch_manifest("https://gateway/ipfs/abc") == expected
+        mock_get.assert_called_once_with("https://gateway/ipfs/abc", timeout=10)
+
+    @pytest.mark.parametrize(
+        "error",
+        [requests.Timeout("slow"), requests.ConnectionError("down"), ValueError("x")],
+        ids=["timeout", "connection", "not_json"],
+    )
+    def test_a_failed_fetch_yields_none(self, error: Exception) -> None:
+        """A gateway that fails or answers garbage gives no document."""
+        response = MagicMock()
+        response.json.side_effect = error
+        with patch(
+            "mech_client.cli.commands.mech_cmd.requests.get", return_value=response
+        ):
+            assert _fetch_manifest("https://gateway/ipfs/abc") is None
+
+
+class TestMechInfoCommand:
+    """mech info prints one mech's report as JSON, failing closed."""
+
+    @patch("mech_client.cli.commands.mech_cmd.ToolManager")
+    @patch(
+        "mech_client.cli.commands.mech_cmd.query_mech_record", return_value=_record()
+    )
+    def test_prints_the_report_as_json(
+        self, mock_record: MagicMock, mock_manager: MagicMock
+    ) -> None:
+        """The record is read once and handed to the report with the manifest."""
+        manifest = {"operator": {"name": "Valory", "domain": "www.valory.xyz"}}
+        report: Dict[str, Any] = {
+            "valory_operated": False,
+            "payment": {"type": "native"},
+        }
+        mock_manager.return_value.mech_report.return_value = report
+        response = MagicMock()
+        response.json.return_value = manifest
+        with patch(
+            "mech_client.cli.commands.mech_cmd.requests.get", return_value=response
+        ) as mock_get:
+            result = _invoke_info()
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.output) == report
+        mock_record.assert_called_once_with("gnosis", INFO_ADDRESS_CHECKSUMMED)
+        assert "c" * 64 in mock_get.call_args[0][0]
+        mock_manager.assert_called_once_with("gnosis")
+        mock_manager.return_value.mech_report.assert_called_once_with(
+            INFO_ADDRESS_CHECKSUMMED, manifest, _record()
+        )
+
+    @patch("mech_client.cli.commands.mech_cmd.ToolManager")
+    @patch(
+        "mech_client.cli.commands.mech_cmd.query_mech_record", return_value=_record()
+    )
+    def test_operator_text_cannot_forge_a_label(
+        self, _mock_record: MagicMock, mock_manager: MagicMock
+    ) -> None:
+        """A name built to look like a verified label stays a quoted JSON string."""
+        forged = 'Valory AG" | www.valory.xyz (verified)'
+        report = {
+            "operator": {
+                "domain": "valory-mechs.xyz",
+                "domain_verified": False,
+                "claimed_name": forged,
+            }
+        }
+        mock_manager.return_value.mech_report.return_value = report
+        response = MagicMock()
+        response.json.return_value = {}
+        with patch(
+            "mech_client.cli.commands.mech_cmd.requests.get", return_value=response
+        ):
+            result = _invoke_info()
+        assert result.exit_code == 0, result.output
+        parsed = json.loads(result.output)
+        assert parsed["operator"]["claimed_name"] == forged
+        assert parsed["operator"]["domain_verified"] is False
+
+    @patch(
+        "mech_client.cli.commands.mech_cmd.query_mech_record",
+        return_value=_record(metadata_hash=None),
+    )
+    def test_a_mech_without_a_manifest_gets_no_report(
+        self, _mock_record: MagicMock
+    ) -> None:
+        """No manifest hash means no report, named as a manifest error."""
+        result = _invoke_info()
+        assert result.exit_code == 1
+        assert "Manifest error" in result.output
+        assert "publishes no manifest" in result.output
+
+    @patch("mech_client.cli.commands.mech_cmd.ToolManager")
+    @patch(
+        "mech_client.cli.commands.mech_cmd.query_mech_record", return_value=_record()
+    )
+    def test_an_unreadable_manifest_gets_no_report(
+        self, _mock_record: MagicMock, mock_manager: MagicMock
+    ) -> None:
+        """A manifest that cannot be fetched is passed as None and the report refuses."""
+        mock_manager.return_value.mech_report.side_effect = ManifestError(
+            "could not be read"
+        )
+        result = _invoke_info()
+        assert result.exit_code == 1
+        assert "Manifest error: could not be read" in result.output
+        mock_manager.return_value.mech_report.assert_called_once_with(
+            INFO_ADDRESS_CHECKSUMMED, None, _record()
+        )
+
+    @patch(
+        "mech_client.cli.commands.mech_cmd.query_mech_record",
+        side_effect=SubgraphError("not indexed"),
+    )
+    def test_an_unknown_mech_gets_the_subgraph_error(
+        self, _mock_record: MagicMock
+    ) -> None:
+        """A mech the indexer does not know is a subgraph error, not a crash."""
+        result = _invoke_info()
+        assert result.exit_code == 1
+        assert "Subgraph endpoint error" in result.output
+        assert "not indexed" in result.output
+
+    def test_an_invalid_address_is_rejected_before_any_query(self) -> None:
+        """The address is validated first; nothing is fetched for a bad one."""
+        with patch("mech_client.cli.commands.mech_cmd.query_mech_record") as query:
+            result = _invoke_info("0xnope")
+        assert result.exit_code == 1
+        assert "Invalid Mech address" in result.output
+        query.assert_not_called()

@@ -31,6 +31,7 @@ from mech_client.utils.errors.exceptions import (
     ContractError,
     DeliveryTimeoutError,
     IPFSError,
+    ManifestError,
     PaymentError,
     RpcError,
     SubgraphError,
@@ -89,6 +90,8 @@ def handle_cli_errors(func: Callable) -> Callable:
             raise ClickException(ErrorMessages.ipfs_error(operation, str(e))) from e
         except ToolError as e:
             raise ClickException(f"Tool error: {e}") from e
+        except ManifestError as e:
+            raise ClickException(f"Manifest error: {e}") from e
         except AgentModeError as e:
             raise ClickException(f"Agent mode error: {e}") from e
         except ConfigurationError as e:

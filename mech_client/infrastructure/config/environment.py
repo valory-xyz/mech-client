@@ -70,6 +70,7 @@ class EnvironmentConfig:  # pylint: disable=too-many-instance-attributes
     # MECHX_* user configuration variables
     mechx_chain_rpc: Optional[str] = None
     mechx_subgraph_url: Optional[str] = None
+    mechx_registry_subgraph_url: Optional[str] = None
     mechx_gas_limit: Optional[int] = None
     mechx_transaction_url: Optional[str] = None
     mechx_ledger_chain_id: Optional[int] = None
@@ -91,6 +92,12 @@ class EnvironmentConfig:  # pylint: disable=too-many-instance-attributes
         subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
         if subgraph_url:
             self.mechx_subgraph_url = subgraph_url
+
+        # MECHX_REGISTRY_SUBGRAPH_URL - Service registry endpoint for the
+        # ERC-8004 agent id a mech report checks the operator's domain against
+        registry_subgraph_url = os.getenv("MECHX_REGISTRY_SUBGRAPH_URL")
+        if registry_subgraph_url:
+            self.mechx_registry_subgraph_url = registry_subgraph_url
 
         # MECHX_GAS_LIMIT - Gas limit override
         gas_limit_str = os.getenv("MECHX_GAS_LIMIT")

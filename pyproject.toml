@@ -1,6 +1,6 @@
 [project]
 name = "mech-client"
-version = "0.23.3"
+version = "0.24.0"
 description = "Basic client to interact with a mech"
 requires-python = ">=3.10,<3.15"
 readme = "README.md"
@@ -30,8 +30,7 @@ dev = [
     "pytest-cov>=7.0.0,<8",
     "mkdocs>=1.6.0,<2",
     "mkdocs-material>=9.5.0,<10",
-    # TODO: flip to ==0.7.0 once tomte v0.7.0 publishes to PyPI.
-    "tomte[cli, tests] @ git+https://github.com/valory-xyz/tomte.git@v0.7.0",
+    "tomte[cli, tests]==0.7.3",
 ]
 
 [tool.uv]
@@ -53,8 +52,9 @@ gitleaks_extra_paths = [
     "mech_client/infrastructure/config/payment_config.py",
     "mech_client/marketplace_interact.py",
 ]
-# TODO: flip to ==0.7.0 once tomte v0.7.0 publishes to PyPI.
-tomte_dep_pin = " @ git+https://github.com/valory-xyz/tomte.git@v0.7.0"
+# Appended to the extras in the tox template render
+# (`tomte[<extras>]$TOMTE_DEP_PIN`), so it carries its own operator.
+tomte_dep_pin = "==0.7.3"
 # E1101: operate's LocalResource has dynamic attributes pylint can't follow.
 # W0719: CLI surfaces wrap library exceptions as plain Exception.
 # C0411: tomte's canonical isort.cfg pins known_first_party=autonomy, so

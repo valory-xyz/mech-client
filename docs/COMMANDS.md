@@ -149,6 +149,31 @@ NOTES:
   - Override with MECHX_SUBGRAPH_URL only if using custom subgraph (on robinhood, it must also be a squid)
 ```
 
+### 6b. mech info
+
+```
+mechx mech info --chain-config gnosis --address 0x...
+├─ Subgraph GraphQL API (MECHX_SUBGRAPH_URL) ← Optional override
+│  └─ Query: MechRecord (delivery record, payment type, creation block, manifest hash)
+├─ IPFS Gateway
+│  └─ Fetch the mech's manifest
+├─ Registry subgraph (MECHX_REGISTRY_SUBGRAPH_URL) ← Optional override
+│  └─ Query: ServiceAgentId (only when the manifest names an operator)
+├─ Operator domain
+│  └─ Fetch https://<domain>/.well-known/agent-registration.json (no redirects)
+└─ DNS
+   └─ Resolve <address>-<chain id>.mech.valory.xyz (terms)
+
+ENV VARS:
+  MECHX_SUBGRAPH_URL, MECHX_REGISTRY_SUBGRAPH_URL (optional - defaults provided)
+
+NOTES:
+  - Read-only command, no transactions; does NOT use HTTP RPC
+  - Prints ToolManager.mech_report as JSON
+  - Fails closed: no manifest, or one that cannot be read, means no report
+  - Benchmark links are the operator's claim and are not checked; no price is shown
+```
+
 ### 7. tool list
 
 ```
@@ -226,6 +251,7 @@ NOTES:
 | deposit token | ✓ | | |
 | subscription purchase | ✓ | | |
 | mech list | | ○ | |
+| mech info | | ○ | |
 | tool list | ✓ | | |
 | tool describe | ✓ | | |
 | tool schema | ✓ | | |
