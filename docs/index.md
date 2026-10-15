@@ -153,7 +153,7 @@ The `AI Agent Id` column in `mech list` is the Olas service id. The ERC-8004 age
 dig +short c05e7412439bd7e91730a6880e18d5d5873f632c-100.mech.valory.xyz
 ```
 
-**Without mech-client.** The marketplace publishes an ERC-8004 registration file and an A2A agent card for every service. The registration file links the metadata, the operator domain and the benchmark endpoint; the agent card lists the tools and the payment type, and names the operator as `provider` only when the domain proof matches. These endpoints belong to the marketplace and may change without this page. `<network>` is `gnosis`, `base`, `polygon` or `op-mainnet`, and `<serviceId>` is the `AI Agent Id` shown on the marketplace website:
+**Without mech-client.** The marketplace publishes an ERC-8004 registration file and an A2A agent card for every service. The registration file links the metadata, the operator domain and the benchmark endpoint; the agent card lists the tools and the payment type, and names the operator as `provider` only when the domain proof matches. These endpoints belong to the marketplace and may change without this page. `<network>` is the chain's name on the marketplace, on every chain the Olas Marketplace is deployed to, and `<serviceId>` is the `AI Agent Id` shown on the marketplace website:
 
 ```
 https://marketplace.olas.network/api/erc8004/<network>/ai-agents/<serviceId>
