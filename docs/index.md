@@ -9,7 +9,7 @@ A requester - whether it is an agent or an application - can choose between two 
 
 To send a request, follow these steps:
 
-**1.** Choose a Mech;
+**1.** Choose a Mech, and check [who runs it](#who-runs-a-mech-and-how-it-has-behaved);
 
 **2.** Make an on-chain deposit according to the Mech’s [payment model](https://stack.olas.network/mech-tools-dev/#payment-models).
 
@@ -126,6 +126,41 @@ export MECHX_SUBGRAPH_URL=<your-custom-subgraph-url>
 +--------------+--------------------+--------------------------------------------+--------------------+---------------------------------------------------------------------------------------------------------------+
 ```
 
+
+#### Who runs a Mech, and how it has behaved
+
+Before paying a Mech you can ask who runs it and what its record is:
+
+```bash
+mechx mech info --chain-config <chain-config> --address <mech-address>
+```
+
+The report is built from the Mech's published metadata and the chain, and printed as JSON. It fails closed: a metadata file that cannot be read gives no report, and anything not verified says so.
+
+- **Operator**: the domain the operator named, and whether it is verified. Verified means `https://<domain>/.well-known/agent-registration.json` lists this Mech's ERC-8004 agent id. It shows that the Mech's metadata and the domain point at each other, nothing more: a domain owner can list a Mech someone else runs, so it does not prove that one party controls both. The operator's display name is never checked and is reported as `claimed_name`.
+- **Payment** (`payment.type`): the payment method, such as `native` or `usdc`. The report does not list tools; for those use `mechx tool list` (see [List tools available for a mech](#list-tools-available-for-a-mech)). No price is shown. `maxDeliveryRate` on the Mech contract is the most it can charge per request, and what your deposit must cover; the contract settles the actual charge at delivery, which can be less.
+- **Delivery record** (`delivery`): `received_requests`, `self_delivered`, `delivered_by_others` (requests another Mech delivered after this one missed its deadline) and `age_days`. A request another Mech delivered was missed by this one too, so received minus `self_delivered` is what this Mech did not deliver: requests another Mech took over, requests no Mech answered, and any still within their deadline. Off-chain requests only enter the counts once the Mech settles them on-chain, so an off-chain request that was never delivered appears nowhere, and off-chain traffic always looks fully delivered.
+- **Benchmark** (`benchmarks`): one link per tool to the operator's own figures. The report carries only the link; the metric and time window the operator chose are in the metadata entry, not in the report. The link is passed on as a claim and no number is shown; open it and judge it yourself, and if you use a Mech, measure it yourself.
+- **Terms**: the terms link, when the operator published one in the metadata, as published.
+
+> **Note:** Olas does not review Mechs or their claims. The report gives you what the operator published and what the chain records, and tells you which is which. Karma, the on-chain reputation score, is not part of this report; it is shown on the marketplace website.
+
+The `AI Agent Id` column in `mech list` is the Olas service id. The ERC-8004 agent id used in domain proofs is a different number, the same only by coincidence on Gnosis; the report resolves it for you.
+
+**Mechs run by Valory.** Valory creates one DNS name per Mech it operates: the Mech address without `0x`, a hyphen, then the chain id (100 for Gnosis), under `mech.valory.xyz`. If it resolves, Valory runs that Mech and the [Valory Mech Terms](https://www.valory.xyz/terms/mechs) apply. Newer `mech list` output marks these in an Operator column, not shown in the sample above.
+
+```bash
+dig +short c05e7412439bd7e91730a6880e18d5d5873f632c-100.mech.valory.xyz
+```
+
+**Without mech-client.** The marketplace publishes an ERC-8004 registration file and an A2A agent card for every service. The registration file links the metadata, the operator domain and the benchmark endpoint; the agent card lists the tools and the payment type, and names the operator as `provider` only when the domain proof matches. These endpoints belong to the marketplace and may change without this page. `<network>` is the chain's name on the marketplace, on every chain the Olas Marketplace is deployed to, and `<serviceId>` is the `AI Agent Id` shown on the marketplace website:
+
+```
+https://marketplace.olas.network/api/erc8004/<network>/ai-agents/<serviceId>
+https://marketplace.olas.network/api/erc8004/<network>/ai-agents/<serviceId>/agent-card.json
+```
+
+To check a domain proof by hand: take the operator domain from the metadata, fetch `https://<domain>/.well-known/agent-registration.json`, and confirm it lists the same `agentId` and `agentRegistry` as the registration file above.
 
 ### 1. 2. In terminal
 
@@ -419,6 +454,21 @@ The client queries the mech's `ComplementaryServiceMetadata` contract to find th
 
 
 ## 4. Programmatic Usage
+
+From a script, the same report is available as data:
+
+```python
+from mech_client.domain.tools import ToolManager
+
+manager = ToolManager("gnosis")
+service_id = 2182
+mech = "0xc05e7412439bd7e91730a6880e18d5d5873f632c"
+metadata = manager.fetch_tools_metadata(service_id)  # the Mech's published metadata, or None
+report = manager.mech_report(mech, metadata)         # dict with the same fields as `mechx mech info`
+```
+
+Call `manager.mech_report_or_terms(mech, metadata)` before paying: when the metadata or the chain record cannot be read it returns the Valory terms check alone, with a `report_note` saying why.
+
 
 You can use the Mech Client as a library in your Python project:
 
