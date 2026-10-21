@@ -737,7 +737,7 @@ class TestOffchainDeliveryWatcherReportsCharge:
 
         results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
 
-        assert results["0x1a"].delivery_rate == CHARGE
+        assert results["0x1a"].actual_delivery_rate == CHARGE
         assert results["0x1a"].data == envelope
 
     @pytest.mark.anyio
@@ -754,7 +754,7 @@ class TestOffchainDeliveryWatcherReportsCharge:
 
         results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
 
-        assert results["0x1a"].delivery_rate == CHARGE
+        assert results["0x1a"].actual_delivery_rate == CHARGE
         assert results["0x1a"].data == {"result": "the answer"}
         assert results["0x1a"].url is not None
 
@@ -769,7 +769,7 @@ class TestOffchainDeliveryWatcherReportsCharge:
 
         results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
 
-        assert results["0x1a"].delivery_rate is None
+        assert results["0x1a"].actual_delivery_rate is None
         mock_logger.warning.assert_not_called()
 
     @pytest.mark.anyio
@@ -786,7 +786,7 @@ class TestOffchainDeliveryWatcherReportsCharge:
 
         results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
 
-        assert results["0x1a"].delivery_rate is None
+        assert results["0x1a"].actual_delivery_rate is None
         assert results["0x1a"].data is not None
         mock_logger.warning.assert_called_once()
         assert "26" in mock_logger.warning.call_args.args
@@ -822,4 +822,4 @@ class TestOffchainDeliveryWatcherReportsCharge:
 
         assert results["0x1a"].data is None
         assert results["0x1a"].url is not None
-        assert results["0x1a"].delivery_rate == CHARGE
+        assert results["0x1a"].actual_delivery_rate == CHARGE

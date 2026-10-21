@@ -23,9 +23,11 @@ import socket
 from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import eth_abi
 import pytest
 import requests
 from eth_account import Account
+from eth_utils import keccak
 from eth_account.messages import encode_defunct
 
 from mech_client.domain.delivery import DeliveryResult
@@ -2936,8 +2938,115 @@ async def _send_offchain(
     return dict(result), payloads
 
 
+# A request-id vector produced by the mech's own reimplementation of the
+# marketplace views (``task_execution/utils/request_id.py``,
+# ``compute_request_id_with_nonce`` / ``compute_request_id``) for these
+# inputs. The stub views below encode whatever the client passes them in
+# the marketplace's field order, so the payload only reproduces the vector
+# if the client passes the fields in that order with the right tag.
+VECTOR_MARKETPLACE = "0x4554fE75c1f5576c1d7F765B2A036c199Adae329"
+VECTOR_MECH = "0x77af31De935740567Cf4fF1986D04B2c964A786a"
+VECTOR_DATA = "0x" + "b" * 64
+VECTOR_RATE = 10**16
+VECTOR_PAYMENT_TYPE = "0xba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"
+VECTOR_NONCE = 0xDEADBEEF
+VECTOR_DOMAIN_SEPARATOR = bytes.fromhex("5a" * 32)
+VECTOR_EXPLICIT_REQUEST_ID = "ac0292e75b2419e3b0609489d35f90b5c9d9718787a619d8c75e9d721545b213"
+VECTOR_SEQUENTIAL_REQUEST_ID = "fd5fd4b72cc0d1964c4ce14ae2764ab978a20cdb48fa65c3a00b80c0e1d41800"
+EXPLICIT_NONCE_TAG = keccak(text="ExplicitNonceDelivery")
+
+
+def _marketplace_request_id(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    tagged: bool,
+    mech: str,
+    requester: str,
+    data: Any,
+    rate: int,
+    payment_type: Any,
+    nonce: int,
+) -> bytes:
+    """Mirror ``getRequestId`` / ``getRequestIdWithNonce`` over the client's view arguments.
+
+    :param tagged: whether to prepend ``EXPLICIT_NONCE_TAG`` (the explicit view)
+    :param mech: the mech address as the client passed it
+    :param requester: the requester address as the client passed it
+    :param data: the request data as the client passed it (hex string or bytes)
+    :param rate: the signed cap
+    :param payment_type: the payment type as the client passed it (hex string or bytes)
+    :param nonce: the nonce
+    :return: the 32-byte request id
+    """
+    data_bytes = bytes.fromhex(data[2:]) if isinstance(data, str) else bytes(data)
+    pt_bytes = (
+        bytes.fromhex(payment_type[2:])
+        if isinstance(payment_type, str)
+        else bytes(payment_type)
+    )
+    fields = eth_abi.encode(
+        ["address", "address", "address", "bytes32", "uint256", "bytes32", "uint256"],
+        [VECTOR_MARKETPLACE, mech, requester, keccak(data_bytes), rate, pt_bytes, nonce],
+    )
+    if tagged:
+        fields = EXPLICIT_NONCE_TAG + fields
+    return keccak(b"\x19\x01" + VECTOR_DOMAIN_SEPARATOR + keccak(fields))
+
+
+def _vector_contract() -> MagicMock:
+    """Marketplace contract stub whose request-id views really hash their arguments.
+
+    :return: the contract mock
+    """
+    contract = MagicMock()
+
+    def _view(tagged: bool) -> Any:
+        def view(*args: Any) -> MagicMock:
+            call = MagicMock()
+            call.call.return_value = _marketplace_request_id(tagged, *args)
+            return call
+
+        return view
+
+    contract.functions.getRequestIdWithNonce.side_effect = _view(True)
+    contract.functions.getRequestId.side_effect = _view(False)
+    return contract
+
+
 class TestOffchainNonceModes:
     """How an offchain request is numbered, signed and, when refused, resent."""
+
+    @pytest.mark.parametrize(
+        "nonce_mode, expected",
+        [
+            (NONCE_MODE_EXPLICIT, VECTOR_EXPLICIT_REQUEST_ID),
+            (NONCE_MODE_SEQUENTIAL, VECTOR_SEQUENTIAL_REQUEST_ID),
+        ],
+    )
+    def test_request_id_reproduces_the_mech_s_vector(
+        self, nonce_mode: Any, expected: str
+    ) -> None:
+        """The view gets the fields in the marketplace's order and the explicit path carries the tag."""
+        service = _build_offchain_service()
+        service.signer = _real_signing_signer()
+        requester = ensure_checksummed_address(_TEST_ACCOUNT.address)
+
+        request_id, payload = service._build_offchain_payload(  # pylint: disable=protected-access
+            _vector_contract(),
+            requester,
+            VECTOR_MECH,
+            VECTOR_DATA,
+            VECTOR_RATE,
+            VECTOR_PAYMENT_TYPE,
+            VECTOR_NONCE,
+            nonce_mode,
+            CONTENT_DATA,
+        )
+
+        assert request_id.hex() == expected
+        assert payload["request_id"] == int(expected, 16)
+        assert payload["nonce"] == VECTOR_NONCE
+        assert payload.get("nonce_mode") == (
+            nonce_mode if nonce_mode == NONCE_MODE_EXPLICIT else None
+        )
 
     def setup_method(self) -> None:
         """Build a client-mode service whose signatures really recover."""

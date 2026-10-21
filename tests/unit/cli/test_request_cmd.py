@@ -1109,7 +1109,7 @@ class TestRequestCommandCharge:
 
     def test_a_reported_charge_is_printed(self) -> None:
         """A delivery carrying a charge prints it after the answer."""
-        deliveries = {"0xabc": DeliveryResult("0xabc", data="answer", delivery_rate=120)}
+        deliveries = {"0xabc": DeliveryResult("0xabc", data="answer", actual_delivery_rate=120)}
 
         invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": deliveries}, "--use-offchain", "true")
 

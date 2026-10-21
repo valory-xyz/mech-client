@@ -118,10 +118,8 @@ def _format_delivery_output(delivery_data: JSONValue) -> str:
     default=NONCE_MODE_EXPLICIT,
     show_default=True,
     help=(
-        "How offchain requests are numbered. 'explicit' signs a random "
-        "per-request nonce so independent requests settle in any order, and "
-        "falls back to 'sequential' on a mech that does not accept it. "
-        "'sequential' uses the marketplace's nonce counter. Offchain only."
+        "How offchain requests are numbered; see 'Offchain Requests' in the "
+        "docs. Offchain only."
     ),
 )
 @click.option(
@@ -195,7 +193,7 @@ def request(
     :param use_prepaid: Use the marketplace prepaid balance instead of per-request payment.
     :param use_offchain: Route delivery off-chain (auto-discovered URL); implies prepaid.
     :param auto_deposit: On an offchain HTTP 402, top up the prepaid balance and retry.
-    :param nonce_mode: ``explicit`` or ``sequential`` numbering of offchain requests.
+    :param nonce_mode: ``explicit`` or ``sequential``, see :data:`NonceMode`.
     :param key: Optional path to a private-key file (required in client mode).
     :param tools: One or more tool names matching ``prompts`` positionally.
     :param extra_attribute: Optional ``key=value`` extras attached to each request.
@@ -280,8 +278,8 @@ def request(
             )
             if delivery.url:
                 click.echo(f"    Result file: {delivery.url}")
-            if delivery.delivery_rate is not None:
+            if delivery.actual_delivery_rate is not None:
                 click.echo(
-                    f"    Charged: {delivery.delivery_rate} (base units of the "
+                    f"    Charged: {delivery.actual_delivery_rate} (base units of the "
                     f"mech's payment asset, at or below the signed maximum)"
                 )

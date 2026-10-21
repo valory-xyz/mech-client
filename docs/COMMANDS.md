@@ -60,7 +60,7 @@ OPTIONAL:
 │  ├─ POST /send_signed_requests (signed maximum, nonce, nonce_mode)
 │  └─ GET /fetch_offchain_info (answer and the charge the mech reports)
 └─ MechMarketplace views (offchain only)
-   ├─ getRequestIdWithNonce() (--nonce-mode explicit, default; 503 falls back to sequential)
+   ├─ getRequestIdWithNonce() (--nonce-mode explicit, default; the disabled-path 503 falls back to sequential)
    └─ mapNonces(), getRequestId() (--nonce-mode sequential)
 
 ENV VARS:

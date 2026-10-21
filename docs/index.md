@@ -454,7 +454,7 @@ mechx request --prompts "test" --tools openai-gpt-4 --use-offchain --chain-confi
 
 The client queries the mech's `ComplementaryServiceMetadata` contract to find the `url` field published by the mech operator, then sends requests to that endpoint.
 
-Each off-chain request is signed with a nonce. By default (`--nonce-mode explicit`) the client signs a random nonce chosen per request, so independently signed requests can settle in any order and in independent transactions. A Mech that has not been upgraded to accept explicit nonces says so, and the client resends the request, and the rest of the batch, with the marketplace's sequential nonce counter for your address, so the default serves every Mech. `--nonce-mode sequential` sends requests that way from the start; it remains supported and settles requests in counter order:
+Each off-chain request is signed with a nonce. By default (`--nonce-mode explicit`) the client signs a random nonce chosen per request and says so on the wire, so independently signed requests can settle in any order and in independent transactions. A Mech that has the explicit-nonce path switched off answers HTTP 503 and the client resends the request, and the rest of the batch, with the marketplace's sequential nonce counter for your address. A Mech on a release that predates this option does not take part in that fallback, so pass `--nonce-mode sequential` for it. `sequential` sends the same payload as before and settles requests in counter order:
 
 ```bash
 mechx request --prompts "test" --tools openai-gpt-4 --use-offchain true --nonce-mode sequential --chain-config gnosis

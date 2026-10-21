@@ -40,7 +40,8 @@ OFFCHAIN_DELIVER_ENDPOINT = "fetch_offchain_info"
 # Envelope field carrying what the mech charged for the request: the actual
 # cost, at or below the maximum the requester signed, in the base units of
 # the mech's payment asset. A mech that has not priced the request yet, or
-# one running an older release, omits it.
+# one running an older release, omits it. Surfaced as
+# ``DeliveryResult.actual_delivery_rate``.
 CHARGED_RATE_FIELD = "delivery_rate"
 
 # `IPFS_URL_TEMPLATE` already carries the multibase and multicodec prefix, so a
@@ -135,7 +136,7 @@ class OffchainDeliveryWatcher(
                         results[request_id] = DeliveryResult(
                             request_id=request_id,
                             data=response,
-                            delivery_rate=charged,
+                            actual_delivery_rate=charged,
                         )
                     else:
                         pending_files[request_id] = (url, charged)
@@ -157,7 +158,7 @@ class OffchainDeliveryWatcher(
                             request_id=request_id,
                             data=data,
                             url=url,
-                            delivery_rate=charged,
+                            actual_delivery_rate=charged,
                         )
                     logger.info(
                         f"Received offchain response for request {request_id_int}"
@@ -196,7 +197,7 @@ class OffchainDeliveryWatcher(
                 url,
             )
             results[request_id] = DeliveryResult(
-                request_id=request_id, data=None, url=url, delivery_rate=charged
+                request_id=request_id, data=None, url=url, actual_delivery_rate=charged
             )
 
         return results

@@ -67,23 +67,28 @@ logger = logging.getLogger(__name__)
 # insufficient (structured 402 challenge, see mech task_execution handlers).
 HTTP_PAYMENT_REQUIRED = 402
 # HTTP status the offchain mech returns when it cannot serve a request right
-# now; with ``EXPLICIT_NONCE_DISABLED_REASON`` it means the mech does not
-# accept explicit nonces at all, and the request is resent sequentially.
+# now; see ``EXPLICIT_NONCE_DISABLED_REASON`` for the one case that is retried.
 HTTP_SERVICE_UNAVAILABLE = 503
 # Outbound HTTP timeout (seconds) for the offchain request POST.
 OFFCHAIN_HTTP_TIMEOUT = 30
 
 # How an offchain request's nonce is chosen, which decides the view that
-# derives its request id and the marketplace path that settles it.
+# derives its request id and the marketplace path that settles it. This is
+# the one description; the docs' "Offchain Requests" section is the
+# user-facing copy.
 #
-# ``explicit`` (the default): the requester picks the nonce, the id comes
-# from ``getRequestIdWithNonce``, and the marketplace's per-request-id
-# record is the only replay guard, so independently signed requests settle
-# in any order and in independent transactions.
+# ``explicit`` (the default): the requester picks a random nonce per request,
+# the id comes from ``getRequestIdWithNonce``, the payload says so in
+# ``nonce_mode``, and the marketplace's per-request-id record is the only
+# replay guard, so independently signed requests settle in any order and in
+# independent transactions.
 # ``sequential``: the nonce is the requester's ``mapNonces`` counter, the id
-# comes from ``getRequestId``, and settlement consumes the counter in order.
-# It is what a mech not yet running the upgraded marketplace accepts, and
-# what an explicit request falls back to when such a mech turns it away.
+# comes from ``getRequestId``, the payload is the one every mech has always
+# accepted, and settlement consumes the counter in order.
+# A mech with the explicit-nonce path switched off answers an explicit
+# request with HTTP 503 and ``EXPLICIT_NONCE_DISABLED_REASON``; the request,
+# and the rest of the batch, is then resent sequentially. A mech on a
+# release that predates ``nonce_mode`` is not covered by that fallback.
 # The two ids are domain-separated: a signature for one path is rejected on
 # the other.
 NonceMode = Literal["explicit", "sequential"]
@@ -297,13 +302,9 @@ class MarketplaceService(
             with the shortfall and retry once (only applies to the offchain path)
         :param extra_attributes: Extra attributes for metadata
         :param timeout: Timeout for delivery watching
-        :param nonce_mode: How offchain requests are numbered: ``explicit``
-            (a random per-request nonce, the default) or ``sequential`` (the
-            marketplace counter), see :data:`NonceMode`. A mech that does
-            not accept explicit nonces answers HTTP 503 and the request is
-            resent sequentially, so the default serves mechs not yet
-            upgraded. On-chain requests take their nonce from the
-            marketplace and ignore this.
+        :param nonce_mode: ``explicit`` or ``sequential``, see :data:`NonceMode`.
+            On-chain requests take their nonce from the marketplace and
+            ignore this.
         :return: A :class:`RequestResult` with ``tx_hash`` and ``receipt``
             (both ``None`` on the offchain path, which has no transaction),
             ``request_ids``, and ``deliveries`` mapping each request ID to a
@@ -514,9 +515,6 @@ class MarketplaceService(
         :param timeout: Delivery watching timeout
         :param auto_deposit: On a 402, deposit the shortfall and retry once
         :param nonce_mode: ``explicit`` or ``sequential``, see :data:`NonceMode`.
-            Explicit falls back to sequential, for this request and the rest
-            of the batch, when the mech answers that it does not accept
-            explicit nonces.
         :return: Dictionary with request results
         """
         logger.info("Sending offchain mech marketplace request...")
@@ -560,45 +558,23 @@ class MarketplaceService(
                 f"content CID {data_hash_full}"
             )
 
-            if nonce_mode == NONCE_MODE_EXPLICIT:
-                nonce = secrets.randbits(EXPLICIT_NONCE_BITS)
-            else:
-                nonce = cast(int, next_sequential_nonce)
-                next_sequential_nonce = nonce + 1
-            request_id_bytes, payload = self._build_offchain_payload(
-                marketplace_contract,
-                sender,
-                mech,
-                data_hash,
-                max_delivery_rate,
-                payment_type_hex,
-                nonce,
-                nonce_mode,
-                ipfs_data,
-            )
-
-            # Send HTTP POST request (handles a structured 402 + receipt header)
+            # Send HTTP POST request (handles a structured 402 + receipt header).
+            # At most two rounds: the second only when an explicit request was
+            # turned away for its nonce, in which case the mech answers every
+            # explicit request that way and the rest of the batch goes
+            # sequential too. A refused request was never accepted, so
+            # nothing of it is in flight.
             try:
-                response = self._post_offchain_request(
-                    url, payload, payment_type, auto_deposit, max_delivery_rate
-                )
-                if nonce_mode == NONCE_MODE_EXPLICIT and self._explicit_nonce_refused(
-                    response
-                ):
-                    # The mech answers every explicit request this way, so
-                    # the rest of the batch goes sequential too. The refused
-                    # request was not accepted, so nothing of it is in flight.
-                    logger.warning(
-                        "The mech does not accept explicit nonces; resending "
-                        "with the marketplace's sequential nonce instead."
-                    )
-                    nonce_mode = NONCE_MODE_SEQUENTIAL
-                    if next_sequential_nonce is None:
-                        next_sequential_nonce = (
-                            marketplace_contract.functions.mapNonces(sender).call()
-                        )
-                    nonce = next_sequential_nonce
-                    next_sequential_nonce = nonce + 1
+                while True:
+                    if nonce_mode == NONCE_MODE_EXPLICIT:
+                        nonce = secrets.randbits(EXPLICIT_NONCE_BITS)
+                    else:
+                        if next_sequential_nonce is None:
+                            next_sequential_nonce = (
+                                marketplace_contract.functions.mapNonces(sender).call()
+                            )
+                        nonce = next_sequential_nonce
+                        next_sequential_nonce = nonce + 1
                     request_id_bytes, payload = self._build_offchain_payload(
                         marketplace_contract,
                         sender,
@@ -613,6 +589,15 @@ class MarketplaceService(
                     response = self._post_offchain_request(
                         url, payload, payment_type, auto_deposit, max_delivery_rate
                     )
+                    if nonce_mode == NONCE_MODE_SEQUENTIAL:
+                        break
+                    if not self._explicit_nonce_refused(response):
+                        break
+                    logger.warning(
+                        "The mech does not accept explicit nonces; resending "
+                        "with the marketplace's sequential nonce instead."
+                    )
+                    nonce_mode = NONCE_MODE_SEQUENTIAL
                 if not response.ok:
                     reason = self._rejection_reason(response)
                     raise ValueError(

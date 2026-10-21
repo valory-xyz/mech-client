@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
-- `DeliveryResult.delivery_rate`: what the Mech charged for the request, in the base units of its payment asset, read from the off-chain delivery envelope. `None` when the Mech reports no charge, which is always the case for on-chain delivery. `mechx request` prints it as `Charged: <amount>`.
-- `--nonce-mode` on `mechx request` (`nonce_mode` on `MarketplaceService.send_request`). `explicit`, the default, signs a random per-request nonce through the marketplace's `getRequestIdWithNonce` view and says so on the wire, so independently signed requests settle in any order and in independent transactions. A Mech that does not accept explicit nonces answers HTTP 503 and the request, and the rest of the batch, is resent with the marketplace's sequential nonce, so the default serves Mechs not yet upgraded. `sequential` remains supported as an opt-in and sends the same payload as before. On-chain requests take their nonce from the marketplace and ignore the option.
+- `DeliveryResult.actual_delivery_rate`: what the Mech charged for the request, in the base units of its payment asset, read from the off-chain delivery envelope. `None` when the Mech reports no charge, which is always the case for on-chain delivery. `mechx request` prints it as `Charged: <amount>`.
+- `--nonce-mode` on `mechx request` (`nonce_mode` on `MarketplaceService.send_request`): `explicit` (the default) or `sequential`. See "Offchain Requests" in the docs. Requires a Mech release that knows the option; on an older Mech pass `sequential`.
 - The marketplace ABI carries `getRequestIdWithNonce`, `EXPLICIT_NONCE_TAG`, the `deliverMarketplaceWithSignatures` overloads that settle a cap with an actual charge, and the `RateOverCap` error.
 
 ### 🔧 Changed

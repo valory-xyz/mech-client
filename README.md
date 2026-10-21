@@ -305,9 +305,9 @@ mechx request --prompts "test" --tools openai-gpt-4 --use-offchain true --chain-
 
 The client queries the mech's `ComplementaryServiceMetadata` contract to find the `url` field published by the mech operator, then sends requests to that endpoint.
 
-Each off-chain request is signed with a nonce. By default (`--nonce-mode explicit`) the client signs a random nonce chosen per request, so independently signed requests settle in any order and in independent transactions. A Mech that has not been upgraded to accept explicit nonces says so, and the client resends the request, and the rest of the batch, with the marketplace's sequential nonce counter for your address, so the default serves every Mech. `--nonce-mode sequential` sends requests that way from the start; it remains supported and settles requests in counter order.
+Each off-chain request is signed with a nonce, `explicit` (a random per-request nonce, the default) or `sequential` (the marketplace counter). See [Offchain Requests](https://github.com/valory-xyz/mech-client/blob/main/docs/index.md#offchain-requests) in the docs for how the two behave and when the client falls back from one to the other.
 
-The Mech reports what it charged with the delivery. The CLI prints it as `Charged: <amount>` under the answer, in the base units of the Mech's payment asset, and the library returns it as `DeliveryResult.delivery_rate` (`None` when the Mech reports none, which is always the case for on-chain delivery).
+The Mech reports what it charged with the delivery. The CLI prints it as `Charged: <amount>` under the answer, in the base units of the Mech's payment asset, and the library returns it as `DeliveryResult.actual_delivery_rate` (`None` when the Mech reports none, which is always the case for on-chain delivery).
 
 ### List tools available for a mech
 
@@ -517,12 +517,12 @@ You can also use the Mech Client as a library on your Python project.
 
     # `deliveries` maps each request ID to a DeliveryResult: `.data` is the
     # parsed content the mech delivered, `.url` the IPFS URL it was read from
-    # and `.delivery_rate` what the mech charged, when it reports it.
+    # and `.actual_delivery_rate` what the mech charged, when it reports it.
     # Same shape whether delivery was on-chain or off-chain.
     for request_id, delivery in result["deliveries"].items():
         print(f"Request {request_id}: {delivery.url}")
-        if delivery.delivery_rate is not None:
-            print(f"  charged {delivery.delivery_rate} of the signed maximum")
+        if delivery.actual_delivery_rate is not None:
+            print(f"  charged {delivery.actual_delivery_rate} of the signed maximum")
         payload = delivery.data
         if payload is None:
             print("  result file could not be read")
