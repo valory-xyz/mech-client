@@ -50,19 +50,33 @@ def marketplace_abi() -> List[Dict[str, Any]]:
 class TestMarketplaceAbi:
     """What the client relies on when it derives, signs and reads back a request."""
 
-    def test_the_explicit_view_takes_the_same_arguments_as_the_sequential_one(
+    def test_the_explicit_view_takes_the_sequential_arguments_plus_a_deadline(
         self, abi: List[Dict[str, Any]]
     ) -> None:
-        """Both views are called with one argument list, so their inputs must match."""
+        """The explicit view is the sequential one with the signed cap and a deadline appended."""
         (sequential,) = _functions(abi, "getRequestId")
         (explicit,) = _functions(abi, "getRequestIdWithNonce")
 
-        assert explicit["inputs"] == sequential["inputs"]
-        assert explicit["outputs"] == sequential["outputs"]
-        assert explicit["stateMutability"] == "view"
-        assert [i["type"] for i in explicit["inputs"]] == [
+        assert [i["type"] for i in sequential["inputs"]] == [
             "address", "address", "bytes", "uint256", "bytes32", "uint256"
         ]
+        assert [i["type"] for i in explicit["inputs"]] == [
+            "address", "address", "bytes", "uint256", "bytes32", "uint256", "uint256"
+        ]
+        assert [i["name"] for i in explicit["inputs"]][-2:] == ["nonce", "deadline"]
+        assert explicit["outputs"] == sequential["outputs"]
+        assert explicit["stateMutability"] == "view"
+
+    def test_the_explicit_path_has_its_own_signing_domain(
+        self, abi: List[Dict[str, Any]]
+    ) -> None:
+        """``getDomainSeparatorWithNonce`` is distinct from ``getDomainSeparator``."""
+        (legacy,) = _functions(abi, "getDomainSeparator")
+        (explicit,) = _functions(abi, "getDomainSeparatorWithNonce")
+        (type_hash,) = _functions(abi, "EXPLICIT_NONCE_TYPE_HASH")
+        assert legacy["inputs"] == explicit["inputs"] == []
+        assert explicit["outputs"] == legacy["outputs"]
+        assert type_hash["outputs"][0]["type"] == "bytes32"
 
     def test_the_marketplace_settles_a_cap_with_an_actual_and_an_explicit_nonce(
         self, abi: List[Dict[str, Any]]
@@ -70,10 +84,10 @@ class TestMarketplaceAbi:
         """The deliver overloads settle: cap only, cap and actual, cap and actual and nonce."""
         overloads = _functions(abi, "deliverMarketplaceWithSignatures")
 
-        assert sorted(len(entry["inputs"]) for entry in overloads) == [4, 5, 6]
-        (with_nonces,) = [entry for entry in overloads if len(entry["inputs"]) == 6]
+        assert sorted(len(entry["inputs"]) for entry in overloads) == [4, 5, 7]
+        (with_nonces,) = [entry for entry in overloads if len(entry["inputs"]) == 7]
         assert [i["name"] for i in with_nonces["inputs"]] == [
-            "requester", "deliverWithSignatures", "deliveryRates", "maxRates", "nonces", "paymentData"
+            "requester", "deliverWithSignatures", "deliveryRates", "maxRates", "nonces", "deadlines", "paymentData"
         ]
 
     def test_the_explicit_nonce_tag_is_readable(self, abi: List[Dict[str, Any]]) -> None:

@@ -37,6 +37,7 @@ from mech_client.domain.tools.manager import IDENTIFICATION_NOTE, ToolManager
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.services.marketplace_service import (
+    EXPLICIT_NONCE_DEADLINE_SECONDS,
     EXPLICIT_NONCE_BITS,
     EXPLICIT_NONCE_DISABLED_REASON,
     NONCE_MODE_EXPLICIT,
@@ -2843,6 +2844,9 @@ EXPLICIT_REQUEST_ID = b"\x22" * 32
 CONTENT_HASH = "0x" + "b" * 64
 CONTENT_DATA = '{"prompt":"hello"}'
 MARKETPLACE_NONCE = 5
+# Chain time the contract stub reports; explicit deadlines are measured from it.
+LATEST_BLOCK_TIMESTAMP = 1_700_000_000
+EXPECTED_DEADLINE = LATEST_BLOCK_TIMESTAMP + EXPLICIT_NONCE_DEADLINE_SECONDS
 CHOSEN_NONCE = 0xC0FFEE
 PAYMENT_TYPE_HEX = "0x" + PaymentType.NATIVE.value
 FETCH_IPFS_HASH = "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash"
@@ -2871,6 +2875,7 @@ def _nonce_contract() -> MagicMock:
     contract.functions.getRequestIdWithNonce.return_value.call.return_value = (
         EXPLICIT_REQUEST_ID
     )
+    contract.w3.eth.get_block.return_value = {"timestamp": LATEST_BLOCK_TIMESTAMP}
     return contract
 
 
@@ -2942,38 +2947,48 @@ async def _send_offchain(
 # marketplace views (``task_execution/utils/request_id.py``,
 # ``compute_request_id_with_nonce`` / ``compute_request_id``) for these
 # inputs. The stub views below encode whatever the client passes them in
-# the marketplace's field order, so the payload only reproduces the vector
-# if the client passes the fields in that order with the right tag.
+# the marketplace's field order (the explicit one as the EIP-712
+# ``ExplicitNonceDelivery`` struct), so the payload only reproduces the
+# vector if the client passes the fields in that order.
 VECTOR_MARKETPLACE = "0x4554fE75c1f5576c1d7F765B2A036c199Adae329"
 VECTOR_MECH = "0x77af31De935740567Cf4fF1986D04B2c964A786a"
 VECTOR_DATA = "0x" + "b" * 64
 VECTOR_RATE = 10**16
 VECTOR_PAYMENT_TYPE = "0xba699a34be8fe0e7725e93dcbce1701b0211a8ca61330aaeb8a05bf2ec7abed1"
 VECTOR_NONCE = 0xDEADBEEF
+VECTOR_DEADLINE = 1_900_000_000
 VECTOR_DOMAIN_SEPARATOR = bytes.fromhex("5a" * 32)
-VECTOR_EXPLICIT_REQUEST_ID = "ac0292e75b2419e3b0609489d35f90b5c9d9718787a619d8c75e9d721545b213"
+VECTOR_EXPLICIT_REQUEST_ID = "65790905cee19a886176ee0835e817eb6b326aef18ab1455a2f35ae6f7bbd7e6"
 VECTOR_SEQUENTIAL_REQUEST_ID = "fd5fd4b72cc0d1964c4ce14ae2764ab978a20cdb48fa65c3a00b80c0e1d41800"
-EXPLICIT_NONCE_TAG = keccak(text="ExplicitNonceDelivery")
+EXPLICIT_NONCE_TYPE_HASH = keccak(
+    text=(
+        "ExplicitNonceDelivery(address mech,address requester,bytes data,"
+        "uint256 maxDeliveryRate,bytes32 paymentType,uint256 nonce,uint256 deadline)"
+    )
+)
 
 
 def _marketplace_request_id(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    tagged: bool,
+    explicit: bool,
     mech: str,
     requester: str,
     data: Any,
     rate: int,
     payment_type: Any,
     nonce: int,
+    deadline: Optional[int] = None,
 ) -> bytes:
     """Mirror ``getRequestId`` / ``getRequestIdWithNonce`` over the client's view arguments.
 
-    :param tagged: whether to prepend ``EXPLICIT_NONCE_TAG`` (the explicit view)
+    :param explicit: whether to hash the EIP-712 ``ExplicitNonceDelivery`` struct
+        (the explicit view) rather than the sequential layout
     :param mech: the mech address as the client passed it
     :param requester: the requester address as the client passed it
     :param data: the request data as the client passed it (hex string or bytes)
     :param rate: the signed cap
     :param payment_type: the payment type as the client passed it (hex string or bytes)
     :param nonce: the nonce
+    :param deadline: the settlement deadline (explicit view only)
     :return: the 32-byte request id
     """
     data_bytes = bytes.fromhex(data[2:]) if isinstance(data, str) else bytes(data)
@@ -2982,12 +2997,16 @@ def _marketplace_request_id(  # pylint: disable=too-many-arguments,too-many-posi
         if isinstance(payment_type, str)
         else bytes(payment_type)
     )
-    fields = eth_abi.encode(
-        ["address", "address", "address", "bytes32", "uint256", "bytes32", "uint256"],
-        [VECTOR_MARKETPLACE, mech, requester, keccak(data_bytes), rate, pt_bytes, nonce],
-    )
-    if tagged:
-        fields = EXPLICIT_NONCE_TAG + fields
+    if explicit:
+        fields = eth_abi.encode(
+            ["bytes32", "address", "address", "bytes32", "uint256", "bytes32", "uint256", "uint256"],
+            [EXPLICIT_NONCE_TYPE_HASH, mech, requester, keccak(data_bytes), rate, pt_bytes, nonce, deadline],
+        )
+    else:
+        fields = eth_abi.encode(
+            ["address", "address", "address", "bytes32", "uint256", "bytes32", "uint256"],
+            [VECTOR_MARKETPLACE, mech, requester, keccak(data_bytes), rate, pt_bytes, nonce],
+        )
     return keccak(b"\x19\x01" + VECTOR_DOMAIN_SEPARATOR + keccak(fields))
 
 
@@ -2998,10 +3017,10 @@ def _vector_contract() -> MagicMock:
     """
     contract = MagicMock()
 
-    def _view(tagged: bool) -> Any:
+    def _view(explicit: bool) -> Any:
         def view(*args: Any) -> MagicMock:
             call = MagicMock()
-            call.call.return_value = _marketplace_request_id(tagged, *args)
+            call.call.return_value = _marketplace_request_id(explicit, *args)
             return call
 
         return view
@@ -3039,14 +3058,35 @@ class TestOffchainNonceModes:
             VECTOR_NONCE,
             nonce_mode,
             CONTENT_DATA,
+            VECTOR_DEADLINE,
         )
 
         assert request_id.hex() == expected
         assert payload["request_id"] == int(expected, 16)
         assert payload["nonce"] == VECTOR_NONCE
-        assert payload.get("nonce_mode") == (
-            nonce_mode if nonce_mode == NONCE_MODE_EXPLICIT else None
-        )
+        explicit = nonce_mode == NONCE_MODE_EXPLICIT
+        assert payload.get("nonce_mode") == (nonce_mode if explicit else None)
+        assert payload.get("deadline") == (VECTOR_DEADLINE if explicit else None)
+
+    def test_an_explicit_request_without_a_deadline_is_refused_before_signing(
+        self,
+    ) -> None:
+        """The deadline is part of the signed digest, so it cannot be omitted."""
+        service = _build_offchain_service()
+        service.signer = _real_signing_signer()
+        with pytest.raises(ValueError, match="deadline"):
+            service._build_offchain_payload(  # pylint: disable=protected-access
+                _vector_contract(),
+                ensure_checksummed_address(_TEST_ACCOUNT.address),
+                VECTOR_MECH,
+                VECTOR_DATA,
+                VECTOR_RATE,
+                VECTOR_PAYMENT_TYPE,
+                VECTOR_NONCE,
+                NONCE_MODE_EXPLICIT,
+                CONTENT_DATA,
+            )
+        service.signer.sign_message.assert_not_called()
 
     def setup_method(self) -> None:
         """Build a client-mode service whose signatures really recover."""
@@ -3064,17 +3104,19 @@ class TestOffchainNonceModes:
 
         randbits.assert_called_once_with(EXPLICIT_NONCE_BITS)
         (payload,) = payloads
-        assert list(payload) == SEQUENTIAL_PAYLOAD_FIELDS + ["nonce_mode"]
+        assert list(payload) == SEQUENTIAL_PAYLOAD_FIELDS + ["nonce_mode", "deadline"]
         assert payload["nonce_mode"] == "explicit"
         assert payload["nonce"] == CHOSEN_NONCE
+        assert payload["deadline"] == EXPECTED_DEADLINE
         assert payload["request_id"] == int.from_bytes(EXPLICIT_REQUEST_ID, "big")
         assert payload["delivery_rate"] == MECH_MAX_RATE
         assert payload["sender"] == self.sender
         assert payload["ipfs_hash"] == CONTENT_HASH
         assert payload["ipfs_data"] == CONTENT_DATA
         contract.functions.getRequestIdWithNonce.assert_called_once_with(
-            MECH_ADDRESS, self.sender, CONTENT_HASH, MECH_MAX_RATE, PAYMENT_TYPE_HEX, CHOSEN_NONCE
+            MECH_ADDRESS, self.sender, CONTENT_HASH, MECH_MAX_RATE, PAYMENT_TYPE_HEX, CHOSEN_NONCE, EXPECTED_DEADLINE
         )
+        contract.w3.eth.get_block.assert_called_once_with("latest")
         contract.functions.getRequestId.assert_not_called()
         contract.functions.mapNonces.assert_not_called()
         # The signature is over the explicit id, which the sequential path rejects.

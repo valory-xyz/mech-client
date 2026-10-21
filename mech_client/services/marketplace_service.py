@@ -77,11 +77,13 @@ OFFCHAIN_HTTP_TIMEOUT = 30
 # the one description; the docs' "Offchain Requests" section is the
 # user-facing copy.
 #
-# ``explicit`` (the default): the requester picks a random nonce per request,
-# the id comes from ``getRequestIdWithNonce``, the payload says so in
-# ``nonce_mode``, and the marketplace's per-request-id record is the only
-# replay guard, so independently signed requests settle in any order and in
-# independent transactions.
+# ``explicit`` (the default): the requester picks a random nonce per request
+# and a settlement deadline, the id is the marketplace's EIP-712 digest from
+# ``getRequestIdWithNonce`` (its own signing domain), the payload says so in
+# ``nonce_mode`` and carries ``deadline``, and the marketplace's
+# per-request-id record is the only replay guard, so independently signed
+# requests settle in any order and in independent transactions, up to the
+# deadline.
 # ``sequential``: the nonce is the requester's ``mapNonces`` counter, the id
 # comes from ``getRequestId``, the payload is the one every mech has always
 # accepted, and settlement consumes the counter in order.
@@ -97,6 +99,11 @@ NONCE_MODE_SEQUENTIAL: NonceMode = "sequential"
 # Verbatim ``reason`` a mech sends with its 503 when explicit-nonce requests
 # are not enabled on it (mech ``task_execution`` handlers).
 EXPLICIT_NONCE_DISABLED_REASON = "explicit-nonce requests are not enabled on this mech"
+# How long, from the latest block, an explicit-nonce authorisation stays
+# settleable. The marketplace reverts a settlement past the signed deadline, so
+# the window must cover the mech's execution and settlement, not only the
+# answer; a mech refuses a request whose deadline is closer than its own floor.
+EXPLICIT_NONCE_DEADLINE_SECONDS = 15 * 60
 # Width of a requester-chosen nonce. The marketplace requires it to be unique
 # per (mech, request data, signed maximum, payment type); the request data
 # already carries a per-request UUID, so 256 random bits are not what keeps
@@ -284,6 +291,7 @@ class MarketplaceService(
         extra_attributes: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
         nonce_mode: NonceMode = NONCE_MODE_EXPLICIT,
+        deadline_seconds: int = EXPLICIT_NONCE_DEADLINE_SECONDS,
     ) -> RequestResult:
         """
         Send marketplace request(s) to mech(s).
@@ -305,6 +313,9 @@ class MarketplaceService(
         :param nonce_mode: ``explicit`` or ``sequential``, see :data:`NonceMode`.
             On-chain requests take their nonce from the marketplace and
             ignore this.
+        :param deadline_seconds: How long from the latest block an explicit
+            request stays settleable, see :data:`EXPLICIT_NONCE_DEADLINE_SECONDS`.
+            Sequential and on-chain requests ignore this.
         :return: A :class:`RequestResult` with ``tx_hash`` and ``receipt``
             (both ``None`` on the offchain path, which has no transaction),
             ``request_ids``, and ``deliveries`` mapping each request ID to a
@@ -366,6 +377,7 @@ class MarketplaceService(
                 timeout=timeout or 300.0,
                 auto_deposit=auto_deposit,
                 nonce_mode=nonce_mode,
+                deadline_seconds=deadline_seconds,
             )
 
         # On-chain flow
@@ -496,6 +508,7 @@ class MarketplaceService(
         timeout: float,
         auto_deposit: bool = False,
         nonce_mode: NonceMode = NONCE_MODE_EXPLICIT,
+        deadline_seconds: int = EXPLICIT_NONCE_DEADLINE_SECONDS,
     ) -> OffchainRequestResult:
         """
         Send offchain request to mech HTTP endpoint.
@@ -515,6 +528,8 @@ class MarketplaceService(
         :param timeout: Delivery watching timeout
         :param auto_deposit: On a 402, deposit the shortfall and retry once
         :param nonce_mode: ``explicit`` or ``sequential``, see :data:`NonceMode`.
+        :param deadline_seconds: Settlement window of an explicit request, from
+            the latest block.
         :return: Dictionary with request results
         """
         logger.info("Sending offchain mech marketplace request...")
@@ -539,6 +554,12 @@ class MarketplaceService(
             next_sequential_nonce = marketplace_contract.functions.mapNonces(
                 sender
             ).call()
+        # One deadline for the batch, from chain time rather than the local
+        # clock, since the marketplace compares it with ``block.timestamp``.
+        deadline: Optional[int] = None
+        if nonce_mode == NONCE_MODE_EXPLICIT:
+            latest = marketplace_contract.w3.eth.get_block("latest")
+            deadline = int(latest["timestamp"]) + int(deadline_seconds)
 
         # Prepare and send each request
         request_ids_hex = []
@@ -585,6 +606,7 @@ class MarketplaceService(
                         nonce,
                         nonce_mode,
                         ipfs_data,
+                        deadline,
                     )
                     response = self._post_offchain_request(
                         url, payload, payment_type, auto_deposit, max_delivery_rate
@@ -635,15 +657,16 @@ class MarketplaceService(
         nonce: int,
         nonce_mode: NonceMode,
         ipfs_data: str,
+        deadline: Optional[int] = None,
     ) -> Tuple[bytes, Dict[str, Any]]:
         """Derive, sign and package one offchain request.
 
         The request id comes from the marketplace view for the nonce mode:
-        ``getRequestIdWithNonce`` for an explicit nonce, ``getRequestId`` for
-        a sequential one. The two are domain-separated on-chain, so the
-        signature only verifies on the path the mech is told about through
-        ``nonce_mode``; a sequential payload carries no such field and is the
-        payload every mech has always accepted.
+        ``getRequestIdWithNonce`` (with the deadline) for an explicit nonce,
+        ``getRequestId`` for a sequential one. The two are domain-separated
+        on-chain, so the signature only verifies on the path the mech is told
+        about through ``nonce_mode``; a sequential payload carries no such
+        field and is the payload every mech has always accepted.
 
         :param marketplace_contract: Marketplace contract instance
         :param sender: Checksummed requester of record (Safe or EOA)
@@ -656,21 +679,32 @@ class MarketplaceService(
         :param nonce_mode: ``explicit`` or ``sequential``
         :param ipfs_data: The request metadata as the JSON string that was
             hashed, sent to the mech in place of an IPFS upload
+        :param deadline: Last settlement timestamp, signed into an explicit
+            request; must be given for ``explicit``
         :return: The 32-byte request id and the form payload to POST
+        :raises ValueError: when an explicit request has no deadline
         """
-        view = (
-            marketplace_contract.functions.getRequestIdWithNonce
-            if nonce_mode == NONCE_MODE_EXPLICIT
-            else marketplace_contract.functions.getRequestId
-        )
-        request_id_bytes = view(
-            mech,
-            sender,
-            data_hash,
-            max_delivery_rate,
-            payment_type_hex,
-            nonce,
-        ).call()
+        if nonce_mode == NONCE_MODE_EXPLICIT:
+            if deadline is None:
+                raise ValueError("an explicit-nonce request needs a deadline")
+            request_id_bytes = marketplace_contract.functions.getRequestIdWithNonce(
+                mech,
+                sender,
+                data_hash,
+                max_delivery_rate,
+                payment_type_hex,
+                nonce,
+                deadline,
+            ).call()
+        else:
+            request_id_bytes = marketplace_contract.functions.getRequestId(
+                mech,
+                sender,
+                data_hash,
+                max_delivery_rate,
+                payment_type_hex,
+                nonce,
+            ).call()
 
         # Signature encoding depends on how the marketplace verifies the
         # requester: Safe.isValidSignature (agent mode) requires the
@@ -689,6 +723,7 @@ class MarketplaceService(
         }
         if nonce_mode == NONCE_MODE_EXPLICIT:
             payload["nonce_mode"] = NONCE_MODE_EXPLICIT
+            payload["deadline"] = deadline
         return request_id_bytes, payload
 
     @staticmethod

@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### ✨ Added
 
 - `DeliveryResult.actual_delivery_rate`: what the Mech charged for the request, in the base units of its payment asset, read from the off-chain delivery envelope. `None` when the Mech reports no charge, which is always the case for on-chain delivery. `mechx request` prints it as `Charged: <amount>`.
-- `--nonce-mode` on `mechx request` (`nonce_mode` on `MarketplaceService.send_request`): `explicit` (the default) or `sequential`. See "Offchain Requests" in the docs. Requires a Mech release that knows the option; on an older Mech pass `sequential`.
-- The marketplace ABI carries `getRequestIdWithNonce`, `EXPLICIT_NONCE_TAG`, the `deliverMarketplaceWithSignatures` overloads that settle a cap with an actual charge, and the `RateOverCap` error.
+- `--nonce-mode` on `mechx request` (`nonce_mode` on `MarketplaceService.send_request`): `explicit` (the default) or `sequential`, and `--deadline-seconds` (`deadline_seconds`), how long an explicit request stays settleable from the latest block (15 minutes by default). See "Offchain Requests" in the docs. Requires a Mech release that knows the option; on an older Mech pass `sequential`.
+- The marketplace ABI is the build of autonolas-marketplace `main` at `14f191a`: `getRequestIdWithNonce` with its deadline and signing domain (`getDomainSeparatorWithNonce`), the `deliverMarketplaceWithSignatures` overloads that settle a cap with an actual charge, and the `RateOverCap` and `SignatureExpired` errors.
 
 ### 🔧 Changed
 

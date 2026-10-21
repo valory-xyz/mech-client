@@ -28,6 +28,7 @@ from click import ClickException
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
 from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
 from mech_client.services.marketplace_service import (
+    EXPLICIT_NONCE_DEADLINE_SECONDS,
     MarketplaceService,
     NONCE_MODE_EXPLICIT,
     NonceMode,
@@ -123,6 +124,16 @@ def _format_delivery_output(delivery_data: JSONValue) -> str:
     ),
 )
 @click.option(
+    "--deadline-seconds",
+    type=int,
+    default=EXPLICIT_NONCE_DEADLINE_SECONDS,
+    show_default=True,
+    help=(
+        "How long an explicit-nonce request stays settleable, from the latest "
+        "block. Offchain explicit only."
+    ),
+)
+@click.option(
     "--tools",
     type=str,
     multiple=True,
@@ -163,6 +174,7 @@ def request(
     use_offchain: bool,
     auto_deposit: bool,
     nonce_mode: str,
+    deadline_seconds: int,
     key: Optional[str],
     tools: Optional[tuple],
     extra_attribute: Optional[List[str]] = None,
@@ -194,6 +206,7 @@ def request(
     :param use_offchain: Route delivery off-chain (auto-discovered URL); implies prepaid.
     :param auto_deposit: On an offchain HTTP 402, top up the prepaid balance and retry.
     :param nonce_mode: ``explicit`` or ``sequential``, see :data:`NonceMode`.
+    :param deadline_seconds: Settlement window of an explicit request, from the latest block.
     :param key: Optional path to a private-key file (required in client mode).
     :param tools: One or more tool names matching ``prompts`` positionally.
     :param extra_attribute: Optional ``key=value`` extras attached to each request.
@@ -264,6 +277,7 @@ def request(
             extra_attributes=extra_attributes_dict,
             timeout=timeout,
             nonce_mode=cast(NonceMode, nonce_mode),
+            deadline_seconds=deadline_seconds,
         )
     )
 
