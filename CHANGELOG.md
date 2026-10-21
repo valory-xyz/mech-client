@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ Added
+
+- `DeliveryResult.delivery_rate`: what the Mech charged for the request, in the base units of its payment asset, read from the off-chain delivery envelope. `None` when the Mech reports no charge, which is always the case for on-chain delivery. `mechx request` prints it as `Charged: <amount>`.
+- `--nonce-mode` on `mechx request` (`nonce_mode` on `MarketplaceService.send_request`). `explicit`, the default, signs a random per-request nonce through the marketplace's `getRequestIdWithNonce` view and says so on the wire, so independently signed requests settle in any order and in independent transactions. A Mech that does not accept explicit nonces answers HTTP 503 and the request, and the rest of the batch, is resent with the marketplace's sequential nonce, so the default serves Mechs not yet upgraded. `sequential` remains supported as an opt-in and sends the same payload as before. On-chain requests take their nonce from the marketplace and ignore the option.
+- The marketplace ABI carries `getRequestIdWithNonce`, `EXPLICIT_NONCE_TAG`, the `deliverMarketplaceWithSignatures` overloads that settle a cap with an actual charge, and the `RateOverCap` error.
+
+### 🔧 Changed
+
+- Buyer docs say maximum where they said price: the Mech's `maxDeliveryRate` is what the client signs and what a deposit must cover, the Mech charges at or below it, and what it does not charge stays in the buyer's balance.
+
 ## [0.24.0] - 2026-10-09
 
 ### ✨ Added

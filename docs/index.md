@@ -200,9 +200,9 @@ There are **5 payment types** that mechs can use:
 | **NATIVE_NVM** | NVM subscription with native token | Purchase subscription first, then unlimited requests |
 | **TOKEN_NVM_USDC** | NVM subscription with USDC token | Purchase subscription first, then unlimited requests |
 
-**Finding the price per request**
+**Finding the maximum per request**
 
-To determine the Mech's fee in advance:
+A Mech does not have a fixed price. It advertises a maximum per request, `maxDeliveryRate`, and that maximum is what the client signs into every request on your behalf. At delivery the Mech charges its actual cost, which can be anything up to the maximum; whatever it does not charge stays in your balance on the marketplace. To read the maximum in advance:
 
 - Enter the Mech's address into the block explorer of the corresponding network.
 
@@ -210,9 +210,11 @@ To determine the Mech's fee in advance:
 
 - Find and click on the function maxDeliveryRate.
 
-- Divide the displayed number by 10^8 in order to obtain the price per request (in ether or token units, depending on the Mech).
+- The number is in the base units of the Mech's payment asset: wei for native and OLAS payments (18 decimals), and 6-decimal units for USDC.
 
-Note: For Mechs using the Nevermined subscription model, this value corresponds to the maximum price per request; actual usage may involve multiple requests per subscription.
+For an off-chain request the client prints what the Mech charged under each delivery, as `Charged: <amount>`, in the same units.
+
+Note: For Mechs using the Nevermined subscription model, this value corresponds to the maximum per request; actual usage may involve multiple requests per subscription.
 
 **Making a deposit**
 
@@ -237,7 +239,7 @@ mechx deposit token <amount> --chain-config <network_name> --token-type usdc
 
 **Note:** The `--token-type` parameter is required and must be explicitly specified (olas or usdc).
 
-In all cases above, `<amount>` must be at least the mech's price (as given by maxDeliveryRate).
+In all cases above, `<amount>` must cover the mech's maximum (as given by maxDeliveryRate) for every request you intend to send; a request is refused when the balance is below the maximum, even if the Mech would have charged less. What the Mech does not charge stays in your balance for later requests.
 
 **Option 2: Per-request payment (for NATIVE, OLAS_TOKEN, USDC_TOKEN mechs)**
 
@@ -451,6 +453,14 @@ mechx request --prompts "test" --tools openai-gpt-4 --use-offchain --chain-confi
 ```
 
 The client queries the mech's `ComplementaryServiceMetadata` contract to find the `url` field published by the mech operator, then sends requests to that endpoint.
+
+Each off-chain request is signed with a nonce. By default (`--nonce-mode explicit`) the client signs a random nonce chosen per request, so independently signed requests can settle in any order and in independent transactions. A Mech that has not been upgraded to accept explicit nonces says so, and the client resends the request, and the rest of the batch, with the marketplace's sequential nonce counter for your address, so the default serves every Mech. `--nonce-mode sequential` sends requests that way from the start; it remains supported and settles requests in counter order:
+
+```bash
+mechx request --prompts "test" --tools openai-gpt-4 --use-offchain true --nonce-mode sequential --chain-config gnosis
+```
+
+The request's maximum is the Mech's advertised `maxDeliveryRate`. The Mech reports what it actually charged with the delivery, and the client prints it as `Charged: <amount>`.
 
 
 ## 4. Programmatic Usage

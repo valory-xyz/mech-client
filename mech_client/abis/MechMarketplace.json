@@ -133,6 +133,22 @@
         "type": "error"
     },
     {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "actual",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "cap",
+                "type": "uint256"
+            }
+        ],
+        "name": "RateOverCap",
+        "type": "error"
+    },
+    {
         "inputs": [],
         "name": "ReentrancyGuard",
         "type": "error"
@@ -525,6 +541,19 @@
     },
     {
         "inputs": [],
+        "name": "EXPLICIT_NONCE_TAG",
+        "outputs": [
+            {
+                "internalType": "bytes32",
+                "name": "",
+                "type": "bytes32"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
         "name": "MAX_FEE_FACTOR",
         "outputs": [
             {
@@ -742,6 +771,111 @@
         "type": "function"
     },
     {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "requester",
+                "type": "address"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "bytes",
+                        "name": "requestData",
+                        "type": "bytes"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "signature",
+                        "type": "bytes"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "deliveryData",
+                        "type": "bytes"
+                    }
+                ],
+                "internalType": "struct DeliverWithSignature[]",
+                "name": "deliverWithSignatures",
+                "type": "tuple[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "deliveryRates",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "maxRates",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "bytes",
+                "name": "paymentData",
+                "type": "bytes"
+            }
+        ],
+        "name": "deliverMarketplaceWithSignatures",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "requester",
+                "type": "address"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "bytes",
+                        "name": "requestData",
+                        "type": "bytes"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "signature",
+                        "type": "bytes"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "deliveryData",
+                        "type": "bytes"
+                    }
+                ],
+                "internalType": "struct DeliverWithSignature[]",
+                "name": "deliverWithSignatures",
+                "type": "tuple[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "deliveryRates",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "maxRates",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "nonces",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "bytes",
+                "name": "paymentData",
+                "type": "bytes"
+            }
+        ],
+        "name": "deliverMarketplaceWithSignatures",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
         "inputs": [],
         "name": "domainSeparator",
         "outputs": [
@@ -814,6 +948,50 @@
             }
         ],
         "name": "getRequestId",
+        "outputs": [
+            {
+                "internalType": "bytes32",
+                "name": "requestId",
+                "type": "bytes32"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "mech",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "requester",
+                "type": "address"
+            },
+            {
+                "internalType": "bytes",
+                "name": "data",
+                "type": "bytes"
+            },
+            {
+                "internalType": "uint256",
+                "name": "deliveryRate",
+                "type": "uint256"
+            },
+            {
+                "internalType": "bytes32",
+                "name": "paymentType",
+                "type": "bytes32"
+            },
+            {
+                "internalType": "uint256",
+                "name": "nonce",
+                "type": "uint256"
+            }
+        ],
+        "name": "getRequestIdWithNonce",
         "outputs": [
             {
                 "internalType": "bytes32",

@@ -22,7 +22,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from mech_client.cli.commands.request_cmd import request
 from mech_client.domain.delivery import DeliveryResult
@@ -1074,3 +1074,83 @@ class TestRequestEdgeCases:
 
             # Should handle long prompts
             assert result.exit_code == 0
+
+
+def _invoke_with_result(result: dict, *extra_args: str) -> Result:
+    """Run ``mechx request`` with the service answering ``result``.
+
+    :param result: what the mocked ``send_request`` returns
+    :param extra_args: options appended to a minimal offchain invocation
+    :return: the click result, with the service mock on ``.service``
+    """
+    service = MagicMock()
+    service.send_request = AsyncMock(return_value=result)
+    with (
+        patch("mech_client.cli.commands.request_cmd.setup_wallet_command"),
+        patch("mech_client.cli.commands.request_cmd.MarketplaceService", return_value=service),
+    ):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("key.txt", "w") as f:
+                f.write("dummy_key")
+            invoked = runner.invoke(
+                request,
+                ["--prompts", "p", "--tools", "t", "--chain-config", "gnosis", "--key", "key.txt", *extra_args],
+            )
+    invoked.service = service  # type: ignore[attr-defined]
+    return invoked
+
+
+OFFCHAIN_RESULT = {"tx_hash": None, "request_ids": ["0xabc"], "receipt": None}
+
+
+class TestRequestCommandCharge:
+    """The charge a mech reports is printed under its delivery."""
+
+    def test_a_reported_charge_is_printed(self) -> None:
+        """A delivery carrying a charge prints it after the answer."""
+        deliveries = {"0xabc": DeliveryResult("0xabc", data="answer", delivery_rate=120)}
+
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": deliveries}, "--use-offchain", "true")
+
+        assert invoked.exit_code == 0, invoked.output
+        assert "Request 0xabc: answer" in invoked.output
+        assert "Charged: 120" in invoked.output
+
+    def test_no_charge_line_when_the_mech_reported_none(self) -> None:
+        """A delivery without a charge prints no charge line rather than a placeholder."""
+        deliveries = {"0xabc": DeliveryResult("0xabc", data="answer")}
+
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": deliveries}, "--use-offchain", "true")
+
+        assert invoked.exit_code == 0, invoked.output
+        assert "Charged:" not in invoked.output
+
+
+
+class TestRequestCommandNonceMode:
+    """``--nonce-mode`` reaches the service, and defaults to explicit."""
+
+    def test_defaults_to_explicit(self) -> None:
+        """Without the option the service is asked for an explicit-nonce request."""
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true")
+
+        assert invoked.exit_code == 0, invoked.output
+        assert invoked.service.send_request.call_args.kwargs["nonce_mode"] == "explicit"
+
+    def test_sequential_is_passed_through(self) -> None:
+        """``--nonce-mode sequential`` is passed to the service as given."""
+        invoked = _invoke_with_result(
+            {**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true", "--nonce-mode", "sequential"
+        )
+
+        assert invoked.exit_code == 0, invoked.output
+        assert invoked.service.send_request.call_args.kwargs["nonce_mode"] == "sequential"
+
+    def test_an_unknown_mode_is_a_usage_error(self) -> None:
+        """Click rejects a mode the service does not define before anything runs."""
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": {}}, "--nonce-mode", "random")
+
+        assert invoked.exit_code == 2
+        assert "Invalid value for '--nonce-mode'" in invoked.output
+        invoked.service.send_request.assert_not_called()

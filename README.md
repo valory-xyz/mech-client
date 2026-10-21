@@ -206,7 +206,10 @@ mechx request --prompts <prompt-1> --prompts <prompt-2> --priority-mech <priorit
 Additionally other options are available and their usage is listed below:
 
 `--use-prepaid <bool>`: use the prepaid method to send requests to a Mech via the Mech Marketplace. Defaults to False. <br>
-`--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Defaults to False.
+`--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Defaults to False. <br>
+`--nonce-mode <explicit|sequential>`: how off-chain requests are numbered, see [Offchain Requests](#offchain-requests). Defaults to explicit.
+
+Every request is signed with the Mech's advertised maximum per request (`maxDeliveryRate`). The Mech charges its actual cost at delivery, at or below that maximum, and what it does not charge stays in your marketplace balance.
 
 #### Understanding Payment Types
 
@@ -301,6 +304,10 @@ mechx request --prompts "test" --tools openai-gpt-4 --use-offchain true --chain-
 ```
 
 The client queries the mech's `ComplementaryServiceMetadata` contract to find the `url` field published by the mech operator, then sends requests to that endpoint.
+
+Each off-chain request is signed with a nonce. By default (`--nonce-mode explicit`) the client signs a random nonce chosen per request, so independently signed requests settle in any order and in independent transactions. A Mech that has not been upgraded to accept explicit nonces says so, and the client resends the request, and the rest of the batch, with the marketplace's sequential nonce counter for your address, so the default serves every Mech. `--nonce-mode sequential` sends requests that way from the start; it remains supported and settles requests in counter order.
+
+The Mech reports what it charged with the delivery. The CLI prints it as `Charged: <amount>` under the answer, in the base units of the Mech's payment asset, and the library returns it as `DeliveryResult.delivery_rate` (`None` when the Mech reports none, which is always the case for on-chain delivery).
 
 ### List tools available for a mech
 
@@ -509,10 +516,13 @@ You can also use the Mech Client as a library on your Python project.
     print(f"Transaction hash: {result['tx_hash']}")
 
     # `deliveries` maps each request ID to a DeliveryResult: `.data` is the
-    # parsed content the mech delivered, `.url` the IPFS URL it was read from.
+    # parsed content the mech delivered, `.url` the IPFS URL it was read from
+    # and `.delivery_rate` what the mech charged, when it reports it.
     # Same shape whether delivery was on-chain or off-chain.
     for request_id, delivery in result["deliveries"].items():
         print(f"Request {request_id}: {delivery.url}")
+        if delivery.delivery_rate is not None:
+            print(f"  charged {delivery.delivery_rate} of the signed maximum")
         payload = delivery.data
         if payload is None:
             print("  result file could not be read")

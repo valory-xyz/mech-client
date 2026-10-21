@@ -20,17 +20,20 @@
 """Marketplace service for orchestrating mech requests."""
 
 import logging
+import secrets
 from dataclasses import dataclass
 from typing import (
     Any,
     Dict,
     FrozenSet,
     List,
+    Literal,
     Optional,
     Tuple,
     TypedDict,
     Union,
     cast,
+    get_args,
 )
 
 import requests
@@ -63,8 +66,37 @@ logger = logging.getLogger(__name__)
 # HTTP status the offchain mech returns when the requester's prepaid balance is
 # insufficient (structured 402 challenge, see mech task_execution handlers).
 HTTP_PAYMENT_REQUIRED = 402
+# HTTP status the offchain mech returns when it cannot serve a request right
+# now; with ``EXPLICIT_NONCE_DISABLED_REASON`` it means the mech does not
+# accept explicit nonces at all, and the request is resent sequentially.
+HTTP_SERVICE_UNAVAILABLE = 503
 # Outbound HTTP timeout (seconds) for the offchain request POST.
 OFFCHAIN_HTTP_TIMEOUT = 30
+
+# How an offchain request's nonce is chosen, which decides the view that
+# derives its request id and the marketplace path that settles it.
+#
+# ``explicit`` (the default): the requester picks the nonce, the id comes
+# from ``getRequestIdWithNonce``, and the marketplace's per-request-id
+# record is the only replay guard, so independently signed requests settle
+# in any order and in independent transactions.
+# ``sequential``: the nonce is the requester's ``mapNonces`` counter, the id
+# comes from ``getRequestId``, and settlement consumes the counter in order.
+# It is what a mech not yet running the upgraded marketplace accepts, and
+# what an explicit request falls back to when such a mech turns it away.
+# The two ids are domain-separated: a signature for one path is rejected on
+# the other.
+NonceMode = Literal["explicit", "sequential"]
+NONCE_MODE_EXPLICIT: NonceMode = "explicit"
+NONCE_MODE_SEQUENTIAL: NonceMode = "sequential"
+# Verbatim ``reason`` a mech sends with its 503 when explicit-nonce requests
+# are not enabled on it (mech ``task_execution`` handlers).
+EXPLICIT_NONCE_DISABLED_REASON = "explicit-nonce requests are not enabled on this mech"
+# Width of a requester-chosen nonce. The marketplace requires it to be unique
+# per (mech, request data, signed maximum, payment type); the request data
+# already carries a per-request UUID, so 256 random bits are not what keeps
+# ids distinct, they are what keeps them independent of ``mapNonces``.
+EXPLICIT_NONCE_BITS = 256
 # Hard cap on auto-deposit: refuse to top up more than this multiple of the
 # requester's signed ``max_delivery_rate`` in a single retry. The mech URL is
 # auto-discovered from on-chain metadata, so without a cap a compromised or
@@ -246,9 +278,15 @@ class MarketplaceService(
         auto_deposit: bool = False,
         extra_attributes: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
+        nonce_mode: NonceMode = NONCE_MODE_EXPLICIT,
     ) -> RequestResult:
         """
         Send marketplace request(s) to mech(s).
+
+        The per-request maximum signed into each request is the mech's
+        advertised ``maxDeliveryRate``, read from its contract. The mech
+        charges its actual cost at delivery, at or below that maximum, and
+        what it does not charge stays in the requester's balance.
 
         :param prompts: Tuple of prompt strings
         :param tools: Tuple of tool identifiers
@@ -259,18 +297,29 @@ class MarketplaceService(
             with the shortfall and retry once (only applies to the offchain path)
         :param extra_attributes: Extra attributes for metadata
         :param timeout: Timeout for delivery watching
+        :param nonce_mode: How offchain requests are numbered: ``explicit``
+            (a random per-request nonce, the default) or ``sequential`` (the
+            marketplace counter), see :data:`NonceMode`. A mech that does
+            not accept explicit nonces answers HTTP 503 and the request is
+            resent sequentially, so the default serves mechs not yet
+            upgraded. On-chain requests take their nonce from the
+            marketplace and ignore this.
         :return: A :class:`RequestResult` with ``tx_hash`` and ``receipt``
             (both ``None`` on the offchain path, which has no transaction),
             ``request_ids``, and ``deliveries`` mapping each request ID to a
             :class:`DeliveryResult` carrying the parsed content the mech
-            delivered plus the gateway URL it was read from. ``deliveries``
-            has the same shape regardless of whether delivery was on-chain
-            or offchain.
+            delivered, the gateway URL it was read from and, for offchain
+            delivery, what the mech charged. ``deliveries`` has the same shape
+            regardless of whether delivery was on-chain or offchain.
         """
         # Validate inputs
         if len(prompts) != len(tools):
             raise ValueError(
                 f"Number of prompts ({len(prompts)}) must match number of tools ({len(tools)})"
+            )
+        if nonce_mode not in get_args(NonceMode):
+            raise ValueError(
+                f"Unknown nonce_mode {nonce_mode!r}; expected one of {get_args(NonceMode)}"
             )
 
         # Get marketplace contract
@@ -315,6 +364,7 @@ class MarketplaceService(
                 extra_attributes=extra_attributes,
                 timeout=timeout or 300.0,
                 auto_deposit=auto_deposit,
+                nonce_mode=nonce_mode,
             )
 
         # On-chain flow
@@ -444,9 +494,13 @@ class MarketplaceService(
         extra_attributes: Optional[Dict[str, Any]],
         timeout: float,
         auto_deposit: bool = False,
+        nonce_mode: NonceMode = NONCE_MODE_EXPLICIT,
     ) -> OffchainRequestResult:
         """
         Send offchain request to mech HTTP endpoint.
+
+        ``max_delivery_rate`` is signed into every request as its maximum; the
+        mech charges at or below it and reports the charge with the delivery.
 
         :param marketplace_contract: Marketplace contract instance
         :param prompts: Tuple of prompt strings
@@ -459,23 +513,39 @@ class MarketplaceService(
         :param extra_attributes: Extra attributes for metadata
         :param timeout: Delivery watching timeout
         :param auto_deposit: On a 402, deposit the shortfall and retry once
+        :param nonce_mode: ``explicit`` or ``sequential``, see :data:`NonceMode`.
+            Explicit falls back to sequential, for this request and the rest
+            of the batch, when the mech answers that it does not accept
+            explicit nonces.
         :return: Dictionary with request results
         """
         logger.info("Sending offchain mech marketplace request...")
 
         # In agent mode the requester of record is the Safe (msg.sender on
         # the on-chain path, ``mapNonces`` key, and requester bound into
-        # ``getRequestId``); in client mode it is the EOA. The signature is
+        # the request id); in client mode it is the EOA. The signature is
         # verified against this address downstream (Safe.isValidSignature
         # for the Safe branch, plain ecrecover for the EOA branch).
         sender = self._resolve_offchain_sender()
-        current_nonce = marketplace_contract.functions.mapNonces(sender).call()
+        mech = ensure_checksummed_address(priority_mech_address)
+        # payment_type.value is already a hex string, just add 0x prefix
+        payment_type_hex = "0x" + payment_type.value
+        url = f"{mech_offchain_url.rstrip('/')}/send_signed_requests"
+
+        # The sequential counter is read once and advanced locally for every
+        # request sent on that path, so a batch numbers its requests
+        # contiguously. Explicit requests leave it untouched, and only read
+        # it if the mech turns them away.
+        next_sequential_nonce: Optional[int] = None
+        if nonce_mode == NONCE_MODE_SEQUENTIAL:
+            next_sequential_nonce = marketplace_contract.functions.mapNonces(
+                sender
+            ).call()
 
         # Prepare and send each request
         request_ids_hex = []
-        request_ids_int = []
 
-        for i, (prompt, tool) in enumerate(zip(prompts, tools)):
+        for prompt, tool in zip(prompts, tools):
             # Prepare metadata (get hash and data without uploading)
             # Import here to avoid circular dependency
             from mech_client.infrastructure.ipfs.metadata import (  # pylint: disable=import-outside-toplevel
@@ -490,60 +560,69 @@ class MarketplaceService(
                 f"content CID {data_hash_full}"
             )
 
-            # Calculate request ID
-            # payment_type.value is already a hex string, just add 0x prefix
-            payment_type_hex = "0x" + payment_type.value
-            nonce = current_nonce + i
-            request_id_bytes = marketplace_contract.functions.getRequestId(
-                ensure_checksummed_address(priority_mech_address),
+            if nonce_mode == NONCE_MODE_EXPLICIT:
+                nonce = secrets.randbits(EXPLICIT_NONCE_BITS)
+            else:
+                nonce = cast(int, next_sequential_nonce)
+                next_sequential_nonce = nonce + 1
+            request_id_bytes, payload = self._build_offchain_payload(
+                marketplace_contract,
                 sender,
+                mech,
                 data_hash,
                 max_delivery_rate,
                 payment_type_hex,
                 nonce,
-            ).call()
-
-            request_id_int = int.from_bytes(request_id_bytes, byteorder="big")
-            request_id_hex = request_id_bytes.hex()
-
-            # Signature encoding depends on how the marketplace verifies the
-            # requester: Safe.isValidSignature (agent mode) requires the
-            # SafeMessage-wrapped hash to be signed; plain ecrecover
-            # (client mode) requires the raw digest.
-            signature = self._sign_request_digest(sender, request_id_bytes)
-
-            # Prepare payload
-            payload = {
-                "sender": sender,
-                "signature": signature,
-                "ipfs_hash": data_hash,
-                "request_id": request_id_int,
-                "delivery_rate": max_delivery_rate,
-                "nonce": nonce,
-                "ipfs_data": ipfs_data,
-            }
+                nonce_mode,
+                ipfs_data,
+            )
 
             # Send HTTP POST request (handles a structured 402 + receipt header)
-            url = f"{mech_offchain_url.rstrip('/')}/send_signed_requests"
             try:
                 response = self._post_offchain_request(
                     url, payload, payment_type, auto_deposit, max_delivery_rate
                 )
+                if nonce_mode == NONCE_MODE_EXPLICIT and self._explicit_nonce_refused(
+                    response
+                ):
+                    # The mech answers every explicit request this way, so
+                    # the rest of the batch goes sequential too. The refused
+                    # request was not accepted, so nothing of it is in flight.
+                    logger.warning(
+                        "The mech does not accept explicit nonces; resending "
+                        "with the marketplace's sequential nonce instead."
+                    )
+                    nonce_mode = NONCE_MODE_SEQUENTIAL
+                    if next_sequential_nonce is None:
+                        next_sequential_nonce = (
+                            marketplace_contract.functions.mapNonces(sender).call()
+                        )
+                    nonce = next_sequential_nonce
+                    next_sequential_nonce = nonce + 1
+                    request_id_bytes, payload = self._build_offchain_payload(
+                        marketplace_contract,
+                        sender,
+                        mech,
+                        data_hash,
+                        max_delivery_rate,
+                        payment_type_hex,
+                        nonce,
+                        nonce_mode,
+                        ipfs_data,
+                    )
+                    response = self._post_offchain_request(
+                        url, payload, payment_type, auto_deposit, max_delivery_rate
+                    )
                 if not response.ok:
-                    reason = ""
-                    try:
-                        reason = response.json().get("reason", "")
-                    except Exception:  # pylint: disable=broad-except  # nosec B110
-                        reason = ""
+                    reason = self._rejection_reason(response)
                     raise ValueError(
                         f"Offchain request rejected: {reason or response.reason} "
                         f"(HTTP {response.status_code})"
                     )
 
-                request_ids_hex.append(request_id_hex)
-                request_ids_int.append(str(request_id_int))
+                request_ids_hex.append(request_id_bytes.hex())
 
-                logger.info(f"Created offchain request with ID {request_id_int}")
+                logger.info(f"Created offchain request with ID {payload['request_id']}")
 
             except requests.exceptions.RequestException as e:
                 raise ValueError(f"Failed to send offchain request: {e}") from e
@@ -560,13 +639,108 @@ class MarketplaceService(
             "receipt": None,  # No receipt for offchain requests
         }
 
+    def _build_offchain_payload(  # pylint: disable=too-many-arguments
+        self,
+        marketplace_contract: Web3Contract,
+        sender: str,
+        mech: str,
+        data_hash: str,
+        max_delivery_rate: int,
+        payment_type_hex: str,
+        nonce: int,
+        nonce_mode: NonceMode,
+        ipfs_data: str,
+    ) -> Tuple[bytes, Dict[str, Any]]:
+        """Derive, sign and package one offchain request.
+
+        The request id comes from the marketplace view for the nonce mode:
+        ``getRequestIdWithNonce`` for an explicit nonce, ``getRequestId`` for
+        a sequential one. The two are domain-separated on-chain, so the
+        signature only verifies on the path the mech is told about through
+        ``nonce_mode``; a sequential payload carries no such field and is the
+        payload every mech has always accepted.
+
+        :param marketplace_contract: Marketplace contract instance
+        :param sender: Checksummed requester of record (Safe or EOA)
+        :param mech: Checksummed mech address
+        :param data_hash: Truncated content hash of the request metadata
+        :param max_delivery_rate: The per-request maximum being signed
+        :param payment_type_hex: The mech's payment type as 0x-prefixed hex
+        :param nonce: The nonce to sign: a requester-chosen value (explicit)
+            or the requester's ``mapNonces`` counter (sequential)
+        :param nonce_mode: ``explicit`` or ``sequential``
+        :param ipfs_data: The request metadata as the JSON string that was
+            hashed, sent to the mech in place of an IPFS upload
+        :return: The 32-byte request id and the form payload to POST
+        """
+        view = (
+            marketplace_contract.functions.getRequestIdWithNonce
+            if nonce_mode == NONCE_MODE_EXPLICIT
+            else marketplace_contract.functions.getRequestId
+        )
+        request_id_bytes = view(
+            mech,
+            sender,
+            data_hash,
+            max_delivery_rate,
+            payment_type_hex,
+            nonce,
+        ).call()
+
+        # Signature encoding depends on how the marketplace verifies the
+        # requester: Safe.isValidSignature (agent mode) requires the
+        # SafeMessage-wrapped hash to be signed; plain ecrecover
+        # (client mode) requires the raw digest.
+        signature = self._sign_request_digest(sender, request_id_bytes)
+
+        payload: Dict[str, Any] = {
+            "sender": sender,
+            "signature": signature,
+            "ipfs_hash": data_hash,
+            "request_id": int.from_bytes(request_id_bytes, byteorder="big"),
+            "delivery_rate": max_delivery_rate,
+            "nonce": nonce,
+            "ipfs_data": ipfs_data,
+        }
+        if nonce_mode == NONCE_MODE_EXPLICIT:
+            payload["nonce_mode"] = NONCE_MODE_EXPLICIT
+        return request_id_bytes, payload
+
+    @staticmethod
+    def _rejection_reason(response: requests.Response) -> str:
+        """Return the ``reason`` from a mech's JSON rejection body, else ``""``.
+
+        :param response: the HTTP response from the mech.
+        :return: the reason string, empty when the body carries none.
+        """
+        try:
+            return str(response.json().get("reason", ""))
+        except Exception:  # pylint: disable=broad-except
+            return ""
+
+    @classmethod
+    def _explicit_nonce_refused(cls, response: requests.Response) -> bool:
+        """Whether the mech turned the request away for using an explicit nonce.
+
+        Only the exact 503 the mech sends for a disabled explicit-nonce path
+        counts; any other rejection, including a 503 for another reason, is
+        reported to the caller as it is.
+
+        :param response: the HTTP response from the mech.
+        :return: True if the request should be resent with a sequential nonce.
+        """
+        return (
+            response.status_code == HTTP_SERVICE_UNAVAILABLE
+            and cls._rejection_reason(response) == EXPLICIT_NONCE_DISABLED_REASON
+        )
+
     def _resolve_offchain_sender(self) -> str:
         """Return the requester address bound into the offchain request.
 
         In agent mode this is the Safe (matching the onchain flow where the
         Safe is ``msg.sender`` on the marketplace call); in client mode it
-        is the EOA. Callers use this for ``mapNonces``, ``getRequestId``,
-        and the payload ``sender`` field so the mech, subgraph, and
+        is the EOA. Callers use this for ``mapNonces``, the request-id
+        views, and the payload ``sender`` field so the mech, subgraph, and
         settlement path all agree on who owns the request.
 
         :return: Checksummed requester address
@@ -604,12 +778,12 @@ class MarketplaceService(
         caller (Safe in agent mode, EOA in client mode). Threading it in
         rather than re-resolving keeps the address the signature is bound
         to identical to the address the caller wrote into the payload and
-        ``getRequestId``.
+        the request-id view.
 
         :param sender: Checksummed requester address (agent mode: Safe;
             client mode: EOA). Must equal the ``sender`` field of the
-            outbound payload and the requester argument to
-            ``getRequestId``.
+            outbound payload and the requester argument to the request-id
+            view.
         :param request_id_bytes: the 32-byte request-id digest to sign.
         :return: 0x-prefixed hex signature, as sent to the mech.
         :raises ValueError: if the signature has the wrong length, uses an

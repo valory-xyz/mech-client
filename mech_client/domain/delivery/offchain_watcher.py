@@ -22,7 +22,7 @@
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from mech_client.domain.delivery.base import DeliveryWatcher
@@ -37,6 +37,11 @@ logger = logging.getLogger(__name__)
 
 # Constants for offchain polling
 OFFCHAIN_DELIVER_ENDPOINT = "fetch_offchain_info"
+# Envelope field carrying what the mech charged for the request: the actual
+# cost, at or below the maximum the requester signed, in the base units of
+# the mech's payment asset. A mech that has not priced the request yet, or
+# one running an older release, omits it.
+CHARGED_RATE_FIELD = "delivery_rate"
 
 # `IPFS_URL_TEMPLATE` already carries the multibase and multicodec prefix, so a
 # delivery hash is the bare digest: 32 bytes, i.e. 64 hex characters.
@@ -97,7 +102,7 @@ class OffchainDeliveryWatcher(
         # `results`, which would mark the request done after a single attempt.
         # Retrying matters most for the ordinary case — a pinned file that
         # 404s until the gateway catches up — not just for unexpected errors.
-        pending_urls: Dict[str, str] = {}
+        pending_files: Dict[str, Tuple[str, Optional[int]]] = {}
         prev_count = -1
         start_time = time.time()
 
@@ -124,13 +129,16 @@ class OffchainDeliveryWatcher(
                         continue
 
                     url = self._result_file_url(response, request_id_int)
+                    charged = self._charged_rate(response, request_id_int)
                     if url is None:
                         # The mech answered inline; the envelope is the answer.
                         results[request_id] = DeliveryResult(
-                            request_id=request_id, data=response
+                            request_id=request_id,
+                            data=response,
+                            delivery_rate=charged,
                         )
                     else:
-                        pending_urls[request_id] = url
+                        pending_files[request_id] = (url, charged)
                         # Off the event loop: a gateway round-trip here would
                         # otherwise stall every other request's poll.
                         data = await asyncio.to_thread(
@@ -144,9 +152,12 @@ class OffchainDeliveryWatcher(
                             # next cycle try again. The backfill below reports
                             # it with this URL if it never becomes readable.
                             continue
-                        pending_urls.pop(request_id, None)
+                        pending_files.pop(request_id, None)
                         results[request_id] = DeliveryResult(
-                            request_id=request_id, data=data, url=url
+                            request_id=request_id,
+                            data=data,
+                            url=url,
+                            delivery_rate=charged,
                         )
                     logger.info(
                         f"Received offchain response for request {request_id_int}"
@@ -177,7 +188,7 @@ class OffchainDeliveryWatcher(
         # so per request: the timeout warning above only counts how many arrived,
         # which does not separate "never delivered" from "delivered, unreadable".
         # Popping on success above leaves this holding only unresolved requests.
-        for request_id, url in pending_urls.items():
+        for request_id, (url, charged) in pending_files.items():
             logger.warning(
                 "Delivered but unreadable for request %s; retry the result file "
                 "at %s",
@@ -185,10 +196,47 @@ class OffchainDeliveryWatcher(
                 url,
             )
             results[request_id] = DeliveryResult(
-                request_id=request_id, data=None, url=url
+                request_id=request_id, data=None, url=url, delivery_rate=charged
             )
 
         return results
+
+    @staticmethod
+    def _charged_rate(response: Any, request_id_decimal: str) -> Optional[int]:
+        """
+        Read what the mech charged for the request from its envelope.
+
+        The charge is settled on-chain by the mech, so the client only reports
+        it: a missing field is a mech that does not report charges, and an
+        unreadable one is logged and reported as unknown rather than failing a
+        delivery that has already been paid for.
+
+        :param response: Raw response from the offchain endpoint
+        :param request_id_decimal: Request ID in decimal, for the log line
+        :return: The charge in the payment asset's base units, or ``None`` when
+            the envelope does not carry a usable one
+        """
+        if not isinstance(response, dict) or CHARGED_RATE_FIELD not in response:
+            return None
+        charged = response[CHARGED_RATE_FIELD]
+        # ``bool`` is an ``int`` subclass; a mech would never mean it as a rate.
+        if isinstance(charged, bool) or not isinstance(charged, (int, str)):
+            charged = None
+        else:
+            try:
+                charged = int(charged)
+            except ValueError:
+                charged = None
+        if charged is None or charged < 0:
+            logger.warning(
+                "Request %s delivered with an unreadable %s %r; the charge is "
+                "reported as unknown",
+                request_id_decimal,
+                CHARGED_RATE_FIELD,
+                response[CHARGED_RATE_FIELD],
+            )
+            return None
+        return charged
 
     @staticmethod
     def _result_file_url(response: Any, request_id_decimal: str) -> Optional[str]:

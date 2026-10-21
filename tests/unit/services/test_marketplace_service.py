@@ -20,7 +20,7 @@
 """Tests for marketplace service."""
 
 import socket
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -35,6 +35,10 @@ from mech_client.domain.tools.manager import IDENTIFICATION_NOTE, ToolManager
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.services.marketplace_service import (
+    EXPLICIT_NONCE_BITS,
+    EXPLICIT_NONCE_DISABLED_REASON,
+    NONCE_MODE_EXPLICIT,
+    NONCE_MODE_SEQUENTIAL,
     MarketplaceService,
     PaymentChallenge,
 )
@@ -1479,9 +1483,8 @@ class TestSendOffchainRequest:
 
         # Mock marketplace contract
         mock_contract = MagicMock()
-        mock_contract.functions.mapNonces.return_value.call.return_value = 0
         request_id_bytes = b"\x00" * 32
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
+        mock_contract.functions.getRequestIdWithNonce.return_value.call.return_value = (
             request_id_bytes
         )
 
@@ -1553,7 +1556,7 @@ class TestSendOffchainRequest:
 
         Symmetric to the agent-mode invariant: with no Safe, the EOA is
         ``msg.sender`` on the settlement path and must be the address the
-        offchain payload, ``mapNonces`` lookup, and ``getRequestId`` all
+        offchain payload and ``getRequestIdWithNonce`` both
         key on. The Safe-wrapped signing helper must not be exercised.
         """
         mock_mech_config = create_mock_mech_config()
@@ -1570,9 +1573,8 @@ class TestSendOffchainRequest:
         service.signer = _real_signing_signer()
 
         mock_contract = MagicMock()
-        mock_contract.functions.mapNonces.return_value.call.return_value = 3
         request_id_bytes = b"\xcd" * 32
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
+        mock_contract.functions.getRequestIdWithNonce.return_value.call.return_value = (
             request_id_bytes
         )
 
@@ -1613,9 +1615,8 @@ class TestSendOffchainRequest:
         expected_sender = ensure_checksummed_address(_TEST_ACCOUNT.address)
 
         # Requester of record on all three surfaces is the EOA
-        mock_contract.functions.mapNonces.assert_called_once_with(expected_sender)
         assert (
-            mock_contract.functions.getRequestId.call_args.args[1] == expected_sender
+            mock_contract.functions.getRequestIdWithNonce.call_args.args[1] == expected_sender
         )
         posted_payload = mock_requests.post.call_args.kwargs["data"]
         assert posted_payload["sender"] == expected_sender
@@ -1644,8 +1645,8 @@ class TestSendOffchainRequest:
         """Agent-mode offchain request binds the Safe as the requester.
 
         End-to-end assertion of the requester-of-record property: the
-        Safe address (not the signer EOA) must be the address passed to
-        ``mapNonces``, into ``getRequestId``, and set as ``sender`` on the
+        Safe address (not the signer EOA) must be the address passed
+        into ``getRequestIdWithNonce`` and set as ``sender`` on the
         payload posted to the mech. The mech, subgraph, and settlement
         path all key on that field, so any of the three falling back to
         the EOA would split the identity across the offchain and onchain
@@ -1671,9 +1672,8 @@ class TestSendOffchainRequest:
         )
 
         mock_contract = MagicMock()
-        mock_contract.functions.mapNonces.return_value.call.return_value = 7
         request_id_bytes = b"\xab" * 32
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
+        mock_contract.functions.getRequestIdWithNonce.return_value.call.return_value = (
             request_id_bytes
         )
 
@@ -1713,21 +1713,18 @@ class TestSendOffchainRequest:
 
         expected_sender = ensure_checksummed_address(safe)
 
-        # 1. mapNonces was keyed on the Safe, not the EOA
-        mock_contract.functions.mapNonces.assert_called_once_with(expected_sender)
-
-        # 2. getRequestId was computed against the Safe as requester
-        get_req_call = mock_contract.functions.getRequestId.call_args
+        # 1. getRequestIdWithNonce was computed against the Safe as requester
+        get_req_call = mock_contract.functions.getRequestIdWithNonce.call_args
         assert get_req_call.args[1] == expected_sender
 
-        # 3. The signature was produced through the Safe-wrapped path
+        # 2. The signature was produced through the Safe-wrapped path
         service.signer.sign_safe_message.assert_called_once_with(
             expected_sender,
             service.mech_config.ledger_config.chain_id,
             request_id_bytes,
         )
 
-        # 4. The payload posted to the mech advertised the Safe as sender
+        # 3. The payload posted to the mech advertised the Safe as sender
         posted_payload = mock_requests.post.call_args.kwargs["data"]
         assert posted_payload["sender"] == expected_sender
         assert posted_payload["signature"] == "0x" + ("dd" * 64) + "1b"
@@ -1767,8 +1764,7 @@ class TestSendOffchainRequest:
         service.signer = _real_signing_signer()
 
         mock_contract = MagicMock()
-        mock_contract.functions.mapNonces.return_value.call.return_value = 0
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
+        mock_contract.functions.getRequestIdWithNonce.return_value.call.return_value = (
             b"\x00" * 32
         )
 
@@ -1836,8 +1832,7 @@ class TestSendOffchainRequest:
         service.signer = _real_signing_signer()
 
         mock_contract = MagicMock()
-        mock_contract.functions.mapNonces.return_value.call.return_value = 0
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
+        mock_contract.functions.getRequestIdWithNonce.return_value.call.return_value = (
             b"\x00" * 32
         )
 
@@ -1909,8 +1904,7 @@ class TestSendOffchainRequest:
         service.signer = _real_signing_signer()
 
         mock_contract = MagicMock()
-        mock_contract.functions.mapNonces.return_value.call.return_value = 0
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
+        mock_contract.functions.getRequestIdWithNonce.return_value.call.return_value = (
             b"\x00" * 32
         )
 
@@ -2831,3 +2825,330 @@ class TestOffchain402Handling:
         mock_ds.return_value.deposit_native.assert_called_once()
         # Surface the still-outstanding shortfall in the message.
         assert "remaining shortfall 50" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# Offchain nonce modes: an explicit request (the default) signs a nonce the
+# requester chooses; a sequential request is the wire payload every mech
+# accepts today, and what an explicit request falls back to.
+# ---------------------------------------------------------------------------
+
+# Above the 0.01 default in mechs.json: the maximum a mech advertises is what
+# gets signed, whatever the chain-wide default says.
+MECH_MAX_RATE = 15 * 10**16
+SEQUENTIAL_REQUEST_ID = b"\x11" * 32
+EXPLICIT_REQUEST_ID = b"\x22" * 32
+CONTENT_HASH = "0x" + "b" * 64
+CONTENT_DATA = '{"prompt":"hello"}'
+MARKETPLACE_NONCE = 5
+CHOSEN_NONCE = 0xC0FFEE
+PAYMENT_TYPE_HEX = "0x" + PaymentType.NATIVE.value
+FETCH_IPFS_HASH = "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash"
+# Every field of the payload a sequential request has always sent, in order.
+SEQUENTIAL_PAYLOAD_FIELDS = [
+    "sender",
+    "signature",
+    "ipfs_hash",
+    "request_id",
+    "delivery_rate",
+    "nonce",
+    "ipfs_data",
+]
+
+
+def _nonce_contract() -> MagicMock:
+    """Marketplace contract stub answering the counter and both request-id views.
+
+    :return: the contract mock
+    """
+    contract = MagicMock()
+    contract.functions.mapNonces.return_value.call.return_value = MARKETPLACE_NONCE
+    contract.functions.getRequestId.return_value.call.return_value = (
+        SEQUENTIAL_REQUEST_ID
+    )
+    contract.functions.getRequestIdWithNonce.return_value.call.return_value = (
+        EXPLICIT_REQUEST_ID
+    )
+    return contract
+
+
+def _accepted() -> MagicMock:
+    """The mech's 200 for an accepted request.
+
+    :return: a mock response
+    """
+    return _mock_http_response(200, {"status": "ok"})
+
+
+def _refused(status_code: int, reason: str) -> MagicMock:
+    """The mech's rejection body for ``status_code``.
+
+    :param status_code: HTTP status of the rejection
+    :param reason: the ``reason`` field of the JSON body
+    :return: a mock response
+    """
+    response = _mock_http_response(status_code, {"reason": reason})
+    response.reason = "Service Unavailable"
+    return response
+
+
+async def _send_offchain(
+    service: MarketplaceService,
+    contract: MagicMock,
+    responses: List[MagicMock],
+    nonce_mode: Any = NONCE_MODE_EXPLICIT,
+    prompts: Tuple[str, ...] = ("hello",),
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Send ``prompts`` offchain against canned HTTP responses.
+
+    :param service: the service under test
+    :param contract: the marketplace contract stub
+    :param responses: what each successive POST answers
+    :param nonce_mode: the nonce mode to send with
+    :param prompts: one prompt per request
+    :return: the result and every payload POSTed, in order
+    """
+    watcher = AsyncMock()
+    watcher.watch.return_value = {}
+    with (
+        patch(FETCH_IPFS_HASH, return_value=(CONTENT_HASH, "full-hash", CONTENT_DATA)),
+        patch(f"{SERVICE}.OffchainDeliveryWatcher", return_value=watcher),
+        patch(f"{SERVICE}.requests") as mock_requests,
+    ):
+        mock_requests.post.side_effect = responses
+        mock_requests.exceptions.RequestException = (
+            requests.exceptions.RequestException
+        )
+        result = await service._send_offchain_request(  # pylint: disable=protected-access
+            marketplace_contract=contract,
+            prompts=prompts,
+            tools=("some-tool",) * len(prompts),
+            priority_mech_address=MECH_ADDRESS,
+            max_delivery_rate=MECH_MAX_RATE,
+            payment_type=PaymentType.NATIVE,
+            response_timeout=300,
+            mech_offchain_url="https://mech.example.com",
+            extra_attributes=None,
+            timeout=30.0,
+            nonce_mode=nonce_mode,
+        )
+        payloads = [call.kwargs["data"] for call in mock_requests.post.call_args_list]
+    return dict(result), payloads
+
+
+class TestOffchainNonceModes:
+    """How an offchain request is numbered, signed and, when refused, resent."""
+
+    def setup_method(self) -> None:
+        """Build a client-mode service whose signatures really recover."""
+        self.service = _build_offchain_service()
+        self.service.signer = _real_signing_signer()
+        self.sender = ensure_checksummed_address(_TEST_ACCOUNT.address)
+
+    @pytest.mark.asyncio
+    async def test_explicit_is_the_default_and_signs_a_chosen_nonce(self) -> None:
+        """Without a mode, the id comes from ``getRequestIdWithNonce`` and the payload says so."""
+        contract = _nonce_contract()
+
+        with patch(f"{SERVICE}.secrets.randbits", return_value=CHOSEN_NONCE) as randbits:
+            result, payloads = await _send_offchain(self.service, contract, [_accepted()])
+
+        randbits.assert_called_once_with(EXPLICIT_NONCE_BITS)
+        (payload,) = payloads
+        assert list(payload) == SEQUENTIAL_PAYLOAD_FIELDS + ["nonce_mode"]
+        assert payload["nonce_mode"] == "explicit"
+        assert payload["nonce"] == CHOSEN_NONCE
+        assert payload["request_id"] == int.from_bytes(EXPLICIT_REQUEST_ID, "big")
+        assert payload["delivery_rate"] == MECH_MAX_RATE
+        assert payload["sender"] == self.sender
+        assert payload["ipfs_hash"] == CONTENT_HASH
+        assert payload["ipfs_data"] == CONTENT_DATA
+        contract.functions.getRequestIdWithNonce.assert_called_once_with(
+            MECH_ADDRESS, self.sender, CONTENT_HASH, MECH_MAX_RATE, PAYMENT_TYPE_HEX, CHOSEN_NONCE
+        )
+        contract.functions.getRequestId.assert_not_called()
+        contract.functions.mapNonces.assert_not_called()
+        # The signature is over the explicit id, which the sequential path rejects.
+        self.service.signer.sign_message.assert_called_once_with(EXPLICIT_REQUEST_ID)
+        assert result["request_ids"] == [EXPLICIT_REQUEST_ID.hex()]
+
+    @pytest.mark.asyncio
+    async def test_explicit_nonces_are_drawn_fresh_per_request(self) -> None:
+        """Each request in a batch gets its own 256-bit nonce."""
+        _, payloads = await _send_offchain(
+            self.service, _nonce_contract(), [_accepted(), _accepted()], prompts=("one", "two")
+        )
+
+        nonces = [payload["nonce"] for payload in payloads]
+        assert nonces[0] != nonces[1]
+        assert all(0 <= nonce < 2**EXPLICIT_NONCE_BITS for nonce in nonces)
+
+    @pytest.mark.asyncio
+    async def test_sequential_request_is_the_payload_every_mech_accepts(self) -> None:
+        """Opting into sequential sends exactly today's fields, in today's order."""
+        contract = _nonce_contract()
+
+        result, payloads = await _send_offchain(
+            self.service, contract, [_accepted()], nonce_mode=NONCE_MODE_SEQUENTIAL
+        )
+
+        (payload,) = payloads
+        assert list(payload) == SEQUENTIAL_PAYLOAD_FIELDS
+        assert payload["sender"] == self.sender
+        assert payload["ipfs_hash"] == CONTENT_HASH
+        assert payload["request_id"] == int.from_bytes(SEQUENTIAL_REQUEST_ID, "big")
+        assert payload["delivery_rate"] == MECH_MAX_RATE
+        assert payload["nonce"] == MARKETPLACE_NONCE
+        assert payload["ipfs_data"] == CONTENT_DATA
+        assert payload["signature"] == (
+            "0x" + bytes(_TEST_ACCOUNT.unsafe_sign_hash(SEQUENTIAL_REQUEST_ID).signature).hex()
+        )
+        contract.functions.mapNonces.assert_called_once_with(self.sender)
+        contract.functions.getRequestId.assert_called_once_with(
+            MECH_ADDRESS, self.sender, CONTENT_HASH, MECH_MAX_RATE, PAYMENT_TYPE_HEX, MARKETPLACE_NONCE
+        )
+        contract.functions.getRequestIdWithNonce.assert_not_called()
+        assert result["request_ids"] == [SEQUENTIAL_REQUEST_ID.hex()]
+
+    @pytest.mark.asyncio
+    async def test_sequential_batch_numbers_its_requests_from_one_counter_read(self) -> None:
+        """A sequential batch reads ``mapNonces`` once and numbers requests contiguously."""
+        contract = _nonce_contract()
+
+        _, payloads = await _send_offchain(
+            self.service,
+            contract,
+            [_accepted(), _accepted()],
+            nonce_mode=NONCE_MODE_SEQUENTIAL,
+            prompts=("one", "two"),
+        )
+
+        assert [payload["nonce"] for payload in payloads] == [MARKETPLACE_NONCE, MARKETPLACE_NONCE + 1]
+        contract.functions.mapNonces.assert_called_once_with(self.sender)
+
+    @pytest.mark.asyncio
+    async def test_the_mech_maximum_is_signed_even_above_the_chain_default(self) -> None:
+        """The advertised maximum is the cap, not the 0.01 default in mechs.json."""
+        assert MECH_MAX_RATE > self.service.mech_config.price
+
+        _, payloads = await _send_offchain(self.service, _nonce_contract(), [_accepted()])
+
+        assert payloads[0]["delivery_rate"] == MECH_MAX_RATE
+
+    @pytest.mark.asyncio
+    async def test_a_mech_without_explicit_nonces_gets_the_sequential_request(self) -> None:
+        """The disabled-path 503 resends the same content with the marketplace counter."""
+        contract = _nonce_contract()
+
+        with patch(f"{SERVICE}.logger.warning") as warning:
+            result, payloads = await _send_offchain(
+                self.service,
+                contract,
+                [_refused(503, EXPLICIT_NONCE_DISABLED_REASON), _accepted()],
+            )
+
+        explicit, sequential = payloads
+        assert explicit["nonce_mode"] == "explicit"
+        assert list(sequential) == SEQUENTIAL_PAYLOAD_FIELDS
+        assert sequential["nonce"] == MARKETPLACE_NONCE
+        assert sequential["ipfs_data"] == CONTENT_DATA
+        assert sequential["request_id"] == int.from_bytes(SEQUENTIAL_REQUEST_ID, "big")
+        # The counter is read only once the mech has turned explicit nonces away
+        contract.functions.mapNonces.assert_called_once_with(self.sender)
+        assert self.service.signer.sign_message.call_args.args[0] == SEQUENTIAL_REQUEST_ID
+        assert result["request_ids"] == [SEQUENTIAL_REQUEST_ID.hex()]
+        warning.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_the_fallback_covers_the_rest_of_the_batch(self) -> None:
+        """After one refusal the remaining requests go sequential straight away."""
+        contract = _nonce_contract()
+
+        _, payloads = await _send_offchain(
+            self.service,
+            contract,
+            [_refused(503, EXPLICIT_NONCE_DISABLED_REASON), _accepted(), _accepted()],
+            prompts=("one", "two"),
+        )
+
+        assert [payload.get("nonce_mode") for payload in payloads] == ["explicit", None, None]
+        assert [payload["nonce"] for payload in payloads[1:]] == [MARKETPLACE_NONCE, MARKETPLACE_NONCE + 1]
+        contract.functions.mapNonces.assert_called_once_with(self.sender)
+        assert contract.functions.getRequestIdWithNonce.call_count == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "status_code, reason",
+        [
+            (503, "ledger unavailable"),
+            (503, ""),
+            (401, "request id already recorded on-chain"),
+            (400, EXPLICIT_NONCE_DISABLED_REASON),
+        ],
+    )
+    async def test_other_rejections_of_an_explicit_request_are_reported_not_retried(
+        self, status_code: int, reason: str
+    ) -> None:
+        """Only the disabled-path 503 triggers the fallback; anything else is an error."""
+        contract = _nonce_contract()
+
+        with pytest.raises(ValueError, match=f"Offchain request rejected: .*HTTP {status_code}"):
+            await _send_offchain(self.service, contract, [_refused(status_code, reason)])
+
+        contract.functions.mapNonces.assert_not_called()
+        contract.functions.getRequestId.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_a_sequential_request_the_mech_refuses_is_an_error(self) -> None:
+        """A disabled-path 503 can only mean a fallback for an explicit request."""
+        contract = _nonce_contract()
+
+        with pytest.raises(ValueError, match="HTTP 503"):
+            await _send_offchain(
+                self.service,
+                contract,
+                [_refused(503, EXPLICIT_NONCE_DISABLED_REASON)],
+                nonce_mode=NONCE_MODE_SEQUENTIAL,
+            )
+
+        assert contract.functions.getRequestId.call_count == 1
+
+
+class TestSendRequestNonceMode:
+    """``send_request`` checks the nonce mode before touching the chain and passes it on."""
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_mode_is_refused_before_any_chain_read(self) -> None:
+        """A typo in the mode is an error, not a request in the default mode."""
+        service = _build_offchain_service()
+
+        with patch.object(service, "_get_marketplace_contract") as contract:
+            with pytest.raises(ValueError, match="Unknown nonce_mode 'random'"):
+                await service.send_request(
+                    prompts=("p",), tools=("t",), use_offchain=True, nonce_mode="random"  # type: ignore[arg-type]
+                )
+
+        contract.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "kwargs, expected",
+        [({}, NONCE_MODE_EXPLICIT), ({"nonce_mode": NONCE_MODE_SEQUENTIAL}, NONCE_MODE_SEQUENTIAL)],
+    )
+    async def test_the_mode_reaches_the_offchain_sender(
+        self, kwargs: Dict[str, Any], expected: str
+    ) -> None:
+        """Explicit unless the caller opts into sequential."""
+        service = _build_offchain_service()
+        service.tool_manager = MagicMock()
+
+        with (
+            patch.object(service, "_get_marketplace_contract", return_value=MagicMock()),
+            patch.object(service, "_fetch_mech_info", return_value=(PaymentType.NATIVE, 1, MECH_MAX_RATE)),
+            patch.object(service, "_validate_tools"),
+            patch.object(service, "_send_offchain_request", new_callable=AsyncMock) as offchain,
+        ):
+            await service.send_request(prompts=("p",), tools=("t",), use_offchain=True, **kwargs)
+
+        assert offchain.call_args.kwargs["nonce_mode"] == expected
+        assert offchain.call_args.kwargs["max_delivery_rate"] == MECH_MAX_RATE
