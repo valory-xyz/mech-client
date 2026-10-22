@@ -116,7 +116,7 @@ The report is built from the Mech's published manifest and the marketplace subgr
 - **Operator.** The manifest may name its operator (`operator.domain` and `operator.name`). The domain is the identity: it is marked verified only when `https://<domain>/.well-known/agent-registration.json` lists the Mech's ERC-8004 agent id for the chain's identity registry. The name is never checked and is reported as `claimed_name`, the operator's own words, so a verified `valory-mechs.xyz` calling itself "Valory AG" proves only the domain. The agent id comes from the service registry subgraph; it is not the Olas service id except by coincidence. The manifest must name the exact host that serves the proof: redirects are not followed, so a domain that redirects, as `valory.xyz` does to `www.valory.xyz`, is reported as redirecting and stays unverified. A proof that cannot be fetched leaves the domain unverified, with the reason, and is fetched again next time rather than remembered as a no. The domain must be a bare lowercase hostname and every link an `https` URL with a host, or the field is treated as unpublished.
 - **Benchmarks.** Each tool may carry a benchmark link (`toolMetadata.<tool>.benchmark.url`). The report passes the link on as the operator's claim. It never shows a figure, checked or not.
 - **Delivery record.** `receivedRequests`, `selfDeliveredFromReceived` and `deliveredByOthersFromReceived` from the marketplace subgraph, plus the Mech's age from its creation block. The counters cover requests made on-chain and off-chain requests the Mech settled on-chain, and cannot be split by path. An off-chain request that was never delivered appears nowhere on-chain.
-- **Payment.** The payment method (native, OLAS, USDC, or a subscription), with no price. The Mech contract quotes the charge at request time, and its maximum delivery rate is only a ceiling a Mech may charge less than.
+- **Payment.** The payment method (native, OLAS, USDC, or a subscription), with no price. The Mech contract quotes the charge at request time, and its maximum delivery rate is only a ceiling a Mech may charge less than. When the manifest publishes an expected cost per tool (`toolMetadata.<tool>.expectedCost`, with `asset` and a decimal-string `amount` in base units), the report passes it on under `payment.expected_costs` as the operator's estimate for choosing a cap; it is never a charge.
 
 `mechx mech info` prints the report as JSON. For library users, `ToolManager.mech_report(mech_address, metadata)` returns the same report as data, a superset of `terms_report`. `ToolManager.mech_report_or_terms(mech_address, metadata)` is the one to call before paying: it falls back to the terms alone, with `report_note`, when the manifest or the Mech's record cannot be read. The subgraph reads a report makes time out after 10 seconds each, and each read of the domain proof after 5.
 
@@ -207,9 +207,10 @@ Additionally other options are available and their usage is listed below:
 
 `--use-prepaid <bool>`: use the prepaid method to send requests to a Mech via the Mech Marketplace. Defaults to False. <br>
 `--use-offchain <bool>`: use the off-chain method to send requests to a Mech via the Mech Marketplace. Defaults to False. <br>
-`--nonce-mode <explicit|sequential>`: how off-chain requests are numbered, see [Offchain Requests](#offchain-requests). Defaults to explicit.
+`--nonce-mode <explicit|sequential>`: how off-chain requests are numbered, see [Offchain Requests](#offchain-requests). Defaults to explicit. <br>
+`--max-cost <amount>`: the most to pay per request, in base units of the Mech's payment asset. See [Choosing a cap](https://github.com/valory-xyz/mech-client/blob/main/docs/index.md#choosing-a-cap) in the docs.
 
-Every request is signed with the Mech's advertised maximum per request (`maxDeliveryRate`). The Mech charges its actual cost at delivery, at or below that maximum, and what it does not charge stays in your marketplace balance.
+An off-chain request is signed with a cap you set: `--max-cost`, or by default twice the expected cost the Mech publishes for the tool in its manifest, or the Mech's advertised maximum (`maxDeliveryRate`) when it publishes none. The Mech charges its actual cost at delivery, at or below the cap, and what it does not charge stays in your marketplace balance. An on-chain request pays the Mech's advertised `maxDeliveryRate`; with `--max-cost` below it the request is refused before it is sent.
 
 #### Understanding Payment Types
 
@@ -307,7 +308,7 @@ The client queries the mech's `ComplementaryServiceMetadata` contract to find th
 
 Each off-chain request is signed with a nonce, `explicit` (a random per-request nonce, the default) or `sequential` (the marketplace counter). See [Offchain Requests](https://github.com/valory-xyz/mech-client/blob/main/docs/index.md#offchain-requests) in the docs for how the two behave and when the client falls back from one to the other.
 
-The Mech reports what it charged with the delivery. The CLI prints it as `Charged: <amount>` under the answer, in the base units of the Mech's payment asset, and the library returns it as `DeliveryResult.actual_delivery_rate` (`None` when the Mech reports none, which is always the case for on-chain delivery).
+The Mech reports the charge it will settle with the delivery. The CLI prints it as `Reported charge: <amount>` under the answer, in the base units of the Mech's payment asset, and the library returns it as `DeliveryResult.actual_delivery_rate` (`None` when the Mech reports none, which is always the case for on-chain delivery). It is what the Mech reports when it answers; the Mech settles it on-chain afterwards, and a request that is never settled is not charged.
 
 ### List tools available for a mech
 
@@ -522,7 +523,7 @@ You can also use the Mech Client as a library on your Python project.
     for request_id, delivery in result["deliveries"].items():
         print(f"Request {request_id}: {delivery.url}")
         if delivery.actual_delivery_rate is not None:
-            print(f"  charged {delivery.actual_delivery_rate} of the signed maximum")
+            print(f"  reported charge {delivery.actual_delivery_rate} of the signed cap")
         payload = delivery.data
         if payload is None:
             print("  result file could not be read")

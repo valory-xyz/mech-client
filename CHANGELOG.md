@@ -9,13 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
-- `DeliveryResult.actual_delivery_rate`: what the Mech charged for the request, in the base units of its payment asset, read from the off-chain delivery envelope. `None` when the Mech reports no charge, which is always the case for on-chain delivery. `mechx request` prints it as `Charged: <amount>`.
+- `--max-cost` on `mechx request` (`max_cost` on `MarketplaceService.send_request`): the most to pay per request, in base units of the Mech's payment asset. Off-chain it is the cap signed into the request. On-chain the Mech's advertised `maxDeliveryRate` is the charge, and a `--max-cost` below it refuses the request before it is sent.
+- Without `--max-cost`, an off-chain request signs twice the expected cost the Mech's manifest publishes for the tool (`toolMetadata.<tool>.expectedCost`, with `asset` and a decimal-string `amount`), and falls back to the Mech's advertised `maxDeliveryRate`, with a warning, for a tool without one or with one stated in another asset. A batch signs the largest cap among its tools. See "Choosing a cap" in the docs.
+- `read_expected_costs(manifest)` reads that field, and `mech_report` passes it on under `payment.expected_costs` with `expected_cost_note`.
+- `DeliveryResult.actual_delivery_rate`: the charge the Mech reports for the request, in the base units of its payment asset, read from the off-chain delivery envelope. `None` when the Mech reports no charge, which is always the case for on-chain delivery. `mechx request` prints it as `Reported charge: <amount>`; the Mech settles it on-chain afterwards.
 - `--nonce-mode` on `mechx request` (`nonce_mode` on `MarketplaceService.send_request`): `explicit` (the default) or `sequential`, and `--deadline-seconds` (`deadline_seconds`), how long an explicit request stays settleable from the latest block (15 minutes by default). See "Offchain Requests" in the docs. Requires a Mech release that knows the option; on an older Mech pass `sequential`.
 - The marketplace ABI is the build of autonolas-marketplace `main` at `14f191a`: `getRequestIdWithNonce` with its deadline and signing domain (`getDomainSeparatorWithNonce`), the `deliverMarketplaceWithSignatures` overloads that settle a cap with an actual charge, and the `RateOverCap` and `SignatureExpired` errors.
 
 ### 🔧 Changed
 
-- Buyer docs say maximum where they said price: the Mech's `maxDeliveryRate` is what the client signs and what a deposit must cover, the Mech charges at or below it, and what it does not charge stays in the buyer's balance.
+- The manifest fetched from the Mech's `ComplementaryServiceMetadata` URI is used only when its bytes hash to the content id that URI names; otherwise it is treated as unreadable.
+- Buyer docs say cap where they said price: the requester sets the cap signed into an off-chain request, the Mech charges at or below it, and what it does not charge stays in the buyer's balance. The Mech's `maxDeliveryRate` is the on-chain charge and the off-chain fallback cap.
 
 ## [0.24.0] - 2026-10-09
 

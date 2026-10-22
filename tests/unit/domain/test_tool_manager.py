@@ -19,6 +19,7 @@
 
 """Tests for tool manager."""
 
+import json
 import socket
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -35,16 +36,22 @@ from mech_client.domain.operator import (
 from mech_client.domain.tools.manager import (
     DELIVERY_NOTE,
     DOMAIN_CHECK_FAILED_NOTE,
+    EXPECTED_COST_NOTE,
+    MANIFEST_HASH_NOTE,
     MANIFEST_UNREADABLE_NOTE,
     NAME_NOTE,
     IDENTIFICATION_NOTE,
     PAYMENT_NOTE,
     ToolManager,
     claimed_operator,
+    manifest_matches_uri,
+    payment_asset,
     payment_label,
 )
+from mech_client.infrastructure.ipfs.local_cid import compute_cidv1_bytes
 from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
 from mech_client.infrastructure.config.chain_config import LedgerConfig
+from mech_client.infrastructure.config.payment_config import PaymentType
 from mech_client.infrastructure.subgraph.queries import MechRecord
 from mech_client.utils.errors import SubgraphError
 from mech_client.utils.errors.exceptions import ManifestError
@@ -127,146 +134,210 @@ class TestParseToolId:
             ToolManager._parse_tool_id("")  # pylint: disable=protected-access
 
 
-class TestFetchToolsMetadata:
-    """Tests for fetch_tools_metadata method."""
+GATEWAY = "https://gateway.autonolas.tech/ipfs/"
+TOOLS_MANIFEST: Dict[str, Any] = {
+    "tools": ["openai-gpt-4", "stability-ai"],
+    "toolMetadata": {
+        "openai-gpt-4": {"description": "GPT-4 model"},
+        "stability-ai": {"description": "Image generation"},
+    },
+}
 
-    @patch("mech_client.domain.tools.manager.requests")
-    @patch("mech_client.domain.tools.manager.get_contract")
-    @patch("mech_client.domain.tools.manager.get_abi")
-    @patch("mech_client.domain.tools.manager.EthereumApi")
-    @patch("mech_client.domain.tools.manager.get_mech_config")
-    def test_fetch_tools_metadata_success(
+
+def _published(document: Any, body: Optional[bytes] = None) -> tuple:
+    """
+    Publish a manifest the way the contract and a gateway present it.
+
+    :param document: the manifest the operator pinned, whose CID the URI names
+    :param body: what the gateway serves, the pinned bytes unless given
+    :return: the on-chain metadata URI and the HTTP response for it
+    """
+    pinned = json.dumps(document).encode()
+    uri = GATEWAY + "f" + compute_cidv1_bytes(pinned).hex()
+    response = MagicMock()
+    response.content = pinned if body is None else body
+    return uri, response
+
+
+class TestManifestMatchesUri:
+    """The served bytes must hash to the CID the on-chain URI names."""
+
+    def test_the_pinned_bytes_match_their_own_uri(self) -> None:
+        """A faithful gateway serves exactly what was pinned."""
+        uri, response = _published(TOOLS_MANIFEST)
+        assert manifest_matches_uri(uri, response.content) is True
+
+    def test_a_trailing_slash_and_upper_case_hex_still_match(self) -> None:
+        """The CID is read from the last path segment, case-insensitively."""
+        uri, response = _published(TOOLS_MANIFEST)
+        assert manifest_matches_uri(uri.upper() + "/", response.content) is True
+
+    def test_a_single_changed_byte_does_not_match(self) -> None:
+        """Any other document, however close, hashes elsewhere."""
+        uri, _ = _published(TOOLS_MANIFEST)
+        other = json.dumps({**TOOLS_MANIFEST, "url": "https://else.example"}).encode()
+        assert manifest_matches_uri(uri, other) is False
+
+    @pytest.mark.parametrize(
+        "uri",
+        [
+            "https://metadata.example.com/tool.json",
+            GATEWAY + "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+            GATEWAY + "f01551220" + "a" * 64,
+            GATEWAY,
+            "",
+        ],
+        ids=["plain_url", "base32_cid", "raw_codec_cid", "no_segment", "empty"],
+    )
+    def test_a_uri_without_a_dag_pb_sha256_cid_never_matches(self, uri: str) -> None:
+        """Only the base16 CIDv1 the contract writes can be checked, so anything else fails."""
+        assert manifest_matches_uri(uri, json.dumps(TOOLS_MANIFEST).encode()) is False
+
+    def test_a_body_too_large_for_one_block_does_not_match(self) -> None:
+        """A multi-block document is not a manifest this client can verify."""
+        uri, _ = _published(TOOLS_MANIFEST)
+        assert manifest_matches_uri(uri, b"x" * (256 * 1024 + 1)) is False
+
+
+@patch("mech_client.domain.tools.manager.requests")
+@patch("mech_client.domain.tools.manager.get_contract")
+@patch("mech_client.domain.tools.manager.get_abi")
+@patch("mech_client.domain.tools.manager.EthereumApi")
+@patch("mech_client.domain.tools.manager.get_mech_config")
+class TestFetchToolsMetadata:
+    """The manifest is read from the on-chain URI and kept only when it hashes to it."""
+
+    @staticmethod
+    def _fetch(
+        mock_config: MagicMock,
+        mock_get_contract: MagicMock,
+        mock_requests: MagicMock,
+        uri: str,
+        response: Any,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch service 1's manifest against a contract naming ``uri``.
+
+        :param mock_config: the patched config loader
+        :param mock_get_contract: the patched contract factory
+        :param mock_requests: the patched requests module
+        :param uri: what ``tokenURI`` returns
+        :param response: what the gateway answers, or an exception to raise
+        :return: what ``fetch_tools_metadata`` returns
+        """
+        mock_config.return_value = create_mock_mech_config()
+        mock_contract = MagicMock()
+        mock_contract.functions.tokenURI.return_value.call.return_value = uri
+        mock_get_contract.return_value = mock_contract
+        if isinstance(response, Exception):
+            mock_requests.get.side_effect = response
+        else:
+            mock_requests.get.return_value = response
+        return ToolManager(chain_config="gnosis").fetch_tools_metadata(service_id=1)
+
+    def test_a_manifest_that_hashes_to_its_uri_is_returned(
         self,
         mock_config: MagicMock,
-        mock_ledger_api: MagicMock,
-        mock_get_abi: MagicMock,
+        _ledger: MagicMock,
+        _abi: MagicMock,
         mock_get_contract: MagicMock,
         mock_requests: MagicMock,
     ) -> None:
-        """Test successful metadata fetching."""
-        # Setup mocks
-        mock_config.return_value = create_mock_mech_config()
+        """The pinned document comes back parsed, read from the contract's URI."""
+        uri, response = _published(TOOLS_MANIFEST)
 
-        # Mock contract returning metadata URI
-        mock_contract = MagicMock()
-        mock_contract.functions.tokenURI.return_value.call.return_value = (
-            "https://metadata.example.com/tool.json"
-        )
-        mock_get_contract.return_value = mock_contract
+        metadata = self._fetch(mock_config, mock_get_contract, mock_requests, uri, response)
 
-        # Mock HTTP response
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "tools": ["openai-gpt-4", "stability-ai"],
-            "toolMetadata": {
-                "openai-gpt-4": {"description": "GPT-4 model"},
-                "stability-ai": {"description": "Image generation"},
-            },
-        }
-        mock_requests.get.return_value = mock_response
+        assert metadata == TOOLS_MANIFEST
+        mock_get_contract.return_value.functions.tokenURI.assert_called_once_with(1)
+        mock_requests.get.assert_called_once_with(uri, timeout=10)
 
-        # Create manager and fetch
-        manager = ToolManager(chain_config="gnosis")
-        metadata = manager.fetch_tools_metadata(service_id=1)
-
-        # Verify
-        assert metadata is not None
-        assert "tools" in metadata
-        assert "toolMetadata" in metadata
-        assert len(metadata["tools"]) == 2
-        mock_contract.functions.tokenURI.assert_called_once_with(1)
-        mock_requests.get.assert_called_once_with(
-            "https://metadata.example.com/tool.json", timeout=10
-        )
-
-    @patch("mech_client.domain.tools.manager.EthereumApi")
-    @patch("mech_client.domain.tools.manager.get_mech_config")
-    def test_fetch_tools_metadata_zero_address(
-        self, mock_config: MagicMock, mock_ledger_api: MagicMock
+    def test_a_manifest_that_does_not_hash_to_its_uri_is_not_used(
+        self,
+        mock_config: MagicMock,
+        _ledger: MagicMock,
+        _abi: MagicMock,
+        mock_get_contract: MagicMock,
+        mock_requests: MagicMock,
     ) -> None:
-        """Test fetch with zero metadata address raises error."""
-        # Setup mocks with zero address
+        """A document other than the one recorded on-chain is treated as unreadable."""
+        served = json.dumps({**TOOLS_MANIFEST, "url": "https://else.example"}).encode()
+        uri, response = _published(TOOLS_MANIFEST, body=served)
+
+        with patch("mech_client.domain.tools.manager.logger.error") as error:
+            metadata = self._fetch(mock_config, mock_get_contract, mock_requests, uri, response)
+
+        assert metadata is None
+        error.assert_called_once_with(MANIFEST_HASH_NOTE.format(service_id=1))
+
+    def test_a_uri_without_a_cid_cannot_be_checked_and_is_not_used(
+        self,
+        mock_config: MagicMock,
+        _ledger: MagicMock,
+        _abi: MagicMock,
+        mock_get_contract: MagicMock,
+        mock_requests: MagicMock,
+    ) -> None:
+        """Without the on-chain CID in the URI there is nothing to check the bytes against."""
+        _, response = _published(TOOLS_MANIFEST)
+
+        metadata = self._fetch(
+            mock_config, mock_get_contract, mock_requests, "https://metadata.example.com/tool.json", response
+        )
+
+        assert metadata is None
+
+    def test_zero_metadata_address_raises(
+        self,
+        mock_config: MagicMock,
+        _ledger: MagicMock,
+        _abi: MagicMock,
+        _contract: MagicMock,
+        _requests: MagicMock,
+    ) -> None:
+        """A chain without the metadata contract cannot serve a manifest."""
         mock_mech_config = create_mock_mech_config()
         mock_mech_config.complementary_metadata_hash_address = (
             "0x0000000000000000000000000000000000000000"
         )
         mock_config.return_value = mock_mech_config
 
-        # Create manager
-        manager = ToolManager(chain_config="gnosis")
-
-        # Fetch should raise
         with pytest.raises(ValueError, match="not yet implemented"):
-            manager.fetch_tools_metadata(service_id=1)
+            ToolManager(chain_config="gnosis").fetch_tools_metadata(service_id=1)
 
-    @patch("mech_client.domain.tools.manager.requests")
-    @patch("mech_client.domain.tools.manager.get_contract")
-    @patch("mech_client.domain.tools.manager.get_abi")
-    @patch("mech_client.domain.tools.manager.EthereumApi")
-    @patch("mech_client.domain.tools.manager.get_mech_config")
-    def test_fetch_tools_metadata_http_error(
+    def test_an_http_error_gives_no_manifest(
         self,
         mock_config: MagicMock,
-        mock_ledger_api: MagicMock,
-        mock_get_abi: MagicMock,
+        _ledger: MagicMock,
+        _abi: MagicMock,
         mock_get_contract: MagicMock,
         mock_requests: MagicMock,
     ) -> None:
-        """Test fetch with HTTP error returns None."""
-        # Setup mocks
-        mock_config.return_value = create_mock_mech_config()
+        """A gateway that cannot be reached means an unreadable manifest, not an exception."""
+        uri, _ = _published(TOOLS_MANIFEST)
 
-        mock_contract = MagicMock()
-        mock_contract.functions.tokenURI.return_value.call.return_value = (
-            "https://metadata.example.com/tool.json"
+        metadata = self._fetch(
+            mock_config, mock_get_contract, mock_requests, uri, IOError("Network error")
         )
-        mock_get_contract.return_value = mock_contract
 
-        # Mock HTTP error
-        mock_requests.get.side_effect = IOError("Network error")
-
-        # Create manager and fetch
-        manager = ToolManager(chain_config="gnosis")
-        metadata = manager.fetch_tools_metadata(service_id=1)
-
-        # Should return None on error
         assert metadata is None
 
-    @patch("mech_client.domain.tools.manager.requests")
-    @patch("mech_client.domain.tools.manager.get_contract")
-    @patch("mech_client.domain.tools.manager.get_abi")
-    @patch("mech_client.domain.tools.manager.EthereumApi")
-    @patch("mech_client.domain.tools.manager.get_mech_config")
-    def test_fetch_tools_metadata_invalid_json(
+    def test_bytes_that_hash_right_but_are_not_json_give_no_manifest(
         self,
         mock_config: MagicMock,
-        mock_ledger_api: MagicMock,
-        mock_get_abi: MagicMock,
+        _ledger: MagicMock,
+        _abi: MagicMock,
         mock_get_contract: MagicMock,
         mock_requests: MagicMock,
     ) -> None:
-        """Test fetch with invalid JSON returns None."""
-        # Setup mocks
-        mock_config.return_value = create_mock_mech_config()
+        """A pinned document that is not JSON passes the hash check and fails parsing."""
+        pinned = b"not json"
+        uri = GATEWAY + "f" + compute_cidv1_bytes(pinned).hex()
+        response = MagicMock()
+        response.content = pinned
 
-        mock_contract = MagicMock()
-        mock_contract.functions.tokenURI.return_value.call.return_value = (
-            "https://metadata.example.com/tool.json"
-        )
-        mock_get_contract.return_value = mock_contract
+        metadata = self._fetch(mock_config, mock_get_contract, mock_requests, uri, response)
 
-        # Mock response with invalid JSON
-        mock_response = MagicMock()
-        mock_response.json.side_effect = requests.exceptions.JSONDecodeError(
-            "Invalid JSON", "", 0
-        )
-        mock_requests.get.return_value = mock_response
-
-        # Create manager and fetch
-        manager = ToolManager(chain_config="gnosis")
-        metadata = manager.fetch_tools_metadata(service_id=1)
-
-        # Should return None on JSON error
         assert metadata is None
 
 
@@ -916,6 +987,23 @@ class TestPaymentLabel:
         assert payment_label(payment_type) == expected
 
 
+@pytest.mark.parametrize(
+    "payment_type, expected",
+    [
+        (PaymentType.NATIVE, "native"),
+        (PaymentType.NATIVE_NVM, "native"),
+        (PaymentType.OLAS_TOKEN, "olas"),
+        (PaymentType.USDC_TOKEN, "usdc"),
+        (PaymentType.TOKEN_NVM_USDC, "usdc"),
+    ],
+)
+def test_payment_asset_names_what_the_mech_is_settled_in(
+    payment_type: PaymentType, expected: str
+) -> None:
+    """A subscription is settled in the same asset as its pay-per-request kin."""
+    assert payment_asset(payment_type) == expected
+
+
 class TestClaimedOperator:
     """The operator claim is passed on as data and checked against the domain."""
 
@@ -1073,6 +1161,30 @@ class TestMechReport:
         assert report["delivery"]["received_requests"] == 1020284
         assert report["delivery"]["note"] == DELIVERY_NOTE
         assert report["payment"] == {"type": "native", "note": PAYMENT_NOTE}
+
+    @pytest.mark.usefixtures("offline")
+    def test_published_expected_costs_are_passed_on_as_guidance(
+        self, manager: ToolManager
+    ) -> None:
+        """Each tool's expected cost is reported as published, amount as a string, with its note."""
+        manifest = {
+            **OPERATOR_MANIFEST,
+            "toolMetadata": {
+                "tool-a": {"expectedCost": {"asset": "native", "amount": "12000000000000000"}},
+                "tool-b": {"expectedCost": {"asset": "usdc", "amount": "0"}},
+            },
+        }
+        with (
+            patch(f"{MANAGER}.query_mech_record", return_value=_record()),
+            patch(f"{MANAGER}.claimed_operator", return_value=None),
+        ):
+            report = manager.mech_report(GNOSIS_MECH, manifest)
+        assert report["payment"] == {
+            "type": "native",
+            "note": PAYMENT_NOTE,
+            "expected_costs": {"tool-a": {"asset": "native", "amount": "12000000000000000"}},
+            "expected_cost_note": EXPECTED_COST_NOTE,
+        }
 
     @pytest.mark.usefixtures("offline")
     def test_a_given_record_is_not_queried_again(self, manager: ToolManager) -> None:

@@ -37,6 +37,7 @@ from mech_client.domain.tools.manager import IDENTIFICATION_NOTE, ToolManager
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.services.marketplace_service import (
+    DEFAULT_CAP_FACTOR,
     EXPLICIT_NONCE_DEADLINE_SECONDS,
     EXPLICIT_NONCE_BITS,
     EXPLICIT_NONCE_DISABLED_REASON,
@@ -3303,3 +3304,180 @@ class TestSendRequestNonceMode:
 
         assert offchain.call_args.kwargs["nonce_mode"] == expected
         assert offchain.call_args.kwargs["max_delivery_rate"] == MECH_MAX_RATE
+
+
+EXPECTED_COST = 12 * 10**15
+EXPECTED_COST_B = 30 * 10**15
+OWN_CAP = 7 * 10**15
+COSTED_MANIFEST = {
+    "toolMetadata": {
+        "tool-a": {"expectedCost": {"asset": "native", "amount": str(EXPECTED_COST)}},
+        "tool-b": {"expectedCost": {"asset": "native", "amount": str(EXPECTED_COST_B)}},
+        "tool-usdc": {"expectedCost": {"asset": "usdc", "amount": "25000"}},
+    }
+}
+
+
+class TestResolveSignedRate:
+    """The rate signed into a batch: the requester's cap off-chain, the mech's charge on-chain."""
+
+    def setup_method(self) -> None:
+        """Build a client-mode service."""
+        self.service = _build_offchain_service()
+
+    def _resolve(self, tools: Tuple[str, ...], **overrides: Any) -> int:
+        """
+        Resolve the signed rate for ``tools`` against the costed manifest.
+
+        :param tools: the tool of each request
+        :param overrides: any of the resolver's keyword arguments
+        :return: the rate the batch signs
+        """
+        kwargs: Dict[str, Any] = {
+            "tools": tools,
+            "metadata": COSTED_MANIFEST,
+            "payment_type": PaymentType.NATIVE,
+            "advertised_max": MECH_MAX_RATE,
+            "max_cost": None,
+            "use_offchain": True,
+        }
+        kwargs.update(overrides)
+        return self.service._resolve_signed_rate(**kwargs)  # pylint: disable=protected-access
+
+    def test_a_chosen_cap_is_signed_as_given_offchain(self) -> None:
+        """``max_cost`` wins over the manifest and the advertised maximum, even below both."""
+        assert OWN_CAP < EXPECTED_COST < MECH_MAX_RATE
+        assert self._resolve(("tool-a",), max_cost=OWN_CAP) == OWN_CAP
+
+    def test_without_a_cap_the_default_is_a_multiple_of_the_expected_cost(self) -> None:
+        """The manifest's expected cost, times the default factor, replaces the advertised maximum."""
+        with patch(f"{SERVICE}.logger.warning") as warning:
+            rate = self._resolve(("tool-a",))
+        assert rate == DEFAULT_CAP_FACTOR * EXPECTED_COST
+        assert rate != MECH_MAX_RATE
+        warning.assert_not_called()
+
+    def test_a_batch_signs_the_largest_cap_among_its_tools(self) -> None:
+        """One rate per batch, so it is the one that covers every request in it."""
+        rate = self._resolve(("tool-a", "tool-b", "tool-a"))
+        assert rate == DEFAULT_CAP_FACTOR * EXPECTED_COST_B
+
+    @pytest.mark.parametrize(
+        "metadata",
+        [None, {}, {"toolMetadata": {"other": {"expectedCost": {"asset": "native", "amount": "1"}}}}],
+        ids=["unreadable_manifest", "empty_manifest", "another_tool_only"],
+    )
+    def test_a_tool_without_an_expected_cost_falls_back_to_the_advertised_maximum(
+        self, metadata: Any
+    ) -> None:
+        """No published cost for the tool means the mech's own maximum is signed, with a warning."""
+        with patch(f"{SERVICE}.logger.warning") as warning:
+            rate = self._resolve(("tool-a",), metadata=metadata)
+        assert rate == MECH_MAX_RATE
+        warning.assert_called_once()
+        assert "no expected cost for tool-a" in warning.call_args.args[0]
+        assert str(MECH_MAX_RATE) in warning.call_args.args[0]
+
+    def test_an_expected_cost_in_another_asset_is_ignored(self) -> None:
+        """A cost stated in an asset the mech is not paid in cannot size a cap in that asset."""
+        with patch(f"{SERVICE}.logger.warning") as warning:
+            rate = self._resolve(("tool-usdc",))
+        assert rate == MECH_MAX_RATE
+        messages = [call.args[0] for call in warning.call_args_list]
+        assert any("stated in usdc, not the mech's payment asset native" in m for m in messages)
+
+    def test_the_asset_check_follows_the_mechs_payment_type(self) -> None:
+        """The same manifest entry is usable once the mech is paid in that asset."""
+        rate = self._resolve(("tool-usdc",), payment_type=PaymentType.USDC_TOKEN)
+        assert rate == DEFAULT_CAP_FACTOR * 25000
+
+    def test_a_mixed_batch_covers_the_tool_without_a_cost_too(self) -> None:
+        """A tool falling back to the advertised maximum raises the batch rate when that is larger."""
+        assert MECH_MAX_RATE > DEFAULT_CAP_FACTOR * EXPECTED_COST
+        rate = self._resolve(("tool-a", "unknown-tool"))
+        assert rate == MECH_MAX_RATE
+
+    def test_onchain_signs_the_advertised_maximum_whatever_the_manifest_says(self) -> None:
+        """On-chain the marketplace records the mech's maximum as the charge; the manifest is not consulted."""
+        rate = self._resolve(("tool-a",), use_offchain=False)
+        assert rate == MECH_MAX_RATE
+
+    def test_onchain_accepts_a_cap_at_or_above_the_advertised_charge(self) -> None:
+        """A cap the charge fits under changes nothing about what is signed."""
+        assert self._resolve(("tool-a",), use_offchain=False, max_cost=MECH_MAX_RATE) == MECH_MAX_RATE
+        assert self._resolve(("tool-a",), use_offchain=False, max_cost=MECH_MAX_RATE + 1) == MECH_MAX_RATE
+
+    def test_onchain_refuses_a_cap_below_the_advertised_charge(self) -> None:
+        """The request would revert with a lower maximum, so it is stopped here with the price."""
+        with pytest.raises(ValueError, match=f"charges {MECH_MAX_RATE} per on-chain request"):
+            self._resolve(("tool-a",), use_offchain=False, max_cost=MECH_MAX_RATE - 1)
+
+
+class TestSendRequestMaxCost:
+    """``send_request`` validates ``max_cost`` first and signs the resolved rate."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("max_cost", [0, -1])
+    async def test_a_non_positive_cap_is_refused_before_any_chain_read(self, max_cost: int) -> None:
+        """A cap of nothing cannot be signed, so nothing is fetched."""
+        service = _build_offchain_service()
+
+        with patch.object(service, "_get_marketplace_contract") as contract:
+            with pytest.raises(ValueError, match="max_cost must be a positive amount"):
+                await service.send_request(prompts=("p",), tools=("tool-a",), use_offchain=True, max_cost=max_cost)
+
+        contract.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_the_default_cap_from_the_manifest_reaches_the_offchain_sender(self) -> None:
+        """The advertised maximum is no longer what an off-chain request signs when a cost is published."""
+        service = _build_offchain_service()
+        service.tool_manager = MagicMock()
+        service.tool_manager.fetch_tools_metadata.return_value = COSTED_MANIFEST
+
+        with (
+            patch.object(service, "_get_marketplace_contract", return_value=MagicMock()),
+            patch.object(service, "_fetch_mech_info", return_value=(PaymentType.NATIVE, 1, MECH_MAX_RATE)),
+            patch.object(service, "_validate_tools"),
+            patch.object(service, "_send_offchain_request", new_callable=AsyncMock) as offchain,
+        ):
+            await service.send_request(prompts=("p",), tools=("tool-a",), use_offchain=True)
+
+        assert offchain.call_args.kwargs["max_delivery_rate"] == DEFAULT_CAP_FACTOR * EXPECTED_COST
+
+    @pytest.mark.asyncio
+    async def test_a_chosen_cap_reaches_the_offchain_sender(self) -> None:
+        """``max_cost`` is the signed rate, approvals and deposits included."""
+        service = _build_offchain_service()
+        service.tool_manager = MagicMock()
+        service.tool_manager.fetch_tools_metadata.return_value = COSTED_MANIFEST
+
+        with (
+            patch.object(service, "_get_marketplace_contract", return_value=MagicMock()),
+            patch.object(service, "_fetch_mech_info", return_value=(PaymentType.NATIVE, 1, MECH_MAX_RATE)),
+            patch.object(service, "_validate_tools"),
+            patch.object(service, "_send_offchain_request", new_callable=AsyncMock) as offchain,
+        ):
+            await service.send_request(prompts=("p",), tools=("tool-a",), use_offchain=True, max_cost=OWN_CAP)
+
+        assert offchain.call_args.kwargs["max_delivery_rate"] == OWN_CAP
+
+    @pytest.mark.asyncio
+    async def test_an_onchain_request_above_the_cap_is_refused_before_upload_or_send(self) -> None:
+        """Nothing is uploaded or sent for a request the marketplace would refuse anyway."""
+        service = _build_offchain_service()
+        service.tool_manager = MagicMock()
+        service.tool_manager.fetch_tools_metadata.return_value = COSTED_MANIFEST
+
+        with (
+            patch.object(service, "_get_marketplace_contract", return_value=MagicMock()),
+            patch.object(service, "_fetch_mech_info", return_value=(PaymentType.NATIVE, 1, MECH_MAX_RATE)),
+            patch.object(service, "_validate_tools"),
+            patch(f"{SERVICE}.push_metadata_to_ipfs") as push,
+            patch.object(service, "_send_marketplace_request") as send,
+        ):
+            with pytest.raises(ValueError, match="per on-chain request"):
+                await service.send_request(prompts=("p",), tools=("tool-a",), max_cost=OWN_CAP)
+
+        push.assert_not_called()
+        send.assert_not_called()

@@ -44,9 +44,11 @@ from mech_client.domain.delivery import (
     OffchainDeliveryWatcher,
     OnchainDeliveryWatcher,
 )
+from mech_client.domain.operator import read_expected_costs
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
+from mech_client.domain.tools.manager import payment_asset
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.blockchain.receipt_waiter import (
@@ -109,6 +111,11 @@ EXPLICIT_NONCE_DEADLINE_SECONDS = 15 * 60
 # already carries a per-request UUID, so 256 random bits are not what keeps
 # ids distinct, they are what keeps them independent of ``mapNonces``.
 EXPLICIT_NONCE_BITS = 256
+# Without a chosen cap, an off-chain request signs this multiple of the
+# expected cost the mech publishes for the tool: headroom sized from the
+# spread of charges observed across mechs (valory-xyz/mech#505). What is
+# not charged is not paid.
+DEFAULT_CAP_FACTOR = 2
 # Hard cap on auto-deposit: refuse to top up more than this multiple of the
 # requester's signed ``max_delivery_rate`` in a single retry. The mech URL is
 # auto-discovered from on-chain metadata, so without a cap a compromised or
@@ -292,14 +299,19 @@ class MarketplaceService(
         timeout: Optional[float] = None,
         nonce_mode: NonceMode = NONCE_MODE_EXPLICIT,
         deadline_seconds: int = EXPLICIT_NONCE_DEADLINE_SECONDS,
+        max_cost: Optional[int] = None,
     ) -> RequestResult:
         """
         Send marketplace request(s) to mech(s).
 
-        The per-request maximum signed into each request is the mech's
-        advertised ``maxDeliveryRate``, read from its contract. The mech
-        charges its actual cost at delivery, at or below that maximum, and
-        what it does not charge stays in the requester's balance.
+        Off-chain, the requester sets the cap signed into each request and the
+        mech charges its actual cost at delivery, at or below it; what it does
+        not charge stays in the requester's balance. The cap is ``max_cost``
+        when given, else :data:`DEFAULT_CAP_FACTOR` times the expected cost the
+        mech's manifest publishes for the tool, else the mech's advertised
+        ``maxDeliveryRate``. On-chain the marketplace records the advertised
+        ``maxDeliveryRate`` as the charge, so that is what is signed, and a
+        ``max_cost`` below it refuses the request before anything is sent.
 
         :param prompts: Tuple of prompt strings
         :param tools: Tuple of tool identifiers
@@ -316,6 +328,9 @@ class MarketplaceService(
         :param deadline_seconds: How long from the latest block an explicit
             request stays settleable, see :data:`EXPLICIT_NONCE_DEADLINE_SECONDS`.
             Sequential and on-chain requests ignore this.
+        :param max_cost: The most to pay per request, in base units of the
+            mech's payment asset. Off-chain it is the signed cap; on-chain
+            the advertised charge must be at or below it.
         :return: A :class:`RequestResult` with ``tx_hash`` and ``receipt``
             (both ``None`` on the offchain path, which has no transaction),
             ``request_ids``, and ``deliveries`` mapping each request ID to a
@@ -333,19 +348,27 @@ class MarketplaceService(
             raise ValueError(
                 f"Unknown nonce_mode {nonce_mode!r}; expected one of {get_args(NonceMode)}"
             )
+        if max_cost is not None and max_cost <= 0:
+            raise ValueError(f"max_cost must be a positive amount, got {max_cost}")
 
         # Get marketplace contract
         marketplace_contract = self._get_marketplace_contract()
 
         # Fetch mech info (payment type, service ID, max delivery rate)
-        payment_type, service_id, max_delivery_rate = self._fetch_mech_info(
-            priority_mech
-        )
+        payment_type, service_id, advertised_max = self._fetch_mech_info(priority_mech)
 
-        # One metadata read per request: the tool check, the terms notice and
-        # the offchain URL lookup all derive from this document.
+        # One metadata read per request: the tool check, the terms notice, the
+        # expected costs and the offchain URL lookup all derive from this document.
         metadata = self.tool_manager.fetch_tools_metadata(service_id)
         self._validate_tools(tools, service_id, metadata)
+        max_delivery_rate = self._resolve_signed_rate(
+            tools=tools,
+            metadata=metadata,
+            payment_type=payment_type,
+            advertised_max=advertised_max,
+            max_cost=max_cost,
+            use_offchain=use_offchain,
+        )
 
         # Get priority mech address (use configured or provided)
         priority_mech_address = priority_mech or self.mech_config.priority_mech_address
@@ -494,6 +517,76 @@ class MarketplaceService(
             "receipt": receipt,
         }
 
+    def _resolve_signed_rate(  # pylint: disable=too-many-arguments
+        self,
+        tools: Tuple[str, ...],
+        metadata: Any,
+        payment_type: PaymentType,
+        advertised_max: int,
+        max_cost: Optional[int],
+        use_offchain: bool,
+    ) -> int:
+        """
+        Pick the per-request rate signed into this batch.
+
+        On-chain the marketplace records the mech's advertised maximum as the
+        charge and refuses a lower one, so the advertised maximum is signed
+        and a lower ``max_cost`` stops the request here. Off-chain the signed
+        value is a cap the mech charges at or below: ``max_cost`` when given,
+        else, for each tool, :data:`DEFAULT_CAP_FACTOR` times the expected cost
+        the manifest publishes in the mech's payment asset, falling back to
+        the advertised maximum for a tool without one. One batch signs one
+        rate, the largest of its tools', so every request in it is covered.
+
+        :param tools: The tool of each request in the batch
+        :param metadata: The mech's manifest document, or None if unreadable
+        :param payment_type: The mech's payment type
+        :param advertised_max: The mech's on-chain ``maxDeliveryRate``
+        :param max_cost: The requester's own cap, or None to derive one
+        :param use_offchain: Whether the batch goes to the mech's HTTP endpoint
+        :return: The rate to sign into every request of the batch
+        :raises ValueError: If an on-chain request's charge is above ``max_cost``
+        """
+        if not use_offchain:
+            if max_cost is not None and advertised_max > max_cost:
+                raise ValueError(
+                    f"The mech charges {advertised_max} per on-chain request, "
+                    f"above the {max_cost} allowed. On-chain requests pay the "
+                    f"mech's advertised maxDeliveryRate; raise max_cost or send "
+                    f"the request off-chain, where the cap is yours."
+                )
+            return advertised_max
+        if max_cost is not None:
+            logger.info(f"Signing your cap of {max_cost} per request")
+            return max_cost
+
+        asset = payment_asset(payment_type)
+        published = read_expected_costs(metadata) if isinstance(metadata, dict) else {}
+        caps: Dict[str, int] = {}
+        for tool in dict.fromkeys(tools):
+            cost = published.get(tool)
+            if cost is not None and cost.asset != asset:
+                logger.warning(
+                    f"The expected cost of {tool} is stated in {cost.asset}, "
+                    f"not the mech's payment asset {asset}; it is ignored."
+                )
+                cost = None
+            if cost is None:
+                logger.warning(
+                    f"The mech publishes no expected cost for {tool}; its "
+                    f"advertised maximum of {advertised_max} is signed as the "
+                    f"cap for it. Pass max_cost to choose your own."
+                )
+                caps[tool] = advertised_max
+                continue
+            caps[tool] = DEFAULT_CAP_FACTOR * cost.amount
+            logger.info(
+                f"Signing a cap of {caps[tool]} per {tool} request, "
+                f"{DEFAULT_CAP_FACTOR}x the expected cost of {cost.amount} "
+                f"{asset} the mech publishes"
+            )
+        return max(caps.values())
+
     async def _send_offchain_request(  # pylint: disable=too-many-arguments,too-many-locals,unused-argument
         self,
         marketplace_contract: Web3Contract,
@@ -513,14 +606,15 @@ class MarketplaceService(
         """
         Send offchain request to mech HTTP endpoint.
 
-        ``max_delivery_rate`` is signed into every request as its maximum; the
-        mech charges at or below it and reports the charge with the delivery.
+        ``max_delivery_rate`` is the requester's cap, signed into every
+        request; the mech charges at or below it and reports the charge with
+        the delivery.
 
         :param marketplace_contract: Marketplace contract instance
         :param prompts: Tuple of prompt strings
         :param tools: Tuple of tool identifiers
         :param priority_mech_address: Mech address
-        :param max_delivery_rate: Max delivery rate from mech
+        :param max_delivery_rate: The per-request cap, see ``_resolve_signed_rate``
         :param payment_type: Payment type
         :param response_timeout: Response timeout in seconds
         :param mech_offchain_url: Base URL of offchain mech

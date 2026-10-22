@@ -21,6 +21,8 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from click.testing import CliRunner, Result
 
@@ -1115,7 +1117,8 @@ class TestRequestCommandCharge:
 
         assert invoked.exit_code == 0, invoked.output
         assert "Request 0xabc: answer" in invoked.output
-        assert "Charged: 120" in invoked.output
+        assert "Reported charge: 120" in invoked.output
+        assert "settles it on-chain later" in invoked.output
 
     def test_no_charge_line_when_the_mech_reported_none(self) -> None:
         """A delivery without a charge prints no charge line rather than a placeholder."""
@@ -1124,8 +1127,37 @@ class TestRequestCommandCharge:
         invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": deliveries}, "--use-offchain", "true")
 
         assert invoked.exit_code == 0, invoked.output
-        assert "Charged:" not in invoked.output
+        assert "Reported charge" not in invoked.output
 
+
+
+class TestRequestCommandMaxCost:
+    """``--max-cost`` is validated like a deposit amount and reaches the service in base units."""
+
+    def test_omitted_means_the_service_derives_the_cap(self) -> None:
+        """Without the option the service gets no cap and picks the default."""
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true")
+
+        assert invoked.exit_code == 0, invoked.output
+        assert invoked.service.send_request.call_args.kwargs["max_cost"] is None
+
+    def test_an_amount_is_passed_through_as_an_integer(self) -> None:
+        """The amount is base units, so it is parsed as an integer and not scaled."""
+        invoked = _invoke_with_result(
+            {**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true", "--max-cost", "24000000000000000"
+        )
+
+        assert invoked.exit_code == 0, invoked.output
+        assert invoked.service.send_request.call_args.kwargs["max_cost"] == 24_000_000_000_000_000
+
+    @pytest.mark.parametrize("value", ["0", "-5", "0.01", "1e16", "abc", ""])
+    def test_anything_but_a_positive_integer_is_refused_before_the_request(self, value: str) -> None:
+        """A fraction, a sign, an exponent or text is not an amount in base units."""
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true", "--max-cost", value)
+
+        assert invoked.exit_code == 1, invoked.output
+        assert "max-cost" in invoked.output
+        invoked.service.send_request.assert_not_called()
 
 
 class TestRequestCommandNonceMode:
