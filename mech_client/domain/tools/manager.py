@@ -83,6 +83,10 @@ MANIFEST_HASH_NOTE = (
     "The manifest served for service {service_id} does not hash to the CID "
     "recorded on-chain; it is not used."
 )
+MANIFEST_HTTP_NOTE = (
+    "The gateway answered HTTP {status} for the manifest of service "
+    "{service_id}; the manifest could not be read."
+)
 # The on-chain metadata URI ends in the manifest's CIDv1 in base16: dag-pb
 # over a 32-byte sha2-256 multihash. The served bytes must hash to it.
 MANIFEST_CID_PREFIX = "f01701220"
@@ -248,7 +252,15 @@ class ToolManager:
                 self.ledger_api,
             )
             metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
-            body = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).content
+            response = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT)
+            if not response.ok:
+                logger.error(
+                    MANIFEST_HTTP_NOTE.format(
+                        status=response.status_code, service_id=service_id
+                    )
+                )
+                return None
+            body = response.content
             if not manifest_matches_uri(metadata_uri, body):
                 logger.error(MANIFEST_HASH_NOTE.format(service_id=service_id))
                 return None

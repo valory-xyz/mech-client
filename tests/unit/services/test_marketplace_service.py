@@ -37,6 +37,7 @@ from mech_client.domain.tools.manager import IDENTIFICATION_NOTE, ToolManager
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.services.marketplace_service import (
+    CAP_WARNING_FACTOR,
     DEFAULT_CAP_FACTOR,
     EXPLICIT_NONCE_DEADLINE_SECONDS,
     EXPLICIT_NONCE_BITS,
@@ -46,6 +47,7 @@ from mech_client.services.marketplace_service import (
     MarketplaceService,
     PaymentChallenge,
 )
+from mech_client.utils.constants import UINT256_MAX
 from mech_client.utils.validators import ensure_checksummed_address
 from tests.unit.helpers import create_mock_signer
 
@@ -3364,8 +3366,8 @@ class TestResolveSignedRate:
 
     @pytest.mark.parametrize(
         "metadata",
-        [None, {}, {"toolMetadata": {"other": {"expectedCost": {"asset": "native", "amount": "1"}}}}],
-        ids=["unreadable_manifest", "empty_manifest", "another_tool_only"],
+        [{}, {"toolMetadata": {"other": {"expectedCost": {"asset": "native", "amount": "1"}}}}],
+        ids=["empty_manifest", "another_tool_only"],
     )
     def test_a_tool_without_an_expected_cost_falls_back_to_the_advertised_maximum(
         self, metadata: Any
@@ -3377,6 +3379,46 @@ class TestResolveSignedRate:
         warning.assert_called_once()
         assert "no expected cost for tool-a" in warning.call_args.args[0]
         assert str(MECH_MAX_RATE) in warning.call_args.args[0]
+
+    @pytest.mark.parametrize("metadata", [None, "manifest", 7], ids=["none", "string", "int"])
+    def test_an_unreadable_manifest_signs_the_advertised_maximum_with_one_warning(
+        self, metadata: Any
+    ) -> None:
+        """A manifest that could not be read says so once; it is not a statement about the mech's costs."""
+        with patch(f"{SERVICE}.logger.warning") as warning:
+            rate = self._resolve(("tool-a", "tool-b"), metadata=metadata)
+        assert rate == MECH_MAX_RATE
+        warning.assert_called_once()
+        message = warning.call_args.args[0]
+        assert "manifest could not be read" in message
+        assert "no expected cost for" not in message
+        assert str(MECH_MAX_RATE) in message
+
+    def test_a_cap_far_above_the_advertised_maximum_is_signed_with_a_warning(self) -> None:
+        """The manifest is the operator's document and the cap sets the deposit ceiling, so a large one is called out."""
+        high = {"toolMetadata": {"tool-a": {"expectedCost": {"asset": "native", "amount": str(6 * MECH_MAX_RATE)}}}}
+        with patch(f"{SERVICE}.logger.warning") as warning:
+            rate = self._resolve(("tool-a",), metadata=high)
+        assert rate == DEFAULT_CAP_FACTOR * 6 * MECH_MAX_RATE
+        assert rate > CAP_WARNING_FACTOR * MECH_MAX_RATE
+        warning.assert_called_once()
+        assert f"more than {CAP_WARNING_FACTOR}x" in warning.call_args.args[0]
+        assert str(MECH_MAX_RATE) in warning.call_args.args[0]
+
+    def test_a_cap_at_the_warning_factor_is_signed_quietly(self) -> None:
+        """Exactly the factor is not above it."""
+        at = {"toolMetadata": {"tool-a": {"expectedCost": {"asset": "native", "amount": str(5 * MECH_MAX_RATE)}}}}
+        with patch(f"{SERVICE}.logger.warning") as warning:
+            rate = self._resolve(("tool-a",), metadata=at)
+        assert rate == CAP_WARNING_FACTOR * MECH_MAX_RATE
+        warning.assert_not_called()
+
+    def test_the_derived_cap_never_exceeds_what_a_contract_can_carry(self) -> None:
+        """Doubling the largest publishable amount stays at the uint256 ceiling."""
+        top = {"toolMetadata": {"tool-a": {"expectedCost": {"asset": "native", "amount": str(UINT256_MAX)}}}}
+        with patch(f"{SERVICE}.logger.warning"):
+            rate = self._resolve(("tool-a",), metadata=top)
+        assert rate == UINT256_MAX
 
     def test_an_expected_cost_in_another_asset_is_ignored(self) -> None:
         """A cost stated in an asset the mech is not paid in cannot size a cap in that asset."""
@@ -3417,9 +3459,11 @@ class TestSendRequestMaxCost:
     """``send_request`` validates ``max_cost`` first and signs the resolved rate."""
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("max_cost", [0, -1])
-    async def test_a_non_positive_cap_is_refused_before_any_chain_read(self, max_cost: int) -> None:
-        """A cap of nothing cannot be signed, so nothing is fetched."""
+    @pytest.mark.parametrize("max_cost", [0, -1, UINT256_MAX + 1], ids=["zero", "negative", "above_uint256"])
+    async def test_a_cap_a_contract_cannot_carry_is_refused_before_any_chain_read(
+        self, max_cost: int
+    ) -> None:
+        """A cap of nothing, or one wider than a uint256, cannot be signed, so nothing is fetched."""
         service = _build_offchain_service()
 
         with patch.object(service, "_get_marketplace_contract") as contract:

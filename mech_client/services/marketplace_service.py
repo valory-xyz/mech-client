@@ -58,6 +58,7 @@ from mech_client.infrastructure.blockchain.receipt_waiter import (
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.ipfs import IPFSClient, push_metadata_to_ipfs
 from mech_client.services.base_service import BaseTransactionService
+from mech_client.utils.constants import UINT256_MAX
 from mech_client.utils.validators import ensure_checksummed_address
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
@@ -116,6 +117,10 @@ EXPLICIT_NONCE_BITS = 256
 # spread of charges observed across mechs (valory-xyz/mech#505). What is
 # not charged is not paid.
 DEFAULT_CAP_FACTOR = 2
+# A default cap this many times the mech's advertised maximum is logged as a
+# warning: the manifest is the operator's own document, and the cap also sets
+# the auto-deposit ceiling (``_MAX_AUTO_DEPOSIT_RATIO`` times the cap).
+CAP_WARNING_FACTOR = 10
 # Hard cap on auto-deposit: refuse to top up more than this multiple of the
 # requester's signed ``max_delivery_rate`` in a single retry. The mech URL is
 # auto-discovered from on-chain metadata, so without a cap a compromised or
@@ -348,8 +353,11 @@ class MarketplaceService(
             raise ValueError(
                 f"Unknown nonce_mode {nonce_mode!r}; expected one of {get_args(NonceMode)}"
             )
-        if max_cost is not None and max_cost <= 0:
-            raise ValueError(f"max_cost must be a positive amount, got {max_cost}")
+        if max_cost is not None and not 0 < max_cost <= UINT256_MAX:
+            raise ValueError(
+                f"max_cost must be a positive amount no larger than a contract "
+                f"can carry (2**256 - 1), got {max_cost}"
+            )
 
         # Get marketplace contract
         marketplace_contract = self._get_marketplace_contract()
@@ -537,6 +545,10 @@ class MarketplaceService(
         the manifest publishes in the mech's payment asset, falling back to
         the advertised maximum for a tool without one. One batch signs one
         rate, the largest of its tools', so every request in it is covered.
+        An unreadable manifest signs the advertised maximum with one warning.
+        A derived cap above :data:`CAP_WARNING_FACTOR` times the advertised
+        maximum is signed with a warning, since the manifest is the operator's
+        and the cap also sets the auto-deposit ceiling.
 
         :param tools: The tool of each request in the batch
         :param metadata: The mech's manifest document, or None if unreadable
@@ -560,8 +572,16 @@ class MarketplaceService(
             logger.info(f"Signing your cap of {max_cost} per request")
             return max_cost
 
+        if not isinstance(metadata, dict):
+            logger.warning(
+                f"The mech's manifest could not be read, so no expected cost is "
+                f"known; its advertised maximum of {advertised_max} is signed as "
+                f"the cap. Pass max_cost to choose your own."
+            )
+            return advertised_max
+
         asset = payment_asset(payment_type)
-        published = read_expected_costs(metadata) if isinstance(metadata, dict) else {}
+        published = read_expected_costs(metadata)
         caps: Dict[str, int] = {}
         for tool in dict.fromkeys(tools):
             cost = published.get(tool)
@@ -579,13 +599,22 @@ class MarketplaceService(
                 )
                 caps[tool] = advertised_max
                 continue
-            caps[tool] = DEFAULT_CAP_FACTOR * cost.amount
+            caps[tool] = min(DEFAULT_CAP_FACTOR * cost.amount, UINT256_MAX)
             logger.info(
                 f"Signing a cap of {caps[tool]} per {tool} request, "
                 f"{DEFAULT_CAP_FACTOR}x the expected cost of {cost.amount} "
                 f"{asset} the mech publishes"
             )
-        return max(caps.values())
+        cap = max(caps.values())
+        if cap > CAP_WARNING_FACTOR * advertised_max:
+            logger.warning(
+                f"The cap of {cap} derived from the manifest is more than "
+                f"{CAP_WARNING_FACTOR}x the mech's advertised maximum of "
+                f"{advertised_max}. The manifest is the operator's own document "
+                f"and this cap also sets the auto-deposit ceiling; pass max_cost "
+                f"to choose your own."
+            )
+        return cap
 
     async def _send_offchain_request(  # pylint: disable=too-many-arguments,too-many-locals,unused-argument
         self,

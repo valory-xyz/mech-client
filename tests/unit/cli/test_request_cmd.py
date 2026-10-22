@@ -1150,9 +1150,9 @@ class TestRequestCommandMaxCost:
         assert invoked.exit_code == 0, invoked.output
         assert invoked.service.send_request.call_args.kwargs["max_cost"] == 24_000_000_000_000_000
 
-    @pytest.mark.parametrize("value", ["0", "-5", "0.01", "1e16", "abc", ""])
+    @pytest.mark.parametrize("value", ["0", "-5", "0.01", "1e16", "abc", "", str(2**256)])
     def test_anything_but_a_positive_integer_is_refused_before_the_request(self, value: str) -> None:
-        """A fraction, a sign, an exponent or text is not an amount in base units."""
+        """A fraction, a sign, an exponent, text or a value wider than a uint256 is not an amount in base units."""
         invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true", "--max-cost", value)
 
         assert invoked.exit_code == 1, invoked.output

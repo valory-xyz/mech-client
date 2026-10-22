@@ -29,6 +29,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import requests
+from mech_client.utils.constants import UINT256_MAX
 from mech_client.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -191,10 +192,11 @@ def base_units(value: Any) -> Optional[int]:
     """
     Read an amount field from the manifest: a positive decimal integer string.
 
+    The amount must fit a uint256, since it is signed into a contract call.
     Amounts travel as strings so that no reader rounds them through a float.
 
     :param value: The raw manifest value
-    :return: The amount, or None when it is not a positive decimal string
+    :return: The amount, or None when it is not a positive decimal string a contract can carry
     """
     if not isinstance(value, str):
         return None
@@ -202,7 +204,7 @@ def base_units(value: Any) -> Optional[int]:
     if not text.isascii() or not text.isdecimal() or len(text) > AMOUNT_MAX_DIGITS:
         return None
     amount = int(text)
-    return amount if amount > 0 else None
+    return amount if 0 < amount <= UINT256_MAX else None
 
 
 def read_expected_costs(manifest: Dict[str, Any]) -> Dict[str, ExpectedCost]:

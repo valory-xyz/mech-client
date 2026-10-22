@@ -38,6 +38,7 @@ from mech_client.domain.tools.manager import (
     DOMAIN_CHECK_FAILED_NOTE,
     EXPECTED_COST_NOTE,
     MANIFEST_HASH_NOTE,
+    MANIFEST_HTTP_NOTE,
     MANIFEST_UNREADABLE_NOTE,
     NAME_NOTE,
     IDENTIFICATION_NOTE,
@@ -269,6 +270,29 @@ class TestFetchToolsMetadata:
 
         assert metadata is None
         error.assert_called_once_with(MANIFEST_HASH_NOTE.format(service_id=1))
+
+    @pytest.mark.parametrize("status", [404, 500, 504])
+    def test_a_gateway_error_is_reported_as_such_and_gives_no_manifest(
+        self,
+        mock_config: MagicMock,
+        _ledger: MagicMock,
+        _abi: MagicMock,
+        mock_get_contract: MagicMock,
+        mock_requests: MagicMock,
+        status: int,
+    ) -> None:
+        """An error page is not a manifest that failed the hash check; the status is what is logged."""
+        uri, _ = _published(TOOLS_MANIFEST)
+        response = MagicMock()
+        response.ok = False
+        response.status_code = status
+        response.content = b"upstream request timeout"
+
+        with patch("mech_client.domain.tools.manager.logger.error") as error:
+            metadata = self._fetch(mock_config, mock_get_contract, mock_requests, uri, response)
+
+        assert metadata is None
+        error.assert_called_once_with(MANIFEST_HTTP_NOTE.format(status=status, service_id=1))
 
     def test_a_uri_without_a_cid_cannot_be_checked_and_is_not_used(
         self,

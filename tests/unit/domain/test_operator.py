@@ -403,6 +403,7 @@ class TestBaseUnits:
             "0x10",
             "1_000",
             "１２",
+            str(UINT256_MAX + 1),
             "1" * 79,
         ],
         ids=[
@@ -421,11 +422,12 @@ class TestBaseUnits:
             "hex",
             "underscore",
             "fullwidth_digits",
+            "above_uint256",
             "too_many_digits",
         ],
     )
     def test_anything_else_is_not_an_amount(self, value: Any) -> None:
-        """Numbers, signs, fractions, non-ASCII digits and oversize values are refused."""
+        """Numbers, signs, fractions, non-ASCII digits and values a contract cannot carry are refused."""
         assert base_units(value) is None
 
 
