@@ -36,8 +36,15 @@ class DeliveryResult:
     ``None`` when the gateway could not be read (``url`` still points at it).
     ``url`` is the gateway URL ``data`` was read from; it is ``None`` for
     offchain mechs that answer inline instead of pinning a result file.
+    ``actual_delivery_rate`` is what the mech charged for the request, in
+    the base units of its payment asset: at or below the maximum the
+    requester signed (the ``delivery_rate`` of the request payload), with
+    the difference staying in the requester's balance. It is ``None`` when
+    the mech did not report a charge, which is always the case for on-chain
+    delivery.
     """
 
     request_id: str
     data: JSONValue = None
     url: Optional[str] = None
+    actual_delivery_rate: Optional[int] = None

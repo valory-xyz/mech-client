@@ -25,7 +25,12 @@ from unittest.mock import MagicMock, mock_open, patch
 import pytest
 from click import ClickException
 
-from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
+from mech_client.cli.validators import (
+    validate_amount,
+    validate_chain_config,
+    validate_ethereum_address,
+)
+from mech_client.utils.constants import UINT256_MAX
 
 
 class TestValidateChainConfigCli:
@@ -102,3 +107,18 @@ class TestValidateEthereumAddressCli:
         """Test that an invalid address format raises ClickException."""
         with pytest.raises(ClickException):
             validate_ethereum_address("not-an-address", "Address")
+
+
+class TestValidateAmountCli:
+    """An amount is a positive integer a contract can carry."""
+
+    @pytest.mark.parametrize("value", ["1", str(UINT256_MAX), "1000000000000000000"])
+    def test_a_positive_integer_up_to_uint256_is_accepted(self, value: str) -> None:
+        """The widest uint256 is the largest amount any contract call takes."""
+        assert validate_amount(value, "max-cost") == int(value)
+
+    @pytest.mark.parametrize("value", ["0", "-1", "1.5", "abc", str(UINT256_MAX + 1)])
+    def test_zero_negative_fractional_text_or_too_wide_is_refused(self, value: str) -> None:
+        """The error names the option and the bound."""
+        with pytest.raises(ClickException, match="max-cost"):
+            validate_amount(value, "max-cost")

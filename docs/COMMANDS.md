@@ -56,7 +56,12 @@ mechx request --priority-mech 0x... --tools tool1 --prompts "..."
 
 OPTIONAL:
 ├─ Offchain Mech HTTP (auto-discovered from on-chain metadata)
-│  └─ If --use-offchain flag set
+│  ├─ If --use-offchain flag set
+│  ├─ POST /send_signed_requests (signed maximum, nonce, nonce_mode)
+│  └─ GET /fetch_offchain_info (answer and the charge the mech reports)
+└─ MechMarketplace views (offchain only)
+   ├─ getRequestIdWithNonce() (--nonce-mode explicit, default; the disabled-path 503 falls back to sequential)
+   └─ mapNonces(), getRequestId() (--nonce-mode sequential)
 
 ENV VARS:
   MECHX_CHAIN_RPC (required for reliable operation) ← SET THIS

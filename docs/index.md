@@ -138,7 +138,7 @@ mechx mech info --chain-config <chain-config> --address <mech-address>
 The report is built from the Mech's published metadata and the chain, and printed as JSON. It fails closed: a metadata file that cannot be read gives no report, and anything not verified says so.
 
 - **Operator**: the domain the operator named, and whether it is verified. Verified means `https://<domain>/.well-known/agent-registration.json` lists this Mech's ERC-8004 agent id. It shows that the Mech's metadata and the domain point at each other, nothing more: a domain owner can list a Mech someone else runs, so it does not prove that one party controls both. The operator's display name is never checked and is reported as `claimed_name`.
-- **Payment** (`payment.type`): the payment method, such as `native` or `usdc`. The report does not list tools; for those use `mechx tool list` (see [List tools available for a mech](#list-tools-available-for-a-mech)). No price is shown. `maxDeliveryRate` on the Mech contract is the most it can charge per request, and what your deposit must cover; the contract settles the actual charge at delivery, which can be less.
+- **Payment** (`payment.type`): the payment method, such as `native` or `usdc`. The report does not list tools; for those use `mechx tool list` (see [List tools available for a mech](#list-tools-available-for-a-mech)). No price is shown. `maxDeliveryRate` on the Mech contract is the most it can charge per request, and what your deposit must cover; the contract settles the actual charge at delivery, which can be less. When the manifest publishes an expected cost per tool, it appears under `payment.expected_costs` as the operator's estimate for choosing a cap (see [Choosing a cap](#choosing-a-cap)); it is never a charge.
 - **Delivery record** (`delivery`): `received_requests`, `self_delivered`, `delivered_by_others` (requests another Mech delivered after this one missed its deadline) and `age_days`. A request another Mech delivered was missed by this one too, so received minus `self_delivered` is what this Mech did not deliver: requests another Mech took over, requests no Mech answered, and any still within their deadline. Off-chain requests only enter the counts once the Mech settles them on-chain, so an off-chain request that was never delivered appears nowhere, and off-chain traffic always looks fully delivered.
 - **Benchmark** (`benchmarks`): one link per tool to the operator's own figures. The report carries only the link; the metric and time window the operator chose are in the metadata entry, not in the report. The link is passed on as a claim and no number is shown; open it and judge it yourself, and if you use a Mech, measure it yourself.
 - **Terms**: the terms link, when the operator published one in the metadata, as published.
@@ -200,9 +200,21 @@ There are **5 payment types** that mechs can use:
 | **NATIVE_NVM** | NVM subscription with native token | Purchase subscription first, then unlimited requests |
 | **TOKEN_NVM_USDC** | NVM subscription with USDC token | Purchase subscription first, then unlimited requests |
 
-**Finding the price per request**
+**Choosing a cap**
 
-To determine the Mech's fee in advance:
+An off-chain request carries a cap: the most you agree to pay for it. The Mech charges its actual cost at delivery, never above the cap, and whatever it does not charge stays in your balance on the marketplace. A cap below the floor the Mech sets for the tool is refused when the request is sent. The client picks the cap as follows:
+
+- `--max-cost <amount>` signs that amount, in the base units of the Mech's payment asset: wei for native and OLAS payments (18 decimals), and 6-decimal units for USDC.
+- Otherwise, when the Mech's manifest publishes an expected cost for the tool (`toolMetadata.<tool>.expectedCost`, with `asset` naming `native`, `olas` or `usdc` and `amount` as a decimal string in base units), the client signs twice that amount. The expected cost is the operator's estimate, as guidance only, and the margin is a default; pass `--max-cost` to choose your own. The client ignores an expected cost stated in an asset other than the one the Mech is paid in.
+- Otherwise it signs the Mech's advertised maximum per request, `maxDeliveryRate`, and says so. A manifest that could not be read at all gets one warning saying so, and the advertised maximum is signed.
+
+Every amount, the published one and `--max-cost`, must fit a uint256 (at most 2^256 - 1); larger values are refused before anything is read from the chain. A derived cap more than 10x the Mech's advertised maximum is signed with a warning: the manifest is the operator's own document, and the cap also sets the ceiling of `--auto-deposit` (10x the cap).
+
+The manifest is accepted only when the gateway answers with the document and its bytes hash to the content id recorded on the Mech's `ComplementaryServiceMetadata` contract, so the expected cost is the one the operator published. A gateway error is reported as such.
+
+For operators: the published `expectedCost` must be at or above the price configured for the tool on the Mech. A cap below that price passes the HTTP and balance checks and is refused during execution, and the client then only sees a poll timeout.
+
+An on-chain request has no cap of its own: the marketplace records the Mech's advertised `maxDeliveryRate` as the charge. With `--max-cost` below it, the request is refused before it is sent. To read the advertised maximum in advance:
 
 - Enter the Mech's address into the block explorer of the corresponding network.
 
@@ -210,9 +222,11 @@ To determine the Mech's fee in advance:
 
 - Find and click on the function maxDeliveryRate.
 
-- Divide the displayed number by 10^8 in order to obtain the price per request (in ether or token units, depending on the Mech).
+- The number is in the base units of the Mech's payment asset: wei for native and OLAS payments (18 decimals), and 6-decimal units for USDC.
 
-Note: For Mechs using the Nevermined subscription model, this value corresponds to the maximum price per request; actual usage may involve multiple requests per subscription.
+For an off-chain request the client prints the charge the Mech reports under each delivery, as `Reported charge: <amount>`, in the same units. The Mech settles it on-chain afterwards.
+
+Note: For Mechs using the Nevermined subscription model, this value corresponds to the maximum per request; actual usage may involve multiple requests per subscription.
 
 **Making a deposit**
 
@@ -237,7 +251,7 @@ mechx deposit token <amount> --chain-config <network_name> --token-type usdc
 
 **Note:** The `--token-type` parameter is required and must be explicitly specified (olas or usdc).
 
-In all cases above, `<amount>` must be at least the mech's price (as given by maxDeliveryRate).
+In all cases above, `<amount>` must cover the cap of every request you intend to send (see [Choosing a cap](#choosing-a-cap)); the Mech refuses a request when the balance is below its cap, even if it would have charged less. What the Mech does not charge stays in your balance for later requests.
 
 **Option 2: Per-request payment (for NATIVE, OLAS_TOKEN, USDC_TOKEN mechs)**
 
@@ -451,6 +465,14 @@ mechx request --prompts "test" --tools openai-gpt-4 --use-offchain --chain-confi
 ```
 
 The client queries the mech's `ComplementaryServiceMetadata` contract to find the `url` field published by the mech operator, then sends requests to that endpoint.
+
+Each off-chain request is signed with a nonce. By default (`--nonce-mode explicit`) the client signs a random nonce chosen per request together with a settlement deadline (`--deadline-seconds` from the latest block, 15 minutes by default) and says so on the wire, so independently signed requests can settle in any order and in independent transactions, up to that deadline. The mech refuses a request whose deadline is too close for it to execute and settle. A Mech that has the explicit-nonce path switched off answers HTTP 503 and the client resends the request, and the rest of the batch, with the marketplace's sequential nonce counter for your address. A Mech on a release that predates this option does not take part in that fallback, so pass `--nonce-mode sequential` for it. `sequential` sends the same payload as before and settles requests in counter order:
+
+```bash
+mechx request --prompts "test" --tools openai-gpt-4 --use-offchain true --nonce-mode sequential --chain-config gnosis
+```
+
+The request's cap is yours to set, see [Choosing a cap](#choosing-a-cap). The Mech reports the charge it will settle with the delivery, and the client prints it as `Reported charge: <amount>`.
 
 
 ## 4. Programmatic Usage

@@ -38,8 +38,10 @@ from mech_client.domain.operator import (
     PROOF_UNAVAILABLE_NOTE,
     TEXT_MAX_LENGTH,
     DomainVerification,
+    ExpectedCost,
     Operator,
     ProofStatus,
+    base_units,
     clean_text,
     fetch_domain_proof,
     hostname,
@@ -47,6 +49,7 @@ from mech_client.domain.operator import (
     proof_matches,
     proof_url,
     read_benchmarks,
+    read_expected_costs,
     read_operator,
     verify_domain,
 )
@@ -57,6 +60,8 @@ PROOF_URL = f"https://{DOMAIN}/.well-known/agent-registration.json"
 GNOSIS = 100
 AGENT_ID = 2182
 BENCHMARK_URL = "https://analytics.test/v1/metrics/mech/100/0xabc"
+EXPECTED_COST_WEI = 12_000_000_000_000_000
+UINT256_MAX = 2**256 - 1
 
 
 def _registration(chain_id: int = GNOSIS, agent_id: Any = AGENT_ID) -> Dict[str, Any]:
@@ -363,6 +368,142 @@ class TestReadBenchmarks:
     ) -> None:
         """No usable link means no entry for that tool."""
         assert read_benchmarks(manifest) == {}
+
+
+class TestBaseUnits:
+    """An amount is a positive decimal integer string; nothing else is read."""
+
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            ("1", 1),
+            (f"  {EXPECTED_COST_WEI}  ", EXPECTED_COST_WEI),
+            (str(UINT256_MAX), UINT256_MAX),
+        ],
+    )
+    def test_reads_a_positive_decimal_string(self, value: str, expected: int) -> None:
+        """Surrounding whitespace is stripped; the widest uint256 is accepted."""
+        assert base_units(value) == expected
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            None,
+            EXPECTED_COST_WEI,
+            1.5,
+            True,
+            "",
+            "   ",
+            "0",
+            "000",
+            "-1",
+            "+1",
+            "1.0",
+            "1e18",
+            "0x10",
+            "1_000",
+            "１２",
+            str(UINT256_MAX + 1),
+            "1" * 79,
+        ],
+        ids=[
+            "none",
+            "json_number",
+            "float",
+            "bool",
+            "empty",
+            "blank",
+            "zero",
+            "zeros",
+            "negative",
+            "plus_sign",
+            "decimal_point",
+            "exponent",
+            "hex",
+            "underscore",
+            "fullwidth_digits",
+            "above_uint256",
+            "too_many_digits",
+        ],
+    )
+    def test_anything_else_is_not_an_amount(self, value: Any) -> None:
+        """Numbers, signs, fractions, non-ASCII digits and values a contract cannot carry are refused."""
+        assert base_units(value) is None
+
+
+class TestReadExpectedCosts:
+    """Each tool's expected cost is its asset and base-unit amount, as published."""
+
+    def test_reads_the_asset_and_amount_of_each_tool(self) -> None:
+        """The asset is lowercased; the amount is the decimal string as an integer."""
+        manifest = {
+            "toolMetadata": {
+                "tool-a": {
+                    "expectedCost": {"asset": "Native", "amount": str(EXPECTED_COST_WEI)}
+                },
+                "tool-b": {
+                    "benchmark": {"url": BENCHMARK_URL},
+                    "expectedCost": {"asset": " usdc ", "amount": " 25000 "},
+                },
+            }
+        }
+        assert read_expected_costs(manifest) == {
+            "tool-a": ExpectedCost("native", EXPECTED_COST_WEI),
+            "tool-b": ExpectedCost("usdc", 25000),
+        }
+
+    def test_a_tool_with_a_bad_entry_is_left_out_but_not_its_neighbours(self) -> None:
+        """One unusable entry does not hide the usable ones."""
+        manifest = {
+            "toolMetadata": {
+                "good": {"expectedCost": {"asset": "olas", "amount": "7"}},
+                "bad": {"expectedCost": {"asset": "olas", "amount": 7}},
+            }
+        }
+        assert read_expected_costs(manifest) == {"good": ExpectedCost("olas", 7)}
+
+    @pytest.mark.parametrize(
+        "manifest",
+        [
+            {},
+            {"toolMetadata": None},
+            {"toolMetadata": ["t"]},
+            {"toolMetadata": {"t": None}},
+            {"toolMetadata": {"t": {}}},
+            {"toolMetadata": {"t": {"expectedCost": "12"}}},
+            {"toolMetadata": {"t": {"expectedCost": {}}}},
+            {"toolMetadata": {"t": {"expectedCost": {"amount": "12"}}}},
+            {"toolMetadata": {"t": {"expectedCost": {"asset": "native"}}}},
+            {"toolMetadata": {"t": {"expectedCost": {"asset": "", "amount": "12"}}}},
+            {"toolMetadata": {"t": {"expectedCost": {"asset": 1, "amount": "12"}}}},
+            {"toolMetadata": {"t": {"expectedCost": {"asset": "native", "amount": 12}}}},
+            {"toolMetadata": {"t": {"expectedCost": {"asset": "native", "amount": "0"}}}},
+            {"toolMetadata": {"t": {"expectedCost": {"asset": "native", "amount": "0.012"}}}},
+            {"toolMetadata": {5: {"expectedCost": {"asset": "native", "amount": "12"}}}},
+        ],
+        ids=[
+            "no_tool_metadata",
+            "null_tool_metadata",
+            "list_tool_metadata",
+            "null_entry",
+            "no_expected_cost",
+            "expected_cost_is_a_bare_string",
+            "empty_block",
+            "no_asset",
+            "no_amount",
+            "blank_asset",
+            "asset_not_string",
+            "amount_is_a_number",
+            "zero_amount",
+            "fractional_amount",
+            "tool_not_string",
+        ],
+    )
+    def test_a_tool_without_a_usable_cost_is_left_out(
+        self, manifest: Dict[str, Any]
+    ) -> None:
+        """No asset or no positive decimal-string amount means no entry for that tool."""
+        assert read_expected_costs(manifest) == {}
 
 
 class TestProofUrl:

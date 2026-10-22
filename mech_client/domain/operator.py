@@ -29,6 +29,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import requests
+from mech_client.utils.constants import UINT256_MAX
 from mech_client.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -42,8 +43,9 @@ _HOSTNAME_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 # The last label is a top-level domain: letters only, or punycode. This keeps
 # every IPv4 spelling out, dotted-decimal and hex alike.
 _TOP_LABEL = re.compile(r"[a-z]{1,63}|xn--[a-z0-9-]{1,59}")
-# Widest agent id accepted from a proof: a uint256 has at most 78 digits.
+# Widest integer accepted from a manifest or proof: a uint256 has at most 78 digits.
 AGENT_ID_MAX_DIGITS = 78
+AMOUNT_MAX_DIGITS = AGENT_ID_MAX_DIGITS
 
 # ERC-8004 IdentityRegistry. One address on every chain the mechs run on.
 IDENTITY_REGISTRY = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
@@ -173,6 +175,65 @@ def read_benchmarks(manifest: Dict[str, Any]) -> Dict[str, str]:
         if url is not None:
             links[tool] = url
     return links
+
+
+@dataclass(frozen=True)
+class ExpectedCost:
+    """What a tool usually costs, as the operator publishes it: guidance for a cap, never a charge."""
+
+    asset: str
+    """The payment asset the amount is stated in, lowercase: ``native``, ``olas`` or ``usdc``."""
+
+    amount: int
+    """The amount in the asset's base units."""
+
+
+def base_units(value: Any) -> Optional[int]:
+    """
+    Read an amount field from the manifest: a positive decimal integer string.
+
+    The amount must fit a uint256, since it is signed into a contract call.
+    Amounts travel as strings so that no reader rounds them through a float.
+
+    :param value: The raw manifest value
+    :return: The amount, or None when it is not a positive decimal string a contract can carry
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text.isascii() or not text.isdecimal() or len(text) > AMOUNT_MAX_DIGITS:
+        return None
+    amount = int(text)
+    return amount if 0 < amount <= UINT256_MAX else None
+
+
+def read_expected_costs(manifest: Dict[str, Any]) -> Dict[str, ExpectedCost]:
+    """
+    Read the expected cost each tool's manifest entry publishes.
+
+    The block is ``toolMetadata.<tool>.expectedCost`` with ``asset`` and a
+    decimal-string ``amount``. It is the operator's estimate for choosing a
+    cap; the mech charges its actual cost, at or below the cap it is sent.
+
+    :param manifest: The parsed manifest document
+    :return: The expected cost by tool name; a tool without a usable one is left out
+    """
+    tool_metadata = manifest.get("toolMetadata")
+    if not isinstance(tool_metadata, dict):
+        return {}
+    costs: Dict[str, ExpectedCost] = {}
+    for tool, entry in tool_metadata.items():
+        if not isinstance(tool, str) or not isinstance(entry, dict):
+            continue
+        block = entry.get("expectedCost")
+        if not isinstance(block, dict):
+            continue
+        asset = clean_text(block.get("asset"))
+        amount = base_units(block.get("amount"))
+        if asset is None or amount is None:
+            continue
+        costs[tool] = ExpectedCost(asset.lower(), amount)
+    return costs
 
 
 def proof_url(domain: str) -> str:

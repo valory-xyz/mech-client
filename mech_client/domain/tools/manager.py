@@ -38,6 +38,7 @@ from mech_client.domain.operator import (
     BENCHMARK_NOTE,
     DomainVerification,
     read_benchmarks,
+    read_expected_costs,
     read_operator,
     verify_domain,
 )
@@ -46,6 +47,7 @@ from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.config.loader import get_mech_config
 from mech_client.infrastructure.config.payment_config import PaymentType
+from mech_client.infrastructure.ipfs.local_cid import compute_cidv1_bytes
 from mech_client.infrastructure.subgraph.queries import (
     MechRecord,
     query_erc8004_agent_id,
@@ -72,6 +74,22 @@ PAYMENT_NOTE = (
     "No price is quoted here: the mech contract quotes the charge at request "
     "time, and its maximum delivery rate is only a ceiling."
 )
+EXPECTED_COST_NOTE = (
+    "Expected costs are the operator's estimate per tool, in base units of the "
+    "stated asset, for choosing a cap. The mech charges its actual cost, at or "
+    "below the cap signed into the request."
+)
+MANIFEST_HASH_NOTE = (
+    "The manifest served for service {service_id} does not hash to the CID "
+    "recorded on-chain; it is not used."
+)
+MANIFEST_HTTP_NOTE = (
+    "The gateway answered HTTP {status} for the manifest of service "
+    "{service_id}; the manifest could not be read."
+)
+# The on-chain metadata URI ends in the manifest's CIDv1 in base16: dag-pb
+# over a 32-byte sha2-256 multihash. The served bytes must hash to it.
+MANIFEST_CID_PREFIX = "f01701220"
 NAME_NOTE = (
     "The name is the operator's own text and is not checked; only the domain is."
 )
@@ -93,6 +111,46 @@ PAYMENT_LABELS = {
     PaymentType.TOKEN_NVM_USDC: "usdc_nvm",
 }
 UNKNOWN_PAYMENT = "unknown"
+# The asset a mech is paid in, as a manifest states it next to an amount.
+PAYMENT_ASSETS = {
+    PaymentType.NATIVE: "native",
+    PaymentType.OLAS_TOKEN: "olas",
+    PaymentType.USDC_TOKEN: "usdc",
+    PaymentType.NATIVE_NVM: "native",
+    PaymentType.TOKEN_NVM_USDC: "usdc",
+}
+
+
+def payment_asset(payment_type: PaymentType) -> str:
+    """
+    Name the asset a mech's payment type is settled in.
+
+    :param payment_type: The mech's payment type
+    :return: The asset name a manifest's ``expectedCost.asset`` must carry
+    """
+    return PAYMENT_ASSETS[payment_type]
+
+
+def manifest_matches_uri(metadata_uri: str, body: bytes) -> bool:
+    """
+    Tell whether the bytes served for a manifest hash to the CID its URI names.
+
+    The URI comes from the ComplementaryServiceMetadata contract and ends in
+    the CID recorded on-chain; the body comes from whatever gateway serves it.
+    The CID is recomputed the way ``ipfs add`` does for a single-block file,
+    which every manifest is.
+
+    :param metadata_uri: The on-chain metadata URI
+    :param body: The bytes the URI served
+    :return: True only when the body hashes to the CID in the URI
+    """
+    recorded = urlparse(metadata_uri).path.rstrip("/").rsplit("/", 1)[-1].lower()
+    if not recorded.startswith(MANIFEST_CID_PREFIX):
+        return False
+    try:
+        return recorded == "f" + compute_cidv1_bytes(body).hex()
+    except ValueError:
+        return False
 
 
 def payment_label(payment_type: str) -> str:
@@ -173,7 +231,9 @@ class ToolManager:
         Fetch tools metadata for specified service ID.
 
         Queries the complementary metadata hash contract to get the metadata
-        URI, then fetches the metadata from that URI.
+        URI, fetches the document from that URI and accepts it only when its
+        bytes hash to the CID the URI names, so a gateway cannot substitute
+        another document for the one recorded on-chain.
 
         :param service_id: The service ID of the mech
         :return: Dictionary containing tools and metadata, or None if error
@@ -192,8 +252,20 @@ class ToolManager:
                 self.ledger_api,
             )
             metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
-            return requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
-        except (json.JSONDecodeError, NotImplementedError, IOError) as e:
+            response = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT)
+            if not response.ok:
+                logger.error(
+                    MANIFEST_HTTP_NOTE.format(
+                        status=response.status_code, service_id=service_id
+                    )
+                )
+                return None
+            body = response.content
+            if not manifest_matches_uri(metadata_uri, body):
+                logger.error(MANIFEST_HASH_NOTE.format(service_id=service_id))
+                return None
+            return json.loads(body)
+        except (ValueError, NotImplementedError, IOError) as e:
             logger.error(f"Error fetching tools for service {service_id}: {e}")
             return None
 
@@ -340,6 +412,13 @@ class ToolManager:
             "type": payment_label(record.payment_type),
             "note": PAYMENT_NOTE,
         }
+        expected_costs = read_expected_costs(metadata)
+        if expected_costs:
+            report["payment"]["expected_costs"] = {
+                tool: {"asset": cost.asset, "amount": str(cost.amount)}
+                for tool, cost in expected_costs.items()
+            }
+            report["payment"]["expected_cost_note"] = EXPECTED_COST_NOTE
         return report
 
     def mech_report_or_terms(self, mech_address: str, metadata: Any) -> Dict[str, Any]:

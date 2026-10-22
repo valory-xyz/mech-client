@@ -21,13 +21,22 @@
 
 import asyncio
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast, get_args
 
 import click
 from click import ClickException
 from mech_client.cli.common import common_wallet_options, setup_wallet_command
-from mech_client.cli.validators import validate_chain_config, validate_ethereum_address
-from mech_client.services.marketplace_service import MarketplaceService
+from mech_client.cli.validators import (
+    validate_amount,
+    validate_chain_config,
+    validate_ethereum_address,
+)
+from mech_client.services.marketplace_service import (
+    EXPLICIT_NONCE_DEADLINE_SECONDS,
+    MarketplaceService,
+    NONCE_MODE_EXPLICIT,
+    NonceMode,
+)
 from mech_client.utils.errors.handlers import handle_cli_errors
 from mech_client.utils.types import JSONValue
 from mech_client.utils.validators import (
@@ -109,6 +118,38 @@ def _format_delivery_output(delivery_data: JSONValue) -> str:
     ),
 )
 @click.option(
+    "--nonce-mode",
+    type=click.Choice(list(get_args(NonceMode))),
+    default=NONCE_MODE_EXPLICIT,
+    show_default=True,
+    help=(
+        "How offchain requests are numbered; see 'Offchain Requests' in the "
+        "docs. Offchain only."
+    ),
+)
+@click.option(
+    "--deadline-seconds",
+    type=int,
+    default=EXPLICIT_NONCE_DEADLINE_SECONDS,
+    show_default=True,
+    help=(
+        "How long an explicit-nonce request stays settleable, from the latest "
+        "block. Offchain explicit only."
+    ),
+)
+@click.option(
+    "--max-cost",
+    type=str,
+    default=None,
+    help=(
+        "The most to pay per request, in base units of the Mech's payment "
+        "asset. Off-chain it is the cap signed into the request; on-chain the "
+        "Mech's fixed charge must be at or below it. Default: 2x the expected "
+        "cost the Mech publishes for the tool, else the Mech's advertised "
+        "maximum. See 'Choosing a cap' in the docs."
+    ),
+)
+@click.option(
     "--tools",
     type=str,
     multiple=True,
@@ -148,6 +189,9 @@ def request(
     use_prepaid: bool,
     use_offchain: bool,
     auto_deposit: bool,
+    nonce_mode: str,
+    deadline_seconds: int,
+    max_cost: Optional[str],
     key: Optional[str],
     tools: Optional[tuple],
     extra_attribute: Optional[List[str]] = None,
@@ -178,6 +222,9 @@ def request(
     :param use_prepaid: Use the marketplace prepaid balance instead of per-request payment.
     :param use_offchain: Route delivery off-chain (auto-discovered URL); implies prepaid.
     :param auto_deposit: On an offchain HTTP 402, top up the prepaid balance and retry.
+    :param nonce_mode: ``explicit`` or ``sequential``, see :data:`NonceMode`.
+    :param deadline_seconds: Settlement window of an explicit request, from the latest block.
+    :param max_cost: The most to pay per request, in base units of the Mech's payment asset.
     :param key: Optional path to a private-key file (required in client mode).
     :param tools: One or more tool names matching ``prompts`` positionally.
     :param extra_attribute: Optional ``key=value`` extras attached to each request.
@@ -205,6 +252,10 @@ def request(
     # Validate timeout if provided
     if timeout is not None:
         timeout = validate_timeout(timeout)
+
+    max_cost_units = (
+        validate_amount(max_cost, "max-cost") if max_cost is not None else None
+    )
 
     # Process flags
     use_offchain = use_offchain or False
@@ -247,6 +298,9 @@ def request(
             auto_deposit=auto_deposit,
             extra_attributes=extra_attributes_dict,
             timeout=timeout,
+            nonce_mode=cast(NonceMode, nonce_mode),
+            deadline_seconds=deadline_seconds,
+            max_cost=max_cost_units,
         )
     )
 
@@ -261,3 +315,9 @@ def request(
             )
             if delivery.url:
                 click.echo(f"    Result file: {delivery.url}")
+            if delivery.actual_delivery_rate is not None:
+                click.echo(
+                    f"    Reported charge: {delivery.actual_delivery_rate} (base "
+                    f"units of the mech's payment asset, at or below the signed "
+                    f"cap; the mech settles it on-chain later)"
+                )
