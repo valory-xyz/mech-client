@@ -161,19 +161,20 @@ def validate_request_shape(
     Refuse a request every mech would fail, before anything is read or sent.
 
     A mech charges the full signed cap for a run that fails because of the
-    request, so these are checked locally. Only the arguments are read; the
+    request, so these are checked locally. An empty prompt is allowed: a tool
+    may read its inputs from extra attributes. Only the arguments are read; the
     tool list is checked against the mech's already fetched manifest by
     ``MarketplaceService._validate_tools``.
 
     :param prompts: The prompt of each request
     :param tools: The tool of each request
     :param extra_attributes: Extra attributes merged into each request
-    :raises ValueError: If a prompt or tool is empty, or an extra attribute
+    :raises ValueError: If a prompt is not a string, a tool is empty, or an extra attribute
         replaces a field the request sets itself
     """
     for index, prompt in enumerate(prompts):
-        if not isinstance(prompt, str) or not prompt.strip():
-            raise ValueError(f"Prompt {index + 1} is empty")
+        if not isinstance(prompt, str):
+            raise ValueError(f"Prompt {index + 1} is not a string")
     for index, tool in enumerate(tools):
         if not isinstance(tool, str) or not tool.strip():
             raise ValueError(f"Tool {index + 1} is empty")
@@ -263,7 +264,13 @@ class PaymentChallenge:
 
     @property
     def shortfall(self) -> int:
-        """The deficit the requester needs to top up. Never negative."""
+        """The deficit the requester needs to top up. Never negative.
+
+        ``current_balance`` is net of in-flight reservations and may be
+        negative, which raises the deficit above ``required``.
+
+        :return: ``required`` less ``current_balance``, floored at zero.
+        """
         return max(0, self.required - self.current_balance)
 
 

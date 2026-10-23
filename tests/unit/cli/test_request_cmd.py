@@ -1229,7 +1229,7 @@ class TestRequestCommandFailedRuns:
         ("fault", "charge", "expected"),
         [
             (FAULT_CLIENT, 10**16, ["Fault: client", "full signed cap", "Charged: 10000000000000000"]),
-            (FAULT_MECH, 1, ["Fault: mech", "small fixed amount", "Charged: 1 "]),
+            (FAULT_MECH, 1, ["Fault: mech (the mech could not complete the run)", "Charged: 1 "]),
             (None, None, ["Fault: not reported", "Charged: not reported"]),
         ],
     )
@@ -1258,6 +1258,7 @@ class TestRequestCommandFailedRuns:
         assert f"Request 0xabc failed: {FAILED_ERROR}" in result.output
         for text in expected:
             assert text in result.output
+        assert "fixed amount" not in result.output
         assert "Reported charge" not in result.output
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")

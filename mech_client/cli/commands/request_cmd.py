@@ -93,10 +93,7 @@ _FAULT_DESCRIPTIONS = {
         "client (the request could not be run as sent, so the mech charges the "
         "full signed cap)"
     ),
-    FAULT_MECH: (
-        "mech (the mech could not complete the run, so it charges a small "
-        "fixed amount)"
-    ),
+    FAULT_MECH: "mech (the mech could not complete the run)",
 }
 
 

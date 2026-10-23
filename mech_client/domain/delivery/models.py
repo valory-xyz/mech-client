@@ -36,8 +36,8 @@ class RunFailure:
     ``error`` is the mech's ``"<ExceptionType>: <message>"``. ``fault`` is
     :data:`FAULT_CLIENT` when the request could not be run as sent, which the
     mech charges at the full signed cap, or :data:`FAULT_MECH` when the mech
-    could not complete it, which it charges at a small fixed amount. It is
-    ``None`` when the mech named neither.
+    could not complete it, whose charge depends on the mech's settings. It
+    is ``None`` when the mech named neither.
     """
 
     error: str

@@ -2663,6 +2663,21 @@ class TestOffchain402Handling:
             )
             mock_ds.return_value.deposit_native.assert_called_once_with(70)
 
+    def test_auto_deposit_adds_a_negative_balance_to_the_shortfall(self) -> None:
+        """A balance reported net of reservations may be negative; it raises the deposit."""
+        service = _build_offchain_service()
+        resp = _mock_http_response(
+            402, {"required": "100", "currentBalance": "-30", "payTo": "0xbt"}
+        )
+        challenge = MarketplaceService._parse_402_challenge(resp)
+        assert challenge.current_balance == -30
+        assert challenge.shortfall == 130
+        with patch("mech_client.services.deposit_service.DepositService") as mock_ds:
+            service._auto_deposit_for_402(
+                PaymentType.NATIVE, challenge, max_delivery_rate=100
+            )
+            mock_ds.return_value.deposit_native.assert_called_once_with(130)
+
     def test_auto_deposit_token_usdc(self) -> None:
         """USDC payment deposits via deposit_token with the usdc token type."""
         service = _build_offchain_service()
@@ -3619,9 +3634,11 @@ class TestValidateRequestShape:
             (VALID_PROMPTS, VALID_TOOLS, {}, None),
             (VALID_PROMPTS, VALID_TOOLS, {"model": "gpt-4.1"}, None),
             (("a", "b"), ("t1", "t2"), None, None),
-            (("",), VALID_TOOLS, None, "Prompt 1 is empty"),
-            (("ok", "  \n"), ("t1", "t2"), None, "Prompt 2 is empty"),
-            ((None,), VALID_TOOLS, None, "Prompt 1 is empty"),
+            (("",), VALID_TOOLS, None, None),
+            (("ok", "  \n"), ("t1", "t2"), None, None),
+            (("",), ("propose-question",), {"num_questions": 3}, None),
+            ((None,), VALID_TOOLS, None, "Prompt 1 is not a string"),
+            (("ok", 7), ("t1", "t2"), None, "Prompt 2 is not a string"),
             (VALID_PROMPTS, ("",), None, "Tool 1 is empty"),
             (VALID_PROMPTS, (" ",), None, "Tool 1 is empty"),
             (VALID_PROMPTS, VALID_TOOLS, {"tool": "other"}, "may not set tool"),
@@ -3659,16 +3676,16 @@ class TestValidateRequestShape:
         mock_push: MagicMock,
         use_offchain: bool,
     ) -> None:
-        """An empty prompt stops send_request before the chain, the manifest or the mech is touched."""
+        """An empty tool stops send_request before the chain, the manifest or the mech is touched."""
         service = MagicMock(spec=MarketplaceService)
         service.send_request = MarketplaceService.send_request.__get__(
             service, MarketplaceService
         )
 
-        with pytest.raises(ValueError, match="Prompt 1 is empty"):
+        with pytest.raises(ValueError, match="Tool 1 is empty"):
             asyncio.run(
                 service.send_request(
-                    prompts=("",), tools=VALID_TOOLS, use_offchain=use_offchain
+                    prompts=VALID_PROMPTS, tools=("",), use_offchain=use_offchain
                 )
             )
 
@@ -3677,6 +3694,30 @@ class TestValidateRequestShape:
         service._send_offchain_request.assert_not_called()
         mock_push.assert_not_called()
         assert mock_requests.mock_calls == []
+
+    def test_send_request_sends_an_empty_prompt(self) -> None:
+        """A tool reading its inputs from extra attributes is sent an empty prompt."""
+        service = MagicMock(spec=MarketplaceService)
+        service.send_request = MarketplaceService.send_request.__get__(
+            service, MarketplaceService
+        )
+        service.tool_manager = MagicMock()
+        service._fetch_mech_info.return_value = (MagicMock(), 1, 100)
+        extras = {"num_questions": 3}
+
+        asyncio.run(
+            service.send_request(
+                prompts=("",),
+                tools=("propose-question",),
+                priority_mech="0xmech",
+                use_offchain=True,
+                extra_attributes=extras,
+            )
+        )
+
+        sent = service._send_offchain_request.await_args.kwargs
+        assert sent["prompts"] == ("",)
+        assert sent["extra_attributes"] == extras
 
 
 SIGNED_CAP = 1000
