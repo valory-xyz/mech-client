@@ -226,6 +226,8 @@ An on-chain request has no cap of its own: the marketplace records the Mech's ad
 
 For an off-chain request the client prints the charge the Mech reports under each delivery, as `Reported charge: <amount>`, in the same units. The Mech settles it on-chain afterwards.
 
+A failed off-chain run is charged too, and the client prints `Fault:` and `Charged:` under its error. A `client` fault (the request could not be run as sent, for example an unknown tool) is charged the full cap; a `mech` fault (the Mech could not complete the run) is charged a small fixed amount. A cap below the Mech's minimum charge is refused with nothing charged, and the client prints the minimum.
+
 Note: For Mechs using the Nevermined subscription model, this value corresponds to the maximum per request; actual usage may involve multiple requests per subscription.
 
 **Making a deposit**

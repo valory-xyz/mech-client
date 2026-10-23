@@ -31,6 +31,11 @@ from mech_client.cli.validators import (
     validate_chain_config,
     validate_ethereum_address,
 )
+from mech_client.domain.delivery import (
+    FAULT_CLIENT,
+    FAULT_MECH,
+    RunFailure,
+)
 from mech_client.services.marketplace_service import (
     EXPLICIT_NONCE_DEADLINE_SECONDS,
     MarketplaceService,
@@ -81,6 +86,43 @@ def _format_delivery_output(delivery_data: JSONValue) -> str:
         return _dump(delivery_data)
 
     return str(delivery_data)
+
+
+_FAULT_DESCRIPTIONS = {
+    FAULT_CLIENT: (
+        "client (the request could not be run as sent, so the mech charges the "
+        "full signed cap)"
+    ),
+    FAULT_MECH: (
+        "mech (the mech could not complete the run, so it charges a small "
+        "fixed amount)"
+    ),
+}
+
+
+def _format_failed_delivery(
+    request_id: str, failure: RunFailure, charged_rate: Optional[int]
+) -> List[str]:
+    """
+    Describe a failed off-chain run: the mech's error, who caused it, the charge.
+
+    :param request_id: The request the run was for.
+    :param failure: The failure the mech reported.
+    :param charged_rate: What the mech reported charging, if anything.
+    :return: The lines to print.
+    """
+    charged = (
+        "not reported"
+        if charged_rate is None
+        else f"{charged_rate} (base units of the mech's payment asset; the mech "
+        "settles it on-chain later)"
+    )
+    fault = _FAULT_DESCRIPTIONS.get(failure.fault or "", "not reported")
+    return [
+        f"  Request {request_id} failed: {failure.error}",
+        f"    Fault: {fault}",
+        f"    Charged: {charged}",
+    ]
 
 
 @click.command()
@@ -310,6 +352,12 @@ def request(
     if result.get("deliveries"):
         click.echo("\n✓ Delivery results:")
         for request_id, delivery in result["deliveries"].items():
+            if delivery.failure is not None:
+                for line in _format_failed_delivery(
+                    request_id, delivery.failure, delivery.actual_delivery_rate
+                ):
+                    click.echo(line)
+                continue
             click.echo(
                 f"  Request {request_id}: {_format_delivery_output(delivery.data)}"
             )

@@ -19,6 +19,7 @@
 
 """Tests for request command."""
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,7 +28,12 @@ from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
 from click.testing import CliRunner, Result
 
 from mech_client.cli.commands.request_cmd import request
-from mech_client.domain.delivery import DeliveryResult
+from mech_client.domain.delivery import (
+    FAULT_CLIENT,
+    FAULT_MECH,
+    DeliveryResult,
+    RunFailure,
+)
 
 
 class TestRequestCommand:
@@ -1186,3 +1192,86 @@ class TestRequestCommandNonceMode:
         assert invoked.exit_code == 2
         assert "Invalid value for '--nonce-mode'" in invoked.output
         invoked.service.send_request.assert_not_called()
+
+
+FAILED_ERROR = "ValueError: Tool nope is not supported."
+
+
+def _invoke_with_deliveries(
+    mock_setup_wallet: MagicMock,
+    mock_marketplace_service: MagicMock,
+    deliveries: dict,
+) -> Result:
+    """Run ``mechx request`` offchain with the service returning ``deliveries``."""
+    mock_setup_wallet.return_value = MagicMock(agent_mode=False)
+    mock_service = MagicMock()
+    mock_service.send_request = AsyncMock(
+        return_value={"tx_hash": None, "request_ids": ["0xabc"], "deliveries": deliveries}
+    )
+    mock_marketplace_service.return_value = mock_service
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        with open("key.txt", "w") as f:
+            f.write("dummy_key")
+        return runner.invoke(
+            request,
+            [
+                "--prompts", "q", "--tools", "t", "--chain-config", "gnosis",
+                "--key", "key.txt", "--use-offchain", "true",
+            ],
+        )
+
+
+class TestRequestCommandFailedRuns:
+    """A failed run prints the mech's error, who caused it and the charge."""
+
+    @pytest.mark.parametrize(
+        ("fault", "charge", "expected"),
+        [
+            (FAULT_CLIENT, 10**16, ["Fault: client", "full signed cap", "Charged: 10000000000000000"]),
+            (FAULT_MECH, 1, ["Fault: mech", "small fixed amount", "Charged: 1 "]),
+            (None, None, ["Fault: not reported", "Charged: not reported"]),
+        ],
+    )
+    @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
+    @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    def test_failed_run_output(
+        self,
+        mock_setup_wallet: MagicMock,
+        mock_marketplace_service: MagicMock,
+        fault: Any,
+        charge: Any,
+        expected: list,
+    ) -> None:
+        """The failure lines replace the answer and the generic charge line."""
+        delivery = DeliveryResult(
+            "0xabc",
+            data={"status": "failed", "error": FAILED_ERROR},
+            actual_delivery_rate=charge,
+            failure=RunFailure(error=FAILED_ERROR, fault=fault),
+        )
+        result = _invoke_with_deliveries(
+            mock_setup_wallet, mock_marketplace_service, {"0xabc": delivery}
+        )
+
+        assert result.exit_code == 0, result.output
+        assert f"Request 0xabc failed: {FAILED_ERROR}" in result.output
+        for text in expected:
+            assert text in result.output
+        assert "Reported charge" not in result.output
+
+    @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
+    @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    def test_a_successful_run_prints_no_failure(
+        self, mock_setup_wallet: MagicMock, mock_marketplace_service: MagicMock
+    ) -> None:
+        """An answer with a charge prints as before."""
+        delivery = DeliveryResult("0xabc", data={"result": "yes"}, actual_delivery_rate=5)
+        result = _invoke_with_deliveries(
+            mock_setup_wallet, mock_marketplace_service, {"0xabc": delivery}
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Request 0xabc: yes" in result.output
+        assert "Reported charge: 5" in result.output
+        assert "failed" not in result.output

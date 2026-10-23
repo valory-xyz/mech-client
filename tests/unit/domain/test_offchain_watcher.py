@@ -25,6 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import requests
 
+from mech_client.domain.delivery import FAULT_CLIENT, FAULT_MECH, RunFailure
 from mech_client.domain.delivery.offchain_watcher import OffchainDeliveryWatcher
 
 
@@ -823,3 +824,83 @@ class TestOffchainDeliveryWatcherReportsCharge:
         assert results["0x1a"].data is None
         assert results["0x1a"].url is not None
         assert results["0x1a"].actual_delivery_rate == CHARGE
+
+
+FAILED_ERROR = "ValueError: Tool nope is not supported."
+
+
+class TestOffchainDeliveryWatcherReportsFailedRuns:
+    """A ``failed`` envelope is a finished, charged run: its error, fault and charge are kept."""
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        ("fault", "expected_fault"),
+        [
+            (FAULT_CLIENT, FAULT_CLIENT),
+            (FAULT_MECH, FAULT_MECH),
+            ("nobody", None),
+            (None, None),
+        ],
+    )
+    @patch(f"{WATCHER}.fetch_result_file")
+    @patch(f"{WATCHER}.requests")
+    async def test_a_failed_run_is_delivered_with_its_failure(
+        self,
+        mock_requests: MagicMock,
+        mock_fetch_result_file: MagicMock,
+        fault: Any,
+        expected_fault: Any,
+    ) -> None:
+        """One poll finishes it; no result file is read."""
+        envelope = {
+            "status": "failed",
+            "error": FAILED_ERROR,
+            "fault": fault,
+            "delivery_rate": CHARGE,
+            "task_result": RESULT_FILE_HASH,
+        }
+        mock_requests.get.return_value = _envelope_response(envelope)
+
+        results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
+
+        assert results["0x1a"].failure == RunFailure(error=FAILED_ERROR, fault=expected_fault)
+        assert results["0x1a"].actual_delivery_rate == CHARGE
+        assert results["0x1a"].url is None
+        mock_requests.get.assert_called_once()
+        mock_fetch_result_file.assert_not_called()
+
+    @pytest.mark.anyio
+    @patch(f"{WATCHER}.requests")
+    async def test_a_failed_run_without_an_error_is_still_a_failure(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """A missing error message does not turn the envelope into an answer."""
+        mock_requests.get.return_value = _envelope_response(
+            {"status": "failed", "fault": FAULT_MECH}
+        )
+
+        results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
+
+        assert results["0x1a"].failure == RunFailure(error="failed", fault=FAULT_MECH)
+        assert results["0x1a"].actual_delivery_rate is None
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "envelope",
+        [
+            {"status": "rejected", "reason": "bad prompt"},
+            {"status": "ok", "result": "the answer", "delivery_rate": CHARGE},
+            {"result": "the answer"},
+        ],
+    )
+    @patch(f"{WATCHER}.requests")
+    async def test_other_envelopes_carry_no_failure(
+        self, mock_requests: MagicMock, envelope: Any
+    ) -> None:
+        """A refusal or an answer is delivered inline as before, with no failure."""
+        mock_requests.get.return_value = _envelope_response(envelope)
+
+        results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
+
+        assert results["0x1a"].failure is None
+        assert results["0x1a"].data == envelope
