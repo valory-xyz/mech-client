@@ -27,7 +27,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 from mech_client.domain.delivery.base import DeliveryWatcher
 from mech_client.domain.delivery.constants import WAIT_SLEEP
-from mech_client.domain.delivery.models import DeliveryResult
+from mech_client.domain.delivery.models import (
+    DeliveryResult,
+    FAULT_CLIENT,
+    FAULT_MECH,
+    RunFailure,
+)
 from mech_client.infrastructure.ipfs.result_file import (
     build_result_file_url,
     fetch_result_file,
@@ -43,6 +48,9 @@ OFFCHAIN_DELIVER_ENDPOINT = "fetch_offchain_info"
 # one running an older release, omits it. Surfaced as
 # ``DeliveryResult.actual_delivery_rate``.
 CHARGED_RATE_FIELD = "delivery_rate"
+# Envelope ``status`` of a run that failed and is settled on-chain at its
+# ``delivery_rate``. ``rejected`` is a refusal at acceptance and is not charged.
+FAILED_STATUS = "failed"
 
 # `IPFS_URL_TEMPLATE` already carries the multibase and multicodec prefix, so a
 # delivery hash is the bare digest: 32 bytes, i.e. 64 hex characters.
@@ -129,8 +137,24 @@ class OffchainDeliveryWatcher(
                     if not response:
                         continue
 
-                    url = self._result_file_url(response, request_id_int)
                     charged = self._charged_rate(response, request_id_int)
+                    failure = self._run_failure(response)
+                    if failure is not None:
+                        logger.warning(
+                            "Request %s failed (fault: %s, charged: %s): %s",
+                            request_id_int,
+                            failure.fault,
+                            charged,
+                            failure.error,
+                        )
+                        results[request_id] = DeliveryResult(
+                            request_id=request_id,
+                            data=response,
+                            actual_delivery_rate=charged,
+                            failure=failure,
+                        )
+                        continue
+                    url = self._result_file_url(response, request_id_int)
                     if url is None:
                         # The mech answered inline; the envelope is the answer.
                         results[request_id] = DeliveryResult(
@@ -238,6 +262,22 @@ class OffchainDeliveryWatcher(
             )
             return None
         return charged
+
+    @staticmethod
+    def _run_failure(response: Any) -> Optional[RunFailure]:
+        """
+        Read a failed run from an offchain envelope.
+
+        :param response: Raw response from the offchain endpoint
+        :return: The failure, or ``None`` when the envelope is not a failed run
+        """
+        if not isinstance(response, dict) or response.get("status") != FAILED_STATUS:
+            return None
+        fault = response.get("fault")
+        return RunFailure(
+            error=str(response.get("error") or FAILED_STATUS),
+            fault=fault if fault in (FAULT_CLIENT, FAULT_MECH) else None,
+        )
 
     @staticmethod
     def _result_file_url(response: Any, request_id_decimal: str) -> Optional[str]:

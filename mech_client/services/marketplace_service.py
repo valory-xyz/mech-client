@@ -69,6 +69,11 @@ logger = logging.getLogger(__name__)
 # HTTP status the offchain mech returns when the requester's prepaid balance is
 # insufficient (structured 402 challenge, see mech task_execution handlers).
 HTTP_PAYMENT_REQUIRED = 402
+# HTTP status and verbatim ``reason`` a mech sends when the signed cap is below
+# the least it charges for a run; the body carries that least as
+# ``minimum_cap``. A deposit cannot fix it, only a higher cap can.
+HTTP_BAD_REQUEST = 400
+MINIMUM_CAP_REASON = "signed cap below the mech's minimum charge"
 # HTTP status the offchain mech returns when it cannot serve a request right
 # now; see ``EXPLICIT_NONCE_DISABLED_REASON`` for the one case that is retried.
 HTTP_SERVICE_UNAVAILABLE = 503
@@ -141,6 +146,44 @@ _MAX_AUTO_DEPOSIT_RATIO = 10
 _SUPPORTED_DEPOSIT_PAYMENT_TYPES: FrozenSet[PaymentType] = frozenset(
     {PaymentType.NATIVE, PaymentType.OLAS_TOKEN, PaymentType.USDC_TOKEN}
 )
+
+
+# Request fields the metadata builders set; an extra attribute may not replace them.
+RESERVED_REQUEST_KEYS: FrozenSet[str] = frozenset({"prompt", "tool", "nonce"})
+
+
+def validate_request_shape(
+    prompts: Tuple[str, ...],
+    tools: Tuple[str, ...],
+    extra_attributes: Optional[Dict[str, Any]],
+) -> None:
+    """
+    Refuse a request every mech would fail, before anything is read or sent.
+
+    A mech charges the full signed cap for a run that fails because of the
+    request, so these are checked locally. An empty prompt is allowed: a tool
+    may read its inputs from extra attributes. Only the arguments are read; the
+    tool list is checked against the mech's already fetched manifest by
+    ``MarketplaceService._validate_tools``.
+
+    :param prompts: The prompt of each request
+    :param tools: The tool of each request
+    :param extra_attributes: Extra attributes merged into each request
+    :raises ValueError: If a prompt is not a string, a tool is empty, or an extra attribute
+        replaces a field the request sets itself
+    """
+    for index, prompt in enumerate(prompts):
+        if not isinstance(prompt, str):
+            raise ValueError(f"Prompt {index + 1} is not a string")
+    for index, tool in enumerate(tools):
+        if not isinstance(tool, str) or not tool.strip():
+            raise ValueError(f"Tool {index + 1} is empty")
+    clobbered = sorted((extra_attributes or {}).keys() & RESERVED_REQUEST_KEYS)
+    if clobbered:
+        raise ValueError(
+            f"Extra attributes may not set {', '.join(clobbered)}; the request "
+            f"sets these itself"
+        )
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -221,7 +264,13 @@ class PaymentChallenge:
 
     @property
     def shortfall(self) -> int:
-        """The deficit the requester needs to top up. Never negative."""
+        """The deficit the requester needs to top up. Never negative.
+
+        ``current_balance`` is net of in-flight reservations and may be
+        negative, which raises the deficit above ``required``.
+
+        :return: ``required`` less ``current_balance``, floored at zero.
+        """
         return max(0, self.required - self.current_balance)
 
 
@@ -349,6 +398,7 @@ class MarketplaceService(
             raise ValueError(
                 f"Number of prompts ({len(prompts)}) must match number of tools ({len(tools)})"
             )
+        validate_request_shape(prompts, tools, extra_attributes)
         if nonce_mode not in get_args(NonceMode):
             raise ValueError(
                 f"Unknown nonce_mode {nonce_mode!r}; expected one of {get_args(NonceMode)}"
@@ -743,6 +793,7 @@ class MarketplaceService(
                         "with the marketplace's sequential nonce instead."
                     )
                     nonce_mode = NONCE_MODE_SEQUENTIAL
+                self._raise_if_below_minimum_cap(response, max_delivery_rate)
                 if not response.ok:
                     reason = self._rejection_reason(response)
                     raise ValueError(
@@ -860,6 +911,37 @@ class MarketplaceService(
             return str(response.json().get("reason", ""))
         except Exception:  # pylint: disable=broad-except
             return ""
+
+    @staticmethod
+    def _raise_if_below_minimum_cap(
+        response: requests.Response, signed_cap: int
+    ) -> None:
+        """Raise a clear error when the mech refused the cap as below its minimum.
+
+        :param response: the HTTP response from the mech.
+        :param signed_cap: the cap the request was signed with.
+        :raises ValueError: if the mech answered with the minimum-cap refusal.
+        """
+        if response.status_code != HTTP_BAD_REQUEST:
+            return
+        try:
+            body = response.json()
+        except ValueError:
+            return
+        if not isinstance(body, dict) or body.get("reason") != MINIMUM_CAP_REASON:
+            return
+        minimum = body.get("minimum_cap")
+        minimum_text = (
+            str(minimum)
+            if isinstance(minimum, int) and not isinstance(minimum, bool)
+            else "not reported"
+        )
+        raise ValueError(
+            f"Offchain request refused: the signed cap {signed_cap} is below the "
+            f"mech's minimum charge (minimum cap: {minimum_text}, in base units "
+            f"of the mech's payment asset). Nothing was charged. Re-run with "
+            f"--max-cost at or above the minimum."
+        )
 
     @classmethod
     def _explicit_nonce_refused(cls, response: requests.Response) -> bool:
@@ -1035,6 +1117,14 @@ class MarketplaceService(
                     f"{challenge.current_balance}) deposited to "
                     f"{challenge.pay_to}. Re-run with auto-deposit enabled or "
                     f"top up your prepaid balance. ({challenge.error})"
+                )
+            if challenge.required > max_delivery_rate:
+                # The mech reports this request's cap as ``required``; more
+                # than the signed cap is not a figure a deposit should follow.
+                raise ValueError(
+                    "Offchain request rejected with HTTP 402 asking for "
+                    f"{challenge.required}, more than the signed cap of "
+                    f"{max_delivery_rate}; not depositing. ({challenge.error})"
                 )
             if challenge.shortfall <= 0:
                 # Auto-deposit can't do anything useful here: either the body

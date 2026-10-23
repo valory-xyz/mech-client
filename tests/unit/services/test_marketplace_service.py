@@ -19,6 +19,7 @@
 
 """Tests for marketplace service."""
 
+import asyncio
 import socket
 from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -44,8 +45,10 @@ from mech_client.services.marketplace_service import (
     EXPLICIT_NONCE_DISABLED_REASON,
     NONCE_MODE_EXPLICIT,
     NONCE_MODE_SEQUENTIAL,
+    MINIMUM_CAP_REASON,
     MarketplaceService,
     PaymentChallenge,
+    validate_request_shape,
 )
 from mech_client.utils.constants import UINT256_MAX
 from mech_client.utils.validators import ensure_checksummed_address
@@ -1883,6 +1886,81 @@ class TestSendOffchainRequest:
     @patch("mech_client.services.marketplace_service.EthereumCrypto")
     @patch("mech_client.services.base_service.EthereumApi")
     @patch("mech_client.services.base_service.get_mech_config")
+    async def test_offchain_request_below_minimum_cap_names_the_minimum(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api_cls: MagicMock,
+        mock_crypto: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+        mock_offchain_watcher_cls: MagicMock,
+    ) -> None:
+        """A minimum-cap 400 surfaces the minimum, not a generic rejection."""
+        mock_mech_config = create_mock_mech_config()
+        mock_mech_config.priority_mech_address = "0x" + "9" * 40
+        mock_config.return_value = mock_mech_config
+
+        mock_executor_factory.create.return_value = MagicMock()
+        mock_ledger_api_cls.return_value = MagicMock()
+
+        service = MarketplaceService(
+            chain_config="gnosis",
+            agent_mode=False,
+            crypto=create_mock_crypto(),
+        )
+
+        service.signer = _real_signing_signer()
+
+        mock_contract = MagicMock()
+        mock_contract.functions.getRequestIdWithNonce.return_value.call.return_value = (
+            b"\x00" * 32
+        )
+
+        with patch(
+            "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash",
+            return_value=("0x" + "b" * 64, "full-hash", '{"prompt":"hello"}'),
+        ):
+            with patch(
+                "mech_client.services.marketplace_service.requests"
+            ) as mock_requests:
+                mock_response = MagicMock()
+                mock_response.ok = False
+                mock_response.status_code = 400
+                mock_response.reason = "Bad Request"
+                mock_response.json.return_value = {
+                    "reason": MINIMUM_CAP_REASON,
+                    "minimum_cap": 3 * 10**17,
+                }
+                mock_requests.post.return_value = mock_response
+                mock_requests.exceptions.RequestException = (
+                    requests.exceptions.RequestException
+                )
+
+                with pytest.raises(
+                    ValueError, match=r"minimum cap: 300000000000000000"
+                ):
+                    await service._send_offchain_request(  # pylint: disable=protected-access
+                        marketplace_contract=mock_contract,
+                        prompts=("hello",),
+                        tools=("some-tool",),
+                        priority_mech_address="0x" + "9" * 40,
+                        max_delivery_rate=10**17,
+                        payment_type=PaymentType.NATIVE,
+                        response_timeout=300,
+                        mech_offchain_url="https://mech.example.com",
+                        extra_attributes=None,
+                        timeout=30.0,
+                    )
+
+    @pytest.mark.asyncio
+    @patch("mech_client.services.marketplace_service.OffchainDeliveryWatcher")
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.marketplace_service.EthereumCrypto")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
     async def test_offchain_request_rejected_no_json_body(
         self,
         mock_config: MagicMock,
@@ -2585,6 +2663,21 @@ class TestOffchain402Handling:
             )
             mock_ds.return_value.deposit_native.assert_called_once_with(70)
 
+    def test_auto_deposit_adds_a_negative_balance_to_the_shortfall(self) -> None:
+        """A balance reported net of reservations may be negative; it raises the deposit."""
+        service = _build_offchain_service()
+        resp = _mock_http_response(
+            402, {"required": "100", "currentBalance": "-30", "payTo": "0xbt"}
+        )
+        challenge = MarketplaceService._parse_402_challenge(resp)
+        assert challenge.current_balance == -30
+        assert challenge.shortfall == 130
+        with patch("mech_client.services.deposit_service.DepositService") as mock_ds:
+            service._auto_deposit_for_402(
+                PaymentType.NATIVE, challenge, max_delivery_rate=100
+            )
+            mock_ds.return_value.deposit_native.assert_called_once_with(130)
+
     def test_auto_deposit_token_usdc(self) -> None:
         """USDC payment deposits via deposit_token with the usdc token type."""
         service = _build_offchain_service()
@@ -2763,7 +2856,7 @@ class TestOffchain402Handling:
         assert "deposited to" not in str(exc_info.value)
 
     def test_post_offchain_request_above_cap_is_refused(self) -> None:
-        """A 402 demanding more than the safety cap is refused, no retry, no deposit."""
+        """A 402 whose ``required`` is above the signed cap is refused, no retry, no deposit."""
         service = _build_offchain_service()
         with (
             patch(
@@ -2775,7 +2868,7 @@ class TestOffchain402Handling:
             ) as mock_post,
             patch("mech_client.services.deposit_service.DepositService") as mock_ds,
         ):
-            with pytest.raises(ValueError, match=r"refused.*safety cap"):
+            with pytest.raises(ValueError, match=r"more than the signed cap of 1000"):
                 service._post_offchain_request(
                     "http://mech/send_signed_requests",
                     {},
@@ -3525,3 +3618,226 @@ class TestSendRequestMaxCost:
 
         push.assert_not_called()
         send.assert_not_called()
+
+
+VALID_PROMPTS = ("Will it rain tomorrow?",)
+VALID_TOOLS = ("prediction-online",)
+
+
+class TestValidateRequestShape:
+    """A request every mech would fail is refused locally, before it is sent."""
+
+    @pytest.mark.parametrize(
+        ("prompts", "tools", "extras", "error"),
+        [
+            (VALID_PROMPTS, VALID_TOOLS, None, None),
+            (VALID_PROMPTS, VALID_TOOLS, {}, None),
+            (VALID_PROMPTS, VALID_TOOLS, {"model": "gpt-4.1"}, None),
+            (("a", "b"), ("t1", "t2"), None, None),
+            (("",), VALID_TOOLS, None, None),
+            (("ok", "  \n"), ("t1", "t2"), None, None),
+            (("",), ("propose-question",), {"num_questions": 3}, None),
+            ((None,), VALID_TOOLS, None, "Prompt 1 is not a string"),
+            (("ok", 7), ("t1", "t2"), None, "Prompt 2 is not a string"),
+            (VALID_PROMPTS, ("",), None, "Tool 1 is empty"),
+            (VALID_PROMPTS, (" ",), None, "Tool 1 is empty"),
+            (VALID_PROMPTS, VALID_TOOLS, {"tool": "other"}, "may not set tool"),
+            (
+                VALID_PROMPTS,
+                VALID_TOOLS,
+                {"nonce": "n", "prompt": "p", "model": "m"},
+                "may not set nonce, prompt",
+            ),
+        ],
+    )
+    @patch("mech_client.services.marketplace_service.requests")
+    def test_validate_request_shape(
+        self,
+        mock_requests: MagicMock,
+        prompts: Tuple[Any, ...],
+        tools: Tuple[Any, ...],
+        extras: Optional[Dict[str, Any]],
+        error: Optional[str],
+    ) -> None:
+        """Each check passes a well-formed request and names what a bad one lacks, offline."""
+        if error is None:
+            validate_request_shape(prompts, tools, extras)
+        else:
+            with pytest.raises(ValueError, match=error):
+                validate_request_shape(prompts, tools, extras)
+        assert mock_requests.mock_calls == []
+
+    @pytest.mark.parametrize("use_offchain", [True, False])
+    @patch("mech_client.services.marketplace_service.push_metadata_to_ipfs")
+    @patch("mech_client.services.marketplace_service.requests")
+    def test_send_request_refuses_before_any_read_or_send(
+        self,
+        mock_requests: MagicMock,
+        mock_push: MagicMock,
+        use_offchain: bool,
+    ) -> None:
+        """An empty tool stops send_request before the chain, the manifest or the mech is touched."""
+        service = MagicMock(spec=MarketplaceService)
+        service.send_request = MarketplaceService.send_request.__get__(
+            service, MarketplaceService
+        )
+
+        with pytest.raises(ValueError, match="Tool 1 is empty"):
+            asyncio.run(
+                service.send_request(
+                    prompts=VALID_PROMPTS, tools=("",), use_offchain=use_offchain
+                )
+            )
+
+        service._get_marketplace_contract.assert_not_called()
+        service._fetch_mech_info.assert_not_called()
+        service._send_offchain_request.assert_not_called()
+        mock_push.assert_not_called()
+        assert mock_requests.mock_calls == []
+
+    def test_send_request_sends_an_empty_prompt(self) -> None:
+        """A tool reading its inputs from extra attributes is sent an empty prompt."""
+        service = MagicMock(spec=MarketplaceService)
+        service.send_request = MarketplaceService.send_request.__get__(
+            service, MarketplaceService
+        )
+        service.tool_manager = MagicMock()
+        service._fetch_mech_info.return_value = (MagicMock(), 1, 100)
+        extras = {"num_questions": 3}
+
+        asyncio.run(
+            service.send_request(
+                prompts=("",),
+                tools=("propose-question",),
+                priority_mech="0xmech",
+                use_offchain=True,
+                extra_attributes=extras,
+            )
+        )
+
+        sent = service._send_offchain_request.await_args.kwargs
+        assert sent["prompts"] == ("",)
+        assert sent["extra_attributes"] == extras
+
+
+SIGNED_CAP = 1000
+MINIMUM_CAP = 2500
+
+
+class TestOffchainCapRefusals:
+    """A cap below the mech's minimum is refused without a deposit; a 402 shortfall is required minus balance."""
+
+    @pytest.mark.parametrize(
+        ("status", "body", "match"),
+        [
+            (
+                400,
+                {"reason": MINIMUM_CAP_REASON, "minimum_cap": MINIMUM_CAP},
+                rf"cap {SIGNED_CAP} is below .*minimum cap: {MINIMUM_CAP}",
+            ),
+            (
+                400,
+                {"reason": MINIMUM_CAP_REASON},
+                rf"cap {SIGNED_CAP} is below .*minimum cap: not reported",
+            ),
+            (
+                400,
+                {"reason": MINIMUM_CAP_REASON, "minimum_cap": "lots"},
+                "minimum cap: not reported",
+            ),
+        ],
+    )
+    def test_minimum_cap_refusal_is_explained(
+        self, status: int, body: Dict[str, Any], match: str
+    ) -> None:
+        """The refusal names the minimum and never triggers a deposit or a retry."""
+        response = _mock_http_response(status, body)
+        with pytest.raises(ValueError, match=match):
+            MarketplaceService._raise_if_below_minimum_cap(response, SIGNED_CAP)
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            _mock_http_response(200, {}),
+            _mock_http_response(400, {"reason": "invalid signature"}),
+            _mock_http_response(400, ["not", "a", "dict"]),  # type: ignore[arg-type]
+            _mock_http_response(402, {"reason": MINIMUM_CAP_REASON}),
+        ],
+    )
+    def test_other_responses_are_not_a_minimum_cap_refusal(
+        self, response: MagicMock
+    ) -> None:
+        """Only a 400 with the exact reason counts."""
+        MarketplaceService._raise_if_below_minimum_cap(response, SIGNED_CAP)
+
+    def test_a_non_json_400_is_not_a_minimum_cap_refusal(self) -> None:
+        """An unreadable body is left to the generic rejection path."""
+        response = _mock_http_response(400)
+        response.json.side_effect = ValueError("not json")
+        MarketplaceService._raise_if_below_minimum_cap(response, SIGNED_CAP)
+
+    def test_minimum_cap_400_with_auto_deposit_does_not_deposit(self) -> None:
+        """_post_offchain_request passes the 400 back untouched: one POST, no deposit."""
+        service = _build_offchain_service()
+        refusal = _mock_http_response(
+            400, {"reason": MINIMUM_CAP_REASON, "minimum_cap": MINIMUM_CAP}
+        )
+        with (
+            patch(
+                "mech_client.services.marketplace_service.requests.post",
+                return_value=refusal,
+            ) as mock_post,
+            patch("mech_client.services.deposit_service.DepositService") as mock_ds,
+        ):
+            response = service._post_offchain_request(
+                "http://mech/send_signed_requests",
+                {},
+                PaymentType.NATIVE,
+                True,
+                max_delivery_rate=SIGNED_CAP,
+            )
+        assert response is refusal
+        assert mock_post.call_count == 1
+        mock_ds.assert_not_called()
+
+    def test_auto_deposit_tops_up_required_minus_reported_balance(self) -> None:
+        """The deposit is the cap less the balance the mech reports after in-flight reservations."""
+        service = _build_offchain_service()
+        responses = [
+            _mock_http_response(
+                402,
+                {"required": str(SIGNED_CAP), "currentBalance": "400", "payTo": "0xbt"},
+            ),
+            _mock_http_response(200, {}),
+        ]
+        with (
+            patch(
+                "mech_client.services.marketplace_service.requests.post",
+                side_effect=responses,
+            ),
+            patch("mech_client.services.deposit_service.DepositService") as mock_ds,
+        ):
+            service._post_offchain_request(
+                "http://mech/send_signed_requests",
+                {},
+                PaymentType.NATIVE,
+                True,
+                max_delivery_rate=SIGNED_CAP,
+            )
+        mock_ds.return_value.deposit_native.assert_called_once_with(SIGNED_CAP - 400)
+
+    def test_auto_deposit_above_the_safety_cap_is_refused(self) -> None:
+        """The deposit helper still refuses a shortfall above its safety multiple."""
+        service = _build_offchain_service()
+        challenge = PaymentChallenge(
+            required=SIGNED_CAP * 20,
+            current_balance=0,
+            pay_to="0xbt",
+            asset="",
+            chain_id=100,
+            error="",
+        )
+        with patch("mech_client.services.deposit_service.DepositService") as mock_ds:
+            with pytest.raises(ValueError, match=r"refused.*safety cap"):
+                service._auto_deposit_for_402(PaymentType.NATIVE, challenge, SIGNED_CAP)
+        mock_ds.assert_not_called()

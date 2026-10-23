@@ -310,6 +310,8 @@ Each off-chain request is signed with a nonce, `explicit` (a random per-request 
 
 The Mech reports the charge it will settle with the delivery. The CLI prints it as `Reported charge: <amount>` under the answer, in the base units of the Mech's payment asset, and the library returns it as `DeliveryResult.actual_delivery_rate` (`None` when the Mech reports none, which is always the case for on-chain delivery). It is what the Mech reports when it answers; the Mech settles it on-chain afterwards, and a request that is never settled is not charged.
 
+A failed run is also charged and settled on-chain. The CLI prints it as `Request <id> failed: <error>`, followed by `Fault:` and `Charged:`, and the library returns it as `DeliveryResult.failure` (`RunFailure` with `error` and `fault`) with the charge in `actual_delivery_rate`. A `client` fault means the request could not be run as sent (for example an unknown tool), and the Mech charges the full signed cap. A `mech` fault means the Mech could not complete the run; what it charges depends on the Mech's settings and is shown on the `Charged:` line. Before sending, the client refuses a prompt that is not a string, an empty tool, a tool the Mech's manifest does not list, and an `--extra-attribute` that sets `prompt`, `tool` or `nonce`. A cap below the Mech's minimum charge is refused by the Mech with nothing charged, and the client prints the minimum to pass as `--max-cost`.
+
 ### List tools available for a mech
 
 To list the tools available for a specific marketplace mech, use the `tool list` command. You can specify an AI Agent ID to get tools for a specific mech.
