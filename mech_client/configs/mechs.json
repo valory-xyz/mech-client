@@ -61,9 +61,9 @@
     "price": 10000,
     "transaction_url": "https://polygonscan.com/tx/{transaction_digest}",
     "subgraph_url": "",
-    "registry_subgraph_url": "https://registry-polygon.subgraph.autonolas.tech",
+    "registry_subgraph_url": "",
     "subgraph_dialect": "squid",
-    "registry_subgraph_dialect": "graph"
+    "registry_subgraph_dialect": "squid"
   },
   "base": {
     "mech_marketplace_contract": "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020",
@@ -80,7 +80,7 @@
     "price": 3000000000000,
     "transaction_url": "https://basescan.org/tx/{transaction_digest}",
     "subgraph_url": "",
-    "registry_subgraph_url": "https://registry-base.subgraph.autonolas.tech",
+    "registry_subgraph_url": "",
     "nvm_subscription": {
       "subscription_nft_address": "0xd5318d1A17819F65771B6c9277534C08Dd765498",
       "receiver_plan": "0xaaFBeef195BDAb1Bb6f3Dc9cEbA875Cd72499230",
@@ -91,7 +91,7 @@
       "plan_price_mechs": "990000"
     },
     "subgraph_dialect": "squid",
-    "registry_subgraph_dialect": "graph"
+    "registry_subgraph_dialect": "squid"
   },
   "celo": {
     "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",

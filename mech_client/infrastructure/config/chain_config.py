@@ -240,6 +240,10 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
                 getattr(env_config, f"mechx_marketplace_{self.chain_config}_squid_url")
                 or self.subgraph_url
             )
+            self.registry_subgraph_url = (
+                getattr(env_config, f"mechx_registry_{self.chain_config}_squid_url")
+                or self.registry_subgraph_url
+            )
 
         # In agent mode, try to load RPC from stored operate configuration first
         if self.agent_mode and self.chain_config:

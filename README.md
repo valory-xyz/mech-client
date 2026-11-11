@@ -744,3 +744,10 @@ now use the squid query dialect. `MECHX_SUBGRAPH_URL` remains the explicit
 per-process override and must point to a compatible squid on these chains.
 Registry endpoints retain their independently configured dialect. Release
 this package before upgrading downstream clients such as Connect.
+
+Base and Polygon registry reads also use squids. Set
+`MECHX_REGISTRY_BASE_SQUID_URL` and `MECHX_REGISTRY_POLYGON_SQUID_URL`;
+the ERC-8004 service lookup uses the existing `serviceById` adapter.
+Marketplace and registry endpoints/dialects stay independent.
+`MECHX_REGISTRY_SUBGRAPH_URL` remains a per-process endpoint override,
+and must use the chain's configured registry dialect.

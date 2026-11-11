@@ -73,6 +73,8 @@ class EnvironmentConfig:  # pylint: disable=too-many-instance-attributes
     mechx_marketplace_base_squid_url: Optional[str] = None
     mechx_marketplace_polygon_squid_url: Optional[str] = None
     mechx_registry_subgraph_url: Optional[str] = None
+    mechx_registry_base_squid_url: Optional[str] = None
+    mechx_registry_polygon_squid_url: Optional[str] = None
     mechx_gas_limit: Optional[int] = None
     mechx_transaction_url: Optional[str] = None
     mechx_ledger_chain_id: Optional[int] = None
@@ -101,6 +103,11 @@ class EnvironmentConfig:  # pylint: disable=too-many-instance-attributes
         subgraph_url = os.getenv("MECHX_SUBGRAPH_URL")
         if subgraph_url:
             self.mechx_subgraph_url = subgraph_url
+
+        self.mechx_registry_base_squid_url = os.getenv("MECHX_REGISTRY_BASE_SQUID_URL")
+        self.mechx_registry_polygon_squid_url = os.getenv(
+            "MECHX_REGISTRY_POLYGON_SQUID_URL"
+        )
 
         # MECHX_REGISTRY_SUBGRAPH_URL - Service registry endpoint for the
         # ERC-8004 agent id a mech report checks the operator's domain against

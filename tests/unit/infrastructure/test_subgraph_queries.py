@@ -838,14 +838,29 @@ class TestQueryErc8004AgentId:
 
     @pytest.mark.parametrize(
         ("chain", "lookup", "expected_dialect"),
-        [("optimism", "service", "graph"), ("robinhood", "serviceById", "squid")],
-        ids=["graph", "squid"],
+        [
+            ("optimism", "service", "graph"),
+            ("robinhood", "serviceById", "squid"),
+            ("base", "serviceById", "squid"),
+            ("polygon", "serviceById", "squid"),
+        ],
+        ids=["graph", "robinhood", "base", "polygon"],
     )
     @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
     def test_reads_the_agent_id_from_the_registry_endpoint(
-        self, mock_client: MagicMock, chain: str, lookup: str, expected_dialect: str
+        self,
+        mock_client: MagicMock,
+        chain: str,
+        lookup: str,
+        expected_dialect: str,
+        monkeypatch,
     ) -> None:
         """The chain's registry URL and dialect are used; the id comes back as an int."""
+        if chain in ("base", "polygon"):
+            monkeypatch.setenv(
+                f"MECHX_REGISTRY_{chain.upper()}_SQUID_URL",
+                "https://registry.test/graphql",
+            )
         mock_client.return_value.query_service_agent_id.return_value = {
             lookup: {"id": "195", "erc8004Agent": {"id": "516"}}
         }
@@ -920,6 +935,6 @@ class TestEveryMarketplaceChainHasARegistry:
         """Both endpoints are configured together, or neither."""
         configs = json.loads(MECH_CONFIGS.read_text())
         for name, cfg in configs.items():
-            assert bool(cfg["registry_subgraph_url"]) == (
-                bool(cfg["subgraph_url"]) or name in ("base", "polygon")
-            ), name
+            assert (
+                bool(cfg["registry_subgraph_url"]) or name in ("base", "polygon")
+            ) == (bool(cfg["subgraph_url"]) or name in ("base", "polygon")), name

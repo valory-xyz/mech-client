@@ -176,12 +176,16 @@ class TestGetMechConfigIntegration:
 
 
 @pytest.mark.parametrize("chain", ["base", "polygon"])
-def test_marketplace_squid_does_not_change_registry_dialect(monkeypatch, chain):
+def test_marketplace_and_registry_use_distinct_squid_endpoints(monkeypatch, chain):
     monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
     monkeypatch.setenv(
         f"MECHX_MARKETPLACE_{chain.upper()}_SQUID_URL", "https://squid.test/graphql"
     )
+    monkeypatch.setenv(
+        f"MECHX_REGISTRY_{chain.upper()}_SQUID_URL", "https://registry.test/graphql"
+    )
     config = get_mech_config(chain)
+    assert config.registry_subgraph_url == "https://registry.test/graphql"
     assert config.subgraph_url == "https://squid.test/graphql"
     assert config.subgraph_dialect == "squid"
-    assert config.registry_subgraph_dialect == "graph"
+    assert config.registry_subgraph_dialect == "squid"
