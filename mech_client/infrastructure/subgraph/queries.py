@@ -245,11 +245,13 @@ def query_erc8004_agent_id(chain_config: str, service_id: int) -> Optional[int]:
         )
     client = SubgraphClient(
         mech_config.registry_subgraph_url,
-        dialect=mech_config.subgraph_dialect,
+        dialect=mech_config.registry_subgraph_dialect,
         timeout=REPORT_QUERY_TIMEOUT,
     )
     response = client.query_service_agent_id(service_id)
-    lookup = "serviceById" if mech_config.subgraph_dialect == "squid" else "service"
+    lookup = (
+        "serviceById" if mech_config.registry_subgraph_dialect == "squid" else "service"
+    )
     try:
         service = response[lookup]  # pylint: disable=unsubscriptable-object
         if service is None:

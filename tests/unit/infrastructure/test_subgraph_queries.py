@@ -67,7 +67,11 @@ class TestChainToMechFactoryMapping:
     def test_every_chain_with_a_subgraph_has_a_factory_mapping(self) -> None:
         """Test mech list can type every chain it can query, keyed by known chains."""
         configs = json.loads(MECH_CONFIGS.read_text())
-        with_subgraph = {name for name, cfg in configs.items() if cfg["subgraph_url"]}
+        with_subgraph = {
+            name
+            for name, cfg in configs.items()
+            if cfg["subgraph_url"] or name in ("base", "polygon")
+        }
 
         assert set(CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE) == with_subgraph
         assert set(CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE) <= set(CHAIN_NAME_TO_ID)
@@ -348,9 +352,7 @@ class TestQueryMmMechsInfo:
         assert len(result) == RESULTS_LIMIT
 
     @patch("mech_client.infrastructure.subgraph.queries.get_mech_config")
-    def test_query_mechs_no_subgraph_url(
-        self, mock_get_config: MagicMock
-    ) -> None:
+    def test_query_mechs_no_subgraph_url(self, mock_get_config: MagicMock) -> None:
         """Test query raises SubgraphError when subgraph URL not set."""
         # Setup mock config with no subgraph URL
         mock_config = MagicMock()
@@ -483,11 +485,14 @@ class TestQueryMechsChainWithoutSubgraph:
         blank = replace(get_mech_config("robinhood"), subgraph_url="")
         assert int(blank.mech_marketplace_contract, 16) != 0
 
-        with patch(
-            "mech_client.infrastructure.subgraph.queries.get_mech_config",
-            return_value=blank,
-        ), pytest.raises(
-            SubgraphError, match="Subgraph URL not set for chain config: robinhood"
+        with (
+            patch(
+                "mech_client.infrastructure.subgraph.queries.get_mech_config",
+                return_value=blank,
+            ),
+            pytest.raises(
+                SubgraphError, match="Subgraph URL not set for chain config: robinhood"
+            ),
         ):
             query_mm_mechs_info("robinhood")
 
@@ -572,7 +577,8 @@ class TestQueryMechsMalformedResponse:
         "record",
         [
             pytest.param(
-                {"address": "0xabc", "totalDeliveriesTransactions": "2"}, id="factory-missing"
+                {"address": "0xabc", "totalDeliveriesTransactions": "2"},
+                id="factory-missing",
             ),
             pytest.param(
                 {
@@ -664,7 +670,6 @@ class TestQueryMechsOverrideWarning:
         query_mm_mechs_info(chain)
 
         assert mock_logger.warning.called is warns
-
 
 
 MECH_ADDRESS = "0xc05e7412439bd7e91730a6880e18d5d5873f632c"
@@ -915,4 +920,6 @@ class TestEveryMarketplaceChainHasARegistry:
         """Both endpoints are configured together, or neither."""
         configs = json.loads(MECH_CONFIGS.read_text())
         for name, cfg in configs.items():
-            assert bool(cfg["registry_subgraph_url"]) == bool(cfg["subgraph_url"]), name
+            assert bool(cfg["registry_subgraph_url"]) == (
+                bool(cfg["subgraph_url"]) or name in ("base", "polygon")
+            ), name

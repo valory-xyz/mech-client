@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Optional, get_args
 
 import requests
+
 from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
 from mech_client.infrastructure.config.environment import EnvironmentConfig
 
@@ -202,8 +203,8 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         agent_mode: Whether running in agent mode (default: False)
         chain_config: Chain configuration name (e.g., 'gnosis')
         subgraph_dialect: GraphQL dialect of subgraph_url ("graph" or "squid")
-        registry_subgraph_url: Service registry GraphQL endpoint, same dialect
-            as subgraph_url; blank when the chain has none
+        registry_subgraph_url: Service registry GraphQL endpoint, independent of the marketplace dialect; blank when the chain has none
+        registry_subgraph_dialect: GraphQL dialect of the registry endpoint
     """
 
     complementary_metadata_hash_address: str
@@ -216,6 +217,7 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     mech_marketplace_contract: str
     subgraph_dialect: SubgraphDialect
     registry_subgraph_url: str = field(default="")
+    registry_subgraph_dialect: SubgraphDialect = field(default="graph")
     priority_mech_address: Optional[str] = field(default=None)
     agent_mode: bool = field(default=False)
     chain_config: Optional[str] = field(default=None)
@@ -229,8 +231,15 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         3. Default from mechs.json (lowest priority)
         """
         validate_subgraph_dialect(self.subgraph_dialect, f"chain {self.chain_config!r}")
+        validate_subgraph_dialect(self.registry_subgraph_dialect, "registry")
         # Load environment configuration (centralized env var loading)
         env_config = EnvironmentConfig.load()
+
+        if self.chain_config in ("base", "polygon"):
+            self.subgraph_url = (
+                getattr(env_config, f"mechx_marketplace_{self.chain_config}_squid_url")
+                or self.subgraph_url
+            )
 
         # In agent mode, try to load RPC from stored operate configuration first
         if self.agent_mode and self.chain_config:

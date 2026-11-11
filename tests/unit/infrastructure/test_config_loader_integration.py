@@ -174,3 +174,14 @@ class TestGetMechConfigIntegration:
         with pytest.raises(ValueError, match="'robinhood' has no subgraph_dialect"):
             get_mech_config("robinhood")
 
+
+@pytest.mark.parametrize("chain", ["base", "polygon"])
+def test_marketplace_squid_does_not_change_registry_dialect(monkeypatch, chain):
+    monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+    monkeypatch.setenv(
+        f"MECHX_MARKETPLACE_{chain.upper()}_SQUID_URL", "https://squid.test/graphql"
+    )
+    config = get_mech_config(chain)
+    assert config.subgraph_url == "https://squid.test/graphql"
+    assert config.subgraph_dialect == "squid"
+    assert config.registry_subgraph_dialect == "graph"

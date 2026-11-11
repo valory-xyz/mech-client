@@ -735,3 +735,12 @@ mechx request --prompts "write a short poem" --priority-mech 0x77af31De935740567
 ```
 
 </details>
+
+### Base and Polygon Marketplace squid configuration
+
+Set `MECHX_MARKETPLACE_BASE_SQUID_URL` and
+`MECHX_MARKETPLACE_POLYGON_SQUID_URL` in the runtime environment. Both chains
+now use the squid query dialect. `MECHX_SUBGRAPH_URL` remains the explicit
+per-process override and must point to a compatible squid on these chains.
+Registry endpoints retain their independently configured dialect. Release
+this package before upgrading downstream clients such as Connect.
