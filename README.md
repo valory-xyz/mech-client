@@ -561,6 +561,32 @@ service = MarketplaceService(
 
 This works for on-chain requests (client and agent mode), deposits (`DepositService`), and offchain prepaid requests. In agent mode the Safe transaction is approved via the pre-validated signature encoding, so only ordinary transaction signing is required from the signer. Passing `crypto=` keeps working unchanged (it wraps the key in the default `LocalSigner`).
 
+### Choosing offchain nonces
+
+A caller that tracks its own marketplace nonces (e.g. to keep several offchain requests from one requester in flight) can pass them, and see each request id before it is signed:
+
+```python
+from mech_client import OffchainRequestRejected
+
+def approve(request_id: bytes, nonce: int) -> None:
+    ...  # raise to stop this request before it is signed
+
+try:
+    result = await service.send_request(
+        prompts=("What is 2+2?",),
+        tools=("openai-gpt-4o-2024-05-13",),
+        use_offchain=True,
+        nonces=[next_nonce],
+        on_request_id=approve,
+        extra_attributes={"nonce": salt},  # fixed salt: a resend signs the same id
+    )
+    print(result["nonces"])
+except OffchainRequestRejected as e:
+    ...
+```
+
+The mech accepts only the requester's next nonce, so requests must reach it in nonce order. A transport error stays a plain `ValueError`: whether the mech stored the request is unknown.
+
 You can also use the Mech Client to programmatically fetch tools for marketplace mechs in your Python project, as well as retrieve descriptions and input/output schemas for specific tools given their unique identifier.
 
 1. Set up the private key as specified [above](#set-up-the-private-key). Store the resulting key file (e.g., `ethereum_private_key.txt`) in a convenient and secure location.
