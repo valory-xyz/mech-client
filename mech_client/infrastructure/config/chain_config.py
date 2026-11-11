@@ -23,7 +23,6 @@ from dataclasses import dataclass, field
 from typing import Literal, Optional, get_args
 
 import requests
-
 from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME
 from mech_client.infrastructure.config.environment import EnvironmentConfig
 

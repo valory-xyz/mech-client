@@ -26,15 +26,14 @@ from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.config.constants import MECH_CONFIGS
 from mech_client.infrastructure.subgraph.client import DEFAULT_TIMEOUT
 from mech_client.infrastructure.subgraph.queries import (
     CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE,
+    MechRecord,
     REPORT_QUERY_TIMEOUT,
     RESULTS_LIMIT,
-    MechRecord,
     query_erc8004_agent_id,
     query_mech_record,
     query_mm_mechs_info,

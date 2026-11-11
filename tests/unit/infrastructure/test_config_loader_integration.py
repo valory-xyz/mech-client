@@ -22,9 +22,8 @@
 import json
 from pathlib import Path
 
-import pytest
-
 import mech_client.infrastructure.config.loader as config_loader
+import pytest
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME, MECH_CONFIGS
 from mech_client.utils.constants import CHAIN_NAME_TO_ID
