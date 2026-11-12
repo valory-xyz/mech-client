@@ -981,3 +981,24 @@ def test_registry_dialect_is_independent_of_marketplace(
         }
         assert query_erc8004_agent_id("gnosis", 1) == 23
     assert client.call_args.kwargs["dialect"] == registry
+
+
+def test_registry_override_warns_and_preserves_squid_dialect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A generic override changes the endpoint while retaining squid syntax."""
+    monkeypatch.setenv("MECHX_REGISTRY_SUBGRAPH_URL", "https://override.test/graphql")
+    monkeypatch.setenv("MECHX_REGISTRY_BASE_SQUID_URL", "https://base.test/graphql")
+    with (
+        patch("mech_client.infrastructure.subgraph.queries.SubgraphClient") as client,
+        patch("mech_client.infrastructure.subgraph.queries.logger.warning") as warning,
+    ):
+        client.return_value.query_service_agent_id.return_value = {
+            "serviceById": {"erc8004Agent": {"id": "23"}}
+        }
+        assert query_erc8004_agent_id("base", 1) == 23
+    assert client.call_args.args[0] == "https://override.test/graphql"
+    assert client.call_args.kwargs["dialect"] == "squid"
+    assert (
+        "MECHX_REGISTRY_SUBGRAPH_URL replaces the endpoint" in warning.call_args.args[0]
+    )
