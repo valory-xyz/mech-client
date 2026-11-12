@@ -140,12 +140,13 @@ mechx mech list --chain-config gnosis
    └─ IPFS Gateway links (metadata URLs)
 
 ENV VARS:
-  MECHX_SUBGRAPH_URL (optional - defaults provided for gnosis, base, polygon, optimism, robinhood)
+  MECHX_MARKETPLACE_BASE_SQUID_URL / MECHX_MARKETPLACE_POLYGON_SQUID_URL (required for the corresponding chain)
+  MECHX_SUBGRAPH_URL (optional override; must speak the configured dialect)
 
 NOTES:
   - Read-only command, no transactions
   - Does NOT use HTTP RPC
-  - Default subgraph URLs provided for gnosis, base, polygon, optimism, robinhood (the marketplace squid)
+  - Defaults exist for gnosis, optimism and robinhood; configure Base/Polygon squid variables first
   - Override with MECHX_SUBGRAPH_URL only if using custom subgraph (on robinhood, it must also be a squid)
 ```
 

@@ -24,7 +24,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-
 from mech_client.infrastructure.config.chain_config import (
     LedgerConfig,
     MechConfig,
@@ -283,7 +282,7 @@ class TestLedgerConfigRpcValidation:
             mock_logger = MagicMock()
             mock_get_logger.return_value = mock_logger
 
-            config = LedgerConfig(
+            LedgerConfig(
                 address="https://optimism.example",
                 chain_id=10,  # Optimism
                 poa_chain=False,
@@ -316,7 +315,7 @@ class TestLedgerConfigRpcValidation:
             mock_logger = MagicMock()
             mock_get_logger.return_value = mock_logger
 
-            config = LedgerConfig(
+            LedgerConfig(
                 address="https://polygon.example",
                 chain_id=137,
                 poa_chain=True,
@@ -435,6 +434,7 @@ class TestMechConfigEnvOverrides:
 
         mech_config = MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://rpc.gnosischain.com",
             ledger_config=ledger_config,
@@ -484,6 +484,7 @@ class TestMechConfigEnvOverrides:
 
         mech_config = MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://rpc.gnosischain.com",
             ledger_config=ledger_config,
@@ -494,7 +495,10 @@ class TestMechConfigEnvOverrides:
             mech_marketplace_contract="0x" + "3" * 40,
         )
 
-        assert mech_config.transaction_url == "https://custom-explorer/{transaction_digest}"
+        assert (
+            mech_config.transaction_url
+            == "https://custom-explorer/{transaction_digest}"
+        )
 
     @patch.dict("os.environ", {}, clear=True)
     @patch("mech_client.infrastructure.config.chain_config.EnvironmentConfig.load")
@@ -533,6 +537,7 @@ class TestMechConfigEnvOverrides:
 
         mech_config = MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://rpc.gnosischain.com",
             ledger_config=ledger_config,
@@ -584,6 +589,7 @@ class TestMechConfigRegistrySubgraphUrl:
         )
         return MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://rpc.gnosischain.com",
             ledger_config=ledger_config,
@@ -638,4 +644,3 @@ class TestMechConfigRequiresItsDialect:
                 price=1,
                 mech_marketplace_contract="0x" + "3" * 40,
             )
-

@@ -69,7 +69,7 @@ class TestChainToMechFactoryMapping:
         with_subgraph = {
             name
             for name, cfg in configs.items()
-            if cfg["subgraph_url"] or name in ("base", "polygon")
+            if cfg["subgraph_url"] or cfg.get("subgraph_url_env")
         }
 
         assert set(CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE) == with_subgraph
@@ -481,6 +481,7 @@ class TestQueryMechsChainWithoutSubgraph:
     ) -> None:
         """Test mech list fails fast when a marketplace chain has no subgraph URL."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        monkeypatch.delenv("MECHX_REGISTRY_SUBGRAPH_URL", raising=False)
         blank = replace(get_mech_config("robinhood"), subgraph_url="")
         assert int(blank.mech_marketplace_contract, 16) != 0
 
@@ -505,6 +506,7 @@ class TestQueryMechsRobinhoodSquid:
     ) -> None:
         """Test robinhood uses the squid dialect and names its USDC-type mech."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        monkeypatch.delenv("MECHX_REGISTRY_SUBGRAPH_URL", raising=False)
         mock_client_class.return_value.query_mechs.return_value = {
             "meches": [
                 {
@@ -548,6 +550,7 @@ class TestUnmappedMechFactory:
     ) -> None:
         """Test an unmapped factory shows as Unknown and names itself in a warning."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        monkeypatch.delenv("MECHX_REGISTRY_SUBGRAPH_URL", raising=False)
         unmapped = "0x00000000000000000000000000000000000000ff"
         mock_client_class.return_value.query_mechs.return_value = {
             "meches": [
@@ -609,6 +612,7 @@ class TestQueryMechsMalformedResponse:
     ) -> None:
         """Test a record mech-client can't read names the chain, not a generic crash."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        monkeypatch.delenv("MECHX_REGISTRY_SUBGRAPH_URL", raising=False)
         mock_client_class.return_value.query_mechs.return_value = {"meches": [record]}
 
         with pytest.raises(
@@ -796,6 +800,7 @@ class TestQueryMechRecord:
     ) -> None:
         """The marketplace record needs the marketplace indexer."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        monkeypatch.delenv("MECHX_REGISTRY_SUBGRAPH_URL", raising=False)
         blank = replace(get_mech_config("gnosis"), subgraph_url="")
         with (
             patch(
@@ -855,7 +860,13 @@ class TestQueryErc8004AgentId:
         monkeypatch,
     ) -> None:
         """The chain's registry URL and dialect are used; the id comes back as an int."""
+        monkeypatch.delenv("MECHX_REGISTRY_SUBGRAPH_URL", raising=False)
+        monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
         if chain in ("base", "polygon"):
+            monkeypatch.setenv(
+                f"MECHX_MARKETPLACE_{chain.upper()}_SQUID_URL",
+                "https://marketplace.test/graphql",
+            )
             monkeypatch.setenv(
                 f"MECHX_REGISTRY_{chain.upper()}_SQUID_URL",
                 "https://registry.test/graphql",
@@ -934,6 +945,39 @@ class TestEveryMarketplaceChainHasARegistry:
         """Both endpoints are configured together, or neither."""
         configs = json.loads(MECH_CONFIGS.read_text())
         for name, cfg in configs.items():
-            assert (
-                bool(cfg["registry_subgraph_url"]) or name in ("base", "polygon")
-            ) == (bool(cfg["subgraph_url"]) or name in ("base", "polygon")), name
+            assert bool(cfg["registry_subgraph_url"]) == bool(cfg["subgraph_url"]), name
+            if cfg.get("subgraph_url_env"):
+                assert cfg["subgraph_url"] == cfg["registry_subgraph_url"] == ""
+                assert (
+                    cfg["subgraph_dialect"]
+                    == cfg["registry_subgraph_dialect"]
+                    == "squid"
+                )
+                assert cfg.get("registry_subgraph_url_env"), name
+
+
+@pytest.mark.parametrize(
+    "marketplace,registry,lookup",
+    [("graph", "squid", "serviceById"), ("squid", "graph", "service")],
+)
+def test_registry_dialect_is_independent_of_marketplace(
+    marketplace: str, registry: str, lookup: str
+) -> None:
+    """A mixed deployment must use the registry's dialect and response root."""
+    config = replace(
+        get_mech_config("gnosis"),
+        subgraph_dialect=marketplace,
+        registry_subgraph_dialect=registry,
+    )
+    with (
+        patch(
+            "mech_client.infrastructure.subgraph.queries.get_mech_config",
+            return_value=config,
+        ),
+        patch("mech_client.infrastructure.subgraph.queries.SubgraphClient") as client,
+    ):
+        client.return_value.query_service_agent_id.return_value = {
+            lookup: {"erc8004Agent": {"id": "23"}}
+        }
+        assert query_erc8004_agent_id("gnosis", 1) == 23
+    assert client.call_args.kwargs["dialect"] == registry

@@ -69,8 +69,8 @@ export MECHX_SUBGRAPH_URL='https://your-custom-subgraph-url'
 
 # Default URLs (already configured):
 # Gnosis:   https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis
-# Base:     https://api.subgraph.autonolas.tech/api/proxy/marketplace-base
-# Polygon:  https://api.subgraph.autonolas.tech/api/proxy/marketplace-polygon
+# Base:     configure MECHX_MARKETPLACE_BASE_SQUID_URL
+# Polygon:  configure MECHX_MARKETPLACE_POLYGON_SQUID_URL
 # Optimism: https://api.subgraph.autonolas.tech/api/proxy/marketplace-optimism
 ```
 

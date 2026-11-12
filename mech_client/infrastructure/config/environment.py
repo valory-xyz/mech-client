@@ -157,6 +157,11 @@ class EnvironmentConfig:  # pylint: disable=too-many-instance-attributes
         if password:
             self.operate_password = password
 
+    @staticmethod
+    def indexer_url(name: Optional[str]) -> Optional[str]:
+        """Read an endpoint variable named by the chain configuration."""
+        return os.getenv(name) if name else None
+
     @classmethod
     def load(cls) -> "EnvironmentConfig":
         """

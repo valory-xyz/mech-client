@@ -53,9 +53,9 @@ def get_mech_config(
         ledger_config_data = entry.pop("ledger_config")
         # Remove nvm_subscription if present (used by NVMConfig, not MechConfig)
         entry.pop("nvm_subscription", None)
-        if "subgraph_dialect" not in entry:
+        if "subgraph_dialect" not in entry or "registry_subgraph_dialect" not in entry:
             raise ValueError(
-                f"mechs.json entry for {chain_config!r} has no subgraph_dialect "
+                f"mechs.json entry for {chain_config!r} requires subgraph_dialect and registry_subgraph_dialect "
                 '("graph" or "squid")'
             )
 

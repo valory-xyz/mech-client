@@ -63,7 +63,9 @@
     "subgraph_url": "",
     "registry_subgraph_url": "",
     "subgraph_dialect": "squid",
-    "registry_subgraph_dialect": "squid"
+    "registry_subgraph_dialect": "squid",
+    "subgraph_url_env": "MECHX_MARKETPLACE_POLYGON_SQUID_URL",
+    "registry_subgraph_url_env": "MECHX_REGISTRY_POLYGON_SQUID_URL"
   },
   "base": {
     "mech_marketplace_contract": "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020",
@@ -91,7 +93,9 @@
       "plan_price_mechs": "990000"
     },
     "subgraph_dialect": "squid",
-    "registry_subgraph_dialect": "squid"
+    "registry_subgraph_dialect": "squid",
+    "subgraph_url_env": "MECHX_MARKETPLACE_BASE_SQUID_URL",
+    "registry_subgraph_url_env": "MECHX_REGISTRY_BASE_SQUID_URL"
   },
   "celo": {
     "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",

@@ -215,8 +215,10 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     price: int
     mech_marketplace_contract: str
     subgraph_dialect: SubgraphDialect
+    registry_subgraph_dialect: SubgraphDialect
     registry_subgraph_url: str = field(default="")
-    registry_subgraph_dialect: SubgraphDialect = field(default="graph")
+    subgraph_url_env: Optional[str] = None
+    registry_subgraph_url_env: Optional[str] = None
     priority_mech_address: Optional[str] = field(default=None)
     agent_mode: bool = field(default=False)
     chain_config: Optional[str] = field(default=None)
@@ -230,17 +232,19 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         3. Default from mechs.json (lowest priority)
         """
         validate_subgraph_dialect(self.subgraph_dialect, f"chain {self.chain_config!r}")
-        validate_subgraph_dialect(self.registry_subgraph_dialect, "registry")
+        validate_subgraph_dialect(
+            self.registry_subgraph_dialect, f"registry of chain {self.chain_config!r}"
+        )
         # Load environment configuration (centralized env var loading)
         env_config = EnvironmentConfig.load()
 
-        if self.chain_config in ("base", "polygon"):
+        if self.subgraph_url_env:
             self.subgraph_url = (
-                getattr(env_config, f"mechx_marketplace_{self.chain_config}_squid_url")
-                or self.subgraph_url
+                env_config.indexer_url(self.subgraph_url_env) or self.subgraph_url
             )
+        if self.registry_subgraph_url_env:
             self.registry_subgraph_url = (
-                getattr(env_config, f"mechx_registry_{self.chain_config}_squid_url")
+                env_config.indexer_url(self.registry_subgraph_url_env)
                 or self.registry_subgraph_url
             )
 

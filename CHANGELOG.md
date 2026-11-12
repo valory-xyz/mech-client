@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Base/Polygon Marketplace and registry commands require `MECHX_MARKETPLACE_BASE_SQUID_URL`, `MECHX_MARKETPLACE_POLYGON_SQUID_URL`, `MECHX_REGISTRY_BASE_SQUID_URL` and `MECHX_REGISTRY_POLYGON_SQUID_URL`. Committed endpoint defaults are blank; configure these before upgrading. Chain config now declares the independent `registry_subgraph_dialect` and endpoint-variable names.
+
+
 ## [0.24.0] - 2026-10-09
 
 ### ✨ Added
