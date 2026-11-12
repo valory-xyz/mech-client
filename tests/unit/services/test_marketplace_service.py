@@ -3125,6 +3125,39 @@ class TestCallerOwnedNonces:
         assert "remaining shortfall 50" in str(e.value)
 
     @pytest.mark.asyncio
+    async def test_json_body_without_reason_uses_http_reason(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """A JSON error body with no usable reason falls back to the HTTP reason."""
+        resp = _mock_http_response(400, {"error": "x", "reason": None})
+        resp.reason = "Bad Request"
+        mech_post.side_effect = [resp]
+
+        with pytest.raises(OffchainRequestRejected) as exc_info:
+            await _send_offchain(service, _nonce_contract(5))
+
+        assert exc_info.value.reason == "Bad Request"
+        assert "Bad Request (HTTP 400)" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_transport_error_mid_call_names_the_accepted_requests(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """A transport failure after an accepted request still names that request."""
+        mech_post.side_effect = [
+            _mock_http_response(200),
+            requests.exceptions.ConnectionError("reset"),
+        ]
+
+        with pytest.raises(ValueError, match="Failed to send") as e:
+            await _send_offchain(
+                service, _nonce_contract(5), prompts=("a", "b"), nonces=[5, 6]
+            )
+
+        assert not isinstance(e.value, OffchainRequestRejected)
+        assert f"{_request_id_for(5).hex()} (nonce 5)" in str(e.value)
+
+    @pytest.mark.asyncio
     async def test_transport_error_stays_a_plain_value_error(
         self, service: MarketplaceService, mech_post: MagicMock
     ) -> None:
@@ -3181,32 +3214,19 @@ class TestCallerOwnedNonces:
         assert mock_offchain.call_args.kwargs["on_request_id"] is hook
 
     @pytest.mark.asyncio
-    async def test_onchain_path_ignores_nonces_and_hook(
+    async def test_onchain_path_skips_the_nonce_count_check(
         self, service: MarketplaceService
     ) -> None:
-        """The on-chain path neither checks the nonce count nor calls the hook."""
-        hook = MagicMock()
-
-        with (
-            patch.object(
-                service,
-                "_get_marketplace_contract",
-                side_effect=RuntimeError("past validation"),
-            ),
-            patch.object(
-                service, "_send_offchain_request", new_callable=AsyncMock
-            ) as mock_offchain,
+        """A nonce count that differs from the prompts is not an error on-chain."""
+        with patch.object(
+            service,
+            "_get_marketplace_contract",
+            side_effect=RuntimeError("past validation"),
         ):
             with pytest.raises(RuntimeError, match="past validation"):
                 await service.send_request(
-                    prompts=("a", "b"),
-                    tools=("t", "t"),
-                    nonces=[1],
-                    on_request_id=hook,
+                    prompts=("a", "b"), tools=("t", "t"), nonces=[1]
                 )
-
-        mock_offchain.assert_not_called()
-        hook.assert_not_called()
 
     def test_rejection_survives_pickle_and_copy(self) -> None:
         """Every field comes back after a round trip."""

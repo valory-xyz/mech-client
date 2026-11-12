@@ -66,7 +66,6 @@ logger = logging.getLogger(__name__)
 # HTTP status the offchain mech returns when the requester's prepaid balance is
 # insufficient (structured 402 challenge, see mech task_execution handlers).
 HTTP_PAYMENT_REQUIRED = 402
-# The mech answers 503 when the same request can be sent again later.
 HTTP_SERVICE_UNAVAILABLE = 503
 # Outbound HTTP timeout (seconds) for the offchain request POST.
 OFFCHAIN_HTTP_TIMEOUT = 30
@@ -90,6 +89,21 @@ _MAX_AUTO_DEPOSIT_RATIO = 10
 _SUPPORTED_DEPOSIT_PAYMENT_TYPES: FrozenSet[PaymentType] = frozenset(
     {PaymentType.NATIVE, PaymentType.OLAS_TOKEN, PaymentType.USDC_TOKEN}
 )
+
+
+def _accepted_note(accepted_ids: List[str], request_nonces: List[int]) -> str:
+    """Name the requests accepted earlier in a failed call, if any.
+
+    :param accepted_ids: Hex ids accepted earlier in the call, in order
+    :param request_nonces: Nonces of every request in the call
+    :return: The note to append to the error message, or ""
+    """
+    if not accepted_ids:
+        return ""
+    accepted = ", ".join(
+        f"{rid} (nonce {n})" for rid, n in zip(accepted_ids, request_nonces)
+    )
+    return f" Accepted earlier in this call, not watched: {accepted}."
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -149,7 +163,7 @@ class OffchainRequestResult(TypedDict):
 class OffchainRequestRejected(ValueError):
     """The mech answered an offchain request with an HTTP error."""
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments  # the spec's fields, kw-only
         self,
         message: str,
         *,
@@ -639,7 +653,10 @@ class MarketplaceService(
                     e.response, request_id_hex, request_nonces, request_ids_hex, str(e)
                 ) from e
             except requests.exceptions.RequestException as e:
-                raise ValueError(f"Failed to send offchain request: {e}") from e
+                raise ValueError(
+                    f"Failed to send offchain request: {e}"
+                    + _accepted_note(request_ids_hex, request_nonces)
+                ) from e
             if not response.ok:
                 raise self._rejection(
                     response, request_id_hex, request_nonces, request_ids_hex
@@ -681,20 +698,15 @@ class MarketplaceService(
         index = len(accepted_ids)
         try:
             reason = str(response.json().get("reason") or "")
-        except Exception:  # pylint: disable=broad-except  # nosec B110
+        except (ValueError, AttributeError):
             reason = ""
         reason = reason or response.reason
         if message is None:
             message = (
                 f"Offchain request rejected: {reason} (HTTP {response.status_code})"
             )
-        if accepted_ids:
-            accepted = ", ".join(
-                f"{rid} (nonce {n})" for rid, n in zip(accepted_ids, request_nonces)
-            )
-            message += f" Accepted earlier in this call, not watched: {accepted}."
         return OffchainRequestRejected(
-            message,
+            message + _accepted_note(accepted_ids, request_nonces),
             request_id=request_id,
             nonce=request_nonces[index],
             status=response.status_code,
