@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-11-12
+
 ### ✨ Added
 
 - `send_request(..., nonces=[...])` sets the marketplace nonce of each offchain request, instead of `mapNonces(requester) + i`. The nonces must be integers, strictly increasing, one per prompt and none below `mapNonces`; otherwise `ValueError` is raised before anything is signed.
