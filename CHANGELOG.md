@@ -9,10 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
-- `send_request(..., nonces=[...])` sets the marketplace nonce of each offchain request, instead of `mapNonces(requester) + i`. A nonce below `mapNonces`, or a count that differs from the prompts, raises `ValueError` before anything is signed. The on-chain path ignores it.
-- `send_request(..., on_request_id=fn)` calls `fn(request_id, nonce)` for each offchain request just before it is signed. If `fn` raises, that request is neither signed nor sent.
+- `send_request(..., nonces=[...])` sets the marketplace nonce of each offchain request, instead of `mapNonces(requester) + i`. The nonces must be integers, strictly increasing, one per prompt and none below `mapNonces`; otherwise `ValueError` is raised before anything is signed.
+- `send_request(..., on_request_id=fn)` calls `fn(request_id, nonce)` with the raw 32-byte id for each offchain request just before it is signed. If `fn` raises, that request and the rest of the call are neither signed nor sent. An async `fn` is refused.
+- Passing `nonces` or `on_request_id` without `use_offchain=True` raises `ValueError`.
 - The offchain result lists the `nonces` used, matching `request_ids`.
-- `OffchainRequestRejected`, a `ValueError`, raised when the mech answers an offchain request with an HTTP error, including the 402 paths. It carries `request_id`, `nonce`, `status`, the mech's `reason` verbatim, `retryable` (HTTP 503) and `unsent`, the later nonces of the call that were not sent. Requests accepted earlier in the same call are named in its message and not watched. A transport error stays a plain `ValueError`.
+- `OffchainRequestRejected`, a `ValueError`, raised when the mech answers an offchain request with an HTTP error, including its 402s. It carries `request_id`, `nonce`, `status`, the mech's `reason` as a string, `retryable` (HTTP 503), `unsent` (the later nonces of the call, not sent) and `deposited` (the amount auto-deposited before the mech answered 402 again). Requests accepted earlier in the same call are named in its message and not watched. A transport error, or an auto top-up that fails on the requester's side, stays a plain `ValueError`.
 
 ## [0.24.0] - 2026-10-09
 

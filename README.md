@@ -578,14 +578,16 @@ try:
         use_offchain=True,
         nonces=[next_nonce],
         on_request_id=approve,
-        extra_attributes={"nonce": salt},  # fixed salt: a resend signs the same id
+        extra_attributes={"nonce": salt},
     )
     print(result["nonces"])
 except OffchainRequestRejected as e:
     ...
 ```
 
-The mech accepts only the requester's next nonce, so requests must reach it in nonce order. A transport error stays a plain `ValueError`: whether the mech stored the request is unknown.
+The hook gets the raw 32-byte request id; `request_ids` and `OffchainRequestRejected.request_id` are hex strings. The mech accepts only the requester's next nonce, so requests must reach it in nonce order. A transport error stays a plain `ValueError`: whether the mech stored the request is unknown.
+
+`extra_attributes["nonce"]` is unrelated to the marketplace nonce: it fixes the metadata salt, which is otherwise random. A resend signs the same request id only with the same salt, prompt, tool, marketplace nonce, mech, rate and requester.
 
 You can also use the Mech Client to programmatically fetch tools for marketplace mechs in your Python project, as well as retrieve descriptions and input/output schemas for specific tools given their unique identifier.
 

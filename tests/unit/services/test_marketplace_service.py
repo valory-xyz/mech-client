@@ -22,8 +22,8 @@
 import copy
 import pickle
 import socket
-from typing import Any, Dict, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any, Dict, List, Optional
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 import requests
@@ -2936,9 +2936,16 @@ class TestCallerOwnedNonces:
     ) -> None:
         """No nonces keeps the mapNonces + i behaviour."""
         mech_post.side_effect = [_mock_http_response(200), _mock_http_response(200)]
+        hook = MagicMock()
 
-        result = await _send_offchain(service, _nonce_contract(5), prompts=("a", "b"))
+        result = await _send_offchain(
+            service, _nonce_contract(5), prompts=("a", "b"), on_request_id=hook
+        )
 
+        assert hook.call_args_list == [
+            call(_request_id_for(5), 5),
+            call(_request_id_for(6), 6),
+        ]
         assert result["nonces"] == [5, 6]
         assert result["request_ids"] == [
             _request_id_for(5).hex(),
@@ -3093,18 +3100,18 @@ class TestCallerOwnedNonces:
         assert e.value.status == 402
 
     @pytest.mark.asyncio
-    async def test_refused_auto_deposit_is_a_rejection(
+    async def test_refused_auto_deposit_is_a_plain_value_error(
         self, service: MarketplaceService, mech_post: MagicMock
     ) -> None:
-        """A 402 whose top-up is refused is a 402 rejection, not a bare ValueError."""
+        """A top-up refused on our side is not reported as the mech's 402."""
         mech_post.side_effect = [
             _mock_http_response(402, {"required": "100000", "currentBalance": "0"})
         ]
 
-        with pytest.raises(OffchainRequestRejected, match="safety cap") as e:
+        with pytest.raises(ValueError, match="safety cap") as e:
             await _send_offchain(service, _nonce_contract(5), auto_deposit=True)
 
-        assert e.value.status == 402
+        assert not isinstance(e.value, OffchainRequestRejected)
 
     @pytest.mark.asyncio
     async def test_second_402_after_deposit_is_a_rejection(
@@ -3122,6 +3129,7 @@ class TestCallerOwnedNonces:
 
         assert e.value.status == 402
         assert e.value.nonce == 5
+        assert e.value.deposited == 100
         assert "remaining shortfall 50" in str(e.value)
 
     @pytest.mark.asyncio
@@ -3214,19 +3222,92 @@ class TestCallerOwnedNonces:
         assert mock_offchain.call_args.kwargs["on_request_id"] is hook
 
     @pytest.mark.asyncio
-    async def test_onchain_path_skips_the_nonce_count_check(
-        self, service: MarketplaceService
+    @pytest.mark.parametrize(
+        "kwargs", [{"nonces": [1]}, {"on_request_id": lambda request_id, nonce: None}]
+    )
+    async def test_onchain_path_refuses_nonces_and_hook(
+        self, service: MarketplaceService, kwargs: Dict[str, Any]
     ) -> None:
-        """A nonce count that differs from the prompts is not an error on-chain."""
-        with patch.object(
-            service,
-            "_get_marketplace_contract",
-            side_effect=RuntimeError("past validation"),
-        ):
-            with pytest.raises(RuntimeError, match="past validation"):
+        """Offchain-only arguments fail fast on-chain instead of being ignored."""
+        with patch.object(service, "_get_marketplace_contract") as mock_contract:
+            with pytest.raises(ValueError, match="only to offchain"):
+                await service.send_request(prompts=("a",), tools=("t",), **kwargs)
+
+        mock_contract.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("nonces", "match"),
+        [
+            ([5, 5], "strictly increasing"),
+            ([7, 5], "strictly increasing"),
+            ([5, "6"], "integers"),
+        ],
+    )
+    async def test_send_request_refuses_bad_nonce_lists(
+        self, service: MarketplaceService, nonces: List[Any], match: str
+    ) -> None:
+        """Repeated, decreasing or non-integer nonces fail before any chain read."""
+        with patch.object(service, "_get_marketplace_contract") as mock_contract:
+            with pytest.raises(ValueError, match=match):
                 await service.send_request(
-                    prompts=("a", "b"), tools=("t", "t"), nonces=[1]
+                    prompts=("a", "b"),
+                    tools=("t", "t"),
+                    use_offchain=True,
+                    nonces=nonces,
                 )
+
+        mock_contract.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_async_hook_is_refused_before_signing(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """An async hook would never run, so it is refused before anything is signed."""
+
+        async def hook(request_id: bytes, nonce: int) -> None:
+            raise AssertionError("never awaited")
+
+        with pytest.raises(TypeError, match="synchronous"):
+            await _send_offchain(service, _nonce_contract(5), on_request_id=hook)
+
+        service.signer.sign_message.assert_not_called()
+        mech_post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_hook_failure_mid_call_stops_the_rest(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """A hook raising on the second request leaves only the first signed and sent."""
+        mech_post.side_effect = [_mock_http_response(200)]
+
+        def hook(request_id: bytes, nonce: int) -> None:
+            if nonce == 6:
+                raise RuntimeError("not allowed")
+
+        with pytest.raises(RuntimeError, match="not allowed"):
+            await _send_offchain(
+                service,
+                _nonce_contract(5),
+                prompts=("a", "b"),
+                nonces=[5, 6],
+                on_request_id=hook,
+            )
+
+        assert service.signer.sign_message.call_count == 1
+        assert mech_post.call_count == 1
+
+    @pytest.mark.parametrize(
+        ("status", "retryable"),
+        [(400, False), (402, False), (429, False), (500, False), (503, True)],
+    )
+    def test_only_503_is_retryable(self, status: int, retryable: bool) -> None:
+        """retryable follows HTTP 503 alone."""
+        err = OffchainRequestRejected(
+            "x", request_id="ab", nonce=1, status=status, reason="r", unsent=[]
+        )
+
+        assert err.retryable is retryable
 
     def test_rejection_survives_pickle_and_copy(self) -> None:
         """Every field comes back after a round trip."""
@@ -3237,12 +3318,14 @@ class TestCallerOwnedNonces:
             status=503,
             reason="busy",
             unsent=[7],
+            deposited=9,
         )
 
         for clone in (pickle.loads(pickle.dumps(err)), copy.copy(err)):
             assert str(clone) == "rejected"
             assert (clone.request_id, clone.nonce, clone.status) == ("ab", 6, 503)
             assert (clone.reason, clone.unsent, clone.retryable) == ("busy", [7], True)
+            assert clone.deposited == 9
 
     def test_rejection_is_exported(self) -> None:
         """The exception is part of the public API."""
