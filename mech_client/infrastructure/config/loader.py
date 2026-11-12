@@ -41,7 +41,7 @@ def get_mech_config(
                         If None, uses first chain in config.
     :param agent_mode: Whether running in agent mode (uses stored operate config)
     :return: MechConfig instance with loaded configuration
-    :raises ValueError: If the chain's entry has no subgraph_dialect
+    :raises ValueError: If the chain entry lacks subgraph_dialect or registry_subgraph_dialect
     """
     with open(MECH_CONFIGS, "r", encoding="UTF-8") as file:
         data = json.load(file)

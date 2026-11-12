@@ -367,3 +367,5 @@ This refactor was a collaborative effort to modernize the codebase and improve d
 For changes in versions prior to 0.17.0, please refer to the git history or contact the maintainers.
 
 [0.17.0]: https://github.com/valory-xyz/mech-client/compare/v0.16.0...v0.17.0
+
+Base/Polygon indexer endpoints are supplied by your deployment operator. Ask the Olas deployment maintainer for the Marketplace and service-registry squid URLs before using these chains; no default endpoints are bundled.

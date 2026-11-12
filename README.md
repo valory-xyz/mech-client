@@ -751,3 +751,5 @@ the ERC-8004 service lookup uses the existing `serviceById` adapter.
 Marketplace and registry endpoints/dialects stay independent.
 `MECHX_REGISTRY_SUBGRAPH_URL` remains a per-process endpoint override,
 and must use the chain's configured registry dialect.
+
+Base/Polygon indexer endpoints are supplied by your deployment operator. Ask the Olas deployment maintainer for the Marketplace and service-registry squid URLs before using these chains; no default endpoints are bundled.

@@ -195,6 +195,8 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
             is disabled; overridden by eth_estimateGas when is_gas_estimation_enabled
             is true in ledger_config)
         transaction_url: Block explorer transaction URL template
+        subgraph_url_env: Optional env name supplying the Marketplace endpoint
+        registry_subgraph_url_env: Optional env name supplying the registry endpoint
         subgraph_url: Subgraph GraphQL endpoint URL
         price: Default price for requests
         mech_marketplace_contract: Marketplace contract address

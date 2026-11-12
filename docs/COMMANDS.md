@@ -286,10 +286,10 @@ All commands require `--chain-config` with one of these five chain names. Arbitr
 - **Native Payment**: Supports `deposit native` command for prepaid native token deposits (Gnosis, Base, Polygon, Optimism, Robinhood)
 - **NVM Subscriptions**: Supports `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base)
 - **OLAS/USDC Token**: Payment token addresses configured in `infrastructure/config/contract_addresses.py`. On Robinhood the USDC payment type uses USDG, so `--token-type usdc` deposits USDG
-- **Subgraph**: Default subgraph URL provided in `mechs.json` for Gnosis, Base, Polygon, Optimism and Robinhood. Robinhood's is the marketplace squid (SQD), marked `"subgraph_dialect": "squid"` so `mech list` sends the squid's query syntax. An override for Robinhood must also point at a squid. Override with `MECHX_SUBGRAPH_URL` if needed.
+- **Subgraph**: Default URLs are provided for Gnosis, Optimism and Robinhood. Base/Polygon require their `MECHX_MARKETPLACE_*_SQUID_URL` variables from the deployment operator. Robinhood's is the marketplace squid (SQD), marked `"subgraph_dialect": "squid"` so `mech list` sends the squid's query syntax. An override for Robinhood must also point at a squid. Override with `MECHX_SUBGRAPH_URL` if needed.
 
 **Command Requirements:**
-- `mech list`: Requires marketplace + a subgraph (default URLs for Gnosis, Base, Polygon, Optimism and Robinhood; optionally override with `MECHX_SUBGRAPH_URL`)
+- `mech list`: Requires marketplace + a subgraph (defaults for Gnosis, Optimism and Robinhood; Base/Polygon require configured squid envs; optionally override with `MECHX_SUBGRAPH_URL`)
 - `request`: Requires marketplace contract and standard Olas service registry
 - `deposit native`: Requires marketplace + native payment support (Gnosis, Base, Polygon, Optimism, Robinhood)
 - `deposit token`: Requires marketplace + token addresses in config (Gnosis, Base, Polygon, Optimism; USDC type only on Robinhood, which is USDG)

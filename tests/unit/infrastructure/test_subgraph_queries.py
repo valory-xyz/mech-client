@@ -1002,3 +1002,27 @@ def test_registry_override_warns_and_preserves_squid_dialect(
     assert (
         "MECHX_REGISTRY_SUBGRAPH_URL replaces the endpoint" in warning.call_args.args[0]
     )
+
+
+@pytest.mark.parametrize("registry", [False, True])
+def test_base_missing_endpoint_names_exact_env(
+    monkeypatch: pytest.MonkeyPatch, registry: bool
+) -> None:
+    """Missing Base endpoints must identify the chain-specific setting."""
+    for name in [
+        "MECHX_SUBGRAPH_URL",
+        "MECHX_REGISTRY_SUBGRAPH_URL",
+        "MECHX_MARKETPLACE_BASE_SQUID_URL",
+        "MECHX_REGISTRY_BASE_SQUID_URL",
+    ]:
+        monkeypatch.delenv(name, raising=False)
+    expected = (
+        "MECHX_REGISTRY_BASE_SQUID_URL"
+        if registry
+        else "MECHX_MARKETPLACE_BASE_SQUID_URL"
+    )
+    with pytest.raises(SubgraphError, match=expected):
+        if registry:
+            query_erc8004_agent_id("base", 1)
+        else:
+            query_mm_mechs_info("base")
