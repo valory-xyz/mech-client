@@ -585,7 +585,7 @@ except OffchainRequestRejected as e:
     ...
 ```
 
-The hook gets the raw 32-byte request id; `request_ids` and `OffchainRequestRejected.request_id` are hex strings. The mech accepts only the requester's next nonce, so requests must reach it in nonce order. A transport error stays a plain `ValueError`: whether the mech stored the request is unknown.
+`OffchainTopUpFailed` means the auto top-up after the mech's 402 failed on your side, so the request was not accepted. The hook gets the raw 32-byte request id; `request_ids` and `OffchainRequestRejected.request_id` are hex strings. The mech accepts only the requester's next nonce, so requests must reach it in nonce order. A transport error stays a plain `ValueError`: whether the mech stored the request is unknown.
 
 `extra_attributes["nonce"]` is unrelated to the marketplace nonce: it fixes the metadata salt, which is otherwise random. A resend signs the same request id only with the same salt, prompt, tool, marketplace nonce, mech, rate and requester.
 

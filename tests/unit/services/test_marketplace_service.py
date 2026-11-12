@@ -40,6 +40,7 @@ from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.services.marketplace_service import (
     MarketplaceService,
     OffchainRequestRejected,
+    OffchainTopUpFailed,
     PaymentChallenge,
 )
 from mech_client.utils.validators import ensure_checksummed_address
@@ -2475,6 +2476,12 @@ def _mock_http_response(
 class TestOffchain402Handling:
     """Tests for the structured offchain 402 challenge handling."""
 
+    @pytest.fixture(autouse=True)
+    def confirmed_deposits(self) -> Any:
+        """Report every auto-deposit transaction as mined successfully."""
+        with patch(f"{SERVICE}.wait_for_receipt", return_value={"status": 1}):
+            yield
+
     def test_parse_402_challenge_full_body(self) -> None:
         """A full 402 body + WWW-Authenticate header parses to a typed PaymentChallenge."""
         resp = _mock_http_response(
@@ -3100,18 +3107,46 @@ class TestCallerOwnedNonces:
         assert e.value.status == 402
 
     @pytest.mark.asyncio
-    async def test_refused_auto_deposit_is_a_plain_value_error(
+    async def test_refused_top_up_is_its_own_error(
         self, service: MarketplaceService, mech_post: MagicMock
     ) -> None:
-        """A top-up refused on our side is not reported as the mech's 402."""
+        """A top-up refused on our side is neither the mech's 402 nor a transport error."""
         mech_post.side_effect = [
-            _mock_http_response(402, {"required": "100000", "currentBalance": "0"})
+            _mock_http_response(200),
+            _mock_http_response(402, {"required": "100000", "currentBalance": "0"}),
         ]
 
-        with pytest.raises(ValueError, match="safety cap") as e:
-            await _send_offchain(service, _nonce_contract(5), auto_deposit=True)
+        with pytest.raises(OffchainTopUpFailed, match="safety cap") as e:
+            await _send_offchain(
+                service,
+                _nonce_contract(5),
+                prompts=("a", "b", "c"),
+                nonces=[5, 6, 7],
+                auto_deposit=True,
+            )
 
         assert not isinstance(e.value, OffchainRequestRejected)
+        assert (e.value.request_id, e.value.nonce) == (_request_id_for(6).hex(), 6)
+        assert e.value.unsent == [7]
+        assert f"{_request_id_for(5).hex()} (nonce 5)" in str(e.value)
+
+    @pytest.mark.asyncio
+    async def test_reverted_top_up_is_a_top_up_failure(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """A mined but reverted deposit is not reported as deposited."""
+        mech_post.side_effect = [
+            _mock_http_response(402, {"required": "100", "currentBalance": "0"})
+        ]
+
+        with (
+            patch("mech_client.services.deposit_service.DepositService"),
+            patch(f"{SERVICE}.wait_for_receipt", return_value={"status": 0}),
+        ):
+            with pytest.raises(OffchainTopUpFailed, match="reverted"):
+                await _send_offchain(service, _nonce_contract(5), auto_deposit=True)
+
+        assert mech_post.call_count == 1
 
     @pytest.mark.asyncio
     async def test_second_402_after_deposit_is_a_rejection(
@@ -3123,7 +3158,10 @@ class TestCallerOwnedNonces:
             _mock_http_response(402, {"required": "150", "currentBalance": "100"}),
         ]
 
-        with patch("mech_client.services.deposit_service.DepositService"):
+        with (
+            patch("mech_client.services.deposit_service.DepositService"),
+            patch(f"{SERVICE}.wait_for_receipt", return_value={"status": 1}),
+        ):
             with pytest.raises(OffchainRequestRejected, match="did not clear") as e:
                 await _send_offchain(service, _nonce_contract(5), auto_deposit=True)
 
@@ -3242,6 +3280,7 @@ class TestCallerOwnedNonces:
             ([5, 5], "strictly increasing"),
             ([7, 5], "strictly increasing"),
             ([5, "6"], "integers"),
+            ([True, 2], "integers"),
         ],
     )
     async def test_send_request_refuses_bad_nonce_lists(
@@ -3327,6 +3366,15 @@ class TestCallerOwnedNonces:
             assert (clone.reason, clone.unsent, clone.retryable) == ("busy", [7], True)
             assert clone.deposited == 9
 
-    def test_rejection_is_exported(self) -> None:
-        """The exception is part of the public API."""
+    def test_top_up_failure_survives_pickle_and_copy(self) -> None:
+        """Every field comes back after a round trip."""
+        err = OffchainTopUpFailed("failed", request_id="ab", nonce=6, unsent=[7])
+
+        for clone in (pickle.loads(pickle.dumps(err)), copy.copy(err)):
+            assert str(clone) == "failed"
+            assert (clone.request_id, clone.nonce, clone.unsent) == ("ab", 6, [7])
+
+    def test_errors_are_exported(self) -> None:
+        """Both exceptions are part of the public API."""
         assert mech_client.OffchainRequestRejected is OffchainRequestRejected
+        assert mech_client.OffchainTopUpFailed is OffchainTopUpFailed

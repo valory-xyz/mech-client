@@ -161,7 +161,19 @@ class OffchainRequestResult(TypedDict):
     deliveries: Dict[str, DeliveryResult]
 
 
-class OffchainRequestRejected(ValueError):
+class _OffchainRequestError(ValueError):
+    """An error about one request of an offchain call."""
+
+    def __reduce__(self) -> Tuple[Any, ...]:
+        """Rebuild with the keyword-only fields, which ``args`` lacks.
+
+        :return: The callable and arguments that rebuild this exception
+        """
+        fields = {k: v for k, v in vars(self).items() if not k.startswith("_")}
+        return functools.partial(type(self), str(self), **fields), ()
+
+
+class OffchainRequestRejected(_OffchainRequestError):
     """The mech answered an offchain request with an HTTP error."""
 
     def __init__(  # pylint: disable=too-many-arguments  # the spec's fields, kw-only
@@ -195,27 +207,30 @@ class OffchainRequestRejected(ValueError):
         self.unsent = unsent
         self.deposited = deposited
 
-    def __reduce__(self) -> Tuple[Any, ...]:
-        """Rebuild with the keyword-only fields, which ``args`` lacks.
-
-        :return: The callable and arguments that rebuild this exception
-        """
-        rebuild = functools.partial(
-            type(self),
-            str(self),
-            request_id=self.request_id,
-            nonce=self.nonce,
-            status=self.status,
-            reason=self.reason,
-            unsent=self.unsent,
-            deposited=self.deposited,
-        )
-        return rebuild, ()
-
     @property
     def retryable(self) -> bool:
-        """True for HTTP 503, which the mech uses for transient failures."""
+        """True for HTTP 503; the mech uses it mostly, not only, for transient failures."""
         return self.status == HTTP_SERVICE_UNAVAILABLE
+
+
+class OffchainTopUpFailed(_OffchainRequestError):
+    """The auto top-up after the mech's HTTP 402 failed; the request was not accepted."""
+
+    def __init__(
+        self, message: str, *, request_id: str, nonce: int, unsent: List[int]
+    ) -> None:
+        """
+        Initialize the failure.
+
+        :param message: Human-readable error message, naming the top-up's cause
+        :param request_id: Hex id of the request, as in ``request_ids``
+        :param nonce: Marketplace nonce of the request
+        :param unsent: Nonces of this call after this one, not sent
+        """
+        super().__init__(message)
+        self.request_id = request_id
+        self.nonce = nonce
+        self.unsent = unsent
 
 
 class _MechRefusal(ValueError):
@@ -234,6 +249,10 @@ class _MechRefusal(ValueError):
         super().__init__(message)
         self.response = response
         self.deposited = deposited
+
+
+class _TopUpFailure(ValueError):
+    """An auto top-up that failed on the requester's side."""
 
 
 #: The two are a discriminated union rather than one shape with optional
@@ -387,7 +406,7 @@ class MarketplaceService(
                 raise ValueError(
                     f"Number of nonces ({len(nonces)}) must match number of prompts ({len(prompts)})"
                 )
-            if not all(isinstance(n, int) for n in nonces):
+            if not all(isinstance(n, int) and not isinstance(n, bool) for n in nonces):
                 raise ValueError(f"Nonces {list(nonces)} must be integers")
             if any(b <= a for a, b in zip(nonces, nonces[1:])):
                 raise ValueError(f"Nonces {list(nonces)} must be strictly increasing")
@@ -682,6 +701,13 @@ class MarketplaceService(
                     str(e),
                     e.deposited,
                 ) from e
+            except _TopUpFailure as e:
+                raise OffchainTopUpFailed(
+                    str(e) + _accepted_note(request_ids_hex, request_nonces),
+                    request_id=request_id_hex,
+                    nonce=nonce,
+                    unsent=request_nonces[i + 1 :],
+                ) from e
             except requests.exceptions.RequestException as e:
                 raise ValueError(
                     f"Failed to send offchain request: {e}"
@@ -893,6 +919,7 @@ class MarketplaceService(
         :raises _MechRefusal: on a 402 when auto-deposit is disabled, on a
             non-positive shortfall that auto-deposit can't act on, or on a
             second 402 after the deposit landed.
+        :raises _TopUpFailure: if the auto-deposit fails on the requester's side.
         """
         response = self._do_offchain_post(url, payload)
         if response.status_code == HTTP_PAYMENT_REQUIRED:
@@ -923,7 +950,12 @@ class MarketplaceService(
                     f"({challenge.error})",
                     response,
                 )
-            self._auto_deposit_for_402(payment_type, challenge, max_delivery_rate)
+            try:
+                deposited = self._auto_deposit_for_402(
+                    payment_type, challenge, max_delivery_rate
+                )
+            except ValueError as e:
+                raise _TopUpFailure(str(e)) from e
             response = self._do_offchain_post(url, payload)
             if response.status_code == HTTP_PAYMENT_REQUIRED:
                 # The deposit tx already confirmed (DepositService waits for
@@ -941,7 +973,7 @@ class MarketplaceService(
                     f"not be mined yet, the price may have moved, or the asset "
                     f"may be wrong. ({retry.error})",
                     response,
-                    deposited=challenge.shortfall,
+                    deposited=deposited,
                 )
         self._log_payment_receipt(response)
         return response
@@ -995,7 +1027,7 @@ class MarketplaceService(
         payment_type: PaymentType,
         challenge: PaymentChallenge,
         max_delivery_rate: int,
-    ) -> None:
+    ) -> int:
         """Deposit the 402 shortfall into the prepaid balance.
 
         Refuses to deposit when the shortfall exceeds
@@ -1005,11 +1037,13 @@ class MarketplaceService(
         :param payment_type: the request's payment type (native vs token).
         :param challenge: the parsed 402 challenge.
         :param max_delivery_rate: the requester's signed per-request maximum.
+        :return: the amount deposited, in a confirmed transaction.
         :raises ValueError: if the payment type doesn't support auto-deposit,
-            or if the requested deposit would exceed the safety cap.
+            if the requested deposit would exceed the safety cap, or if the
+            deposit transaction reverted.
         """
         if challenge.shortfall <= 0:
-            return
+            return 0
         if payment_type not in _SUPPORTED_DEPOSIT_PAYMENT_TYPES:
             raise ValueError(
                 f"Auto-deposit is not supported for payment type {payment_type.name}"
@@ -1050,16 +1084,22 @@ class MarketplaceService(
         # AND get a branch here; the assertion-shaped raise below catches the
         # mismatch if only the set is updated.
         if payment_type == PaymentType.NATIVE:
-            deposit_service.deposit_native(challenge.shortfall)
+            tx_hash = deposit_service.deposit_native(challenge.shortfall)
         elif payment_type == PaymentType.OLAS_TOKEN:
-            deposit_service.deposit_token(challenge.shortfall, "olas")
+            tx_hash = deposit_service.deposit_token(challenge.shortfall, "olas")
         elif payment_type == PaymentType.USDC_TOKEN:
-            deposit_service.deposit_token(challenge.shortfall, "usdc")
+            tx_hash = deposit_service.deposit_token(challenge.shortfall, "usdc")
         else:  # pragma: no cover - guarded by the membership check above
             raise ValueError(
                 f"Internal error: {payment_type.name} is listed as supported "
                 f"but has no deposit dispatch branch."
             )
+        # DepositService waits for the receipt but does not check its status.
+        if wait_for_receipt(tx_hash, self.ledger_api).get("status") != 1:
+            raise ValueError(
+                f"Auto-deposit transaction {tx_hash} reverted; nothing was deposited."
+            )
+        return challenge.shortfall
 
     @staticmethod
     def _log_payment_receipt(response: requests.Response) -> None:

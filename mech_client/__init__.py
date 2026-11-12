@@ -56,6 +56,7 @@ from mech_client.services.deposit_service import DepositService
 from mech_client.services.marketplace_service import (
     MarketplaceService,
     OffchainRequestRejected,
+    OffchainTopUpFailed,
 )
 from mech_client.services.setup_service import SetupService
 from mech_client.services.subscription_service import SubscriptionService
@@ -110,4 +111,5 @@ __all__ = [
     "PaymentError",
     "DeliveryTimeoutError",
     "OffchainRequestRejected",
+    "OffchainTopUpFailed",
 ]
