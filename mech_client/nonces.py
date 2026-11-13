@@ -41,11 +41,13 @@ import contextlib
 import functools
 import json
 import logging
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
+    IO,
     Any,
     Callable,
     Dict,
@@ -93,26 +95,58 @@ TAKEN: Outcome = "taken"
 UNKNOWN: Literal["unknown"] = "unknown"
 SLOT_STATES = (ACCEPTED, UNKNOWN)
 
-RULE_IN_FLIGHT = "mech-in-flight"
-RULE_QUEUE_UNREADABLE = "mech-queue-unreadable"
-RULE_QUEUE_UNWRITABLE = "mech-queue-unwritable"
-RULE_QUEUE_NOT_STALLED = "mech-queue-not-stalled"
-REJECTION_RULES: Dict[Outcome, str] = {
-    RETRY: "mech-nonce-gap",
-    TAKEN: "mech-nonce-taken",
-    NOT_ACCEPTED: "mech-request-rejected",
-    UNKNOWN: "mech-answer-unknown",
+NonceRule = Literal[
+    "mech-in-flight",
+    "mech-nonce-gap",
+    "mech-nonce-taken",
+    "mech-request-rejected",
+    "mech-answer-unknown",
+    "mech-queue-unreadable",
+    "mech-queue-unwritable",
+    "mech-queue-not-stalled",
+    "mech-queue-locked",
+]
+RULE_IN_FLIGHT: NonceRule = "mech-in-flight"
+RULE_NONCE_GAP: NonceRule = "mech-nonce-gap"
+RULE_NONCE_TAKEN: NonceRule = "mech-nonce-taken"
+RULE_REQUEST_REJECTED: NonceRule = "mech-request-rejected"
+RULE_ANSWER_UNKNOWN: NonceRule = "mech-answer-unknown"
+RULE_QUEUE_UNREADABLE: NonceRule = "mech-queue-unreadable"
+RULE_QUEUE_UNWRITABLE: NonceRule = "mech-queue-unwritable"
+RULE_QUEUE_NOT_STALLED: NonceRule = "mech-queue-not-stalled"
+RULE_QUEUE_LOCKED: NonceRule = "mech-queue-locked"
+REJECTION_RULES: Dict[Outcome, NonceRule] = {
+    RETRY: RULE_NONCE_GAP,
+    TAKEN: RULE_NONCE_TAKEN,
+    NOT_ACCEPTED: RULE_REQUEST_REJECTED,
+    UNKNOWN: RULE_ANSWER_UNKNOWN,
 }
+LOCK_FILE = "mech_nonces.lock"
+
+# One allocator per store: an advisory, non-blocking lock on LOCK_FILE, which
+# the operating system drops when the holder's file is closed or it exits.
+if sys.platform == "win32":  # pragma: no cover - the branch for this platform runs
+    import msvcrt  # pylint: disable=import-error  # Windows-only, imported only there
+
+    def _lock_file(handle: IO[str]) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+
+else:  # pragma: no cover - the branch for this platform runs
+    import fcntl
+
+    def _lock_file(handle: IO[str]) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
 class NonceRefused(Exception):
     """The allocator will not hand out a nonce now; ``rule`` names why."""
 
-    def __init__(self, rule: str, detail: str) -> None:
+    def __init__(self, rule: NonceRule, detail: str) -> None:
         """
         Initialize the refusal.
 
-        :param rule: The rule that refused, e.g. ``mech-in-flight``
+        :param rule: The rule that refused, one of the ``RULE_*`` constants
         :param detail: Human-readable explanation
         """
         super().__init__(rule, detail)
@@ -180,20 +214,40 @@ class Reservation:
         :param record: Applies an answer to the queue; the allocator binds it
         """
         self._record = record
-        self.nonce = nonce
-        self.prior = prior
-        self.outcome: Optional[Outcome] = None
+        self._nonce = nonce
+        self._prior = prior
+        self._outcome: Optional[Outcome] = None
+
+    @property
+    def nonce(self) -> int:
+        """The reserved nonce."""
+        return self._nonce
+
+    @property
+    def prior(self) -> Optional[_Slot]:
+        """What held this nonce before (only a stalled queue's probe)."""
+        return self._prior
+
+    @property
+    def outcome(self) -> Optional[Outcome]:
+        """The recorded answer, or None until ``answered`` is called."""
+        return self._outcome
 
     def answered(self, outcome: Outcome, *, mech: str, salt: str) -> None:
         """
-        Record the mech's answer to this nonce.
+        Record the mech's answer to this nonce; a reservation is answered once.
 
         :param outcome: What the answer means for the nonce
         :param mech: The mech the request went to
         :param salt: The request's metadata salt, kept so a resend reuses its id
+        :raises RuntimeError: If it was already answered
         """
-        self.outcome = outcome
-        self._record(self.nonce, outcome, mech=mech, salt=salt, prior=self.prior)
+        if self._outcome is not None:
+            raise RuntimeError(
+                f"nonce {self._nonce} was already answered {self._outcome!r}"
+            )
+        self._outcome = outcome
+        self._record(self._nonce, outcome, mech=mech, salt=salt, prior=self._prior)
 
 
 # too-many-instance-attributes: the store's path, locks and failure flags and
@@ -211,7 +265,11 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         """
-        Load the persisted queues from ``store_path``.
+        Lock ``store_path`` for this allocator and load its persisted queues.
+
+        Only one allocator may use a store at a time, across processes too:
+        two would each hand out the same next nonce and overwrite each
+        other's held slots. Call ``close`` to release the store.
 
         :param store_path: Directory holding the queue file (``mech_nonces.json``);
             created if missing, and the store is unwritable if that fails
@@ -221,6 +279,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         :param clock: Time source, in seconds
         :param sleep: Blocking sleep, in seconds
         :raises ValueError: If settle_timeout or gap_retries is negative
+        :raises NonceRefused: ``mech-queue-locked`` if another allocator holds
+            the store
         """
         if settle_timeout < 0 or gap_retries < 0:
             raise ValueError(
@@ -237,15 +297,36 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         self._queues: Dict[str, _Queue] = {}
         self._broken = False
         self._unwritable = False
+        self._lock_handle: Optional[IO[str]] = None
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._lock_handle = (
+                open(  # pylint: disable=consider-using-with  # held until close()
+                    self._path.parent / LOCK_FILE, "a+", encoding="utf-8"
+                )
+            )
         except OSError as e:
             logger.error(
-                "could not create %s (%s); mech requests refused", self._path.parent, e
+                "could not open %s (%s); mech requests refused", self._path.parent, e
             )
             self._unwritable = True
-        else:
-            self._load()
+            return
+        try:
+            _lock_file(self._lock_handle)
+        except OSError as e:
+            self.close()
+            raise NonceRefused(
+                RULE_QUEUE_LOCKED,
+                f"{self._path.parent} is in use by another NonceAllocator "
+                f"({type(e).__name__}); use one allocator per store",
+            ) from e
+        self._load()
+
+    def close(self) -> None:
+        """Release the store for another allocator."""
+        if self._lock_handle is not None:
+            self._lock_handle.close()
+            self._lock_handle = None
 
     @property
     def gap_retries(self) -> int:
@@ -291,8 +372,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         """
         Start the settle clock of each held nonce whose delivery arrived.
 
-        mapNonces should pass a delivered request soon after; one it has not
-        passed within the settle timeout stalls the queue.
+        It waits for the queue's lock, so do not call it inside ``reserve``.
 
         :param chain: Chain name
         :param sender: Requester address
@@ -300,7 +380,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         """
         queue = self._queue(self.key(chain, sender))
         now = self._clock()
-        with self._lock:
+        with queue.lock:
             marked = [n for n in nonces if n in queue.slots]
             for nonce in marked:
                 if queue.slots[nonce].delivered_at is None:
@@ -310,11 +390,6 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
 
     def _sync(self, key: str, queue: _Queue, map_nonces: int) -> None:
         """Free every slot below mapNonces (settled), and stall an overdue queue.
-
-        A held slot whose delivery is done or timed out, and that mapNonces has
-        not passed within the settle timeout, was dropped or never settled:
-        later nonces would gap behind it, so the queue probes at mapNonces
-        until one is accepted again.
 
         :param key: The queue key
         :param queue: The queue, with its lock held
@@ -355,13 +430,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         salt: str = "",
     ) -> Iterator[Reservation]:
         """
-        Reserve the next nonce for ``mech``, holding the queue until it answers.
-
-        n = mapNonces + the sender's own held slots. While another mech holds
-        unsettled slots this waits (re-reading mapNonces), and is refused as
-        ``mech-in-flight`` once ``timeout`` runs out. While the queue is
-        stalled only a probe at n = mapNonces is handed out. Leaving the
-        context without an answer holds n as ``unknown``.
+        Reserve n = mapNonces + held slots for ``mech`` (the probe at mapNonces when stalled).
 
         :param chain: Chain name
         :param sender: Requester address
@@ -475,15 +544,6 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         """
         Hold a long-stalled queue while one on-chain request consumes mapNonces.
 
-        The last resort for a slot the mech never settles: an on-chain
-        marketplace request from ``sender`` takes n = mapNonces and moves
-        mapNonces past it, so the next sync frees n while later accepted
-        slots stay held. It pays a mech, so whoever calls this decides who
-        confirms it. The queue's lock is held for the whole context, so no
-        off-chain request goes out meanwhile; the stall itself clears only
-        when a probe is accepted again. Leaving the context restarts the stall
-        clock, so each cancel needs its own ``stalled_for`` window.
-
         :param chain: Chain name
         :param sender: Requester address
         :param read_map_nonces: Reads mapNonces(sender) from the marketplace
@@ -525,12 +585,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
 
     @staticmethod
     def _restart_settle_clocks(queue: _Queue, nonce: int, now: float) -> None:
-        """Restart the settle clock of every held slot above ``nonce``.
-
-        Once n is unstuck (its probe accepted, or consumed on-chain), the
-        slots behind it only start to settle now; left with their old clocks
-        they would be overdue at once and stall the queue again, which would
-        then probe a nonce the mech already holds.
+        """Restart the settle clock of every held slot above an unstuck ``nonce``.
 
         :param queue: The queue, with its lock held
         :param nonce: The nonce that was unstuck

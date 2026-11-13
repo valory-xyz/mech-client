@@ -25,6 +25,7 @@ import threading
 from pathlib import Path
 from typing import (
     Any,
+    Iterator,
     Callable,
     ContextManager,
     Dict,
@@ -33,6 +34,7 @@ from typing import (
     Optional,
     Tuple,
     cast,
+    get_args,
 )
 
 import pytest
@@ -95,9 +97,11 @@ def _allocator(tmp_path: Path, clock: Clock) -> NonceAllocator:
 
 
 @pytest.fixture
-def allocator(tmp_path: Path, clock: Clock) -> NonceAllocator:
-    """Return an allocator on the fake clock."""
-    return _allocator(tmp_path, clock)
+def allocator(tmp_path: Path, clock: Clock) -> Iterator[NonceAllocator]:
+    """Return an allocator on the fake clock, released after the test."""
+    allocator = _allocator(tmp_path, clock)
+    yield allocator
+    allocator.close()
 
 
 def held(allocator: NonceAllocator, nonce: int) -> Optional[Dict[str, Any]]:
@@ -409,6 +413,7 @@ def test_a_delivery_starts_the_settle_clock(
     clock.now += 11
     _sync(allocator, 5)
     assert allocator.stalled("gnosis", SENDER)
+    allocator.close()
     restarted = _allocator(tmp_path, clock)
     queue = restarted._queue(  # pylint: disable=protected-access
         restarted.key("gnosis", SENDER)
@@ -421,6 +426,7 @@ def test_queues_survive_a_restart(tmp_path: Path, clock: Clock) -> None:
     first = _allocator(tmp_path, clock)
     with take(first, 5) as slot:
         slot.answered("accepted", mech=MECH_A, salt="salt")
+    first.close()
     second = _allocator(tmp_path, clock)
     assert salt_of(second, 5) == "salt"
     with take(second, 5) as slot:
@@ -434,6 +440,7 @@ def test_an_unknown_slot_survives_a_restart_as_unknown(
     first = _allocator(tmp_path, clock)
     with take(first, 5) as slot:
         slot.answered("unknown", mech=MECH_A, salt="s")
+    first.close()
     second = _allocator(tmp_path, clock)
     queue = second._queue(  # pylint: disable=protected-access
         second.key("gnosis", SENDER)
@@ -530,7 +537,7 @@ def _send(
         answer = answers.pop(0)
         if isinstance(answer, HookNotPassed):
             raise answer.error
-        hook.received = True  # what send_request does on entry
+        hook.mark_received()  # what send_request does on entry
         if isinstance(answer, BeforeHook):
             raise answer.error
         returned = hook(b"id", nonce)
@@ -539,7 +546,7 @@ def _send(
             raise TypeError("on_request_id must be synchronous")
         if isinstance(answer, AfterHook):  # e.g. the signer, before the POST
             raise answer.error
-        hook.posting = True  # what send_request does right before the POST
+        hook.mark_posting()  # what send_request does right before the POST
         if isinstance(answer, Exception):
             raise answer
         return answer
@@ -770,6 +777,7 @@ def test_a_restart_keeps_the_stall_and_its_time(tmp_path: Path, clock: Clock) ->
         slot.answered("taken", mech=MECH_A, salt="")
     stalled_at = clock.now
     clock.now += 100
+    first.close()
     second = _allocator(tmp_path, clock)
     assert second.stalled_since("gnosis", SENDER) == stalled_at
     with take(second, 5) as slot:
@@ -831,6 +839,68 @@ def _hold_lock(allocator: NonceAllocator) -> Tuple[threading.Event, threading.Th
     worker.start()
     entered.wait(5)
     return release, worker
+
+
+def test_delivered_waits_for_the_queue_lock(allocator: NonceAllocator) -> None:
+    """delivered and _sync both change a queue's slots under its own lock."""
+    with take(allocator, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="")
+    release, worker = _hold_lock(allocator)  # holds 6 in flight
+    marker = threading.Thread(target=allocator.delivered, args=("gnosis", SENDER, [5]))
+    marker.start()
+    marker.join(0.2)
+    assert marker.is_alive()  # waiting for the reservation to be answered
+    release.set()
+    worker.join(5)
+    marker.join(5)
+    assert cast(dict, held(allocator, 5))["delivered_at"] is not None
+
+
+def test_a_second_allocator_on_one_store_is_refused(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """Two would hand out the same nonce; once the first is closed, one may open."""
+    first = _allocator(tmp_path, clock)
+    with pytest.raises(NonceRefused) as refused:
+        _allocator(tmp_path, clock)
+    assert refused.value.rule == "mech-queue-locked"
+    first.close()
+    first.close()  # closing twice is harmless
+    second = _allocator(tmp_path, clock)
+    with take(second, 5) as slot:
+        assert slot.nonce == 5
+    second.close()
+
+
+def test_a_lock_file_that_cannot_be_opened_makes_the_store_unwritable(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """No lock, no store: requests are refused rather than the allocator raising."""
+    (tmp_path / nonces.LOCK_FILE).mkdir()
+    allocator = _allocator(tmp_path, clock)
+    with pytest.raises(NonceRefused) as refused:
+        _enter(take(allocator, 5))
+    assert refused.value.rule == "mech-queue-unwritable"
+
+
+def test_a_reservation_is_answered_once(allocator: NonceAllocator) -> None:
+    """A second answer would replay the first's prior; its fields are read-only."""
+    with take(allocator, 5) as slot:
+        assert (slot.nonce, slot.prior, slot.outcome) == (5, None, None)
+        slot.answered("accepted", mech=MECH_A, salt="")
+        with pytest.raises(RuntimeError, match="already answered"):
+            slot.answered("not_accepted", mech=MECH_A, salt="")
+        with pytest.raises(AttributeError):
+            slot.nonce = 6  # type: ignore[misc]
+        with pytest.raises(AttributeError):
+            slot.prior = None  # type: ignore[misc]
+    assert cast(dict, held(allocator, 5))["state"] == "accepted"
+
+
+def test_the_rule_constants_are_the_rule_type() -> None:
+    """Callers compare against RULE_* constants; each is a NonceRule value."""
+    constants = {v for k, v in vars(nonces).items() if k.startswith("RULE_")}
+    assert constants == set(get_args(nonces.NonceRule))
 
 
 def test_the_lock_wait_is_bounded(allocator: NonceAllocator) -> None:
@@ -1025,6 +1095,7 @@ class TestHardCancel:
                 allocator.hard_cancel("gnosis", SENDER, lambda: 5, stalled_for=600)
             )
         assert allocator.stalled_since("gnosis", SENDER) == clock.now
+        allocator.close()
         assert _allocator(tmp_path, clock).stalled_since("gnosis", SENDER) == clock.now
 
     def test_a_taken_probe_over_a_fresh_slot_restarts_later_clocks(

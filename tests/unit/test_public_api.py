@@ -54,3 +54,7 @@ def test_the_off_chain_payer_api_is_exported() -> None:
         assert name in mech_client.__all__
         assert getattr(mech_client, name) is value
     assert "Outcome" in mech_client.__all__
+    for name in [n for n in vars(mech_client.nonces) if n.startswith("RULE_")]:
+        assert getattr(mech_client, name) == getattr(mech_client.nonces, name)
+        assert name in mech_client.__all__
+    assert "NonceRule" in mech_client.__all__

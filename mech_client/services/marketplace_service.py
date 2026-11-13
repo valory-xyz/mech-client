@@ -290,6 +290,9 @@ class MechInfo(NamedTuple):
     max_delivery_rate: int
 
 
+_HOOK_NEW, _HOOK_RECEIVED, _HOOK_POSTING = range(3)
+
+
 class PreSignHook:
     """An ``on_request_id`` that records how far ``send_request`` got with it.
 
@@ -307,8 +310,30 @@ class PreSignHook:
         :param inner: The caller's own ``on_request_id``, run when called
         """
         self._inner = inner
-        self.received = False
-        self.posting = False
+        self._stage = _HOOK_NEW
+
+    @property
+    def received(self) -> bool:
+        """Whether ``send_request`` was handed the hook."""
+        return self._stage >= _HOOK_RECEIVED
+
+    @property
+    def posting(self) -> bool:
+        """Whether ``send_request`` reached the POST of a request."""
+        return self._stage >= _HOOK_POSTING
+
+    def mark_received(self) -> None:
+        """Mark that ``send_request`` was handed the hook (it calls this)."""
+        self._stage = max(self._stage, _HOOK_RECEIVED)
+
+    def mark_posting(self) -> None:
+        """Mark that a request is about to be POSTed (``send_request`` calls this).
+
+        :raises ValueError: If the hook was never marked received
+        """
+        if not self.received:
+            raise ValueError("a PreSignHook cannot be posting before it is received")
+        self._stage = _HOOK_POSTING
 
     def __call__(self, request_id: bytes, nonce: int) -> Any:
         """
@@ -501,7 +526,7 @@ class MarketplaceService(
             :class:`RequestIdMismatch` before signing.
         """
         if isinstance(on_request_id, PreSignHook):
-            on_request_id.received = True
+            on_request_id.mark_received()
         # Validate inputs
         if len(prompts) != len(tools):
             raise ValueError(
@@ -840,7 +865,7 @@ class MarketplaceService(
             # Send HTTP POST request (handles a structured 402 + receipt header)
             url = f"{mech_offchain_url.rstrip('/')}/send_signed_requests"
             if isinstance(on_request_id, PreSignHook):
-                on_request_id.posting = True  # from here the mech may hold it
+                on_request_id.mark_posting()  # from here the mech may hold it
             try:
                 response = self._post_offchain_request(
                     url, payload, payment_type, auto_deposit, max_delivery_rate

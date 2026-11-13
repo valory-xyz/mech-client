@@ -3530,6 +3530,26 @@ class TestCallerOwnedNonces:
         mech_post.assert_not_called()
         assert self._next_nonce(allocator, service) == 5
 
+    def test_a_lying_rpc_through_send_with_nonce_frees_the_nonce(
+        self, service: MarketplaceService, mech_post: MagicMock, tmp_path: Path
+    ) -> None:
+        """RequestIdMismatch comes before the hook: nothing signed, n free."""
+        contract = TestLocalRequestId._lying(_nonce_contract(5), 5, b"\x66" * 32)
+        hooked: List[int] = []
+
+        allocator, raised = self._through_allocator(
+            service,
+            tmp_path,
+            contract,
+            on_request_id=lambda request_id, nonce: hooked.append(nonce),
+        )
+
+        assert isinstance(raised, RequestIdMismatch)
+        assert hooked == []
+        service.signer.sign_message.assert_not_called()
+        mech_post.assert_not_called()
+        assert self._next_nonce(allocator, service) == 5
+
     def test_a_transport_error_through_send_with_nonce_holds_the_nonce(
         self, service: MarketplaceService, mech_post: MagicMock, tmp_path: Path
     ) -> None:
@@ -3542,6 +3562,19 @@ class TestCallerOwnedNonces:
 
         assert isinstance(raised, ValueError)
         assert self._next_nonce(allocator, service) == 6
+
+    def test_a_pre_sign_hook_only_moves_forward(self) -> None:
+        """Its stage is read-only, and posting requires received."""
+        hook = PreSignHook()
+        with pytest.raises(ValueError, match="before it is received"):
+            hook.mark_posting()
+        with pytest.raises(AttributeError):
+            hook.received = True  # type: ignore[misc]
+        hook.mark_received()
+        hook.mark_posting()
+        hook.mark_received()  # a later request of the call: no step back
+        assert (hook.received, hook.posting) == (True, True)
+        assert hook(b"id", 5) is None  # no inner hook
 
     def test_errors_are_exported(self) -> None:
         """Both exceptions are part of the public API."""
