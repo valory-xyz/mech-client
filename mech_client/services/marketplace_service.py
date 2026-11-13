@@ -357,6 +357,7 @@ class MarketplaceService(
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
         signer: Optional[Signer] = None,
+        rpc_url: Optional[str] = None,
     ):
         """
         Initialize marketplace service.
@@ -367,6 +368,8 @@ class MarketplaceService(
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
         :param signer: Signer for externalized signing (alternative to crypto)
+        :param rpc_url: RPC endpoint for this service; None keeps the
+            MECHX_CHAIN_RPC / operate config / mechs.json lookup
         """
         super().__init__(
             chain_config=chain_config,
@@ -375,10 +378,11 @@ class MarketplaceService(
             safe_address=safe_address,
             ethereum_client=ethereum_client,
             signer=signer,
+            rpc_url=rpc_url,
         )
 
         # Create tool manager
-        self.tool_manager = ToolManager(chain_config)
+        self.tool_manager = ToolManager(chain_config, rpc_url=rpc_url)
 
         # Create IPFS client
         self.ipfs_client = IPFSClient()
@@ -1185,6 +1189,7 @@ class MarketplaceService(
             safe_address=self.safe_address,
             ethereum_client=self.ethereum_client,
             signer=self.signer,
+            rpc_url=self.rpc_url,
         )
         logger.info(
             f"Auto-depositing {challenge.shortfall} to top up the prepaid balance..."

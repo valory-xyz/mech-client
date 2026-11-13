@@ -95,7 +95,7 @@ class TestDepositServiceInitialization:
         assert service.signer.crypto is mock_crypto
         assert service.safe_address is None
         assert service.ethereum_client is None
-        mock_config.assert_called_once_with("gnosis", agent_mode=False)
+        mock_config.assert_called_once_with("gnosis", agent_mode=False, rpc_url=None)
         mock_executor_factory.create.assert_called_once()
 
     @patch("mech_client.services.base_service.get_mech_config")
@@ -186,7 +186,9 @@ class TestDepositNative:
             ledger_api=mock_ledger_api,
             chain_id=mock_config.return_value.ledger_config.chain_id,
         )
-        mock_payment_strategy.check_balance.assert_called_once_with("0x" + "1" * 40, amount)
+        mock_payment_strategy.check_balance.assert_called_once_with(
+            "0x" + "1" * 40, amount
+        )
         mock_executor.execute_transfer.assert_called_once_with(
             to_address="0x" + "2" * 40,
             amount=amount,
@@ -273,7 +275,9 @@ class TestDepositToken:
         mock_payment_strategy = MagicMock()
         mock_payment_strategy.check_balance.return_value = True
         mock_payment_strategy.get_balance_tracker_address.return_value = "0x" + "2" * 40
-        mock_payment_strategy.approve_if_needed.return_value = None  # No approval needed
+        mock_payment_strategy.approve_if_needed.return_value = (
+            None  # No approval needed
+        )
         mock_payment_factory.create.return_value = mock_payment_strategy
 
         mock_contract = MagicMock()
@@ -534,3 +538,27 @@ class TestCheckBalance:
             ledger_api=mock_ledger_api,
             chain_id=mock_config.return_value.ledger_config.chain_id,
         )
+
+
+@patch("mech_client.services.base_service.get_mech_config")
+@patch("mech_client.services.base_service.EthereumApi")
+@patch("mech_client.services.base_service.ExecutorFactory")
+def test_deposit_service_passes_its_rpc_url(
+    mock_executor_factory: MagicMock,
+    mock_ledger_api: MagicMock,
+    mock_config: MagicMock,
+) -> None:
+    """DepositService(rpc_url=...) loads its config with that RPC."""
+    mock_config.return_value = create_mock_mech_config()
+
+    service = DepositService(
+        chain_config="gnosis",
+        agent_mode=False,
+        crypto=create_mock_crypto(),
+        rpc_url="https://caller.example",
+    )
+
+    assert service.rpc_url == "https://caller.example"
+    mock_config.assert_called_once_with(
+        "gnosis", agent_mode=False, rpc_url="https://caller.example"
+    )

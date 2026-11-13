@@ -197,9 +197,9 @@ class TestMarketplaceServiceInitialization:
         assert service.signer.crypto is mock_crypto
         assert service.safe_address is None
         assert service.ethereum_client is None
-        mock_config.assert_called_once_with("gnosis", agent_mode=False)
+        mock_config.assert_called_once_with("gnosis", agent_mode=False, rpc_url=None)
         mock_executor_factory.create.assert_called_once()
-        mock_tool_manager.assert_called_once_with("gnosis")
+        mock_tool_manager.assert_called_once_with("gnosis", rpc_url=None)
         mock_ipfs_client.assert_called_once()
 
     @patch("mech_client.services.marketplace_service.IPFSClient")
@@ -2613,6 +2613,7 @@ class TestOffchain402Handling:
                 safe_address=service.safe_address,
                 ethereum_client=service.ethereum_client,
                 signer=service.signer,
+                rpc_url=None,
             )
             mock_ds.return_value.deposit_native.assert_called_once_with(70)
 
@@ -3574,3 +3575,46 @@ class TestPriceCap:
         for clone in (pickle.loads(pickle.dumps(err)), copy.copy(err)):
             assert str(clone) == "too much"
             assert (clone.price, clone.max_price) == (20, 19)
+
+
+class TestRpcUrlArgument:
+    """rpc_url reaches every RPC the service and its helpers open."""
+
+    @patch("mech_client.services.marketplace_service.IPFSClient")
+    @patch("mech_client.services.marketplace_service.ToolManager")
+    @patch("mech_client.services.base_service.ExecutorFactory")
+    @patch("mech_client.services.base_service.EthereumApi")
+    @patch("mech_client.services.base_service.get_mech_config")
+    def test_the_service_its_tool_manager_and_its_top_up_share_the_rpc(
+        self,
+        mock_config: MagicMock,
+        mock_ledger_api: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_tool_manager: MagicMock,
+        mock_ipfs_client: MagicMock,
+    ) -> None:
+        """The auto-deposit's DepositService uses the calling service's RPC."""
+        mock_config.return_value = create_mock_mech_config()
+        service = MarketplaceService(
+            chain_config="gnosis",
+            agent_mode=False,
+            crypto=create_mock_crypto(),
+            rpc_url="https://caller.example",
+        )
+
+        mock_config.assert_called_once_with(
+            "gnosis", agent_mode=False, rpc_url="https://caller.example"
+        )
+        mock_tool_manager.assert_called_once_with(
+            "gnosis", rpc_url="https://caller.example"
+        )
+        with (
+            patch("mech_client.services.deposit_service.DepositService") as mock_ds,
+            patch(f"{SERVICE}.wait_for_receipt", return_value={"status": 1}),
+        ):
+            service._auto_deposit_for_402(  # pylint: disable=protected-access
+                PaymentType.NATIVE,
+                PaymentChallenge(100, 30, "0xbt", "", 100, "ib"),
+                max_delivery_rate=100,
+            )
+        assert mock_ds.call_args.kwargs["rpc_url"] == "https://caller.example"

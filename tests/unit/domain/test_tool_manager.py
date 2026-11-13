@@ -86,7 +86,7 @@ class TestToolManagerInitialization:
 
         # Verify initialization
         assert manager.chain_config == "gnosis"
-        mock_config.assert_called_once_with("gnosis")
+        mock_config.assert_called_once_with("gnosis", rpc_url=None)
         mock_ledger_api.assert_called_once()
 
 
@@ -95,16 +95,20 @@ class TestParseToolId:
 
     def test_parse_valid_tool_id(self) -> None:
         """Test parsing valid tool ID."""
-        service_id, tool_name = ToolManager._parse_tool_id(  # pylint: disable=protected-access
-            "42-openai-gpt-4"
+        service_id, tool_name = (
+            ToolManager._parse_tool_id(  # pylint: disable=protected-access
+                "42-openai-gpt-4"
+            )
         )
         assert service_id == 42
         assert tool_name == "openai-gpt-4"
 
     def test_parse_tool_id_with_multiple_dashes(self) -> None:
         """Test parsing tool ID with multiple dashes in tool name."""
-        service_id, tool_name = ToolManager._parse_tool_id(  # pylint: disable=protected-access
-            "1-stability-ai-sdxl-1-0"
+        service_id, tool_name = (
+            ToolManager._parse_tool_id(  # pylint: disable=protected-access
+                "1-stability-ai-sdxl-1-0"
+            )
         )
         assert service_id == 1
         assert tool_name == "stability-ai-sdxl-1-0"
@@ -696,8 +700,14 @@ class TestExtractTermsUrl:
     @pytest.mark.parametrize(
         ("metadata", "expected"),
         [
-            ({"termsUrl": "https://www.valory.xyz/terms/mechs"}, "https://www.valory.xyz/terms/mechs"),
-            ({"termsUrl": "  https://example.test/terms  "}, "https://example.test/terms"),
+            (
+                {"termsUrl": "https://www.valory.xyz/terms/mechs"},
+                "https://www.valory.xyz/terms/mechs",
+            ),
+            (
+                {"termsUrl": "  https://example.test/terms  "},
+                "https://example.test/terms",
+            ),
             ({"tools": []}, None),  # field absent
             ({"termsUrl": ""}, None),  # empty string
             ({"termsUrl": "   "}, None),  # whitespace only
@@ -716,14 +726,35 @@ class TestExtractTermsUrl:
             ({"termsUrl": "https://example.test/\x1b[31m"}, None),  # control char
             ({"termsUrl": "https://example.test/\u202e"}, None),  # bidi override
             ({"termsUrl": "https://[::1/terms"}, None),  # unparseable host
-            ({"termsUrl": "https://example.test/" + "a" * 2027}, "https://example.test/" + "a" * 2027),  # at the cap
+            (
+                {"termsUrl": "https://example.test/" + "a" * 2027},
+                "https://example.test/" + "a" * 2027,
+            ),  # at the cap
             ({"termsUrl": "https://example.test/" + "a" * 2028}, None),  # over the cap
         ],
         ids=[
-            "present", "stripped", "absent", "empty", "whitespace", "null",
-            "int", "list_value", "dict_value", "list_document", "scalar_document", "none",
-            "http", "javascript", "no_host", "no_scheme", "inner_space",
-            "control_char", "bidi_override", "bad_ipv6", "at_cap", "over_cap",
+            "present",
+            "stripped",
+            "absent",
+            "empty",
+            "whitespace",
+            "null",
+            "int",
+            "list_value",
+            "dict_value",
+            "list_document",
+            "scalar_document",
+            "none",
+            "http",
+            "javascript",
+            "no_host",
+            "no_scheme",
+            "inner_space",
+            "control_char",
+            "bidi_override",
+            "bad_ipv6",
+            "at_cap",
+            "over_cap",
         ],
     )
     def test_extract_terms_url(self, metadata: Any, expected: Optional[str]) -> None:
@@ -822,7 +853,9 @@ class TestTermsReport:
     ) -> None:
         """Only a confirmed Valory mech gets the statement; a published link always passes."""
         with (
-            patch(f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=_resolver(outcome)),
+            patch(
+                f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=_resolver(outcome)
+            ),
             patch(f"{IDENTIFICATION}.logger"),
         ):
             assert manager.terms_report(GNOSIS_MECH, metadata) == expected
@@ -1018,9 +1051,11 @@ class TestClaimedOperator:
         self, error: Exception
     ) -> None:
         """Nothing the proof fetch raises escapes; the claim stays, unverified, with the note."""
-        with patch(f"{MANAGER}.query_erc8004_agent_id", return_value=2182), patch(
-            f"{MANAGER}.verify_domain", side_effect=error
-        ), patch(f"{MANAGER}.logger") as logger:
+        with (
+            patch(f"{MANAGER}.query_erc8004_agent_id", return_value=2182),
+            patch(f"{MANAGER}.verify_domain", side_effect=error),
+            patch(f"{MANAGER}.logger") as logger,
+        ):
             block = claimed_operator("gnosis", 100, 2182, OPERATOR_MANIFEST)
         assert block is not None
         assert block["claimed_name"] == "Valory"
@@ -1189,7 +1224,9 @@ class TestMechReportOrTerms:
         claim.assert_not_called()
         logger.warning.assert_called_once()
 
-    def test_a_readable_record_gives_the_full_report(self, manager: ToolManager) -> None:
+    def test_a_readable_record_gives_the_full_report(
+        self, manager: ToolManager
+    ) -> None:
         """With the record in hand it is the full report, queried once."""
         with (
             patch(f"{MANAGER}.query_mech_record", return_value=_record()) as query,
@@ -1227,3 +1264,16 @@ class TestDeliveryRecord:
         with patch(f"{MANAGER}.datetime") as clock:
             clock.now.return_value = CREATED_AT - timedelta(days=2)
             assert ToolManager.delivery_record(_record())["age_days"] == 0
+
+
+@patch("mech_client.domain.tools.manager.EthereumApi")
+@patch("mech_client.domain.tools.manager.get_mech_config")
+def test_tool_manager_passes_its_rpc_url(
+    mock_config: MagicMock, mock_ledger_api: MagicMock
+) -> None:
+    """ToolManager(rpc_url=...) reads the chain through that RPC."""
+    mock_config.return_value.ledger_config = MagicMock()
+    with patch("mech_client.domain.tools.manager.asdict", return_value={}):
+        ToolManager("gnosis", rpc_url="https://caller.example")
+
+    mock_config.assert_called_once_with("gnosis", rpc_url="https://caller.example")

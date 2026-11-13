@@ -158,14 +158,16 @@ class ToolManager:
     retrieving tool schemas from marketplace mechs.
     """
 
-    def __init__(self, chain_config: str):
+    def __init__(self, chain_config: str, rpc_url: Optional[str] = None):
         """
         Initialize tool manager.
 
         :param chain_config: Chain configuration name (gnosis, base, etc.)
+        :param rpc_url: RPC endpoint; None keeps the MECHX_CHAIN_RPC /
+            mechs.json lookup
         """
         self.chain_config = chain_config
-        self.mech_config = get_mech_config(chain_config)
+        self.mech_config = get_mech_config(chain_config, rpc_url=rpc_url)
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
 
     def fetch_tools_metadata(self, service_id: int) -> Optional[Dict[str, Any]]:
