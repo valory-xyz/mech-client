@@ -20,7 +20,7 @@
 """Tool data models."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, NamedTuple, Optional
 
 
 @dataclass
@@ -64,3 +64,19 @@ class ToolSchema:
     description: str
     input_schema: Dict[str, Any]
     output_schema: Dict[str, Any]
+
+
+class MetadataRead(NamedTuple):
+    """A service-metadata read: the document, or why it could not be read.
+
+    The cause travels with the result because the failures it separates need
+    opposite responses: a gateway that timed out may answer on the next call,
+    while a mech that never published metadata never will.
+
+    Attributes:
+        document: The parsed metadata document, or None if unreadable
+        error: Why the document could not be read, or None
+    """
+
+    document: Optional[Dict[str, Any]]
+    error: Optional[str]

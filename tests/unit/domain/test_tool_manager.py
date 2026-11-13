@@ -41,9 +41,14 @@ from mech_client.domain.tools.manager import (
     PAYMENT_NOTE,
     ToolManager,
     claimed_operator,
+    offchain_blocker,
     payment_label,
 )
-from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
+from mech_client.domain.tools.models import (
+    MetadataRead,
+    ToolInfo,
+    ToolsForMarketplaceMech,
+)
 from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.infrastructure.subgraph.queries import MechRecord
 from mech_client.utils.errors import SubgraphError
@@ -1277,3 +1282,100 @@ def test_tool_manager_passes_its_rpc_url(
         ToolManager("gnosis", rpc_url="https://caller.example")
 
     mock_config.assert_called_once_with("gnosis", rpc_url="https://caller.example")
+
+
+class TestReadToolsMetadata:
+    """read_tools_metadata keeps the cause of an unreadable document."""
+
+    @staticmethod
+    def _read(uri: Any, get: MagicMock) -> MetadataRead:
+        """Read metadata where tokenURI answers ``uri`` (or raises it) and GET is ``get``."""
+        contract = MagicMock()
+        token_uri = contract.functions.tokenURI.return_value.call
+        if isinstance(uri, Exception):
+            token_uri.side_effect = uri
+        else:
+            token_uri.return_value = uri
+        with (
+            patch(
+                "mech_client.domain.tools.manager.get_mech_config",
+                return_value=create_mock_mech_config(),
+            ),
+            patch("mech_client.domain.tools.manager.EthereumApi"),
+            patch("mech_client.domain.tools.manager.get_abi"),
+            patch(
+                "mech_client.domain.tools.manager.get_contract", return_value=contract
+            ),
+            patch("mech_client.domain.tools.manager.requests.get", get),
+        ):
+            return ToolManager(chain_config="gnosis").read_tools_metadata(1)
+
+    def test_a_readable_document_has_no_error(self) -> None:
+        """The document comes back with error None, and fetch returns it."""
+        document = {"tools": ["t"], "url": "https://mech.example"}
+        get = MagicMock(return_value=MagicMock(json=MagicMock(return_value=document)))
+
+        assert self._read("https://gateway/1", get) == MetadataRead(document, None)
+
+    @pytest.mark.parametrize(
+        ("uri", "get", "cause"),
+        [
+            (
+                "https://gateway/1",
+                MagicMock(side_effect=requests.exceptions.Timeout("slow")),
+                "Timeout: slow",
+            ),
+            (
+                RuntimeError("execution reverted"),
+                MagicMock(),
+                "RuntimeError: execution reverted",
+            ),
+            (
+                "https://gateway/1",
+                MagicMock(
+                    return_value=MagicMock(
+                        json=MagicMock(side_effect=ValueError("bad"))
+                    )
+                ),
+                "ValueError: bad",
+            ),
+            (
+                "https://gateway/1",
+                MagicMock(return_value=MagicMock(json=MagicMock(return_value=[1]))),
+                "expected a JSON object, got list",
+            ),
+        ],
+    )
+    def test_an_unreadable_document_never_raises_and_names_its_cause(
+        self, uri: Any, get: MagicMock, cause: str
+    ) -> None:
+        """RPC, gateway, JSON and shape failures all come back as the cause."""
+        assert self._read(uri, get) == MetadataRead(None, cause)
+
+
+class TestOffchainBlocker:
+    """offchain_blocker separates a failed read from a mech with no endpoint."""
+
+    def test_an_unreadable_document_may_be_transient(self) -> None:
+        """The cause is quoted, and the advice allows a retry."""
+        assert offchain_blocker(MetadataRead(None, "Timeout: slow")) == (
+            "metadata unreadable (Timeout: slow); may be transient or never published"
+        )
+        assert offchain_blocker(MetadataRead(None, None)) == (
+            "metadata unreadable (no cause reported); may be transient or never "
+            "published"
+        )
+
+    @pytest.mark.parametrize("url", [None, "", "  ", 42])
+    def test_a_document_without_a_url_is_on_chain_only(self, url: Any) -> None:
+        """No usable url: the mech serves on-chain requests only."""
+        document: Dict[str, Any] = {"tools": []}
+        if url is not None:
+            document["url"] = url
+        assert offchain_blocker(MetadataRead(document, None)) == (
+            "no 'url' in metadata; this mech serves on-chain requests only"
+        )
+
+    def test_a_document_with_a_url_has_no_blocker(self) -> None:
+        """A url means the off-chain flow can reach the mech."""
+        assert offchain_blocker(MetadataRead({"url": "https://m"}, None)) is None

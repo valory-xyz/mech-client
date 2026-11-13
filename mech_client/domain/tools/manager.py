@@ -19,7 +19,6 @@
 
 """Tool manager for fetching and managing mech tools."""
 
-import json
 import logging
 import unicodedata
 from dataclasses import asdict
@@ -41,7 +40,11 @@ from mech_client.domain.operator import (
     read_operator,
     verify_domain,
 )
-from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
+from mech_client.domain.tools.models import (
+    MetadataRead,
+    ToolInfo,
+    ToolsForMarketplaceMech,
+)
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.config.loader import get_mech_config
@@ -93,6 +96,7 @@ PAYMENT_LABELS = {
     PaymentType.TOKEN_NVM_USDC: "usdc_nvm",
 }
 UNKNOWN_PAYMENT = "unknown"
+OFFCHAIN_URL_MISSING = "no 'url' in metadata; this mech serves on-chain requests only"
 
 
 def payment_label(payment_type: str) -> str:
@@ -151,6 +155,27 @@ def claimed_operator(
     return block
 
 
+def offchain_blocker(read: MetadataRead) -> Optional[str]:
+    """
+    Say why a mech cannot serve an off-chain request, or None if it can.
+
+    The off-chain flow resolves the mech's endpoint from the ``url`` field of
+    its service metadata, so an unreadable document and one without a ``url``
+    both rule it out, with different advice: a failed read may succeed next
+    time, while a mech that published no ``url`` serves on-chain only.
+
+    :param read: The metadata read from ``ToolManager.read_tools_metadata``
+    :return: The reason, or None when the document names an endpoint
+    """
+    if read.document is None:
+        cause = read.error or "no cause reported"
+        return f"metadata unreadable ({cause}); may be transient or never published"
+    url = read.document.get("url")
+    if not isinstance(url, str) or not url.strip():
+        return OFFCHAIN_URL_MISSING
+    return None
+
+
 class ToolManager:
     """Manager for fetching and caching tool information.
 
@@ -170,15 +195,17 @@ class ToolManager:
         self.mech_config = get_mech_config(chain_config, rpc_url=rpc_url)
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
 
-    def fetch_tools_metadata(self, service_id: int) -> Optional[Dict[str, Any]]:
+    def read_tools_metadata(self, service_id: int) -> MetadataRead:
         """
-        Fetch tools metadata for specified service ID.
+        Read the service metadata document, keeping why a read failed.
 
         Queries the complementary metadata hash contract to get the metadata
-        URI, then fetches the metadata from that URI.
+        URI, then fetches the metadata from that URI. A document that cannot
+        be read (the RPC, the gateway or the JSON failed, or it is not a JSON
+        object) never raises: the cause is in ``error``.
 
         :param service_id: The service ID of the mech
-        :return: Dictionary containing tools and metadata, or None if error
+        :return: The document, or None with the cause
         :raises ValueError: If metadata hash address not configured
         """
         if self.mech_config.complementary_metadata_hash_address == ADDRESS_ZERO:
@@ -194,10 +221,28 @@ class ToolManager:
                 self.ledger_api,
             )
             metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
-            return requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
-        except (json.JSONDecodeError, NotImplementedError, IOError) as e:
+            document = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
+        except (
+            Exception
+        ) as e:  # pylint: disable=broad-exception-caught  # every read failure is reported as the cause
             logger.error(f"Error fetching tools for service {service_id}: {e}")
-            return None
+            return MetadataRead(None, f"{type(e).__name__}: {e}")
+        if not isinstance(document, dict):
+            cause = f"expected a JSON object, got {type(document).__name__}"
+            logger.error(f"Unusable metadata for service {service_id}: {cause}")
+            return MetadataRead(None, cause)
+        return MetadataRead(document, None)
+
+    def fetch_tools_metadata(self, service_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Fetch tools metadata for specified service ID.
+
+        :param service_id: The service ID of the mech
+        :return: Dictionary containing tools and metadata, or None if unreadable
+            (``read_tools_metadata`` says why)
+        :raises ValueError: If metadata hash address not configured
+        """
+        return self.read_tools_metadata(service_id).document
 
     def get_offchain_url(self, service_id: int) -> str:
         """
