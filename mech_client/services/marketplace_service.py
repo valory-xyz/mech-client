@@ -47,6 +47,7 @@ from mech_client.domain.delivery import (
     OnchainDeliveryWatcher,
 )
 from mech_client.domain.payment import PaymentStrategyFactory
+from mech_client.domain.payment.addresses import DEPOSIT_TRACKERS
 from mech_client.domain.request_id import request_digest
 from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
@@ -84,14 +85,10 @@ _MAX_AUTO_DEPOSIT_RATIO = 10
 # Payment types that ``_auto_deposit_for_402`` knows how to top up via the
 # balance tracker. NVM subscription types (``NATIVE_NVM`` / ``TOKEN_NVM_USDC``)
 # are intentionally excluded: they're paid via subscription, not via a
-# balance-tracker deposit. Listing the supported set explicitly (rather than
-# falling through ``if/elif/else``) makes the contract visible — a sixth
-# ``PaymentType`` added later forces this set and the dispatch below to be
-# updated together, surfacing the gap statically instead of at offchain-402
-# runtime.
-_SUPPORTED_DEPOSIT_PAYMENT_TYPES: FrozenSet[PaymentType] = frozenset(
-    {PaymentType.NATIVE, PaymentType.OLAS_TOKEN, PaymentType.USDC_TOKEN}
-)
+# balance-tracker deposit. The set is the one ``balance_tracker`` resolves, so
+# the tracker a caller is told about and the one a top-up pays never diverge;
+# a new entry there also needs a dispatch branch below.
+_SUPPORTED_DEPOSIT_PAYMENT_TYPES: FrozenSet[PaymentType] = frozenset(DEPOSIT_TRACKERS)
 
 
 def _accepted_note(accepted_ids: List[str], request_nonces: List[int]) -> str:

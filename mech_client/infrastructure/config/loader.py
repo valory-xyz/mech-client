@@ -71,3 +71,21 @@ def get_mech_config(
             chain_config=chain_config,
         )
         return mech_config
+
+
+def get_chain_id(chain_config: str) -> int:
+    """Return a chain's id as ``mechs.json`` configures it.
+
+    Reads the file only: no environment override, RPC or operate lookup.
+
+    :param chain_config: Chain name (gnosis, base, polygon, optimism, robinhood)
+    :return: The chain id
+    :raises ValueError: If the chain is not in ``mechs.json``
+    """
+    with open(MECH_CONFIGS, "r", encoding="UTF-8") as file:
+        data = json.load(file)
+    if chain_config not in data:
+        raise ValueError(
+            f"Unknown chain {chain_config!r}; expected one of {sorted(data)}"
+        )
+    return int(data[chain_config]["ledger_config"]["chain_id"])
