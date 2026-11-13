@@ -20,7 +20,6 @@
 """Tool manager for fetching and managing mech tools."""
 
 import logging
-import re
 import unicodedata
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -56,6 +55,7 @@ from mech_client.infrastructure.subgraph.queries import (
     query_mech_record,
 )
 from mech_client.utils.errors.exceptions import ManifestError
+from mech_client.utils.redaction import redacted_cause
 from web3.constants import ADDRESS_ZERO
 from web3.exceptions import Web3Exception
 
@@ -171,45 +171,6 @@ def claimed_operator(
     return block
 
 
-# An exception's text may carry an API key or credentials wherever a URL or a
-# path appears: requests puts the full URL there, urllib3 the bare path
-# ("... with url: /v3/<KEY>?..."). Fail closed: a URL keeps only its scheme
-# and host, and any other path-like or query-like token is cut at its first
-# "/" or "?".
-_SECRET_BEARING = re.compile(
-    r"(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*://)(?:[^\s/@'\"]*@)?"
-    r"(?P<host>[^\s/'\"?#]*)[^\s'\"]*"
-    r"|(?P<cut>[/?])[^\s'\"]*"
-)
-# a cause is a short description, not a dump of the exception
-_CAUSE_MAX_LENGTH = 200
-
-
-def _redact(match: "re.Match[str]") -> str:
-    """Replace one URL-, path- or query-like token by what is safe to keep.
-
-    :param match: The token
-    :return: ``scheme://host/...`` for a URL, else ``/...`` or ``?...``
-    """
-    if match.group("scheme"):
-        return f"{match.group('scheme')}{match.group('host')}/..."
-    return f"{match.group('cut')}..."
-
-
-def _redacted_cause(error: BaseException) -> str:
-    """
-    Describe a read failure without the secrets a URL or path in it may carry.
-
-    :param error: The exception
-    :return: Its type and a short message, with every URL cut to
-        ``scheme://host/...`` and every other path or query cut off
-    """
-    message = _SECRET_BEARING.sub(_redact, str(error))
-    if len(message) > _CAUSE_MAX_LENGTH:
-        message = message[:_CAUSE_MAX_LENGTH] + "..."
-    return f"{type(error).__name__}: {message}"
-
-
 def offchain_blocker(read: MetadataRead) -> Optional[str]:
     """
     Say why a mech cannot serve an off-chain request, or None if it can.
@@ -294,7 +255,7 @@ class ToolManager:
             response.raise_for_status()
             document = response.json()
         except METADATA_READ_ERRORS as e:
-            cause = _redacted_cause(e)
+            cause = redacted_cause(e)
             logger.error(f"Error fetching tools for service {service_id}: {cause}")
             return MetadataRead(None, cause)
         if not isinstance(document, dict):

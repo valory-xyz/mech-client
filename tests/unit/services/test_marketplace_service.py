@@ -3124,6 +3124,23 @@ class TestCallerOwnedNonces:
         assert e.value.status == 402
 
     @pytest.mark.asyncio
+    async def test_a_top_up_failure_never_carries_a_keyed_url(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """A deposit failing on a keyed RPC is reported redacted, in full otherwise."""
+        mech_post.side_effect = [
+            _mock_http_response(402, {"required": "100", "currentBalance": "0"})
+        ]
+        failure = ValueError("deposit failed on https://rpc.example/v3/SECRETKEY")
+
+        with patch.object(service, "_auto_deposit_for_402", side_effect=failure):
+            with pytest.raises(OffchainTopUpFailed) as e:
+                await _send_offchain(service, _nonce_contract(5), auto_deposit=True)
+
+        assert str(e.value) == "deposit failed on https://rpc.example/..."
+        assert e.value.__cause__.__cause__ is failure  # type: ignore[union-attr]
+
+    @pytest.mark.asyncio
     async def test_refused_top_up_is_its_own_error(
         self, service: MarketplaceService, mech_post: MagicMock
     ) -> None:
@@ -3225,12 +3242,18 @@ class TestCallerOwnedNonces:
         self, service: MarketplaceService, mech_post: MagicMock
     ) -> None:
         """No HTTP answer means the outcome is unknown, so it is not a rejection."""
-        mech_post.side_effect = requests.exceptions.ConnectionError("reset")
+        mech_post.side_effect = requests.exceptions.ConnectionError(
+            "HTTPSConnectionPool(host='mech.example', port=443): Max retries "
+            "exceeded with url: /send_signed_requests?key=SECRETKEY"
+        )
 
         with pytest.raises(ValueError, match="Failed to send") as e:
             await _send_offchain(service, _nonce_contract(5))
 
         assert not isinstance(e.value, OffchainRequestRejected)
+        assert "(ConnectionError)" in str(e.value)
+        assert "SECRETKEY" not in str(e.value)
+        assert isinstance(e.value.__cause__, requests.exceptions.ConnectionError)
 
     @pytest.mark.asyncio
     async def test_send_request_refuses_a_nonce_count_mismatch_early(
@@ -3630,7 +3653,7 @@ class TestLocalRequestId:
 
         def get_request_id(*args: Any) -> MagicMock:
             if args[-1] == 6:
-                raise Web3Exception("rpc down")
+                raise Web3Exception("rpc down: https://rpc.example/v3/SECRETKEY")
             return honest(*args)
 
         contract.functions.getRequestId.side_effect = get_request_id
@@ -3640,7 +3663,8 @@ class TestLocalRequestId:
 
         assert type(e.value) is ValueError  # pylint: disable=unidiomatic-typecheck
         assert isinstance(e.value.__cause__, Web3Exception)
-        assert "nonce 6: rpc down" in str(e.value)
+        assert "nonce 6 (Web3Exception)" in str(e.value)
+        assert "SECRETKEY" not in str(e.value)
         assert f"{_request_id_for(5).hex()} (nonce 5)" in str(e.value)
         assert mech_post.call_count == 1
 

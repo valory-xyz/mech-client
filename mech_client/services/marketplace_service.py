@@ -59,6 +59,7 @@ from mech_client.infrastructure.blockchain.receipt_waiter import (
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.ipfs import IPFSClient, push_metadata_to_ipfs
 from mech_client.services.base_service import BaseTransactionService
+from mech_client.utils.redaction import redacted, redacted_cause
 from mech_client.utils.validators import ensure_checksummed_address
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
@@ -484,8 +485,7 @@ class MarketplaceService(
             asset's base units. When the mech's ``max_delivery_rate`` times
             the number of prompts exceeds it, :class:`MechPriceExceeded` is
             raised before any deposit, signature or POST. The cap covers that
-            request price only: an auto-deposit after an HTTP 402 is bounded
-            separately, by ``_MAX_AUTO_DEPOSIT_RATIO`` times the rate.
+            request price only, not an auto-deposit after an HTTP 402.
             ``None`` sets no cap.
         :return: A :class:`RequestResult` with ``tx_hash`` and ``receipt``
             (both ``None`` on the offchain path, which has no transaction),
@@ -494,8 +494,10 @@ class MarketplaceService(
             delivered plus the gateway URL it was read from. ``deliveries``
             has the same shape regardless of whether delivery was on-chain
             or offchain. The offchain result also lists the ``nonces`` used.
-            A mech's HTTP error raises :class:`OffchainRequestRejected`; an RPC
-            whose ``getRequestId`` disagrees with the local derivation raises
+            A mech's HTTP error raises :class:`OffchainRequestRejected`, a
+            failed auto top-up after its 402 :class:`OffchainTopUpFailed`, a
+            price above ``max_price`` :class:`MechPriceExceeded`, and an RPC
+            whose ``getRequestId`` disagrees with the local derivation
             :class:`RequestIdMismatch` before signing.
         """
         if isinstance(on_request_id, PreSignHook):
@@ -528,11 +530,7 @@ class MarketplaceService(
         if not priority_mech_address:
             raise ValueError("No priority mech address specified")
         info = self.mech_info(priority_mech_address)
-        payment_type, service_id, max_delivery_rate = (
-            info.payment_type,
-            info.service_id,
-            info.max_delivery_rate,
-        )
+        _, service_id, payment_type, max_delivery_rate = info
         # the mech contract's own rate, not mechs.json's chain-wide default price
         price = max_delivery_rate * len(prompts)
         if max_price is not None and price > max_price:
@@ -784,8 +782,13 @@ class MarketplaceService(
                 if not request_ids_hex:
                     raise
                 # earlier requests went out: say so, as a transport error does
+                logger.warning(
+                    f"Request id derivation failed for nonce {nonce}: "
+                    f"{redacted_cause(e)}"
+                )
                 raise ValueError(
-                    f"Failed to derive the request id for nonce {nonce}: {e}"
+                    f"Failed to derive the request id for nonce {nonce} "
+                    f"({type(e).__name__}); see the log or the chained cause."
                     + _accepted_note(request_ids_hex, request_nonces)
                 ) from e
             logger.info(
@@ -859,8 +862,10 @@ class MarketplaceService(
                     unsent=request_nonces[i + 1 :],
                 ) from e
             except requests.exceptions.RequestException as e:
+                logger.warning(f"Offchain POST failed: {redacted_cause(e)}")
                 raise ValueError(
-                    f"Failed to send offchain request: {e}"
+                    f"Failed to send offchain request ({type(e).__name__}); "
+                    f"see the log or the chained cause."
                     + _accepted_note(request_ids_hex, request_nonces)
                 ) from e
             if not response.ok:
@@ -1029,8 +1034,9 @@ class MarketplaceService(
         except Exception as e:
             raise ValueError(
                 f"Signer returned a signature that cannot be recovered over "
-                f"the request digest (v byte {signature[64]}): {e}. See "
-                f"Signer.sign_message for the expected encoding."
+                f"the request digest (v byte {signature[64]}, "
+                f"{type(e).__name__}). See Signer.sign_message for the "
+                f"expected encoding."
             ) from e
         if recovered.lower() != self.signer.address.lower():
             raise ValueError(
@@ -1106,7 +1112,7 @@ class MarketplaceService(
                     payment_type, challenge, max_delivery_rate
                 )
             except ValueError as e:
-                raise _TopUpFailure(str(e)) from e
+                raise _TopUpFailure(redacted(str(e), limit=None)) from e
             response = self._do_offchain_post(url, payload)
             if response.status_code == HTTP_PAYMENT_REQUIRED:
                 # The deposit tx already confirmed (DepositService waits for
