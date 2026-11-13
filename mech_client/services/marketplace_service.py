@@ -63,6 +63,7 @@ from mech_client.services.base_service import BaseTransactionService
 from mech_client.utils.validators import ensure_checksummed_address
 from safe_eth.eth import EthereumClient
 from web3.contract import Contract as Web3Contract
+from web3.exceptions import Web3Exception
 from web3.types import TxReceipt
 
 logger = logging.getLogger(__name__)
@@ -446,10 +447,13 @@ class MarketplaceService(
             has been checked against ``getRequestId``. If it raises, that
             request and the rest of the call are neither signed nor sent;
             earlier ones were already sent.
-        :param max_price: The most the call may pay, in the payment asset's
-            base units: the mech's ``max_delivery_rate`` times the number of
-            prompts above it raises :class:`MechPriceExceeded` before any
-            deposit, signature or POST. ``None`` sets no cap.
+        :param max_price: The most the requests may cost, in the payment
+            asset's base units. When the mech's ``max_delivery_rate`` times
+            the number of prompts exceeds it, :class:`MechPriceExceeded` is
+            raised before any deposit, signature or POST. The cap covers that
+            request price only: an auto-deposit after an HTTP 402 is bounded
+            separately, by ``_MAX_AUTO_DEPOSIT_RATIO`` times the rate.
+            ``None`` sets no cap.
         :return: A :class:`RequestResult` with ``tx_hash`` and ``receipt``
             (both ``None`` on the offchain path, which has no transaction),
             ``request_ids``, and ``deliveries`` mapping each request ID to a
@@ -485,14 +489,16 @@ class MarketplaceService(
 
         marketplace_contract = self.marketplace_contract()
 
-        info = self.mech_info(
-            priority_mech or self.mech_config.priority_mech_address or ""
-        )
+        priority_mech_address = priority_mech or self.mech_config.priority_mech_address
+        if not priority_mech_address:
+            raise ValueError("No priority mech address specified")
+        info = self.mech_info(priority_mech_address)
         payment_type, service_id, max_delivery_rate = (
             info.payment_type,
             info.service_id,
             info.max_delivery_rate,
         )
+        # the mech contract's own rate, not mechs.json's chain-wide default price
         price = max_delivery_rate * len(prompts)
         if max_price is not None and price > max_price:
             raise MechPriceExceeded(
@@ -508,11 +514,6 @@ class MarketplaceService(
         read = self.tool_manager.read_tools_metadata(service_id)
         metadata = read.document
         self._validate_tools(tools, service_id, metadata)
-
-        # Get priority mech address (use configured or provided)
-        priority_mech_address = priority_mech or self.mech_config.priority_mech_address
-        if not priority_mech_address:
-            raise ValueError("No priority mech address specified")
 
         response_timeout = RESPONSE_TIMEOUT_SECONDS
 
@@ -566,14 +567,8 @@ class MarketplaceService(
             PaymentType.USDC_TOKEN,
         ):
             balance_tracker = payment_strategy.get_balance_tracker_address()
-            # The marketplace pulls up to `max_delivery_rate * numRequests`
-            # from the requester via `BalanceTracker.checkAndRecordDeliveryRates`.
-            # Use the per-mech `max_delivery_rate` (read from the mech
-            # contract) instead of the static chain-wide `mech_config.price`
-            # from mechs.json — the latter is a default that does not match
-            # per-mech pricing and under-funds the approve whenever a mech's
-            # rate exceeds it, making the marketplace's transferFrom revert
-            # with "ERC20: transfer amount exceeds allowance".
+            # The marketplace pulls up to `price` via
+            # `BalanceTracker.checkAndRecordDeliveryRates`, so approve that much.
             # Check balance
             logger.info(f"Checking {payment_type.name} token balance...")
             sender = self.executor.get_sender_address()
@@ -694,7 +689,7 @@ class MarketplaceService(
         # ``getRequestId``); in client mode it is the EOA. The signature is
         # verified against this address downstream (Safe.isValidSignature
         # for the Safe branch, plain ecrecover for the EOA branch).
-        sender = self._resolve_offchain_sender()
+        sender = self.requester()
         current_nonce = marketplace_contract.functions.mapNonces(sender).call()
         if nonces is None:
             request_nonces = [current_nonce + i for i in range(len(prompts))]
@@ -725,34 +720,42 @@ class MarketplaceService(
                 fetch_ipfs_hash,
             )
 
-            data_hash, data_hash_full, ipfs_data = fetch_ipfs_hash(
-                prompt, tool, extra_attributes or {}
-            )
+            nonce = request_nonces[i]
+            try:
+                data_hash, data_hash_full, ipfs_data = fetch_ipfs_hash(
+                    prompt, tool, extra_attributes or {}
+                )
+                request_id_bytes = request_digest(
+                    domain_separator=domain_separator,
+                    marketplace=marketplace_address,
+                    mech=mech_address,
+                    requester=sender,
+                    data_hash=bytes.fromhex(data_hash.removeprefix("0x")),
+                    delivery_rate=max_delivery_rate,
+                    payment_type=payment_type_bytes,
+                    nonce=nonce,
+                )
+                reported = bytes(
+                    marketplace_contract.functions.getRequestId(
+                        mech_address,
+                        sender,
+                        data_hash,
+                        max_delivery_rate,
+                        "0x" + payment_type.value,
+                        nonce,
+                    ).call()
+                )
+            except (OSError, ValueError, Web3Exception) as e:
+                if not request_ids_hex:
+                    raise
+                # earlier requests went out: say so, as a transport error does
+                raise ValueError(
+                    f"Failed to derive the request id for nonce {nonce}: {e}"
+                    + _accepted_note(request_ids_hex, request_nonces)
+                ) from e
             logger.info(
                 f"Prompt sent directly to the mech (not published to IPFS); "
                 f"content CID {data_hash_full}"
-            )
-
-            nonce = request_nonces[i]
-            request_id_bytes = request_digest(
-                domain_separator=domain_separator,
-                marketplace=marketplace_address,
-                mech=mech_address,
-                requester=sender,
-                data_hash=bytes.fromhex(data_hash.removeprefix("0x")),
-                delivery_rate=max_delivery_rate,
-                payment_type=payment_type_bytes,
-                nonce=nonce,
-            )
-            reported = bytes(
-                marketplace_contract.functions.getRequestId(
-                    mech_address,
-                    sender,
-                    data_hash,
-                    max_delivery_rate,
-                    "0x" + payment_type.value,
-                    nonce,
-                ).call()
             )
             if reported != request_id_bytes:
                 raise RequestIdMismatch(
@@ -883,14 +886,15 @@ class MarketplaceService(
             deposited=deposited,
         )
 
-    def _resolve_offchain_sender(self) -> str:
-        """Return the requester address bound into the offchain request.
+    def requester(self) -> str:
+        """Return the requester of record: the address requests are made from.
 
         In agent mode this is the Safe (matching the onchain flow where the
         Safe is ``msg.sender`` on the marketplace call); in client mode it
-        is the EOA. Callers use this for ``mapNonces``, ``getRequestId``,
-        and the payload ``sender`` field so the mech, subgraph, and
-        settlement path all agree on who owns the request.
+        is the EOA. Offchain requests use it for ``mapNonces``,
+        ``getRequestId`` and the payload ``sender`` field so the mech,
+        subgraph and settlement path all agree on who owns the request; a
+        nonce allocator keys its queue on it.
 
         :return: Checksummed requester address
         :raises ValueError: if agent mode is set but no Safe address was

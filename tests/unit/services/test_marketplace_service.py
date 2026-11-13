@@ -29,16 +29,18 @@ import pytest
 import requests
 from eth_account import Account
 from eth_account.messages import encode_defunct
+from web3.exceptions import Web3Exception
 
 import mech_client
 from mech_client.domain.delivery import DeliveryResult
 from mech_client.domain.identification import VALORY_TERMS_NOTICE
+from mech_client.domain.request_id import request_digest
 from mech_client.domain.signing import LocalSigner
 from mech_client.domain.tools.manager import IDENTIFICATION_NOTE, ToolManager
 from mech_client.domain.tools.models import MetadataRead
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
-from mech_client.domain.request_id import request_digest
+from mech_client.nonces import NOT_SENT_ERRORS
 from mech_client.services.marketplace_service import (
     MarketplaceService,
     MechInfo,
@@ -2151,8 +2153,7 @@ class TestOffchainSenderResolution:
         service = _build_offchain_service()
         service.signer = create_mock_signer(address="0x" + "1" * 40)
 
-        # pylint: disable-next=protected-access
-        sender = service._resolve_offchain_sender()
+        sender = service.requester()
 
         assert sender == ensure_checksummed_address("0x" + "1" * 40)
 
@@ -2169,8 +2170,7 @@ class TestOffchainSenderResolution:
         service = _build_offchain_service(agent_mode=True, safe_address=safe)
         service.signer = create_mock_signer(address="0x" + "1" * 40)
 
-        # pylint: disable-next=protected-access
-        sender = service._resolve_offchain_sender()
+        sender = service.requester()
 
         assert sender == ensure_checksummed_address(safe)
         # Assert the EOA is NOT bound — that would be the client-mode value
@@ -2183,8 +2183,7 @@ class TestOffchainSenderResolution:
         service.safe_address = None
 
         with pytest.raises(ValueError, match="require a Safe address"):
-            # pylint: disable-next=protected-access
-            service._resolve_offchain_sender()
+            service.requester()
 
 
 class TestSendRequestOffchainBranch:
@@ -3490,6 +3489,45 @@ class TestLocalRequestId:
         assert service.signer.sign_message.call_count == 1
         assert mech_post.call_count == 1
 
+    @pytest.mark.asyncio
+    async def test_an_rpc_failure_mid_call_names_the_accepted_requests(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """getRequestId failing on request 2 is a plain ValueError naming request 1."""
+        mech_post.side_effect = [_mock_http_response(200)]
+        contract = _nonce_contract(5)
+        honest = contract.functions.getRequestId.side_effect
+
+        def get_request_id(*args: Any) -> MagicMock:
+            if args[-1] == 6:
+                raise Web3Exception("rpc down")
+            return honest(*args)
+
+        contract.functions.getRequestId.side_effect = get_request_id
+
+        with pytest.raises(ValueError) as e:
+            await _send_offchain(service, contract, prompts=("a", "b"), nonces=[5, 6])
+
+        assert type(e.value) is ValueError  # pylint: disable=unidiomatic-typecheck
+        assert isinstance(e.value.__cause__, Web3Exception)
+        assert "nonce 6: rpc down" in str(e.value)
+        assert f"{_request_id_for(5).hex()} (nonce 5)" in str(e.value)
+        assert not isinstance(e.value, NOT_SENT_ERRORS)  # the slot stays held
+        assert mech_post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_an_rpc_failure_on_the_first_request_propagates_as_is(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """Nothing was accepted yet, so there is nothing to name."""
+        contract = _nonce_contract(5)
+        contract.functions.getRequestId.side_effect = Web3Exception("rpc down")
+
+        with pytest.raises(Web3Exception, match="rpc down"):
+            await _send_offchain(service, contract)
+
+        mech_post.assert_not_called()
+
     def test_mismatch_survives_pickle_and_copy(self) -> None:
         """Every field comes back after a round trip."""
         err = RequestIdMismatch("bad", expected="aa", reported="bb", nonce=3)
@@ -3534,16 +3572,17 @@ class TestPriceCap:
         return mock_offchain
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("max_price", [19, 0])
     async def test_a_price_above_the_cap_is_refused_before_anything_is_sent(
-        self, service: MarketplaceService
+        self, service: MarketplaceService, max_price: int
     ) -> None:
-        """2 requests x 10 > 19: refused with the price and the cap."""
+        """2 requests x 10 > 19 (or 0): refused with the price and the cap."""
         with patch(f"{SERVICE}.PaymentStrategyFactory") as payment_factory:
             with pytest.raises(MechPriceExceeded) as e:
-                await self._send(service, max_price=19)
+                await self._send(service, max_price=max_price)
 
         assert isinstance(e.value, ValueError)
-        assert (e.value.price, e.value.max_price) == (20, 19)
+        assert (e.value.price, e.value.max_price) == (20, max_price)
         service.tool_manager.read_tools_metadata.assert_not_called()
         payment_factory.create.assert_not_called()
 
