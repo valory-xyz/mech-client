@@ -116,9 +116,13 @@ def chat_report(delivery: Any) -> Optional[ChatReport]:
     """
     Read the completion and usage out of a chat delivery.
 
+    None means either that the delivery holds no completion or that it could
+    not be fetched (``DeliveryResult.data`` is None); check ``delivery.data``
+    first to tell the two apart.
+
     :param delivery: A :class:`DeliveryResult` from ``send_request``'s
         ``deliveries``, or its content
-    :return: The report, or None when the delivery holds no completion
+    :return: The report, or None (see above)
     """
     if isinstance(delivery, DeliveryResult):
         delivery = delivery.data
