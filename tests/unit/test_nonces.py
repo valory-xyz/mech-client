@@ -500,6 +500,12 @@ class BeforeHook(NamedTuple):
     error: Exception
 
 
+class AfterHook(NamedTuple):
+    """An exception send_request raises after the hook, before the POST."""
+
+    error: Exception
+
+
 class HookNotPassed(NamedTuple):
     """An exception from a send that never handed the hook to send_request."""
 
@@ -511,10 +517,11 @@ def _send(
 ) -> Tuple[List[int], Any]:
     """Run send_with_nonce once; ``send`` pops its answers in order.
 
-    ``send`` behaves like send_request: it marks the hook received, then
-    runs it before answering, as a POST's answer comes after it. A
-    ``BeforeHook`` answer fails in between; a ``HookNotPassed`` one fails
-    without the hook ever reaching send_request.
+    ``send`` behaves like send_request: it marks the hook received, runs it,
+    then marks it posting before answering, as a POST's answer comes after
+    that. A ``BeforeHook`` answer fails before the hook, an ``AfterHook`` one
+    after it but before posting, and a ``HookNotPassed`` one without the hook
+    ever reaching send_request.
     """
     sent: List[int] = []
 
@@ -530,6 +537,9 @@ def _send(
         if inspect.isawaitable(returned):  # send_request's own guard
             returned.close()  # type: ignore[attr-defined]
             raise TypeError("on_request_id must be synchronous")
+        if isinstance(answer, AfterHook):  # e.g. the signer, before the POST
+            raise answer.error
+        hook.posting = True  # what send_request does right before the POST
         if isinstance(answer, Exception):
             raise answer
         return answer
@@ -690,6 +700,15 @@ def test_send_with_nonce_holds_a_failure_when_send_never_passed_the_hook(
     assert isinstance(raised, ValueError)
     assert cast(dict, held(allocator, 5))["state"] == "unknown"
     assert any("never passed" in e for e in errors)
+
+
+def test_a_signer_failure_after_the_hook_frees_the_nonce(
+    allocator: NonceAllocator,
+) -> None:
+    """Signing comes after the hook but before the POST: nothing reached the mech."""
+    _, raised = _send(allocator, [AfterHook(ValueError("bad v byte"))], not_sent=())
+    assert isinstance(raised, ValueError)
+    assert held(allocator, 5) is None
 
 
 def test_an_async_hook_is_refused_and_frees_the_nonce(

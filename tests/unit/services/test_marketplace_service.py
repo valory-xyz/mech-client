@@ -3488,6 +3488,25 @@ class TestCallerOwnedNonces:
         mech_post.assert_not_called()
         assert self._next_nonce(allocator, service) == 5
 
+    def test_a_signer_failure_through_send_with_nonce_frees_the_nonce(
+        self, service: MarketplaceService, mech_post: MagicMock, tmp_path: Path
+    ) -> None:
+        """The signer fails after the hook ran but before the POST: freed."""
+        service.signer.sign_message.side_effect = RuntimeError("signer offline")
+        hooked: List[int] = []
+
+        allocator, raised = self._through_allocator(
+            service,
+            tmp_path,
+            _nonce_contract(5),
+            on_request_id=lambda request_id, nonce: hooked.append(nonce),
+        )
+
+        assert isinstance(raised, RuntimeError)
+        assert hooked == [5]
+        mech_post.assert_not_called()
+        assert self._next_nonce(allocator, service) == 5
+
     def test_a_transport_error_through_send_with_nonce_holds_the_nonce(
         self, service: MarketplaceService, mech_post: MagicMock, tmp_path: Path
     ) -> None:

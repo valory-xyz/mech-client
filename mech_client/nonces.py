@@ -795,18 +795,19 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
 
     ``send(nonce, hook)`` must pass ``hook`` to ``send_request`` as
     ``on_request_id``; ``hook`` runs the caller's own ``on_request_id``.
-    ``send_request`` marks the hook received on entry, and the hook marks
-    itself returned just before the request is signed, so:
+    ``send_request`` marks the hook received on entry, and posting just
+    before the POST, after signing, so:
 
-    - received but not returned: the failure came before signing (an
-      unknown tool, a missing off-chain URL, an RPC error, a refused or
-      async hook), reached no mech, and the nonce is free again;
-    - returned: a failure may have reached the mech (a transport error), so
-      the slot is held as ``unknown``, unless the exception is in
-      ``not_sent``;
     - never received (``send`` did not pass the hook on): nothing tells a
-      failure before signing from one after, so the slot is held as
-      ``unknown`` and the misuse is logged.
+      failure before the POST from one after, so the slot is held as
+      ``unknown`` and the misuse is logged;
+    - received but not posting: the failure came before the POST (an
+      unknown tool, a missing off-chain URL, an RPC error, a refused or
+      async hook, a signer error), reached no mech, and the nonce is free
+      again;
+    - posting: a failure may have reached the mech (a transport error), so
+      the slot is held as ``unknown``, unless the exception is in
+      ``not_sent``.
 
     A 503 resends the same nonce (and, the salt being kept, the same id) up
     to the allocator's ``gap_retries`` times, with a fresh hook each time.
@@ -818,7 +819,7 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     :param salt: The request's metadata salt (``extra_attributes["nonce"]``)
     :param read_map_nonces: Reads mapNonces(sender) from the marketplace
     :param send: Sends one off-chain request with the given nonce and hook
-    :param not_sent: Exceptions ``send`` raises after the hook returned that
+    :param not_sent: Exceptions ``send`` raises after posting began that
         still reached no mech
     :param timeout: Seconds ``reserve`` may wait
     :param on_request_id: The caller's own pre-sign hook, run by ``hook``
@@ -848,10 +849,10 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
                 slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
                 raise
             except Exception:
-                if hook.received and not hook.returned:
-                    slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
-                elif not hook.received:
+                if not hook.received:
                     logger.error(_HOOK_NOT_PASSED, slot.nonce)
+                elif not hook.posting:
+                    slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
                 raise
             if not hook.received:
                 logger.warning(_HOOK_NOT_PASSED, slot.nonce)

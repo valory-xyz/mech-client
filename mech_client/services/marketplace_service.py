@@ -293,35 +293,32 @@ class PreSignHook:
     """An ``on_request_id`` that records how far ``send_request`` got with it.
 
     ``received`` is set as soon as ``send_request`` is handed the hook, and
-    ``returned`` once the wrapped hook has returned for a request, which is
-    just before that request is signed. A caller can then tell a failure
-    before signing (received, never returned) from one where the hook never
-    reached ``send_request`` at all.
+    ``posting`` just before a request is POSTed to the mech, after it was
+    signed. A caller can then tell a failure that reached no mech (received,
+    not posting) from one that may have (posting), and both from a hook that
+    never reached ``send_request`` at all.
     """
 
     def __init__(self, inner: Optional[Callable[[bytes, int], Any]] = None) -> None:
         """
         Initialize the hook.
 
-        :param inner: The caller's own ``on_request_id``, run first
+        :param inner: The caller's own ``on_request_id``, run when called
         """
         self._inner = inner
         self.received = False
-        self.returned = False
+        self.posting = False
 
     def __call__(self, request_id: bytes, nonce: int) -> Any:
         """
-        Run the wrapped hook and mark that it returned.
+        Run the wrapped hook.
 
         :param request_id: The raw 32-byte request id about to be signed
         :param nonce: Its marketplace nonce
-        :return: What the wrapped hook returned; an awaitable is passed back
-            unmarked, so ``send_request`` refuses it before signing
+        :return: What the wrapped hook returned, so ``send_request`` refuses
+            an awaitable before signing
         """
-        returned = None if self._inner is None else self._inner(request_id, nonce)
-        if not inspect.isawaitable(returned):
-            self.returned = True
-        return returned
+        return None if self._inner is None else self._inner(request_id, nonce)
 
 
 class _MechRefusal(ValueError):
@@ -839,6 +836,8 @@ class MarketplaceService(
 
             # Send HTTP POST request (handles a structured 402 + receipt header)
             url = f"{mech_offchain_url.rstrip('/')}/send_signed_requests"
+            if isinstance(on_request_id, PreSignHook):
+                on_request_id.posting = True  # from here the mech may hold it
             try:
                 response = self._post_offchain_request(
                     url, payload, payment_type, auto_deposit, max_delivery_rate
