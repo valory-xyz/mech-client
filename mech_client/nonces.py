@@ -51,7 +51,6 @@ from typing import (
     Dict,
     Iterable,
     Iterator,
-    List,
     Literal,
     Optional,
     Tuple,
