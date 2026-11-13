@@ -600,15 +600,19 @@ import asyncio
 from pathlib import Path
 
 from mech_client import NonceAllocator, NonceRefused, send_with_nonce
+from mech_client.domain.delivery import OffchainDeliveryWatcher
 
 allocator = NonceAllocator(Path("~/.my-app").expanduser(), settle_timeout=1800, gap_retries=3)
 contract = service.marketplace_contract()
 sender = service.requester()  # the Safe in agent mode, else the signer's EOA, as send_request signs
 
-def send(nonce: int):
+def send(nonce: int, hook):
+    # The queue lock is held until send returns, so keep the delivery wait
+    # short here and watch for the delivery outside the allocator.
     return asyncio.run(service.send_request(
         prompts=(prompt,), tools=(tool,), priority_mech=mech, use_offchain=True,
-        nonces=[nonce], extra_attributes={"nonce": salt}, max_price=cap,
+        nonces=[nonce], on_request_id=hook, extra_attributes={"nonce": salt},
+        max_price=cap, timeout=1,
     ))
 
 try:
@@ -619,9 +623,16 @@ try:
     )
 except NonceRefused as e:
     print(e.rule, e)  # e.g. mech-in-flight, mech-nonce-gap, mech-request-rejected
+else:
+    # Outside the lock: the next request from this requester can go out now.
+    url = service.tool_manager.get_offchain_url(service.mech_info(mech).service_id)
+    deliveries = asyncio.run(OffchainDeliveryWatcher(url, timeout=300).watch(result["request_ids"]))
+    allocator.delivered("gnosis", sender, [
+        n for rid, n in zip(result["request_ids"], result["nonces"]) if rid in deliveries
+    ])
 ```
 
-A 503 resends the same nonce and id up to `gap_retries` times. `outcome_of(error)` maps `OffchainRequestRejected` / `OffchainTopUpFailed` to what the answer means for the nonce: `retry` (503), `taken` (the 401 for a stale or duplicate nonce), `not_accepted` (any other 4xx, or a failed top-up) or `unknown` (other 5xx). An exception listed in `not_sent`, and `RequestIdMismatch` / `MechPriceExceeded`, frees the nonce; any other failure holds it as `unknown`. Call `allocator.delivered(chain, sender, nonces)` when deliveries arrive. A slot's `settle_timeout` counts from its delivery, or, when no delivery was seen, from the end of the request's response timeout; a slot `mapNonces` has not passed by then stalls the queue, which then only probes at `mapNonces` until one is accepted. Once that probe is accepted, the later slots' settle clocks restart. An on-chain request from the same requester goes inside `allocator.exclusive(...)`. As a last resort, `allocator.hard_cancel(chain, sender, read_map_nonces, stalled_for=...)` yields `mapNonces` for one on-chain request once the queue has been stalled (`stalled_since`) at least that long, and restarts the stall clock (and the later slots' settle clocks) when it exits, so each cancel needs its own window; you decide who confirms that payment.
+The allocator's lock covers whatever `send` does, so `send` should only send. `send(nonce, hook)` must pass `hook` to `send_request` as `on_request_id` (a caller's own pre-sign hook goes to `send_with_nonce(on_request_id=...)`, which runs it inside `hook`): any failure before the hook returned, such as an unknown tool, a missing offchain URL or an RPC error, reached no mech and frees the nonce. A 503 resends the same nonce and id up to `gap_retries` times. `outcome_of(error)` maps `OffchainRequestRejected` / `OffchainTopUpFailed` to what the answer means for the nonce: `retry` (503), `taken` (the 401 for a stale or duplicate nonce), `not_accepted` (any other 4xx, or a failed top-up) or `unknown` (other 5xx). An exception listed in `not_sent` (for failures after the hook that still reached no mech), and `RequestIdMismatch` / `MechPriceExceeded`, also frees the nonce; any other failure after the hook holds it as `unknown`, and is logged. Call `allocator.delivered(chain, sender, nonces)` when deliveries arrive. A slot's `settle_timeout` counts from its delivery, or, when no delivery was seen, from the end of the request's response timeout; a slot `mapNonces` has not passed by then stalls the queue, which then only probes at `mapNonces` until one is accepted. Once that probe is accepted, or answered `taken` over a slot of ours (the mech holds that request), the stall clears and the later slots' settle clocks restart. An on-chain request from the same requester goes inside `allocator.exclusive(...)`. As a last resort, `allocator.hard_cancel(chain, sender, read_map_nonces, stalled_for=...)` yields `mapNonces` for one on-chain request once the queue has been stalled (`stalled_since`) at least that long, and restarts the stall clock (and the later slots' settle clocks) when it exits, so each cancel needs its own window; you decide who confirms that payment.
 
 ### Price cap, mech info and RPC
 
