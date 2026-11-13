@@ -51,6 +51,18 @@ def get_rpc_chain_id(rpc_url: str, timeout: float = 5.0) -> Optional[int]:
     return None
 
 
+def _checked_override(rpc_override: str) -> str:
+    """Return a caller-given RPC endpoint, refusing a blank one.
+
+    :param rpc_override: The endpoint the caller passed as ``rpc_url``
+    :return: The endpoint
+    :raises ValueError: If it is empty or whitespace only
+    """
+    if not rpc_override.strip():
+        raise ValueError("rpc_url must not be blank; pass None to use the default")
+    return rpc_override
+
+
 @dataclass
 class LedgerConfig:
     """Ledger configuration with environment variable override support.
@@ -88,8 +100,8 @@ class LedgerConfig:
         # Load environment configuration (centralized env var loading)
         env_config = EnvironmentConfig.load()
 
-        if self.rpc_override:
-            self.address = self.rpc_override
+        if self.rpc_override is not None:
+            self.address = _checked_override(self.rpc_override)
         else:
             self._resolve_rpc(env_config)
 
@@ -268,8 +280,8 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
                 or self.registry_subgraph_url
             )
 
-        if self.rpc_override:
-            self.rpc_url = self.rpc_override
+        if self.rpc_override is not None:
+            self.rpc_url = _checked_override(self.rpc_override)
         else:
             # In agent mode, try to load RPC from stored operate configuration first
             if self.agent_mode and self.chain_config:

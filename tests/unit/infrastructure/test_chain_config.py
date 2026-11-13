@@ -657,8 +657,12 @@ class TestRpcOverride:
         mock_operate: MagicMock,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """The override is the address; no env var, operate config or mismatch probe."""
+        """The override is the address; no env var, operate config or mismatch probe.
+
+        The other ledger env overrides still apply alongside it.
+        """
         monkeypatch.setenv("MECHX_CHAIN_RPC", "https://env.example")
+        monkeypatch.setenv("MECHX_LEDGER_CHAIN_ID", "4663")
         config = LedgerConfig(
             address="https://default.example",
             chain_id=100,
@@ -671,6 +675,7 @@ class TestRpcOverride:
         )
 
         assert config.address == "https://caller.example"
+        assert config.chain_id == 4663
         mock_chain_id.assert_not_called()
         mock_operate.assert_not_called()
 
@@ -678,8 +683,12 @@ class TestRpcOverride:
     def test_mech_config_takes_the_override(
         self, mock_operate: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The override is the rpc_url, whatever MECHX_CHAIN_RPC says."""
+        """The override is the rpc_url, whatever MECHX_CHAIN_RPC says.
+
+        The other env overrides still apply alongside it.
+        """
         monkeypatch.setenv("MECHX_CHAIN_RPC", "https://env.example")
+        monkeypatch.setenv("MECHX_GAS_LIMIT", "777")
         config = MechConfig(
             complementary_metadata_hash_address="0x" + "0" * 40,
             rpc_url="https://default.example",
@@ -697,6 +706,7 @@ class TestRpcOverride:
         )
 
         assert config.rpc_url == "https://caller.example"
+        assert config.gas_limit == 777
         mock_operate.assert_not_called()
 
     @patch("mech_client.infrastructure.config.chain_config.get_rpc_chain_id")
@@ -716,3 +726,22 @@ class TestRpcOverride:
         mock_chain_id.assert_not_called()
         monkeypatch.delenv("MECHX_CHAIN_RPC")
         assert get_mech_config("gnosis").rpc_url != "https://caller.example"
+
+    @pytest.mark.parametrize("blank", ["", "   "])
+    def test_a_blank_override_is_refused(self, blank: str) -> None:
+        """A blank rpc_url is a caller error, not "use the default"."""
+        with pytest.raises(ValueError, match="rpc_url must not be blank"):
+            LedgerConfig(
+                address="https://default.example",
+                chain_id=100,
+                poa_chain=False,
+                default_gas_price_strategy="eip1559",
+                is_gas_estimation_enabled=True,
+                rpc_override=blank,
+            )
+        from mech_client.infrastructure.config import (  # pylint: disable=import-outside-toplevel
+            get_mech_config,
+        )
+
+        with pytest.raises(ValueError, match="rpc_url must not be blank"):
+            get_mech_config("gnosis", rpc_url=blank)
