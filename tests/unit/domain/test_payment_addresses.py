@@ -22,7 +22,12 @@
 from typing import Optional
 
 import pytest
-from mech_client.domain.payment.addresses import balance_tracker, payment_token
+from mech_client.domain.payment.addresses import (
+    BALANCE_TRACKERS,
+    balance_tracker,
+    payment_token,
+    tracker_address,
+)
 from mech_client.infrastructure.config import (
     CHAIN_TO_NATIVE_BALANCE_TRACKER,
     CHAIN_TO_PRICE_TOKEN_OLAS,
@@ -54,7 +59,7 @@ def test_payment_token_names_the_token_or_none_for_native(
 @pytest.mark.parametrize(
     ("payment_type", "chain", "match"),
     [
-        (PaymentType.USDC_TOKEN, "gnosis", "not available on gnosis"),
+        (PaymentType.USDC_TOKEN, "gnosis", "USDC token not available for chain 100"),
         (PaymentType.OLAS_TOKEN, "nowhere", "Unknown chain"),
     ],
 )
@@ -93,3 +98,24 @@ def test_balance_tracker_refuses_an_unknown_chain() -> None:
 def test_get_chain_id_reads_mechs_json() -> None:
     """The chain id comes from the packaged configuration."""
     assert get_chain_id("robinhood") == 4663
+
+
+def test_every_payment_type_has_a_tracker_table() -> None:
+    """The strategies look every payment type up in the one table."""
+    assert set(BALANCE_TRACKERS) == set(PaymentType)
+
+
+@pytest.mark.parametrize(
+    ("payment_type", "chain_id", "match"),
+    [
+        (PaymentType.NATIVE, 1, "Native balance tracker not available for chain 1"),
+        (PaymentType.NATIVE_NVM, 1, "NVM native balance tracker not available"),
+        (PaymentType.TOKEN_NVM_USDC, 100, "NVM USDC balance tracker not available"),
+    ],
+)
+def test_tracker_address_refuses_a_missing_tracker(
+    payment_type: PaymentType, chain_id: int, match: str
+) -> None:
+    """A chain without the tracker raises, naming the tracker type."""
+    with pytest.raises(ValueError, match=match):
+        tracker_address(payment_type, chain_id)

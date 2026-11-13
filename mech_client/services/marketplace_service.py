@@ -47,7 +47,7 @@ from mech_client.domain.delivery import (
     OnchainDeliveryWatcher,
 )
 from mech_client.domain.payment import PaymentStrategyFactory
-from mech_client.domain.payment.addresses import DEPOSIT_TRACKERS
+from mech_client.domain.payment.addresses import DEPOSIT_PAYMENT_TYPES
 from mech_client.domain.request_id import request_digest
 from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
@@ -82,13 +82,8 @@ OFFCHAIN_HTTP_TIMEOUT = 30
 # wallet drained. 10x is generous for legitimate price moves between
 # signature and request, tight enough that catastrophic drain stays bounded.
 _MAX_AUTO_DEPOSIT_RATIO = 10
-# Payment types that ``_auto_deposit_for_402`` knows how to top up via the
-# balance tracker. NVM subscription types (``NATIVE_NVM`` / ``TOKEN_NVM_USDC``)
-# are intentionally excluded: they're paid via subscription, not via a
-# balance-tracker deposit. The set is the one ``balance_tracker`` resolves, so
-# the tracker a caller is told about and the one a top-up pays never diverge;
-# a new entry there also needs a dispatch branch below.
-_SUPPORTED_DEPOSIT_PAYMENT_TYPES: FrozenSet[PaymentType] = frozenset(DEPOSIT_TRACKERS)
+# Payment types ``_auto_deposit_for_402`` tops up: see DEPOSIT_PAYMENT_TYPES.
+_SUPPORTED_DEPOSIT_PAYMENT_TYPES: FrozenSet[PaymentType] = DEPOSIT_PAYMENT_TYPES
 
 
 def _accepted_note(accepted_ids: List[str], request_nonces: List[int]) -> str:
@@ -709,9 +704,7 @@ class MarketplaceService(
                     f"nonce {current_nonce} and can never settle."
                 )
 
-        # The id that is signed is derived locally; getRequestId is only a
-        # cross-check, so a lying RPC can cause a refusal but never a
-        # signature over bytes of its choosing.
+        # See request_digest for why the signed id is derived locally.
         domain_separator = bytes(
             marketplace_contract.functions.domainSeparator().call()
         )
@@ -1194,10 +1187,9 @@ class MarketplaceService(
         logger.info(
             f"Auto-depositing {challenge.shortfall} to top up the prepaid balance..."
         )
-        # Per-asset dispatch over the supported-types frozenset. A future
-        # payment type would need to be added to _SUPPORTED_DEPOSIT_PAYMENT_TYPES
-        # AND get a branch here; the assertion-shaped raise below catches the
-        # mismatch if only the set is updated.
+        # Per-asset dispatch over DEPOSIT_PAYMENT_TYPES. A payment type added
+        # there needs a branch here too; the assertion-shaped raise below
+        # catches the mismatch if only the set is updated.
         if payment_type == PaymentType.NATIVE:
             tx_hash = deposit_service.deposit_native(challenge.shortfall)
         elif payment_type == PaymentType.OLAS_TOKEN:

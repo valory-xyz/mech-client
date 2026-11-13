@@ -21,15 +21,10 @@
 
 from typing import Optional, TYPE_CHECKING
 
+from mech_client.domain.payment.addresses import token_address, tracker_address
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
-from mech_client.infrastructure.config import (
-    CHAIN_TO_PRICE_TOKEN_OLAS,
-    CHAIN_TO_PRICE_TOKEN_USDC,
-    CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS,
-    CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
-)
 from mech_client.utils.validators import ensure_checksummed_address
 
 if TYPE_CHECKING:
@@ -122,38 +117,33 @@ class TokenPaymentStrategy(PaymentStrategy):
         """
         Get the token balance tracker contract address for this chain.
 
+        Propagates ``ValueError`` from ``tracker_address`` when no tracker is
+        registered for the token on the active chain.
+
         :return: Balance tracker contract address
-        :raises ValueError: If balance tracker not available for this chain/type
         """
-        if self.payment_type.is_usdc():
-            return self._lookup_balance_tracker(
-                CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC, "USDC"
-            )
-        if self.payment_type.is_olas():
-            return self._lookup_balance_tracker(
-                CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS, "OLAS"
-            )
-        raise ValueError(f"Unknown token payment type: {self.payment_type}")
+        self._check_token_type()
+        return tracker_address(self.payment_type, self.chain_id)
 
     def get_payment_token_address(self) -> Optional[str]:
         """
         Get the payment token contract address.
 
-        :return: Token contract address
-        :raises ValueError: If token not available for this chain/type
-        """
-        if self.payment_type.is_usdc():
-            token_address = CHAIN_TO_PRICE_TOKEN_USDC.get(self.chain_id, "")
-            if not token_address:
-                raise ValueError(f"USDC token not available for chain {self.chain_id}")
-        elif self.payment_type.is_olas():
-            token_address = CHAIN_TO_PRICE_TOKEN_OLAS.get(self.chain_id, "")
-            if not token_address:
-                raise ValueError(f"OLAS token not available for chain {self.chain_id}")
-        else:
-            raise ValueError(f"Unknown token payment type: {self.payment_type}")
+        Propagates ``ValueError`` from ``token_address`` when the token is not
+        deployed on the active chain.
 
-        return token_address
+        :return: Token contract address
+        """
+        self._check_token_type()
+        return token_address(self.payment_type, self.chain_id)
+
+    def _check_token_type(self) -> None:
+        """Refuse a payment type that is not an OLAS or USDC token.
+
+        :raises ValueError: For any other payment type
+        """
+        if not (self.payment_type.is_usdc() or self.payment_type.is_olas()):
+            raise ValueError(f"Unknown token payment type: {self.payment_type}")
 
     def check_prepaid_balance(
         self,
