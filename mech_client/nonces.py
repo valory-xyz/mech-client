@@ -51,6 +51,7 @@ from typing import (
     Dict,
     Iterable,
     Iterator,
+    List,
     Literal,
     Optional,
     Tuple,
@@ -59,6 +60,8 @@ from typing import (
 )
 
 from mech_client.services.marketplace_service import (
+    HTTP_CLIENT_ERRORS,
+    HTTP_UNAUTHORIZED,
     MechPriceExceeded,
     OffchainRequestRejected,
     OffchainRequestResult,
@@ -79,11 +82,14 @@ GAP_RETRY_SECONDS = 2.0
 NONCE_TAKEN_REASON = "wire nonce below sender's next expected slot"
 
 Outcome = Literal["accepted", "retry", "not_accepted", "taken", "unknown"]
-ACCEPTED: Outcome = "accepted"
+# what a held slot can be: the only outcomes that keep a nonce held
+SlotState = Literal["accepted", "unknown"]
+ACCEPTED: Literal["accepted"] = "accepted"
 RETRY: Outcome = "retry"
 NOT_ACCEPTED: Outcome = "not_accepted"
 TAKEN: Outcome = "taken"
-UNKNOWN: Outcome = "unknown"
+UNKNOWN: Literal["unknown"] = "unknown"
+SLOT_STATES = (ACCEPTED, UNKNOWN)
 
 RULE_IN_FLIGHT = "mech-in-flight"
 RULE_QUEUE_UNREADABLE = "mech-queue-unreadable"
@@ -125,7 +131,7 @@ class NonceRefused(Exception):
 class _Slot:
     """One held nonce: who it was sent to, its salt, and what the mech said."""
 
-    state: Outcome
+    state: SlotState
     mech: str
     salt: str
     at: float
@@ -190,6 +196,8 @@ class Reservation:
         self._record(self.nonce, outcome, mech=mech, salt=salt, prior=self.prior)
 
 
+# too-many-instance-attributes: the store's path, locks and failure flags and
+# the injected clock and sleep are all state of the one allocator
 class NonceAllocator:  # pylint: disable=too-many-instance-attributes
     """Allocates off-chain marketplace nonces, one queue per (chain, sender)."""
 
@@ -212,10 +220,16 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         :param gap_retries: How many times a 503 resends the same nonce
         :param clock: Time source, in seconds
         :param sleep: Blocking sleep, in seconds
+        :raises ValueError: If settle_timeout or gap_retries is negative
         """
+        if settle_timeout < 0 or gap_retries < 0:
+            raise ValueError(
+                f"settle_timeout ({settle_timeout}) and gap_retries "
+                f"({gap_retries}) must not be negative"
+            )
         self._path = Path(store_path) / NONCES_FILE
         self._settle_timeout = settle_timeout
-        self.gap_retries = gap_retries
+        self._gap_retries = gap_retries
         self._clock = clock
         self.sleep = sleep
         self._lock = threading.Lock()
@@ -232,6 +246,11 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             self._unwritable = True
         else:
             self._load()
+
+    @property
+    def gap_retries(self) -> int:
+        """How many times a 503 resends the same nonce."""
+        return self._gap_retries
 
     @staticmethod
     def key(chain: str, sender: str) -> str:
@@ -388,6 +407,12 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 if reservation.outcome is None:
                     # an exception mid-send: whether the mech stored the
                     # request is unknown, so the slot stays held
+                    logger.warning(
+                        "mech nonce %s on %s held as unknown: the request may "
+                        "have reached the mech",
+                        nonce,
+                        key,
+                    )
                     reservation.answered(UNKNOWN, mech=mech, salt=salt)
 
     @contextlib.contextmanager
@@ -551,6 +576,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 "writable again and the allocator is reloaded",
             )
 
+    # too-many-arguments: the queue key, the nonce and the answer, plus the
+    # keyword-only mech, salt and prior slot the answer is recorded with
     def _answered(  # pylint: disable=too-many-arguments
         self,
         key: str,
@@ -578,9 +605,12 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 self._restart_settle_clocks(queue, nonce, now)
             queue.stalled_at = None
         elif outcome == TAKEN:
-            if prior is not None and prior.state == UNKNOWN:
-                # our own earlier request holds n: it was accepted after all
+            if prior is not None:
+                # a probe over our own earlier slot: the mech holds that
+                # request, so n is not stuck; resume from here
                 queue.slots[nonce] = _Slot(ACCEPTED, prior.mech, prior.salt, now)
+                self._restart_settle_clocks(queue, nonce, now)
+                queue.stalled_at = None
             else:
                 # another signer took n, or the mech still settles slots we
                 # think free: sending more would only gap behind it
@@ -635,7 +665,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         return _Queue(
             slots={
                 int(n): _Slot(
-                    s["state"],
+                    _slot_state(s["state"]),
                     s["mech"],
                     s["salt"],
                     float(s["at"]),
@@ -682,6 +712,20 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         tmp.replace(self._path)
 
 
+def _slot_state(raw: Any) -> SlotState:
+    """Check a persisted slot's state.
+
+    :param raw: The stored value
+    :return: The state
+    :raises ValueError: If it is not a state a held slot can have
+    """
+    if raw == ACCEPTED:
+        return ACCEPTED
+    if raw == UNKNOWN:
+        return UNKNOWN
+    raise ValueError(f"slot state {raw!r} is not one of {SLOT_STATES}")
+
+
 def _optional_time(raw: Any) -> Optional[float]:
     return None if raw is None else float(raw)
 
@@ -699,9 +743,9 @@ def outcome_of(error: Union[OffchainRequestRejected, OffchainTopUpFailed]) -> Ou
         return NOT_ACCEPTED
     if error.retryable:
         return RETRY
-    if error.status == 401 and error.reason == NONCE_TAKEN_REASON:
+    if error.status == HTTP_UNAUTHORIZED and error.reason == NONCE_TAKEN_REASON:
         return TAKEN
-    if 400 <= error.status < 500:
+    if error.status in HTTP_CLIENT_ERRORS:
         return NOT_ACCEPTED
     return UNKNOWN
 
@@ -719,6 +763,27 @@ def _refusal(error: Union[OffchainRequestRejected, OffchainTopUpFailed]) -> str:
     )
 
 
+def _tracking_hook(
+    on_request_id: Optional[Callable[[bytes, int], None]],
+) -> Tuple[Callable[[bytes, int], None], List[bool]]:
+    """Wrap a pre-sign hook so the caller can tell whether it returned.
+
+    :param on_request_id: The caller's own hook, or None
+    :return: The hook to pass to send_request, and a list that gets an entry
+        once the hook has returned (the request is about to be signed)
+    """
+    hooked: List[bool] = []
+
+    def hook(request_id: bytes, nonce: int) -> None:
+        if on_request_id is not None:
+            on_request_id(request_id, nonce)
+        hooked.append(True)
+
+    return hook, hooked
+
+
+# too-many-arguments: keyword-only; the allocator plus what identifies,
+# sends and bounds one request
 def send_with_nonce(  # pylint: disable=too-many-arguments
     allocator: NonceAllocator,
     *,
@@ -727,19 +792,24 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     mech: str,
     salt: str,
     read_map_nonces: Callable[[], int],
-    send: Callable[[int], OffchainRequestResult],
+    send: Callable[[int, Callable[[bytes, int], None]], OffchainRequestResult],
     not_sent: Tuple[Type[Exception], ...],
     timeout: float,
+    on_request_id: Optional[Callable[[bytes, int], None]] = None,
 ) -> OffchainRequestResult:
     """
     Reserve a nonce, send with it, and record what the mech answered.
 
-    A 503 resends the same nonce (and, the salt being kept, the same id) up
-    to the allocator's ``gap_retries`` times. An exception in ``not_sent``,
-    or ``RequestIdMismatch`` / ``MechPriceExceeded``, was raised before
-    anything was signed, so the nonce is free again; any other failure (a
-    transport error) holds the slot as ``unknown``, since the mech may have
-    stored the request.
+    ``send(nonce, hook)`` must pass ``hook`` to ``send_request`` as
+    ``on_request_id``: it runs the caller's own ``on_request_id``, then marks
+    the request as about to be signed. Any failure before the hook returned
+    (an unknown tool, a missing off-chain URL, an RPC error, a refused hook)
+    reached no mech, so the nonce is free again; so is an exception in
+    ``not_sent``, or ``RequestIdMismatch`` / ``MechPriceExceeded``. Any other
+    failure after it (a transport error) holds the slot as ``unknown``, since
+    the mech may have stored the request. A 503 resends the same nonce (and,
+    the salt being kept, the same id) up to the allocator's ``gap_retries``
+    times.
 
     :param allocator: The allocator
     :param chain: Chain name
@@ -747,19 +817,23 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     :param mech: Mech the request goes to
     :param salt: The request's metadata salt (``extra_attributes["nonce"]``)
     :param read_map_nonces: Reads mapNonces(sender) from the marketplace
-    :param send: Sends one off-chain request with the given nonce
-    :param not_sent: Exceptions ``send`` raises only before the pre-sign hook
+    :param send: Sends one off-chain request with the given nonce and hook
+    :param not_sent: Exceptions ``send`` raises after the hook that still
+        reached no mech
     :param timeout: Seconds ``reserve`` may wait
+    :param on_request_id: The caller's own pre-sign hook, run by ``hook``
     :return: What ``send`` returned
-    :raises NonceRefused: naming the rule, when the mech did not accept it
+    :raises NonceRefused: naming the rule, when no nonce could be reserved
+        or the mech's answer did not accept the request
     """
     refused_before_signing = NOT_SENT_ERRORS + tuple(not_sent)
     with allocator.reserve(
         chain, sender, mech, read_map_nonces, timeout=timeout, salt=salt
     ) as slot:
         for attempt in range(allocator.gap_retries + 1):
+            hook, hooked = _tracking_hook(on_request_id)
             try:
-                result = send(slot.nonce)
+                result = send(slot.nonce, hook)
             except (OffchainRequestRejected, OffchainTopUpFailed) as e:
                 outcome = outcome_of(e)
                 if outcome == RETRY and attempt < allocator.gap_retries:
@@ -774,6 +848,16 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
             except refused_before_signing:
                 slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
                 raise
+            except Exception:
+                if not hooked:  # nothing was signed, so nothing was sent
+                    slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
+                raise
+            if not hooked:
+                logger.warning(
+                    "send for nonce %s never ran the hook send_with_nonce "
+                    "gave it; pass it to send_request as on_request_id",
+                    slot.nonce,
+                )
             slot.answered(ACCEPTED, mech=mech, salt=salt)
             return result
     raise AssertionError("unreachable")  # pragma: no cover

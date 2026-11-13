@@ -70,8 +70,10 @@ logger = logging.getLogger(__name__)
 
 # HTTP status the offchain mech returns when the requester's prepaid balance is
 # insufficient (structured 402 challenge, see mech task_execution handlers).
+HTTP_UNAUTHORIZED = 401
 HTTP_PAYMENT_REQUIRED = 402
 HTTP_SERVICE_UNAVAILABLE = 503
+HTTP_CLIENT_ERRORS = range(400, 500)
 # The responseTimeout written into every request, in seconds: past it the
 # mech is out of time by the request's own terms.
 RESPONSE_TIMEOUT_SECONDS = 300
