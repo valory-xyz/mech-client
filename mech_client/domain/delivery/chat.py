@@ -46,6 +46,9 @@ def is_chat_prompt(prompt: str) -> bool:
     """
     Whether a prompt is a chat: a non-empty JSON list of ``{role, ...}`` messages.
 
+    Only ``role`` is required: an assistant message carrying ``tool_calls``
+    may omit ``content``, as the OpenAI message format allows.
+
     :param prompt: The prompt string
     :return: True for a chat prompt
     """
@@ -74,16 +77,29 @@ def _parse(value: Any) -> Any:
     return value
 
 
+def _parse_object(value: Any) -> Any:
+    """Decode a JSON object string; any other string is text and stays as is.
+
+    A completion such as ``"42"`` or ``"true"`` is valid JSON too, and must
+    still be reported as the completion.
+
+    :param value: A delivery field
+    :return: The decoded object, or the value itself
+    """
+    decoded = _parse(value)
+    return decoded if isinstance(decoded, dict) else value
+
+
 def _message(data: Any) -> Any:
     """Descend to the completion: response/result, then OpenAI choices.
 
     :param data: The delivered content
     :return: The message holding the completion
     """
-    data = _parse(data)
+    data = _parse_object(data)
     for key in WRAPPER_KEYS:
         if isinstance(data, dict) and key in data:
-            data = _parse(data[key])
+            data = _parse_object(data[key])
             break
     if isinstance(data, dict) and isinstance(data.get("choices"), list):
         choices = data["choices"]

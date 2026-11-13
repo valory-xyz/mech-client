@@ -20,7 +20,7 @@
 """Tests for the chat contract."""
 
 import json
-from typing import Any
+from typing import Any, Dict
 
 import pytest
 
@@ -78,6 +78,33 @@ def test_the_first_candidate_in_parse_order_wins(
     report = chat_report(delivery)
     assert report is not None
     assert report["completion"] == completion
+
+
+@pytest.mark.parametrize("text", ["42", "true", "null", '["a"]'])
+def test_a_completion_that_is_valid_json_is_still_the_completion(text: str) -> None:
+    """A model asked for a number answers "42": that text is the completion."""
+    assert chat_report({"result": text}) == {"completion": text, "usage": {}}
+    assert chat_report(text) == {"completion": text, "usage": {}}
+
+
+@pytest.mark.parametrize(
+    ("usage", "expected"),
+    [
+        ({"prompt_tokens": "n/a", "completion_tokens": None}, {}),
+        ({"prompt_tokens": 4}, {"prompt_tokens": 4}),
+        ([4, 2], {}),
+    ],
+)
+def test_usage_takes_only_integer_counts(usage: Any, expected: Dict[str, int]) -> None:
+    """An untrusted usage block never raises; only integer counts are reported."""
+    report = chat_report({"content": "c", "usage": usage})
+    assert report == {"completion": "c", "usage": expected}
+
+
+def test_an_empty_content_beside_a_tool_call_adds_no_blank_lead() -> None:
+    """The completion is the tool-call block alone."""
+    report = chat_report({"content": "", "tool_calls": [{"function": {"name": "t"}}]})
+    assert report == {"completion": "```bash\nt\n```", "usage": {}}
 
 
 def test_a_delivery_result_is_read_through_its_data() -> None:
