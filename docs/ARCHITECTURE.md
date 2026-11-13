@@ -305,7 +305,8 @@ unreadable or unwritable store refuses with `NonceRefused`. `outcome_of` maps
 `OffchainRequestRejected` / `OffchainTopUpFailed` to an `Outcome`, and
 `send_with_nonce` drives one send through a reservation (503 resends the same
 nonce; a failure after `send_request` received the `PreSignHook` it hands
-`send`, but before the hook returned, frees the nonce). `exclusive` holds the queue for an on-chain request; `hard_cancel`
+`send`, but before it marked the hook posting (right before the POST), frees
+the nonce). `exclusive` holds the queue for an on-chain request; `hard_cancel`
 yields `mapNonces` for one on-chain request once the queue has been stalled
 for at least `stalled_for` seconds (`stalled_since`).
 
