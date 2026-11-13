@@ -592,7 +592,9 @@ class TestGetOffchainUrl:
             ToolManager.offchain_url_from_metadata(1, {"url": "https://m"})
             == "https://m"
         )
-        with pytest.raises(ValueError, match="metadata unreadable \\(no cause"):
+        with pytest.raises(
+            ValueError, match="metadata unreadable \\(no document was read\\)"
+        ):
             ToolManager.offchain_url_from_metadata(1, None)
 
 
@@ -1545,10 +1547,18 @@ class TestOffchainBlocker:
         assert offchain_blocker(MetadataRead(None, "Timeout: slow")) == (
             "metadata unreadable (Timeout: slow); may be transient or never published"
         )
-        assert offchain_blocker(MetadataRead(None, None)) == (
-            "metadata unreadable (no cause reported); may be transient or never "
-            "published"
-        )
+
+    @pytest.mark.parametrize(
+        ("document", "error"), [(None, None), ({"url": "https://m"}, "slow")]
+    )
+    def test_a_read_has_exactly_one_of_document_or_error(
+        self, document: Any, error: Any
+    ) -> None:
+        """Neither and both are refused; the constructors build the two valid reads."""
+        with pytest.raises(ValueError, match="exactly one"):
+            MetadataRead(document, error)
+        assert MetadataRead.ok({"a": 1}) == MetadataRead({"a": 1}, None)
+        assert MetadataRead.failed("slow") == MetadataRead(None, "slow")
 
     @pytest.mark.parametrize("url", [None, "", "  ", 42])
     def test_a_document_without_a_url_is_on_chain_only(self, url: Any) -> None:

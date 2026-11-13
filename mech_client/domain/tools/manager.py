@@ -184,8 +184,9 @@ def offchain_blocker(read: MetadataRead) -> Optional[str]:
     :return: The reason, or None when the document names an endpoint
     """
     if read.document is None:
-        cause = read.error or "no cause reported"
-        return f"metadata unreadable ({cause}); may be transient or never published"
+        return (
+            f"metadata unreadable ({read.error}); may be transient or never published"
+        )
     if usable_offchain_url(read.document) is None:
         return OFFCHAIN_URL_MISSING
     return None
@@ -239,8 +240,8 @@ class ToolManager:
         :return: The document, or None with the cause
         """
         if not self._metadata_hash_deployed():
-            return MetadataRead(
-                None, f"metadata hash contract not deployed on {self.chain_config}"
+            return MetadataRead.failed(
+                f"metadata hash contract not deployed on {self.chain_config}"
             )
 
         # packaging: a missing or broken ABI is a bug, not an unreadable document
@@ -257,12 +258,12 @@ class ToolManager:
         except METADATA_READ_ERRORS as e:
             cause = redacted_cause(e)
             logger.error(f"Error fetching tools for service {service_id}: {cause}")
-            return MetadataRead(None, cause)
+            return MetadataRead.failed(cause)
         if not isinstance(document, dict):
             cause = f"expected a JSON object, got {type(document).__name__}"
             logger.error(f"Unusable metadata for service {service_id}: {cause}")
-            return MetadataRead(None, cause)
-        return MetadataRead(document, None)
+            return MetadataRead.failed(cause)
+        return MetadataRead.ok(document)
 
     def fetch_tools_metadata(self, service_id: int) -> Optional[Dict[str, Any]]:
         """
@@ -306,13 +307,17 @@ class ToolManager:
 
         :param service_id: The service ID of the mech (for error messages)
         :param read: The ``read_tools_metadata`` result; a bare document (or
-            None) is still accepted, with no cause for a missing one
+            None) is still accepted
         :return: The offchain URL string
         :raises ValueError: ``offchain_blocker``'s reason when there is no
             usable URL
         """
         if not isinstance(read, MetadataRead):
-            read = MetadataRead(read if isinstance(read, dict) else None, None)
+            read = (
+                MetadataRead.ok(read)
+                if isinstance(read, dict)
+                else MetadataRead.failed("no document was read")
+            )
         url = usable_offchain_url(read.document)
         if url is None:
             raise ValueError(f"Mech service {service_id}: {offchain_blocker(read)}")
