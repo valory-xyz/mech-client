@@ -71,6 +71,9 @@ logger = logging.getLogger(__name__)
 # insufficient (structured 402 challenge, see mech task_execution handlers).
 HTTP_PAYMENT_REQUIRED = 402
 HTTP_SERVICE_UNAVAILABLE = 503
+# The responseTimeout written into every request, in seconds: past it the
+# mech is out of time by the request's own terms.
+RESPONSE_TIMEOUT_SECONDS = 300
 # Outbound HTTP timeout (seconds) for the offchain request POST.
 OFFCHAIN_HTTP_TIMEOUT = 30
 # Hard cap on auto-deposit: refuse to top up more than this multiple of the
@@ -510,8 +513,7 @@ class MarketplaceService(
         if not priority_mech_address:
             raise ValueError("No priority mech address specified")
 
-        # Response timeout (5 minutes, matching historic default)
-        response_timeout = 300
+        response_timeout = RESPONSE_TIMEOUT_SECONDS
 
         self._log_terms_notice(priority_mech_address, metadata)
 

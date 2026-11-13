@@ -58,6 +58,7 @@ from typing import (
 )
 
 from mech_client.services.marketplace_service import (
+    RESPONSE_TIMEOUT_SECONDS,
     MechPriceExceeded,
     OffchainRequestRejected,
     OffchainRequestResult,
@@ -70,15 +71,11 @@ logger = logging.getLogger(__name__)
 NONCES_FILE = "mech_nonces.json"
 # how often a waiting reserve re-reads mapNonces
 POLL_SECONDS = 2.0
-# mech-client writes responseTimeout=300 into every request: past that the
-# mech is out of time by the request's own terms, so its delivery timed out
-RESPONSE_TIMEOUT_SECONDS = 300.0
 # a 503 is a nonce gap behind a slot still settling: resend the same nonce
 # and id this far apart, up to the allocator's gap_retries times
 GAP_RETRY_SECONDS = 2.0
 # the mech's 401 for a stale or duplicate nonce, verbatim: n is taken
 NONCE_TAKEN_REASON = "wire nonce below sender's next expected slot"
-HTTP_SERVICE_UNAVAILABLE = 503
 
 Outcome = Literal["accepted", "retry", "not_accepted", "taken", "unknown"]
 ACCEPTED: Outcome = "accepted"
@@ -140,6 +137,8 @@ class _Slot:
         """
         if self.delivered_at is not None:
             return self.delivered_at
+        # past the responseTimeout every request carries, the mech is out of
+        # time by the request's own terms, so its delivery timed out
         return self.at + RESPONSE_TIMEOUT_SECONDS
 
 
@@ -312,7 +311,10 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             self._save()
 
     @contextlib.contextmanager
-    def reserve(  # pylint: disable=too-many-arguments  # the spec's signature
+    # too-many-arguments: the queue key (chain, sender), the mech and the
+    # mapNonces reader are all needed to place the slot; timeout and salt are
+    # keyword-only
+    def reserve(  # pylint: disable=too-many-arguments
         self,
         chain: str,
         sender: str,
@@ -441,7 +443,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         slots stay held. It pays a mech, so whoever calls this decides who
         confirms it. The queue's lock is held for the whole context, so no
         off-chain request goes out meanwhile; the stall itself clears only
-        when a probe is accepted again.
+        when a probe is accepted again. Leaving the context restarts the stall
+        clock, so each cancel needs its own ``stalled_for`` window.
 
         :param chain: Chain name
         :param sender: Requester address
@@ -471,7 +474,14 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                     f"this sender's queue on {chain} {stalled}; a hard cancel "
                     f"needs it stalled for at least {stalled_for:.0f}s",
                 )
-            yield map_nonces
+            try:
+                yield map_nonces
+            finally:
+                # whatever the on-chain request did, the next cancel needs a
+                # fresh stalled_for window: mapNonces may now point at a slot
+                # the mech already accepted
+                queue.stalled_at = self._clock()
+                self._save()
 
     @staticmethod
     @contextlib.contextmanager
@@ -658,7 +668,7 @@ def outcome_of(error: Union[OffchainRequestRejected, OffchainTopUpFailed]) -> Ou
     """
     if isinstance(error, OffchainTopUpFailed):
         return NOT_ACCEPTED
-    if error.status == HTTP_SERVICE_UNAVAILABLE:
+    if error.retryable:
         return RETRY
     if error.status == 401 and error.reason == NONCE_TAKEN_REASON:
         return TAKEN

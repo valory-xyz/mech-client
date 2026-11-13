@@ -189,6 +189,20 @@ def test_a_checksummed_mech_is_the_same_mech(allocator: NonceAllocator) -> None:
         assert slot.nonce == 6
 
 
+def test_a_checksummed_sender_is_the_same_sender(allocator: NonceAllocator) -> None:
+    """The sender's address in any case is one queue: its slots are counted once."""
+    checksummed = "0x" + "aB" * 20
+    with allocator.reserve("Gnosis", checksummed, MECH_A, lambda: 5, timeout=1) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="")
+    with allocator.reserve(
+        "gnosis", checksummed.lower(), MECH_A, lambda: 5, timeout=1
+    ) as slot:
+        assert slot.nonce == 6  # 5 is held by the same queue
+    assert allocator.key("Gnosis", checksummed) == allocator.key(
+        "gnosis", checksummed.lower()
+    )
+
+
 def test_taken_resolves_our_unknown_or_stalls(
     allocator: NonceAllocator, clock: Clock
 ) -> None:
@@ -646,6 +660,37 @@ class TestHardCancel:
         assert held(allocator, 5) is None
         assert salt_of(allocator, 6) == "s6"
         assert not allocator.stalled("gnosis", SENDER)
+
+    def test_each_cancel_needs_its_own_stall_window(
+        self, allocator: NonceAllocator, clock: Clock
+    ) -> None:
+        """A second cancel straight after the first is refused, then allowed later."""
+        self._stall(allocator)
+        clock.now += 600
+        with allocator.hard_cancel("gnosis", SENDER, lambda: 5, stalled_for=600):
+            clock.now += 30  # the on-chain request takes a while
+        assert allocator.stalled_since("gnosis", SENDER) == clock.now
+        with pytest.raises(NonceRefused) as refused:
+            _enter(allocator.hard_cancel("gnosis", SENDER, lambda: 6, stalled_for=600))
+        assert refused.value.rule == "mech-queue-not-stalled"
+        clock.now += 600
+        with allocator.hard_cancel(
+            "gnosis", SENDER, lambda: 6, stalled_for=600
+        ) as nonce:
+            assert nonce == 6
+
+    def test_a_failed_cancel_also_restarts_the_window(
+        self, tmp_path: Path, allocator: NonceAllocator, clock: Clock
+    ) -> None:
+        """The on-chain request may have landed even if the body raised."""
+        self._stall(allocator)
+        clock.now += 600
+        with pytest.raises(RuntimeError):
+            _crash_inside(
+                allocator.hard_cancel("gnosis", SENDER, lambda: 5, stalled_for=600)
+            )
+        assert allocator.stalled_since("gnosis", SENDER) == clock.now
+        assert _allocator(tmp_path, clock).stalled_since("gnosis", SENDER) == clock.now
 
     def test_it_holds_the_queue_while_the_on_chain_request_is_sent(
         self, allocator: NonceAllocator, clock: Clock
