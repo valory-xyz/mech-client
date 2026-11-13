@@ -73,10 +73,11 @@ def token_address(payment_type: PaymentType, chain_id: int) -> Optional[str]:
     """
     Return the token a payment type pays in on a chain, by chain id.
 
+    A token not deployed on the chain propagates ``_lookup``'s ``ValueError``.
+
     :param payment_type: The payment type
     :param chain_id: The chain id
     :return: The token address, or None for a native payment type
-    :raises ValueError: If the token is not deployed on the chain
     """
     entry = PAYMENT_TOKENS.get(payment_type)
     if entry is None:
@@ -88,10 +89,11 @@ def tracker_address(payment_type: PaymentType, chain_id: int) -> str:
     """
     Return the balance tracker of a payment type on a chain, by chain id.
 
+    A tracker not deployed on the chain propagates ``_lookup``'s ``ValueError``.
+
     :param payment_type: The payment type
     :param chain_id: The chain id
     :return: The tracker address
-    :raises ValueError: If no tracker is deployed for it on the chain
     """
     return _lookup(BALANCE_TRACKERS[payment_type], chain_id, "balance tracker")
 

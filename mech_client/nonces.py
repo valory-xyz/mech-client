@@ -47,10 +47,10 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
-    IO,
     Any,
     Callable,
     Dict,
+    IO,
     Iterable,
     Iterator,
     Literal,
