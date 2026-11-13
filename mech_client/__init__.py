@@ -81,6 +81,7 @@ from mech_client.services.marketplace_service import (
     OffchainRequestRejected,
     OffchainRequestResult,
     OffchainTopUpFailed,
+    PreSignHook,
     RequestIdMismatch,
 )
 from mech_client.services.setup_service import SetupService
@@ -128,6 +129,7 @@ __all__ = [
     "Reservation",
     "outcome_of",
     "send_with_nonce",
+    "PreSignHook",
     # Tools and off-chain capability
     "ToolManager",
     "MetadataRead",

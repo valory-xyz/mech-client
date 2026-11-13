@@ -19,10 +19,12 @@
 
 """Tests for marketplace service."""
 
+import asyncio
 import copy
 import pickle
 import socket
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
@@ -40,7 +42,7 @@ from mech_client.domain.tools.manager import IDENTIFICATION_NOTE, ToolManager
 from mech_client.domain.tools.models import MetadataRead
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
-from mech_client.nonces import NOT_SENT_ERRORS
+from mech_client.nonces import NonceAllocator, send_with_nonce
 from mech_client.services.marketplace_service import (
     MarketplaceService,
     MechInfo,
@@ -48,6 +50,7 @@ from mech_client.services.marketplace_service import (
     OffchainRequestRejected,
     OffchainTopUpFailed,
     PaymentChallenge,
+    PreSignHook,
     RequestIdMismatch,
 )
 from mech_client.utils.validators import ensure_checksummed_address
@@ -3390,6 +3393,114 @@ class TestCallerOwnedNonces:
             assert str(clone) == "failed"
             assert (clone.request_id, clone.nonce, clone.unsent) == ("ab", 6, [7])
 
+    def _through_allocator(
+        self,
+        service: MarketplaceService,
+        tmp_path: Path,
+        contract: MagicMock,
+        **kwargs: Any,
+    ) -> Tuple[NonceAllocator, Any]:
+        """Send one request through send_with_nonce and the real send_request."""
+        allocator = NonceAllocator(tmp_path, settle_timeout=60, gap_retries=0)
+
+        service.tool_manager = MagicMock()
+        service.tool_manager.terms_report.return_value = {"valory_operated": False}
+        service.tool_manager.read_tools_metadata.return_value = MetadataRead(
+            {"url": "https://mech.example.com"}, None
+        )
+        service.tool_manager.offchain_url_from_metadata = (
+            ToolManager.offchain_url_from_metadata
+        )
+
+        def send(nonce: int, hook: PreSignHook) -> Any:
+            with (
+                patch.object(service, "marketplace_contract", return_value=contract),
+                patch.object(
+                    service,
+                    "mech_info",
+                    return_value=MechInfo(MECH_ADDRESS, 1, PaymentType.NATIVE, 100),
+                ),
+                patch.object(service, "_validate_tools"),
+            ):
+                return asyncio.run(
+                    service.send_request(
+                        prompts=("a",),
+                        tools=("t",),
+                        priority_mech=MECH_ADDRESS,
+                        use_offchain=True,
+                        nonces=[nonce],
+                        on_request_id=hook,
+                    )
+                )
+
+        try:
+            result = send_with_nonce(
+                allocator,
+                chain="gnosis",
+                sender=service.requester(),
+                mech=MECH_ADDRESS,
+                salt="",
+                read_map_nonces=lambda: 5,
+                send=send,
+                not_sent=(),
+                timeout=1,
+                **kwargs,
+            )
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            return allocator, e
+        return allocator, result
+
+    @staticmethod
+    def _next_nonce(allocator: NonceAllocator, service: MarketplaceService) -> int:
+        """Return the nonce the allocator would hand out next."""
+        with allocator.reserve(
+            "gnosis", service.requester(), MECH_ADDRESS, lambda: 5, timeout=1
+        ) as slot:
+            slot.answered("not_accepted", mech=MECH_ADDRESS, salt="")
+            return slot.nonce
+
+    def test_an_async_hook_through_send_with_nonce_is_refused_unsigned(
+        self, service: MarketplaceService, mech_post: MagicMock, tmp_path: Path
+    ) -> None:
+        """The tracking hook hands the awaitable back, so send_request refuses it."""
+
+        async def record(request_id: bytes, nonce: int) -> None:
+            raise AssertionError("never awaited")
+
+        allocator, raised = self._through_allocator(
+            service, tmp_path, _nonce_contract(5), on_request_id=record
+        )
+
+        assert isinstance(raised, TypeError)
+        service.signer.sign_message.assert_not_called()
+        mech_post.assert_not_called()
+        assert self._next_nonce(allocator, service) == 5  # freed: nothing was sent
+
+    def test_a_pre_sign_failure_through_send_with_nonce_frees_the_nonce(
+        self, service: MarketplaceService, mech_post: MagicMock, tmp_path: Path
+    ) -> None:
+        """A nonce below mapNonces fails in send_request before the hook: freed."""
+        allocator, raised = self._through_allocator(
+            service, tmp_path, _nonce_contract(7)
+        )
+
+        assert isinstance(raised, ValueError)
+        mech_post.assert_not_called()
+        assert self._next_nonce(allocator, service) == 5
+
+    def test_a_transport_error_through_send_with_nonce_holds_the_nonce(
+        self, service: MarketplaceService, mech_post: MagicMock, tmp_path: Path
+    ) -> None:
+        """After the hook the mech may hold the request: the slot stays held."""
+        mech_post.side_effect = requests.ConnectionError("reset")
+
+        allocator, raised = self._through_allocator(
+            service, tmp_path, _nonce_contract(5)
+        )
+
+        assert isinstance(raised, ValueError)
+        assert self._next_nonce(allocator, service) == 6
+
     def test_errors_are_exported(self) -> None:
         """Both exceptions are part of the public API."""
         assert mech_client.OffchainRequestRejected is OffchainRequestRejected
@@ -3512,7 +3623,6 @@ class TestLocalRequestId:
         assert isinstance(e.value.__cause__, Web3Exception)
         assert "nonce 6: rpc down" in str(e.value)
         assert f"{_request_id_for(5).hex()} (nonce 5)" in str(e.value)
-        assert not isinstance(e.value, NOT_SENT_ERRORS)  # the slot stays held
         assert mech_post.call_count == 1
 
     @pytest.mark.asyncio

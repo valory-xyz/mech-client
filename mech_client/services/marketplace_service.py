@@ -69,8 +69,10 @@ logger = logging.getLogger(__name__)
 
 # HTTP status the offchain mech returns when the requester's prepaid balance is
 # insufficient (structured 402 challenge, see mech task_execution handlers).
-HTTP_UNAUTHORIZED = 401
 HTTP_PAYMENT_REQUIRED = 402
+# The mech's answers to a stale or duplicate nonce (401, with a reason), to a
+# nonce gap (503), and the client-error range the rest of its refusals fall in.
+HTTP_UNAUTHORIZED = 401
 HTTP_SERVICE_UNAVAILABLE = 503
 HTTP_CLIENT_ERRORS = range(400, 500)
 # The responseTimeout written into every request, in seconds: past it the
@@ -287,6 +289,41 @@ class MechInfo(NamedTuple):
     max_delivery_rate: int
 
 
+class PreSignHook:
+    """An ``on_request_id`` that records how far ``send_request`` got with it.
+
+    ``received`` is set as soon as ``send_request`` is handed the hook, and
+    ``returned`` once the wrapped hook has returned for a request, which is
+    just before that request is signed. A caller can then tell a failure
+    before signing (received, never returned) from one where the hook never
+    reached ``send_request`` at all.
+    """
+
+    def __init__(self, inner: Optional[Callable[[bytes, int], Any]] = None) -> None:
+        """
+        Initialize the hook.
+
+        :param inner: The caller's own ``on_request_id``, run first
+        """
+        self._inner = inner
+        self.received = False
+        self.returned = False
+
+    def __call__(self, request_id: bytes, nonce: int) -> Any:
+        """
+        Run the wrapped hook and mark that it returned.
+
+        :param request_id: The raw 32-byte request id about to be signed
+        :param nonce: Its marketplace nonce
+        :return: What the wrapped hook returned; an awaitable is passed back
+            unmarked, so ``send_request`` refuses it before signing
+        """
+        returned = None if self._inner is None else self._inner(request_id, nonce)
+        if not inspect.isawaitable(returned):
+            self.returned = True
+        return returned
+
+
 class _MechRefusal(ValueError):
     """A 402 path the offchain request could not get past."""
 
@@ -464,6 +501,8 @@ class MarketplaceService(
             whose ``getRequestId`` disagrees with the local derivation raises
             :class:`RequestIdMismatch` before signing.
         """
+        if isinstance(on_request_id, PreSignHook):
+            on_request_id.received = True
         # Validate inputs
         if len(prompts) != len(tools):
             raise ValueError(

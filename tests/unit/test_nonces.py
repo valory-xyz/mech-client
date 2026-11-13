@@ -19,6 +19,7 @@
 
 """Tests for the off-chain marketplace nonce allocator."""
 
+import inspect
 import json
 import threading
 from pathlib import Path
@@ -48,6 +49,7 @@ from mech_client.services.marketplace_service import (
     MechPriceExceeded,
     OffchainRequestRejected,
     OffchainTopUpFailed,
+    PreSignHook,
     RequestIdMismatch,
 )
 
@@ -284,6 +286,32 @@ def test_a_connect_format_slot_is_held(tmp_path: Path, clock: Clock) -> None:
         assert slot.nonce == 6
 
 
+def test_a_stored_checksummed_mech_is_the_same_mech(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """A Connect store may keep the mech checksummed: it is still the same mech."""
+    checksummed = "0x" + "aB" * 20
+    (tmp_path / nonces.NONCES_FILE).write_text(
+        json.dumps(
+            {
+                f"gnosis:{SENDER}": {
+                    "slots": {
+                        "5": {
+                            "state": "accepted",
+                            "mech": checksummed,
+                            "salt": "",
+                            "at": 1000,
+                        }
+                    }
+                }
+            }
+        )
+    )
+    allocator = _allocator(tmp_path, clock)
+    with take(allocator, 5, checksummed.lower(), timeout=0) as slot:
+        assert slot.nonce == 6
+
+
 def test_reserve_rereads_map_nonces_while_another_mech_settles(
     allocator: NonceAllocator,
 ) -> None:
@@ -318,7 +346,7 @@ def test_taken_resolves_our_unknown_or_stalls(
         "state": "accepted",
         "mech": MECH_A,
         "salt": "s5",
-        "at": clock.now,
+        "at": clock.now - 5,  # its own settle clock runs on
         "delivered_at": None,
     }
     assert allocator.stalled_since("gnosis", SENDER) is None
@@ -326,23 +354,24 @@ def test_taken_resolves_our_unknown_or_stalls(
         assert slot.nonce == 6  # resumed past 5
 
 
-def test_taken_on_a_probe_over_our_accepted_slot_unstalls(
+def test_taken_over_the_stuck_slot_keeps_the_stall_and_its_clock(
     allocator: NonceAllocator, clock: Clock
 ) -> None:
-    """The mech holding our accepted slot proves n is not stuck: no re-probing it."""
+    """mapNonces stuck on our overdue slot: taken probes under traffic change nothing.
+
+    The stall clock keeps counting, so hard_cancel becomes allowed.
+    """
     _overdue_queue(allocator, clock)
-    with take(allocator, 5) as slot:
-        slot.answered("taken", mech=MECH_A, salt="")  # over our unknown 5
-    clock.now += nonces.RESPONSE_TIMEOUT_SECONDS + 61  # overdue again
-    _sync(allocator, 5)
-    assert allocator.stalled("gnosis", SENDER)
-    with take(allocator, 5) as slot:
-        assert slot.nonce == 5
-        slot.answered("taken", mech=MECH_A, salt="")  # over our accepted 5
-    assert not allocator.stalled("gnosis", SENDER)
-    assert cast(dict, held(allocator, 6))["at"] == clock.now
-    with take(allocator, 5) as slot:
-        assert slot.nonce == 7
+    stalled_at = cast(float, allocator.stalled_since("gnosis", SENDER))
+    for _ in range(3):
+        clock.now += 300
+        with take(allocator, 5) as slot:
+            assert slot.nonce == 5  # always the probe at the stuck nonce
+            slot.answered("taken", mech=MECH_A, salt="")
+        assert allocator.stalled_since("gnosis", SENDER) == stalled_at
+    assert cast(dict, held(allocator, 5))["state"] == "accepted"  # it is ours
+    with allocator.hard_cancel("gnosis", SENDER, lambda: 5, stalled_for=900) as nonce:
+        assert nonce == 5
 
 
 def test_an_overdue_slot_stalls_the_queue(
@@ -471,22 +500,36 @@ class BeforeHook(NamedTuple):
     error: Exception
 
 
+class HookNotPassed(NamedTuple):
+    """An exception from a send that never handed the hook to send_request."""
+
+    error: Exception
+
+
 def _send(
     allocator: NonceAllocator, answers: List[Any], **kwargs: Any
 ) -> Tuple[List[int], Any]:
     """Run send_with_nonce once; ``send`` pops its answers in order.
 
-    Every answer but a ``BeforeHook`` comes after the hook ran, as a POST's
-    answer does.
+    ``send`` behaves like send_request: it marks the hook received, then
+    runs it before answering, as a POST's answer comes after it. A
+    ``BeforeHook`` answer fails in between; a ``HookNotPassed`` one fails
+    without the hook ever reaching send_request.
     """
     sent: List[int] = []
 
-    def send(nonce: int, hook: Callable[[bytes, int], None]) -> Any:
+    def send(nonce: int, hook: PreSignHook) -> Any:
         sent.append(nonce)
         answer = answers.pop(0)
+        if isinstance(answer, HookNotPassed):
+            raise answer.error
+        hook.received = True  # what send_request does on entry
         if isinstance(answer, BeforeHook):
             raise answer.error
-        hook(b"id", nonce)
+        returned = hook(b"id", nonce)
+        if inspect.isawaitable(returned):  # send_request's own guard
+            returned.close()  # type: ignore[attr-defined]
+            raise TypeError("on_request_id must be synchronous")
         if isinstance(answer, Exception):
             raise answer
         return answer
@@ -564,16 +607,18 @@ def test_send_with_nonce_names_each_rejection(
     "refusal",
     [
         KeyError("refused"),
-        RequestIdMismatch("lying rpc", expected="aa", reported="bb", nonce=5),
-        MechPriceExceeded("too much", price=2, max_price=1),
+        BeforeHook(
+            RequestIdMismatch("lying rpc", expected="aa", reported="bb", nonce=5)
+        ),
+        BeforeHook(MechPriceExceeded("too much", price=2, max_price=1)),
     ],
 )
 def test_send_with_nonce_frees_a_nonce_never_sent(
-    allocator: NonceAllocator, refusal: Exception
+    allocator: NonceAllocator, refusal: Any
 ) -> None:
-    """Refused before signing (the caller's not_sent, or mech-client's own): n is free."""
+    """Refused before signing (mech-client's own), or listed in not_sent: n is free."""
     sent, error = _send(allocator, [refusal])
-    assert error is refusal
+    assert error is getattr(refusal, "error", refusal)
     sent, _ = _send(allocator, [{"ok": 1}])
     assert sent == [5]  # the freed 5 was reused
 
@@ -629,8 +674,56 @@ def test_send_with_nonce_warns_when_send_skips_the_hook(
         timeout=1,
     )
     assert result == {"ok": 5}
-    assert any("never ran the hook" in w for w in warnings)
+    assert any("never passed" in w for w in warnings)
     assert cast(dict, held(allocator, 5))["state"] == "accepted"
+
+
+def test_send_with_nonce_holds_a_failure_when_send_never_passed_the_hook(
+    allocator: NonceAllocator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without the hook nothing tells a failure before signing from one after."""
+    errors: List[str] = []
+    monkeypatch.setattr(
+        nonces.logger, "error", lambda msg, *args: errors.append(msg % args)
+    )
+    _, raised = _send(allocator, [HookNotPassed(ValueError("transport"))], not_sent=())
+    assert isinstance(raised, ValueError)
+    assert cast(dict, held(allocator, 5))["state"] == "unknown"
+    assert any("never passed" in e for e in errors)
+
+
+def test_an_async_hook_is_refused_and_frees_the_nonce(
+    allocator: NonceAllocator,
+) -> None:
+    """send_request's async-hook guard still fires through the tracking hook."""
+
+    async def record(request_id: bytes, nonce: int) -> None:
+        raise AssertionError("never awaited")
+
+    sent, raised = _send(allocator, [{"ok": 1}], on_request_id=record)
+    assert isinstance(raised, TypeError)
+    assert held(allocator, 5) is None
+
+
+def test_each_gap_retry_gets_a_fresh_hook(allocator: NonceAllocator) -> None:
+    """A retry failing before its hook is a pre-sign failure, whatever attempt 1 did."""
+    sent, raised = _send(
+        allocator, [reject(503), BeforeHook(RuntimeError("rpc down"))], not_sent=()
+    )
+    assert sent == [5, 5]
+    assert isinstance(raised, RuntimeError)
+    assert held(allocator, 5) is None
+
+
+def test_gap_retries_zero_never_resends(tmp_path: Path, clock: Clock) -> None:
+    """Zero limits are valid: a 503 is sent once and refused as a nonce gap."""
+    allocator = NonceAllocator(
+        tmp_path, settle_timeout=0, gap_retries=0, clock=clock, sleep=clock.sleep
+    )
+    sent, raised = _send(allocator, [reject(503)])
+    assert sent == [5]
+    assert isinstance(raised, NonceRefused)
+    assert raised.rule == "mech-nonce-gap"
 
 
 def test_send_with_nonce_holds_a_lost_answer(allocator: NonceAllocator) -> None:

@@ -35,6 +35,7 @@ def test_the_off_chain_payer_api_is_exported() -> None:
         "Reservation": mech_client.nonces.Reservation,
         "outcome_of": mech_client.nonces.outcome_of,
         "send_with_nonce": mech_client.nonces.send_with_nonce,
+        "PreSignHook": marketplace_service.PreSignHook,
         "request_digest": request_digest,
         "RequestIdMismatch": marketplace_service.RequestIdMismatch,
         "MechPriceExceeded": marketplace_service.MechPriceExceeded,

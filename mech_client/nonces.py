@@ -62,12 +62,11 @@ from typing import (
 from mech_client.services.marketplace_service import (
     HTTP_CLIENT_ERRORS,
     HTTP_UNAUTHORIZED,
-    MechPriceExceeded,
     OffchainRequestRejected,
     OffchainRequestResult,
     OffchainTopUpFailed,
+    PreSignHook,
     RESPONSE_TIMEOUT_SECONDS,
-    RequestIdMismatch,
 )
 
 logger = logging.getLogger(__name__)
@@ -80,6 +79,10 @@ POLL_SECONDS = 2.0
 GAP_RETRY_SECONDS = 2.0
 # the mech's 401 for a stale or duplicate nonce, verbatim: n is taken
 NONCE_TAKEN_REASON = "wire nonce below sender's next expected slot"
+_HOOK_NOT_PASSED = (
+    "send for nonce %s never passed send_with_nonce's hook to send_request as "
+    "on_request_id; a failure is held as unknown"
+)
 
 Outcome = Literal["accepted", "retry", "not_accepted", "taken", "unknown"]
 # what a held slot can be: the only outcomes that keep a nonce held
@@ -101,8 +104,6 @@ REJECTION_RULES: Dict[Outcome, str] = {
     NOT_ACCEPTED: "mech-request-rejected",
     UNKNOWN: "mech-answer-unknown",
 }
-# raised by send_request before the pre-sign hook: nothing reached the mech
-NOT_SENT_ERRORS: Tuple[Type[Exception], ...] = (RequestIdMismatch, MechPriceExceeded)
 
 
 class NonceRefused(Exception):
@@ -324,20 +325,26 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         settled = [n for n in queue.slots if n < map_nonces]
         for nonce in settled:
             del queue.slots[nonce]
-        overdue = any(
-            now - slot.settle_from() > self._settle_timeout
-            for slot in queue.slots.values()
-        )
+        overdue = any(self._overdue(slot, now) for slot in queue.slots.values())
         if overdue and not queue.stalled:
             logger.warning("mech nonce queue %s stalled: a slot never settled", key)
             queue.stalled_at = now
         if settled or overdue:
             self._save()
 
-    @contextlib.contextmanager
+    def _overdue(self, slot: _Slot, now: float) -> bool:
+        """Whether mapNonces should have passed a held slot by now.
+
+        :param slot: The held slot
+        :param now: The clock time
+        :return: True once the settle timeout has run out
+        """
+        return now - slot.settle_from() > self._settle_timeout
+
     # too-many-arguments: the queue key (chain, sender), the mech and the
     # mapNonces reader are all needed to place the slot; timeout and salt are
     # keyword-only
+    @contextlib.contextmanager
     def reserve(  # pylint: disable=too-many-arguments
         self,
         chain: str,
@@ -606,15 +613,21 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             queue.stalled_at = None
         elif outcome == TAKEN:
             if prior is not None:
-                # a probe over our own earlier slot: the mech holds that
-                # request, so n is not stuck; resume from here
-                queue.slots[nonce] = _Slot(ACCEPTED, prior.mech, prior.salt, now)
-                self._restart_settle_clocks(queue, nonce, now)
-                queue.stalled_at = None
+                # a probe over our own slot at mapNonces: the mech holds that
+                # request, so it was accepted
+                queue.slots[nonce] = _Slot(
+                    ACCEPTED, prior.mech, prior.salt, prior.at, prior.delivered_at
+                )
+                if not self._overdue(prior, now):
+                    # not the slot that stalled the queue (mapNonces has moved
+                    # on to it, say after a hard cancel): resume from here
+                    self._restart_settle_clocks(queue, nonce, now)
+                    queue.stalled_at = None
+                # else it is the stuck one: the stall, and its clock, stand
             else:
                 # another signer took n, or the mech still settles slots we
                 # think free: sending more would only gap behind it
-                self._restore(queue, nonce, prior)
+                queue.slots.pop(nonce, None)
                 if not queue.stalled:
                     queue.stalled_at = now
         elif outcome == UNKNOWN:
@@ -666,7 +679,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             slots={
                 int(n): _Slot(
                     _slot_state(s["state"]),
-                    s["mech"],
+                    str(s["mech"]).lower(),
                     s["salt"],
                     float(s["at"]),
                     _optional_time(s.get("delivered_at")),
@@ -763,25 +776,6 @@ def _refusal(error: Union[OffchainRequestRejected, OffchainTopUpFailed]) -> str:
     )
 
 
-def _tracking_hook(
-    on_request_id: Optional[Callable[[bytes, int], None]],
-) -> Tuple[Callable[[bytes, int], None], List[bool]]:
-    """Wrap a pre-sign hook so the caller can tell whether it returned.
-
-    :param on_request_id: The caller's own hook, or None
-    :return: The hook to pass to send_request, and a list that gets an entry
-        once the hook has returned (the request is about to be signed)
-    """
-    hooked: List[bool] = []
-
-    def hook(request_id: bytes, nonce: int) -> None:
-        if on_request_id is not None:
-            on_request_id(request_id, nonce)
-        hooked.append(True)
-
-    return hook, hooked
-
-
 # too-many-arguments: keyword-only; the allocator plus what identifies,
 # sends and bounds one request
 def send_with_nonce(  # pylint: disable=too-many-arguments
@@ -792,24 +786,31 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     mech: str,
     salt: str,
     read_map_nonces: Callable[[], int],
-    send: Callable[[int, Callable[[bytes, int], None]], OffchainRequestResult],
+    send: Callable[[int, PreSignHook], OffchainRequestResult],
     not_sent: Tuple[Type[Exception], ...],
     timeout: float,
-    on_request_id: Optional[Callable[[bytes, int], None]] = None,
+    on_request_id: Optional[Callable[[bytes, int], Any]] = None,
 ) -> OffchainRequestResult:
     """
     Reserve a nonce, send with it, and record what the mech answered.
 
     ``send(nonce, hook)`` must pass ``hook`` to ``send_request`` as
-    ``on_request_id``: it runs the caller's own ``on_request_id``, then marks
-    the request as about to be signed. Any failure before the hook returned
-    (an unknown tool, a missing off-chain URL, an RPC error, a refused hook)
-    reached no mech, so the nonce is free again; so is an exception in
-    ``not_sent``, or ``RequestIdMismatch`` / ``MechPriceExceeded``. Any other
-    failure after it (a transport error) holds the slot as ``unknown``, since
-    the mech may have stored the request. A 503 resends the same nonce (and,
-    the salt being kept, the same id) up to the allocator's ``gap_retries``
-    times.
+    ``on_request_id``; ``hook`` runs the caller's own ``on_request_id``.
+    ``send_request`` marks the hook received on entry, and the hook marks
+    itself returned just before the request is signed, so:
+
+    - received but not returned: the failure came before signing (an
+      unknown tool, a missing off-chain URL, an RPC error, a refused or
+      async hook), reached no mech, and the nonce is free again;
+    - returned: a failure may have reached the mech (a transport error), so
+      the slot is held as ``unknown``, unless the exception is in
+      ``not_sent``;
+    - never received (``send`` did not pass the hook on): nothing tells a
+      failure before signing from one after, so the slot is held as
+      ``unknown`` and the misuse is logged.
+
+    A 503 resends the same nonce (and, the salt being kept, the same id) up
+    to the allocator's ``gap_retries`` times, with a fresh hook each time.
 
     :param allocator: The allocator
     :param chain: Chain name
@@ -818,20 +819,19 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     :param salt: The request's metadata salt (``extra_attributes["nonce"]``)
     :param read_map_nonces: Reads mapNonces(sender) from the marketplace
     :param send: Sends one off-chain request with the given nonce and hook
-    :param not_sent: Exceptions ``send`` raises after the hook that still
-        reached no mech
+    :param not_sent: Exceptions ``send`` raises after the hook returned that
+        still reached no mech
     :param timeout: Seconds ``reserve`` may wait
     :param on_request_id: The caller's own pre-sign hook, run by ``hook``
     :return: What ``send`` returned
     :raises NonceRefused: naming the rule, when no nonce could be reserved
         or the mech's answer did not accept the request
     """
-    refused_before_signing = NOT_SENT_ERRORS + tuple(not_sent)
     with allocator.reserve(
         chain, sender, mech, read_map_nonces, timeout=timeout, salt=salt
     ) as slot:
         for attempt in range(allocator.gap_retries + 1):
-            hook, hooked = _tracking_hook(on_request_id)
+            hook = PreSignHook(on_request_id)
             try:
                 result = send(slot.nonce, hook)
             except (OffchainRequestRejected, OffchainTopUpFailed) as e:
@@ -845,19 +845,17 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
                     salt=salt,
                 )
                 raise NonceRefused(REJECTION_RULES[outcome], _refusal(e)) from e
-            except refused_before_signing:
+            except not_sent:
                 slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
                 raise
             except Exception:
-                if not hooked:  # nothing was signed, so nothing was sent
+                if hook.received and not hook.returned:
                     slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
+                elif not hook.received:
+                    logger.error(_HOOK_NOT_PASSED, slot.nonce)
                 raise
-            if not hooked:
-                logger.warning(
-                    "send for nonce %s never ran the hook send_with_nonce "
-                    "gave it; pass it to send_request as on_request_id",
-                    slot.nonce,
-                )
+            if not hook.received:
+                logger.warning(_HOOK_NOT_PASSED, slot.nonce)
             slot.answered(ACCEPTED, mech=mech, salt=salt)
             return result
     raise AssertionError("unreachable")  # pragma: no cover
