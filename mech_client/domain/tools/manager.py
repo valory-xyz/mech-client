@@ -171,21 +171,42 @@ def claimed_operator(
     return block
 
 
-# A URL in an exception's text (requests puts the request URL there) may carry
-# an API key in its path or query, or credentials before the host.
-_URL = re.compile(
-    r"([A-Za-z][A-Za-z0-9+.-]*://)(?:[^\s/@'\"]*@)?([^\s/'\"?#]+)[^\s'\"]*"
+# An exception's text may carry an API key or credentials wherever a URL or a
+# path appears: requests puts the full URL there, urllib3 the bare path
+# ("... with url: /v3/<KEY>?..."). Fail closed: a URL keeps only its scheme
+# and host, and any other path-like or query-like token is cut at its first
+# "/" or "?".
+_SECRET_BEARING = re.compile(
+    r"(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*://)(?:[^\s/@'\"]*@)?"
+    r"(?P<host>[^\s/'\"?#]*)[^\s'\"]*"
+    r"|(?P<cut>[/?])[^\s'\"]*"
 )
+# a cause is a short description, not a dump of the exception
+_CAUSE_MAX_LENGTH = 200
+
+
+def _redact(match: "re.Match[str]") -> str:
+    """Replace one URL-, path- or query-like token by what is safe to keep.
+
+    :param match: The token
+    :return: ``scheme://host/...`` for a URL, else ``/...`` or ``?...``
+    """
+    if match.group("scheme"):
+        return f"{match.group('scheme')}{match.group('host')}/..."
+    return f"{match.group('cut')}..."
 
 
 def _redacted_cause(error: BaseException) -> str:
     """
-    Describe a read failure without the secrets a URL in it may carry.
+    Describe a read failure without the secrets a URL or path in it may carry.
 
     :param error: The exception
-    :return: Its type and message, every URL cut to ``scheme://host/...``
+    :return: Its type and a short message, with every URL cut to
+        ``scheme://host/...`` and every other path or query cut off
     """
-    message = _URL.sub(r"\1\2/...", str(error))
+    message = _SECRET_BEARING.sub(_redact, str(error))
+    if len(message) > _CAUSE_MAX_LENGTH:
+        message = message[:_CAUSE_MAX_LENGTH] + "..."
     return f"{type(error).__name__}: {message}"
 
 

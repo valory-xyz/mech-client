@@ -55,6 +55,8 @@ from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.infrastructure.subgraph.queries import MechRecord
 from mech_client.utils.errors import SubgraphError
 from mech_client.utils.errors.exceptions import ManifestError
+from urllib3 import HTTPSConnectionPool
+from urllib3.exceptions import MaxRetryError, ReadTimeoutError
 from web3.exceptions import BadFunctionCallOutput, ContractLogicError
 
 
@@ -1467,6 +1469,65 @@ class TestReadToolsMetadata:
         with pytest.raises(ValueError) as e:
             ToolManager.offchain_url_from_metadata(1, read)
         assert "SECRETKEY" not in str(e.value)
+
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            (
+                requests.ConnectionError(
+                    MaxRetryError(
+                        HTTPSConnectionPool("rpc.example", 443),
+                        "/v3/SECRETKEY?apikey=ALSO",
+                        reason=None,
+                    )
+                ),
+                "ConnectionError: HTTPSConnectionPool(host='rpc.example', port=443):"
+                " Max retries exceeded with url: /... (Caused by None)",
+            ),
+            (
+                requests.ConnectTimeout(
+                    MaxRetryError(
+                        HTTPSConnectionPool("rpc.example", 443),
+                        "https://u:p@rpc.example/v3/SECRETKEY",
+                        reason=None,
+                    )
+                ),
+                "ConnectTimeout: HTTPSConnectionPool(host='rpc.example', port=443):"
+                " Max retries exceeded with url: https://rpc.example/... "
+                "(Caused by None)",
+            ),
+            (
+                requests.ReadTimeout(
+                    ReadTimeoutError(
+                        HTTPSConnectionPool("rpc.example", 443),
+                        "/v3/SECRETKEY?apikey=ALSO",
+                        "Read timed out. (read timeout=10)",
+                    )
+                ),
+                "ReadTimeout: HTTPSConnectionPool(host='rpc.example', port=443):"
+                " Read timed out. (read timeout=10)",
+            ),
+            (
+                ValueError("bad token ?apikey=ALSO here"),
+                "ValueError: bad token ?... here",
+            ),
+        ],
+    )
+    def test_urllib3_paths_and_queries_never_reach_the_cause(
+        self, error: Exception, expected: str
+    ) -> None:
+        """The scheme-less path urllib3 prints is cut too, from the RPC call."""
+        read = self._read(error, MagicMock())
+
+        assert read.error == expected
+        for secret in ("SECRETKEY", "ALSO", "u:p"):
+            assert secret not in (offchain_blocker(read) or "")
+
+    def test_a_long_cause_is_cut_short(self) -> None:
+        """A cause is a short description, not the whole exception."""
+        read = self._read(OSError("y" * 500), MagicMock())
+
+        assert read.error == "OSError: " + "y" * 200 + "..."
 
     def test_a_programming_error_propagates(self) -> None:
         """Only read failures become the cause; a bug keeps its traceback."""
