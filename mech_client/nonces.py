@@ -38,6 +38,7 @@ a stale or duplicate nonce), and settlement rebuilds every id from
 """
 
 import contextlib
+import functools
 import json
 import logging
 import threading
@@ -161,21 +162,18 @@ class Reservation:
 
     def __init__(
         self,
-        allocator: "NonceAllocator",
-        key: str,
         nonce: int,
         prior: Optional[_Slot],
+        record: Callable[..., None],
     ) -> None:
         """
         Initialize the reservation.
 
-        :param allocator: The allocator that reserved it
-        :param key: The queue key
         :param nonce: The reserved nonce
         :param prior: What held this nonce before (only a stalled queue's probe)
+        :param record: Applies an answer to the queue; the allocator binds it
         """
-        self._allocator = allocator
-        self._key = key
+        self._record = record
         self.nonce = nonce
         self.prior = prior
         self.outcome: Optional[Outcome] = None
@@ -189,9 +187,7 @@ class Reservation:
         :param salt: The request's metadata salt, kept so a resend reuses its id
         """
         self.outcome = outcome
-        self._allocator._answered(  # pylint: disable=protected-access  # the allocator owns the queue
-            self._key, self.nonce, outcome, mech=mech, salt=salt, prior=self.prior
-        )
+        self._record(self.nonce, outcome, mech=mech, salt=salt, prior=self.prior)
 
 
 class NonceAllocator:  # pylint: disable=too-many-instance-attributes
@@ -209,7 +205,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         """
         Load the persisted queues from ``store_path``.
 
-        :param store_path: Directory holding the queue file (``mech_nonces.json``)
+        :param store_path: Directory holding the queue file (``mech_nonces.json``);
+            created if missing, and the store is unwritable if that fails
         :param settle_timeout: Seconds a delivered or timed-out slot may stay
             unsettled before its queue stalls
         :param gap_retries: How many times a 503 resends the same nonce
@@ -226,7 +223,15 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         self._queues: Dict[str, _Queue] = {}
         self._broken = False
         self._unwritable = False
-        self._load()
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.error(
+                "could not create %s (%s); mech requests refused", self._path.parent, e
+            )
+            self._unwritable = True
+        else:
+            self._load()
 
     @staticmethod
     def key(chain: str, sender: str) -> str:
@@ -374,7 +379,9 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             if self._unwritable:  # held in memory only: a restart would reissue n
                 self._restore(queue, nonce, prior)
                 self._check_usable()
-            reservation = Reservation(self, key, nonce, prior)
+            reservation = Reservation(
+                nonce, prior, functools.partial(self._answered, key)
+            )
             try:
                 yield reservation
             finally:
@@ -480,8 +487,28 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 # whatever the on-chain request did, the next cancel needs a
                 # fresh stalled_for window: mapNonces may now point at a slot
                 # the mech already accepted
-                queue.stalled_at = self._clock()
+                now = self._clock()
+                queue.stalled_at = now
+                self._restart_settle_clocks(queue, map_nonces, now)
                 self._save()
+
+    @staticmethod
+    def _restart_settle_clocks(queue: _Queue, nonce: int, now: float) -> None:
+        """Restart the settle clock of every held slot above ``nonce``.
+
+        Once n is unstuck (its probe accepted, or consumed on-chain), the
+        slots behind it only start to settle now; left with their old clocks
+        they would be overdue at once and stall the queue again, which would
+        then probe a nonce the mech already holds.
+
+        :param queue: The queue, with its lock held
+        :param nonce: The nonce that was unstuck
+        :param now: The clock time to restart from
+        """
+        for held_nonce, slot in queue.slots.items():
+            if held_nonce > nonce:
+                slot.at = now
+                slot.delivered_at = None
 
     @staticmethod
     @contextlib.contextmanager
@@ -547,6 +574,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         now = self._clock()
         if outcome == ACCEPTED:
             queue.slots[nonce] = _Slot(ACCEPTED, mech.lower(), salt, now)
+            if queue.stalled:
+                self._restart_settle_clocks(queue, nonce, now)
             queue.stalled_at = None
         elif outcome == TAKEN:
             if prior is not None and prior.state == UNKNOWN:

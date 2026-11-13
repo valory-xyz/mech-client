@@ -203,6 +203,91 @@ def test_a_checksummed_sender_is_the_same_sender(allocator: NonceAllocator) -> N
     )
 
 
+def _overdue_queue(allocator: NonceAllocator, clock: Clock) -> None:
+    """Hold 5 (unknown) and 6 (accepted, delivered long ago), both overdue: stalled."""
+    with take(allocator, 5) as slot:
+        slot.answered("unknown", mech=MECH_A, salt="s5")
+    with take(allocator, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="s6")
+    allocator.delivered("gnosis", SENDER, [6])
+    clock.now += nonces.RESPONSE_TIMEOUT_SECONDS + 61
+    _sync(allocator, 5)
+    assert allocator.stalled("gnosis", SENDER)
+
+
+def test_an_accepted_probe_restarts_the_settle_clock_of_later_slots(
+    allocator: NonceAllocator, clock: Clock
+) -> None:
+    """Unstuck at 5, the queue does not stall again on 6 and re-probe 5."""
+    _overdue_queue(allocator, clock)
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 5
+        slot.answered("accepted", mech=MECH_A, salt="s5")
+    assert cast(dict, held(allocator, 6))["delivered_at"] is None
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 7
+    assert not allocator.stalled("gnosis", SENDER)
+
+
+def test_a_store_path_that_does_not_exist_is_created(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """A fresh store directory is created, and the first reserve is saved there."""
+    allocator = _allocator(tmp_path / "a" / "b", clock)
+    with take(allocator, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="")
+    assert (tmp_path / "a" / "b" / nonces.NONCES_FILE).exists()
+
+
+def test_a_store_path_that_cannot_be_created_is_unwritable(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """A path under a file cannot be created: requests are refused, nothing raises."""
+    (tmp_path / "file").write_text("")
+    allocator = _allocator(tmp_path / "file" / "store", clock)
+    with pytest.raises(NonceRefused) as refused:
+        _enter(take(allocator, 5))
+    assert refused.value.rule == "mech-queue-unwritable"
+
+
+def test_a_connect_format_slot_is_held(tmp_path: Path, clock: Clock) -> None:
+    """A slot with only state, mech, salt and at, as Connect writes it, is read back."""
+    (tmp_path / nonces.NONCES_FILE).write_text(
+        json.dumps(
+            {
+                f"gnosis:{SENDER}": {
+                    "stalled": False,
+                    "slots": {
+                        "5": {
+                            "state": "accepted",
+                            "mech": MECH_A,
+                            "salt": "x",
+                            "at": 1000,
+                        }
+                    },
+                }
+            }
+        )
+    )
+    allocator = _allocator(tmp_path, clock)
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 6
+
+
+def test_reserve_rereads_map_nonces_while_another_mech_settles(
+    allocator: NonceAllocator,
+) -> None:
+    """MECH_B waits for MECH_A's 5 to settle, then gets 6 within its timeout."""
+    with take(allocator, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="")
+    map_nonces = iter([5, 5, 6])
+    with allocator.reserve(
+        "gnosis", SENDER, MECH_B, lambda: next(map_nonces), timeout=30
+    ) as slot:
+        assert slot.nonce == 6
+    assert held(allocator, 5) is None
+
+
 def test_taken_resolves_our_unknown_or_stalls(
     allocator: NonceAllocator, clock: Clock
 ) -> None:
@@ -691,6 +776,23 @@ class TestHardCancel:
             )
         assert allocator.stalled_since("gnosis", SENDER) == clock.now
         assert _allocator(tmp_path, clock).stalled_since("gnosis", SENDER) == clock.now
+
+    def test_it_restarts_the_settle_clock_of_later_slots(
+        self, allocator: NonceAllocator, clock: Clock
+    ) -> None:
+        """After consuming 5 on-chain, 6 is not overdue at once."""
+        _overdue_queue(allocator, clock)
+        with allocator.hard_cancel("gnosis", SENDER, lambda: 5, stalled_for=0):
+            pass
+        _sync(allocator, 6)  # the on-chain request moved mapNonces past 5
+        assert held(allocator, 5) is None
+        assert cast(dict, held(allocator, 6))["at"] == clock.now
+        assert cast(dict, held(allocator, 6))["delivered_at"] is None
+        with take(allocator, 6) as slot:  # still stalled from the cancel: probe 6
+            assert slot.nonce == 6
+            slot.answered("accepted", mech=MECH_A, salt="s6")
+        with take(allocator, 6) as slot:
+            assert slot.nonce == 7
 
     def test_it_holds_the_queue_while_the_on_chain_request_is_sent(
         self, allocator: NonceAllocator, clock: Clock
