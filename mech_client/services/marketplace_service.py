@@ -27,7 +27,6 @@ from typing import (
     Any,
     Callable,
     Dict,
-    FrozenSet,
     List,
     NamedTuple,
     Optional,
@@ -88,8 +87,6 @@ OFFCHAIN_HTTP_TIMEOUT = 30
 # wallet drained. 10x is generous for legitimate price moves between
 # signature and request, tight enough that catastrophic drain stays bounded.
 _MAX_AUTO_DEPOSIT_RATIO = 10
-# Payment types ``_auto_deposit_for_402`` tops up: see DEPOSIT_PAYMENT_TYPES.
-_SUPPORTED_DEPOSIT_PAYMENT_TYPES: FrozenSet[PaymentType] = DEPOSIT_PAYMENT_TYPES
 
 
 def _accepted_note(accepted_ids: List[str], request_nonces: List[int]) -> str:
@@ -1160,7 +1157,7 @@ class MarketplaceService(
         """
         if challenge.shortfall <= 0:
             return 0
-        if payment_type not in _SUPPORTED_DEPOSIT_PAYMENT_TYPES:
+        if payment_type not in DEPOSIT_PAYMENT_TYPES:
             raise ValueError(
                 f"Auto-deposit is not supported for payment type {payment_type.name}"
             )
