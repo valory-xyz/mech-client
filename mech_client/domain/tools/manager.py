@@ -20,10 +20,11 @@
 """Tool manager for fetching and managing mech tools."""
 
 import logging
+import re
 import unicodedata
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Union, cast
+from typing import Any, Dict, Optional, Union
 from urllib.parse import urlparse
 
 import requests
@@ -97,10 +98,13 @@ PAYMENT_LABELS = {
     PaymentType.TOKEN_NVM_USDC: "usdc_nvm",
 }
 UNKNOWN_PAYMENT = "unknown"
-# What reading the metadata document can fail with: the RPC (web3 errors,
-# ValueError), the gateway (requests errors, HTTP statuses included, are
-# OSErrors) or the JSON (ValueError, or RecursionError for a document nested
-# past the decoder's limit). Anything else is a bug and propagates.
+# What reading the metadata document can fail with, each reported as the
+# read's cause: the RPC (web3 errors, ValueError, NotImplementedError), the
+# gateway (requests errors, HTTP error statuses included, are OSErrors) or the
+# JSON (ValueError, or RecursionError for a document nested past the
+# decoder's limit). A document that is not a JSON object, and a chain with no
+# metadata hash contract, are causes too. Anything else is a bug and
+# propagates.
 METADATA_READ_ERRORS = (
     OSError,
     ValueError,
@@ -167,6 +171,24 @@ def claimed_operator(
     return block
 
 
+# A URL in an exception's text (requests puts the request URL there) may carry
+# an API key in its path or query, or credentials before the host.
+_URL = re.compile(
+    r"([A-Za-z][A-Za-z0-9+.-]*://)(?:[^\s/@'\"]*@)?([^\s/'\"?#]+)[^\s'\"]*"
+)
+
+
+def _redacted_cause(error: BaseException) -> str:
+    """
+    Describe a read failure without the secrets a URL in it may carry.
+
+    :param error: The exception
+    :return: Its type and message, every URL cut to ``scheme://host/...``
+    """
+    message = _URL.sub(r"\1\2/...", str(error))
+    return f"{type(error).__name__}: {message}"
+
+
 def offchain_blocker(read: MetadataRead) -> Optional[str]:
     """
     Say why a mech cannot serve an off-chain request, or None if it can.
@@ -227,9 +249,9 @@ class ToolManager:
 
         Queries the complementary metadata hash contract to get the metadata
         URI, then fetches the metadata from that URI. A document that cannot
-        be read (no metadata hash contract on the chain, or the RPC, the
-        gateway, its HTTP status or the JSON failed, or it is not a JSON
-        object) never raises: the cause is in ``error``.
+        be read never raises: the cause is in ``error`` (see
+        ``METADATA_READ_ERRORS``), with any URL in it cut to scheme and host.
+        A missing or broken packaged ABI still raises.
 
         :param service_id: The service ID of the mech
         :return: The document, or None with the cause
@@ -251,8 +273,9 @@ class ToolManager:
             response.raise_for_status()
             document = response.json()
         except METADATA_READ_ERRORS as e:
-            logger.error(f"Error fetching tools for service {service_id}: {e}")
-            return MetadataRead(None, f"{type(e).__name__}: {e}")
+            cause = _redacted_cause(e)
+            logger.error(f"Error fetching tools for service {service_id}: {cause}")
+            return MetadataRead(None, cause)
         if not isinstance(document, dict):
             cause = f"expected a JSON object, got {type(document).__name__}"
             logger.error(f"Unusable metadata for service {service_id}: {cause}")
@@ -308,10 +331,10 @@ class ToolManager:
         """
         if not isinstance(read, MetadataRead):
             read = MetadataRead(read if isinstance(read, dict) else None, None)
-        blocker = offchain_blocker(read)
-        if blocker is not None:
-            raise ValueError(f"Mech service {service_id}: {blocker}")
-        return cast(str, usable_offchain_url(read.document))
+        url = usable_offchain_url(read.document)
+        if url is None:
+            raise ValueError(f"Mech service {service_id}: {offchain_blocker(read)}")
+        return url
 
     @staticmethod
     def extract_terms_url(metadata: Any) -> Optional[str]:

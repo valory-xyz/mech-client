@@ -1321,7 +1321,7 @@ class TestReadToolsMetadata:
             return ToolManager(chain_config="gnosis").read_tools_metadata(1)
 
     def test_a_readable_document_has_no_error(self) -> None:
-        """The document comes back with error None, and fetch returns it."""
+        """The document comes back with error None."""
         document = {"tools": ["t"], "url": "https://mech.example"}
         get = MagicMock(return_value=MagicMock(json=MagicMock(return_value=document)))
 
@@ -1393,7 +1393,7 @@ class TestReadToolsMetadata:
 
         assert read.document is None
         assert read.error == (
-            "HTTPError: 504 Server Error: Gateway Timeout for url: https://gateway/1"
+            "HTTPError: 504 Server Error: Gateway Timeout for url: https://gateway/..."
         )
         assert offchain_blocker(read) is not None
 
@@ -1446,6 +1446,27 @@ class TestReadToolsMetadata:
             manager = ToolManager(chain_config="gnosis")
             with pytest.raises(type(error)):
                 manager.read_tools_metadata(1)
+
+    def test_a_keyed_url_in_the_error_never_reaches_the_cause(self) -> None:
+        """An RPC or gateway URL's path, query and credentials are cut off."""
+        keyed = (
+            "401 Client Error: Unauthorized for url: "
+            "https://user:pw@rpc.example/v2/SECRETKEY?apikey=ALSO"
+        )
+        get = MagicMock(side_effect=requests.HTTPError(keyed))
+
+        read = self._read("https://gateway/1", get)
+        blocker = offchain_blocker(read)
+
+        assert read.error == (
+            "HTTPError: 401 Client Error: Unauthorized for url: https://rpc.example/..."
+        )
+        assert blocker is not None
+        for secret in ("SECRETKEY", "ALSO", "user", "pw@"):
+            assert secret not in blocker
+        with pytest.raises(ValueError) as e:
+            ToolManager.offchain_url_from_metadata(1, read)
+        assert "SECRETKEY" not in str(e.value)
 
     def test_a_programming_error_propagates(self) -> None:
         """Only read failures become the cause; a bug keeps its traceback."""
