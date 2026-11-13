@@ -95,7 +95,7 @@ class TestChainToMechFactoryMapping:
     def test_base_mapping(self) -> None:
         """Test base chain factory mappings."""
         base_mapping = CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE["base"]
-        assert len(base_mapping) == 4
+        assert len(base_mapping) == 5
         assert (
             base_mapping["0x2E008211f34b25A7d7c102403c6C2C3B665a1abe"]
             == "Fixed Price Native"
@@ -103,6 +103,10 @@ class TestChainToMechFactoryMapping:
         assert (
             base_mapping["0x97371B1C0cDA1D04dFc43DFb50a04645b7Bc9BEe"]
             == "Fixed Price Token"
+        )
+        assert (
+            base_mapping["0x5b70a66fe68c4c86ffd724b58cc56049c70e9d3d"]
+            == "Fixed Price Token USDC"
         )
         assert (
             base_mapping["0x847bBE8b474e0820215f818858e23F5f5591855A"]
@@ -495,6 +499,59 @@ class TestQueryMechsChainWithoutSubgraph:
             ),
         ):
             query_mm_mechs_info("robinhood")
+
+
+class TestQueryMechsBaseFactoryMapping:
+    """Tests for Base's delivery-active factory labels through the real query."""
+
+    @pytest.mark.parametrize(
+        "factory, expected",
+        [
+            ("0x5b70a66fe68c4c86ffd724b58cc56049c70e9d3d", "Fixed Price Token USDC"),
+            ("0x5B70a66FE68C4c86FFD724B58Cc56049C70e9D3D", "Fixed Price Token USDC"),
+            ("0x2E008211f34b25A7d7c102403c6C2C3B665a1abe", "Fixed Price Native"),
+            ("0x97371B1C0cDA1D04dFc43DFb50a04645b7Bc9BEe", "Fixed Price Token"),
+            ("0x847bBE8b474e0820215f818858e23F5f5591855A", "NvmSubscription Native"),
+            (
+                "0x7beD01f8482fF686F025628e7780ca6C1f0559fc",
+                "NvmSubscription Token USDC",
+            ),
+            ("0x00000000000000000000000000000000000000ff", "Unknown"),
+        ],
+    )
+    @patch("mech_client.infrastructure.subgraph.queries.logger")
+    @patch("mech_client.infrastructure.subgraph.queries.SubgraphClient")
+    def test_base_factory_type_is_resolved(
+        self,
+        mock_client_class: MagicMock,
+        mock_logger: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+        factory: str,
+        expected: str,
+    ) -> None:
+        """Test USDC and prior types without changing unknown-factory fallback."""
+        monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        mock_client_class.return_value.query_mechs.return_value = {
+            "meches": [
+                {
+                    "address": "0x00000000000000000000000000000000000000bb",
+                    "mechFactory": factory,
+                    "totalDeliveriesTransactions": "1",
+                    "service": {"id": "748", "totalDeliveries": "1", "metadata": []},
+                }
+            ]
+        }
+
+        result = query_mm_mechs_info("base")
+
+        assert result is not None
+        assert len(result) == 1
+        assert result[0]["mech_type"] == expected
+        if expected == "Unknown":
+            mock_logger.warning.assert_called_once()
+            assert factory in mock_logger.warning.call_args[0]
+        else:
+            mock_logger.warning.assert_not_called()
 
 
 class TestQueryMechsRobinhoodSquid:
