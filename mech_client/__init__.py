@@ -35,7 +35,7 @@ instead of ``crypto``:
     ... )
 """
 
-__version__ = "0.25.0"
+__version__ = "0.26.0"
 
 # Chat contract
 from mech_client.domain.delivery.chat import ChatReport, chat_report, is_chat_prompt
