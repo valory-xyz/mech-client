@@ -323,8 +323,13 @@ class PreSignHook:
         return self._stage >= _HOOK_POSTING
 
     def mark_received(self) -> None:
-        """Mark that ``send_request`` was handed the hook (it calls this)."""
-        self._stage = max(self._stage, _HOOK_RECEIVED)
+        """Mark that ``send_request`` was handed the hook (it calls this).
+
+        :raises ValueError: If the hook was already handed to a send
+        """
+        if self.received:
+            raise ValueError("a PreSignHook serves one send_request; make a new one")
+        self._stage = _HOOK_RECEIVED
 
     def mark_posting(self) -> None:
         """Mark that a request is about to be POSTed (``send_request`` calls this).
@@ -1058,6 +1063,7 @@ class MarketplaceService(
             # pylint: disable-next=protected-access,no-value-for-parameter
             recovered = Account._recover_hash(request_id_bytes, signature=normalized)
         except Exception as e:
+            logger.warning(f"Signature recovery failed: {redacted_cause(e)}")
             raise ValueError(
                 f"Signer returned a signature that cannot be recovered over "
                 f"the request digest (v byte {signature[64]}, "

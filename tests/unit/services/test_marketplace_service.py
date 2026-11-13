@@ -2050,8 +2050,17 @@ class TestSignRequestDigest:
         service = _build_offchain_service()
         service.signer = create_mock_signer(signature=b"\x00" * 64 + b"\x1b")
 
-        with pytest.raises(ValueError, match="cannot be recovered"):
+        with (
+            patch(f"{SERVICE}.logger.warning") as warning,
+            pytest.raises(ValueError, match="cannot be recovered") as raised,
+        ):
             service._sign_request_digest(create_mock_signer().address, self._digest())
+
+        cause = type(raised.value.__cause__).__name__
+        warning.assert_called_once()
+        assert warning.call_args.args[0].startswith(
+            f"Signature recovery failed: {cause}"
+        )
 
     def test_agent_mode_signs_via_safe_message_wrapper(self) -> None:
         """Agent-mode signing routes through sign_safe_message with the Safe."""
@@ -3564,7 +3573,7 @@ class TestCallerOwnedNonces:
         assert self._next_nonce(allocator, service) == 6
 
     def test_a_pre_sign_hook_only_moves_forward(self) -> None:
-        """Its stage is read-only, and posting requires received."""
+        """Its stage is read-only, posting requires received, and it serves one send."""
         hook = PreSignHook()
         with pytest.raises(ValueError, match="before it is received"):
             hook.mark_posting()
@@ -3572,7 +3581,9 @@ class TestCallerOwnedNonces:
             hook.received = True  # type: ignore[misc]
         hook.mark_received()
         hook.mark_posting()
-        hook.mark_received()  # a later request of the call: no step back
+        hook.mark_posting()  # a later request of the call
+        with pytest.raises(ValueError, match="serves one send_request"):
+            hook.mark_received()
         assert (hook.received, hook.posting) == (True, True)
         assert hook(b"id", 5) is None  # no inner hook
 

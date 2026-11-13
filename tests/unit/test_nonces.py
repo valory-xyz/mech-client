@@ -19,10 +19,14 @@
 
 """Tests for the off-chain marketplace nonce allocator."""
 
+import errno
 import inspect
 import json
+import subprocess  # nosec B404  # runs our own interpreter only
+import sys
 import threading
 from pathlib import Path
+from unittest.mock import patch
 from typing import (
     Any,
     Iterator,
@@ -870,6 +874,68 @@ def test_a_second_allocator_on_one_store_is_refused(
     with take(second, 5) as slot:
         assert slot.nonce == 5
     second.close()
+
+
+def test_another_process_holding_the_store_is_refused(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """The lock is the operating system's, so it holds across processes too."""
+    probe = (
+        "import sys\n"
+        "from mech_client.nonces import NonceAllocator, NonceRefused\n"
+        "try:\n"
+        "    NonceAllocator(sys.argv[1], settle_timeout=60, gap_retries=0).close()\n"
+        "except NonceRefused as e:\n"
+        "    print(e.rule)\n"
+        "else:\n"
+        "    print('opened')\n"
+    )
+
+    def open_elsewhere() -> str:
+        return subprocess.run(  # nosec B603  # our own interpreter and code
+            [sys.executable, "-c", probe, str(tmp_path)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        ).stdout.strip()
+
+    allocator = _allocator(tmp_path, clock)
+    assert open_elsewhere() == "mech-queue-locked"
+    allocator.close()
+    assert open_elsewhere() == "opened"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [BlockingIOError(errno.EAGAIN, "busy"), OSError(errno.EACCES, "locked")],
+)
+def test_a_held_lock_is_refused_as_locked(
+    tmp_path: Path, clock: Clock, error: OSError
+) -> None:
+    """flock's and msvcrt's ways of saying another holder has it."""
+    with patch.object(nonces, "_lock_file", side_effect=error):
+        with pytest.raises(NonceRefused) as refused:
+            _allocator(tmp_path, clock)
+    assert refused.value.rule == "mech-queue-locked"
+
+
+def test_a_lock_that_fails_otherwise_makes_the_store_unwritable(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """A filesystem without locks is not another allocator: say why, and refuse."""
+    with (
+        patch.object(
+            nonces, "_lock_file", side_effect=OSError(errno.ENOLCK, "no locks")
+        ),
+        patch.object(nonces.logger, "error") as error,
+    ):
+        allocator = _allocator(tmp_path, clock)
+    message = error.call_args.args[0] % error.call_args.args[1:]
+    assert "could not lock" in message and "no locks" in message
+    with pytest.raises(NonceRefused) as refused:
+        _enter(take(allocator, 5))
+    assert refused.value.rule == "mech-queue-unwritable"
 
 
 def test_a_lock_file_that_cannot_be_opened_makes_the_store_unwritable(

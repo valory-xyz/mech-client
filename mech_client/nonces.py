@@ -38,6 +38,7 @@ a stale or duplicate nonce), and settlement rebuilds every id from
 """
 
 import contextlib
+import errno
 import functools
 import json
 import logging
@@ -123,8 +124,10 @@ REJECTION_RULES: Dict[Outcome, NonceRule] = {
 }
 LOCK_FILE = "mech_nonces.lock"
 
-# One allocator per store: an advisory, non-blocking lock on LOCK_FILE, which
-# the operating system drops when the holder's file is closed or it exits.
+# An advisory, non-blocking lock on LOCK_FILE, which the operating system
+# drops when the holder's file is closed or it exits.
+# msvcrt reports a held lock as EACCES or EDEADLK; flock as BlockingIOError.
+_LOCK_HELD_ERRNOS = (errno.EACCES, errno.EAGAIN, errno.EDEADLK)
 if sys.platform == "win32":  # pragma: no cover - the branch for this platform runs
     import msvcrt  # pylint: disable=import-error  # Windows-only, imported only there
 
@@ -315,11 +318,19 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             _lock_file(self._lock_handle)
         except OSError as e:
             self.close()
-            raise NonceRefused(
-                RULE_QUEUE_LOCKED,
-                f"{self._path.parent} is in use by another NonceAllocator "
-                f"({type(e).__name__}); use one allocator per store",
-            ) from e
+            if isinstance(e, BlockingIOError) or e.errno in _LOCK_HELD_ERRNOS:
+                raise NonceRefused(
+                    RULE_QUEUE_LOCKED,
+                    f"{self._path.parent} is in use by another NonceAllocator; "
+                    "use one allocator per store",
+                ) from e
+            logger.error(
+                "could not lock %s (%s); mech requests refused",
+                self._path.parent / LOCK_FILE,
+                e,
+            )
+            self._unwritable = True
+            return
         self._load()
 
     def close(self) -> None:
@@ -849,23 +860,10 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     Reserve a nonce, send with it, and record what the mech answered.
 
     ``send(nonce, hook)`` must pass ``hook`` to ``send_request`` as
-    ``on_request_id``; ``hook`` runs the caller's own ``on_request_id``.
-    ``send_request`` marks the hook received on entry, and posting just
-    before the POST, after signing, so:
-
-    - never received (``send`` did not pass the hook on): nothing tells a
-      failure before the POST from one after, so the slot is held as
-      ``unknown`` and the misuse is logged;
-    - received but not posting: the failure came before the POST (an
-      unknown tool, a missing off-chain URL, an RPC error, a refused or
-      async hook, a signer error), reached no mech, and the nonce is free
-      again;
-    - posting: a failure may have reached the mech (a transport error), so
-      the slot is held as ``unknown``, unless the exception is in
-      ``not_sent``.
-
-    A 503 resends the same nonce (and, the salt being kept, the same id) up
-    to the allocator's ``gap_retries`` times, with a fresh hook each time.
+    ``on_request_id``. A failure frees the nonce only if the hook was
+    received and not posting (see ``PreSignHook``), or is in ``not_sent``;
+    otherwise the slot is held as ``unknown``. A 503 resends the same nonce
+    and id, up to the allocator's ``gap_retries`` times, with a fresh hook.
 
     :param allocator: The allocator
     :param chain: Chain name
