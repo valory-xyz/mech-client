@@ -371,9 +371,9 @@ from mech_client.infrastructure.config.constants import CHAIN_ID_GNOSIS, CHAIN_I
 What an off-chain marketplace payer (Connect, a facilitator, pmini) needs lives here, not in each client, and is exported from `mech_client`:
 
 - **Request id**: always derived locally (`domain/request_id.py`). `getRequestId` stays as a cross-check; a mismatch raises `RequestIdMismatch` before `on_request_id` and before signing. Never sign the RPC's answer.
-- **Nonces**: `mech_client/nonces.py` (`NonceAllocator`, `send_with_nonce`, `outcome_of`). Its store format (`mech_nonces.json`, `chain:sender` keys) is a compatibility surface: Connect's existing stores are read as-is, so add fields only as optional ones. `send_with_nonce` tells a request that reached no mech by its pre-sign hook (`send(nonce, hook)`, passed on as `on_request_id`): keep every pre-sign failure in `send_request` before the `on_request_id` call.
+- **Nonces**: `mech_client/nonces.py` (`NonceAllocator`, `send_with_nonce`, `outcome_of`). Its store format (`mech_nonces.json`, `chain:sender` keys) is a compatibility surface: Connect's existing stores are read as-is, so add fields only as optional ones. `send_with_nonce` tells a request that reached no mech by its `PreSignHook` (`send(nonce, hook)`, passed on as `on_request_id`): `send_request` must mark it received first thing, and every pre-sign failure must stay before the `on_request_id` call.
 - **Price cap**: `send_request(max_price=...)` is checked against `mech_info().max_delivery_rate` before any deposit, signature or POST.
-- **Metadata**: `ToolManager.read_tools_metadata` never raises for an unreadable document; the cause is in `MetadataRead.error`. The off-chain failure text has one owner, `offchain_blocker`.
+- **Metadata**: `ToolManager.read_tools_metadata` never raises for an unreadable document; the cause is in `MetadataRead.error`. Causes never carry a URL's path, query or credentials (RPC keys live there). The off-chain failure text has one owner, `offchain_blocker`.
 - **Requester**: `MarketplaceService.requester()` is the address off-chain requests are signed for (Safe in agent mode, else EOA); key nonce queues on it.
 - On-chain request ids stay unprefixed hex in `request_ids` and `deliveries`; callers rely on it.
 
