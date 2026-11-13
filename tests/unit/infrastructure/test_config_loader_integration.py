@@ -22,9 +22,8 @@
 import json
 from pathlib import Path
 
-import pytest
-
 import mech_client.infrastructure.config.loader as config_loader
+import pytest
 from mech_client.infrastructure.config import get_mech_config
 from mech_client.infrastructure.config.constants import CHAIN_ID_TO_NAME, MECH_CONFIGS
 from mech_client.utils.constants import CHAIN_NAME_TO_ID
@@ -88,6 +87,7 @@ class TestGetMechConfigIntegration:
     def test_load_robinhood_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test loading robinhood config: its marketplace indexer is an SQD squid."""
         monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+        monkeypatch.delenv("MECHX_REGISTRY_SUBGRAPH_URL", raising=False)
 
         config = get_mech_config("robinhood")
 
@@ -161,16 +161,36 @@ class TestGetMechConfigIntegration:
         ):
             get_mech_config("robinhood")
 
+    @pytest.mark.parametrize("field", ["subgraph_dialect", "registry_subgraph_dialect"])
     def test_missing_subgraph_dialect_fails_when_the_config_loads(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str
     ) -> None:
         """Test a chain entry without subgraph_dialect fails instead of defaulting."""
         configs = json.loads(MECH_CONFIGS.read_text())
-        del configs["robinhood"]["subgraph_dialect"]
+        del configs["robinhood"][field]
         incomplete = tmp_path / "mechs.json"
         incomplete.write_text(json.dumps(configs))
         monkeypatch.setattr(config_loader, "MECH_CONFIGS", incomplete)
 
-        with pytest.raises(ValueError, match="'robinhood' has no subgraph_dialect"):
+        with pytest.raises(
+            ValueError, match="requires subgraph_dialect and registry_subgraph_dialect"
+        ):
             get_mech_config("robinhood")
 
+
+@pytest.mark.parametrize("chain", ["base", "polygon"])
+def test_marketplace_and_registry_use_distinct_squid_endpoints(monkeypatch, chain):
+    """Separate endpoint variables select distinct clients with the same dialect."""
+    monkeypatch.delenv("MECHX_SUBGRAPH_URL", raising=False)
+    monkeypatch.delenv("MECHX_REGISTRY_SUBGRAPH_URL", raising=False)
+    monkeypatch.setenv(
+        f"MECHX_MARKETPLACE_{chain.upper()}_SQUID_URL", "https://squid.test/graphql"
+    )
+    monkeypatch.setenv(
+        f"MECHX_REGISTRY_{chain.upper()}_SQUID_URL", "https://registry.test/graphql"
+    )
+    config = get_mech_config(chain)
+    assert config.registry_subgraph_url == "https://registry.test/graphql"
+    assert config.subgraph_url == "https://squid.test/graphql"
+    assert config.subgraph_dialect == "squid"
+    assert config.registry_subgraph_dialect == "squid"

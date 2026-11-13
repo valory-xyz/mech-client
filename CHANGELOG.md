@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Base/Polygon Marketplace and registry commands require `MECHX_MARKETPLACE_BASE_SQUID_URL`, `MECHX_MARKETPLACE_POLYGON_SQUID_URL`, `MECHX_REGISTRY_BASE_SQUID_URL` and `MECHX_REGISTRY_POLYGON_SQUID_URL`. Committed endpoint defaults are blank; configure these before upgrading. Chain config now declares the independent `registry_subgraph_dialect` and endpoint-variable names.
+
 ## [0.25.0] - 2026-11-12
 
 ### ✨ Added
@@ -373,3 +377,5 @@ This refactor was a collaborative effort to modernize the codebase and improve d
 For changes in versions prior to 0.17.0, please refer to the git history or contact the maintainers.
 
 [0.17.0]: https://github.com/valory-xyz/mech-client/compare/v0.16.0...v0.17.0
+
+Base/Polygon indexer endpoints are supplied by your deployment operator. Ask the Olas deployment maintainer for the Marketplace and service-registry squid URLs before using these chains; no default endpoints are bundled.

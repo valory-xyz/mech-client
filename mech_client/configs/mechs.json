@@ -24,7 +24,8 @@
       "plan_fee_nvm": "10000000000000000",
       "plan_price_mechs": "990000000000000000"
     },
-    "subgraph_dialect": "graph"
+    "subgraph_dialect": "graph",
+    "registry_subgraph_dialect": "graph"
   },
   "arbitrum": {
     "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
@@ -42,7 +43,8 @@
     "transaction_url": "https://arbiscan.io/tx/{transaction_digest}",
     "subgraph_url": "",
     "registry_subgraph_url": "",
-    "subgraph_dialect": "graph"
+    "subgraph_dialect": "graph",
+    "registry_subgraph_dialect": "graph"
   },
   "polygon": {
     "mech_marketplace_contract": "0x343F2B005cF6D70bA610CD9F1F1927049414B582",
@@ -58,9 +60,12 @@
     "gas_limit": 3000000,
     "price": 10000,
     "transaction_url": "https://polygonscan.com/tx/{transaction_digest}",
-    "subgraph_url": "https://api.subgraph.autonolas.tech/api/proxy/marketplace-polygon",
-    "registry_subgraph_url": "https://registry-polygon.subgraph.autonolas.tech",
-    "subgraph_dialect": "graph"
+    "subgraph_url": "",
+    "registry_subgraph_url": "",
+    "subgraph_dialect": "squid",
+    "registry_subgraph_dialect": "squid",
+    "subgraph_url_env": "MECHX_MARKETPLACE_POLYGON_SQUID_URL",
+    "registry_subgraph_url_env": "MECHX_REGISTRY_POLYGON_SQUID_URL"
   },
   "base": {
     "mech_marketplace_contract": "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020",
@@ -76,8 +81,8 @@
     "gas_limit": 500000,
     "price": 3000000000000,
     "transaction_url": "https://basescan.org/tx/{transaction_digest}",
-    "subgraph_url": "https://api.subgraph.autonolas.tech/api/proxy/marketplace-base",
-    "registry_subgraph_url": "https://registry-base.subgraph.autonolas.tech",
+    "subgraph_url": "",
+    "registry_subgraph_url": "",
     "nvm_subscription": {
       "subscription_nft_address": "0xd5318d1A17819F65771B6c9277534C08Dd765498",
       "receiver_plan": "0xaaFBeef195BDAb1Bb6f3Dc9cEbA875Cd72499230",
@@ -87,7 +92,10 @@
       "plan_fee_nvm": "10000",
       "plan_price_mechs": "990000"
     },
-    "subgraph_dialect": "graph"
+    "subgraph_dialect": "squid",
+    "registry_subgraph_dialect": "squid",
+    "subgraph_url_env": "MECHX_MARKETPLACE_BASE_SQUID_URL",
+    "registry_subgraph_url_env": "MECHX_REGISTRY_BASE_SQUID_URL"
   },
   "celo": {
     "mech_marketplace_contract": "0x0000000000000000000000000000000000000000",
@@ -105,7 +113,8 @@
     "transaction_url": "https://celoscan.io/tx/{transaction_digest}",
     "subgraph_url": "",
     "registry_subgraph_url": "",
-    "subgraph_dialect": "graph"
+    "subgraph_dialect": "graph",
+    "registry_subgraph_dialect": "graph"
   },
   "optimism": {
     "mech_marketplace_contract": "0x46C0D07F55d4F9B5Eed2Fc9680B5953e5fd7b461",
@@ -123,7 +132,8 @@
     "transaction_url": "https://optimistic.etherscan.io/tx/{transaction_digest}",
     "subgraph_url": "https://api.subgraph.autonolas.tech/api/proxy/marketplace-optimism",
     "registry_subgraph_url": "https://registry-optimism.subgraph.autonolas.tech",
-    "subgraph_dialect": "graph"
+    "subgraph_dialect": "graph",
+    "registry_subgraph_dialect": "graph"
   },
   "robinhood": {
     "mech_marketplace_contract": "0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",
@@ -141,6 +151,7 @@
     "transaction_url": "https://robinhoodchain.blockscout.com/tx/{transaction_digest}",
     "subgraph_url": "https://subgraph.autonolas.tech/squid/marketplace-robinhood/graphql",
     "registry_subgraph_url": "https://subgraph.autonolas.tech/squid/service-registry-robinhood/graphql",
-    "subgraph_dialect": "squid"
+    "subgraph_dialect": "squid",
+    "registry_subgraph_dialect": "squid"
   }
 }
