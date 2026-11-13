@@ -53,12 +53,6 @@ def request_digest(  # pylint: disable=too-many-arguments  # the id's preimage, 
             marketplace, mech, requester, keccak256(data),
             deliveryRate, paymentType, nonce)))
 
-    Signed on the RPC's word, a lying RPC could answer ``getRequestId`` with
-    any 32 bytes (a Safe transaction hash included) and collect a signature on
-    it. Derived here, the digest is always a hash over a preimage the client
-    assembled, so a lying RPC (the domain separator and ``mapNonces`` are
-    still reads) can only cause a mismatch, which is refused.
-
     :param domain_separator: The marketplace's ``domainSeparator()``
     :param marketplace: The marketplace contract address
     :param mech: The priority mech address

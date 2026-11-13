@@ -760,7 +760,8 @@ class MarketplaceService(
                     f"nonce {current_nonce} and can never settle."
                 )
 
-        # See request_digest for why the signed id is derived locally.
+        # The signed id is derived locally, so a lying RPC can only cause a
+        # mismatch; getRequestId is a cross-check.
         domain_separator = bytes(
             marketplace_contract.functions.domainSeparator().call()
         )

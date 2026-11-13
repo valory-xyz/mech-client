@@ -113,28 +113,29 @@ def _completion(message: JSONValue) -> Optional[str]:
     return "\n\n".join(([text] if text else []) + blocks)
 
 
+def _wrapper_key(data: Dict[str, JSONValue]) -> Optional[str]:
+    """Return the first ``response``/``result`` key a delivery has, if any.
+
+    :param data: The delivery object
+    :return: The key, or None
+    """
+    return next((key for key in WRAPPER_KEYS if key in data), None)
+
+
 def _delivery_completion(data: Dict[str, JSONValue]) -> Optional[str]:
     """Read the completion out of a delivery object, decoding nothing.
 
     :param data: The delivery: a ``response``/``result`` wrapper, or a message
     :return: The completion, or None when the delivery holds none
     """
-    for key in WRAPPER_KEYS:
-        if key in data:
-            return _completion(data[key])
-    return _completion(data)
+    key = _wrapper_key(data)
+    return _completion(data if key is None else data[key])
 
 
 def _decode(
     value: JSONValue, completion_of: Callable[[Dict[str, JSONValue]], Optional[str]]
 ) -> JSONValue:
-    """Decode one level of a JSON string, only where it is the structure.
-
-    A string decoding to a JSON string is that text. A string decoding to an
-    object is replaced only when the object has the structure the parser
-    reads at this level and yields a non-empty completion through it;
-    anything else (a number, ``true``, a list, a model's own JSON answer) is
-    the completion itself, so the string stays as is.
+    """Decode one level of a JSON string, only to text or a yielding structure.
 
     :param value: A delivery field
     :param completion_of: Reads the completion out of an object at this level
@@ -156,9 +157,9 @@ def _message(data: JSONValue) -> JSONValue:
     """
     data = _decode(data, _delivery_completion)
     if isinstance(data, dict):
-        for key in WRAPPER_KEYS:
-            if key in data:
-                return _decode(data[key], _completion)
+        key = _wrapper_key(data)
+        if key is not None:
+            return _decode(data[key], _completion)
     return data
 
 

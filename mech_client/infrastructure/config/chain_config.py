@@ -283,20 +283,7 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         if self.rpc_override is not None:
             self.rpc_url = _checked_override(self.rpc_override)
         else:
-            # In agent mode, try to load RPC from stored operate configuration first
-            if self.agent_mode and self.chain_config:
-                # Import here to avoid circular imports
-                from mech_client.infrastructure.operate import (  # pylint: disable=import-outside-toplevel
-                    load_rpc_from_operate,
-                )
-
-                operate_rpc = load_rpc_from_operate(self.chain_config)
-                if operate_rpc:
-                    self.rpc_url = operate_rpc
-
-            # Environment variable overrides operate config
-            if env_config.mechx_chain_rpc:
-                self.rpc_url = env_config.mechx_chain_rpc
+            self._resolve_rpc(env_config)
 
         if env_config.mechx_gas_limit is not None:
             self.gas_limit = env_config.mechx_gas_limit
@@ -309,3 +296,23 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
 
         if env_config.mechx_registry_subgraph_url:
             self.registry_subgraph_url = env_config.mechx_registry_subgraph_url
+
+    def _resolve_rpc(self, env_config: EnvironmentConfig) -> None:
+        """Take the RPC from the operate config, then MECHX_CHAIN_RPC.
+
+        :param env_config: The loaded environment configuration
+        """
+        # In agent mode, try to load RPC from stored operate configuration first
+        if self.agent_mode and self.chain_config:
+            # Import here to avoid circular imports
+            from mech_client.infrastructure.operate import (  # pylint: disable=import-outside-toplevel
+                load_rpc_from_operate,
+            )
+
+            operate_rpc = load_rpc_from_operate(self.chain_config)
+            if operate_rpc:
+                self.rpc_url = operate_rpc
+
+        # Environment variable overrides operate config
+        if env_config.mechx_chain_rpc:
+            self.rpc_url = env_config.mechx_chain_rpc

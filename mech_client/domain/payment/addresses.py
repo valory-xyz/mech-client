@@ -53,6 +53,22 @@ DEPOSIT_PAYMENT_TYPES: FrozenSet[PaymentType] = frozenset(
 )
 
 
+def _lookup(entry: Tuple[Dict[int, str], str], chain_id: int, kind: str) -> str:
+    """Return a table's address for a chain.
+
+    :param entry: The table and the label its errors name
+    :param chain_id: The chain id
+    :param kind: What the address is, for the error
+    :return: The address
+    :raises ValueError: If the table has none for the chain
+    """
+    table, label = entry
+    address = table.get(chain_id)
+    if not address:
+        raise ValueError(f"{label} {kind} not available for chain {chain_id}")
+    return address
+
+
 def token_address(payment_type: PaymentType, chain_id: int) -> Optional[str]:
     """
     Return the token a payment type pays in on a chain, by chain id.
@@ -65,11 +81,7 @@ def token_address(payment_type: PaymentType, chain_id: int) -> Optional[str]:
     entry = PAYMENT_TOKENS.get(payment_type)
     if entry is None:
         return None
-    table, label = entry
-    address = table.get(chain_id)
-    if not address:
-        raise ValueError(f"{label} token not available for chain {chain_id}")
-    return address
+    return _lookup(entry, chain_id, "token")
 
 
 def tracker_address(payment_type: PaymentType, chain_id: int) -> str:
@@ -81,11 +93,7 @@ def tracker_address(payment_type: PaymentType, chain_id: int) -> str:
     :return: The tracker address
     :raises ValueError: If no tracker is deployed for it on the chain
     """
-    table, label = BALANCE_TRACKERS[payment_type]
-    address = table.get(chain_id)
-    if not address:
-        raise ValueError(f"{label} balance tracker not available for chain {chain_id}")
-    return address
+    return _lookup(BALANCE_TRACKERS[payment_type], chain_id, "balance tracker")
 
 
 def payment_token(payment_type: PaymentType, chain: str) -> Optional[str]:
