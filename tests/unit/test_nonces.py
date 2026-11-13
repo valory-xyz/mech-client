@@ -691,7 +691,7 @@ def test_send_with_nonce_warns_when_send_skips_the_hook(
 def test_send_with_nonce_holds_a_failure_when_send_never_passed_the_hook(
     allocator: NonceAllocator, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Without the hook nothing tells a failure before signing from one after."""
+    """Without the hook nothing tells a failure before the POST from one after."""
     errors: List[str] = []
     monkeypatch.setattr(
         nonces.logger, "error", lambda msg, *args: errors.append(msg % args)

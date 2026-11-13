@@ -271,7 +271,7 @@ class ToolManager:
         Queries the complementary metadata hash contract to get the metadata
         URI, then fetches the metadata from that URI. A document that cannot
         be read never raises: the cause is in ``error`` (see
-        ``METADATA_READ_ERRORS``), with any URL in it cut to scheme and host.
+        ``METADATA_READ_ERRORS``), redacted by ``_redacted_cause``.
         A missing or broken packaged ABI still raises.
 
         :param service_id: The service ID of the mech
