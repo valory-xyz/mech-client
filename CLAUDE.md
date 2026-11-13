@@ -288,7 +288,7 @@ All functions must have type hints. Mypy runs with `--disallow-untyped-defs`.
 All configuration values can be overridden via `MECHX_*` environment variables using `EnvironmentConfig`:
 
 **Priority order:**
-1. For the RPC only: the `rpc_url` argument of `MarketplaceService`, `DepositService` or `ToolManager` (passed down as `get_mech_config(rpc_url=...)`) - highest priority, and neither the env var nor the operate config is read
+1. For the RPC only: the `rpc_url` argument of `MarketplaceService`, `DepositService`, `ToolService` or `ToolManager` (passed down as `get_mech_config(rpc_url=...)`) - highest priority, and neither the env var nor the operate config is read; a blank one raises `ValueError`
 2. Environment variable (via `EnvironmentConfig`)
 3. Stored operate config (agent mode only, for RPC)
 4. Default from `mech_client/configs/mechs.json` - lowest priority
@@ -373,7 +373,8 @@ What an off-chain marketplace payer (Connect, a facilitator, pmini) needs lives 
 - **Request id**: always derived locally (`domain/request_id.py`). `getRequestId` stays as a cross-check; a mismatch raises `RequestIdMismatch` before `on_request_id` and before signing. Never sign the RPC's answer.
 - **Nonces**: `mech_client/nonces.py` (`NonceAllocator`, `send_with_nonce`, `outcome_of`). Its store format (`mech_nonces.json`, `chain:sender` keys) is a compatibility surface: Connect's existing stores are read as-is, so add fields only as optional ones.
 - **Price cap**: `send_request(max_price=...)` is checked against `mech_info().max_delivery_rate` before any deposit, signature or POST.
-- **Metadata**: `ToolManager.read_tools_metadata` never raises for an unreadable document; the cause is in `MetadataRead.error`.
+- **Metadata**: `ToolManager.read_tools_metadata` never raises for an unreadable document; the cause is in `MetadataRead.error`. The off-chain failure text has one owner, `offchain_blocker`.
+- **Requester**: `MarketplaceService.requester()` is the address off-chain requests are signed for (Safe in agent mode, else EOA); key nonce queues on it.
 - On-chain request ids stay unprefixed hex in `request_ids` and `deliveries`; callers rely on it.
 
 ## Common Refactoring Pitfalls
