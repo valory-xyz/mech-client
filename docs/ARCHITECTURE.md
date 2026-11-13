@@ -301,7 +301,8 @@ class MarketplaceService:
 queue lock held from `reserve` until the mech answers (POSTs in nonce order), a
 slot held until `mapNonces > n`. Slots, salts and the stall are persisted in
 `mech_nonces.json` under the caller's `store_path` before each POST; an
-unreadable or unwritable store refuses with `NonceRefused`. `outcome_of` maps
+unreadable or unwritable store refuses with `NonceRefused`, and a lock on
+`mech_nonces.lock` keeps the store to one allocator, across processes too. `outcome_of` maps
 `OffchainRequestRejected` / `OffchainTopUpFailed` to an `Outcome`, and
 `send_with_nonce` drives one send through a reservation (503 resends the same
 nonce; a failure after `send_request` received the `PreSignHook` it hands
