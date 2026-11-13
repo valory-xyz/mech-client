@@ -745,3 +745,20 @@ class TestRpcOverride:
 
         with pytest.raises(ValueError, match="rpc_url must not be blank"):
             get_mech_config("gnosis", rpc_url=blank)
+
+    def test_a_blank_override_is_refused_by_mech_config(self) -> None:
+        """MechConfig refuses it too, when built on its own."""
+        with pytest.raises(ValueError, match="rpc_url must not be blank"):
+            MechConfig(
+                complementary_metadata_hash_address="0x" + "0" * 40,
+                rpc_url="https://default.example",
+                ledger_config=MagicMock(),
+                gas_limit=1,
+                transaction_url="",
+                subgraph_url="",
+                price=1,
+                mech_marketplace_contract="0x" + "0" * 40,
+                subgraph_dialect="graph",
+                registry_subgraph_dialect="graph",
+                rpc_override="  ",
+            )

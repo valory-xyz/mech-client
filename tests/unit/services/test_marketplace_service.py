@@ -3610,6 +3610,34 @@ class TestPriceCap:
 
         mock_contract.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_the_cap_also_binds_an_on_chain_request(
+        self, service: MarketplaceService
+    ) -> None:
+        """On-chain, the cap refuses before the upload, the approve and the send."""
+        with (
+            patch.object(service, "marketplace_contract"),
+            patch.object(
+                service,
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 1, PaymentType.OLAS_TOKEN, 10),
+            ),
+            patch(f"{SERVICE}.PaymentStrategyFactory") as payment_factory,
+            patch(f"{SERVICE}.push_metadata_to_ipfs") as push,
+            patch.object(service, "_send_marketplace_request") as send,
+        ):
+            with pytest.raises(MechPriceExceeded):
+                await service.send_request(
+                    prompts=("a", "b"),
+                    tools=("t", "t"),
+                    priority_mech=MECH_ADDRESS,
+                    max_price=19,
+                )
+
+        payment_factory.create.assert_not_called()
+        push.assert_not_called()
+        send.assert_not_called()
+
     def test_price_exceeded_survives_pickle_and_copy(self) -> None:
         """Every field comes back after a round trip."""
         err = MechPriceExceeded("too much", price=20, max_price=19)
