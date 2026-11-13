@@ -29,6 +29,7 @@ from typing import (
     Dict,
     FrozenSet,
     List,
+    NamedTuple,
     Optional,
     Sequence,
     Tuple,
@@ -46,6 +47,7 @@ from mech_client.domain.delivery import (
     OnchainDeliveryWatcher,
 )
 from mech_client.domain.payment import PaymentStrategyFactory
+from mech_client.domain.request_id import request_digest
 from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
@@ -161,8 +163,8 @@ class OffchainRequestResult(TypedDict):
     deliveries: Dict[str, DeliveryResult]
 
 
-class _OffchainRequestError(ValueError):
-    """An error about one request of an offchain call."""
+class _FieldsError(ValueError):
+    """A ``ValueError`` whose keyword-only fields survive pickle and copy."""
 
     def __reduce__(self) -> Tuple[Any, ...]:
         """Rebuild with the keyword-only fields, which ``args`` lacks.
@@ -171,6 +173,10 @@ class _OffchainRequestError(ValueError):
         """
         fields = {k: v for k, v in vars(self).items() if not k.startswith("_")}
         return functools.partial(type(self), str(self), **fields), ()
+
+
+class _OffchainRequestError(_FieldsError):
+    """An error about one request of an offchain call."""
 
 
 class OffchainRequestRejected(_OffchainRequestError):
@@ -231,6 +237,59 @@ class OffchainTopUpFailed(_OffchainRequestError):
         self.request_id = request_id
         self.nonce = nonce
         self.unsent = unsent
+
+
+class RequestIdMismatch(_FieldsError):
+    """The RPC's ``getRequestId`` disagrees with the locally derived request id.
+
+    Raised before ``on_request_id`` and before signing: nothing of this
+    request was signed or sent.
+    """
+
+    def __init__(
+        self, message: str, *, expected: str, reported: str, nonce: int
+    ) -> None:
+        """
+        Initialize the mismatch.
+
+        :param message: Human-readable error message
+        :param expected: Hex id derived locally, unprefixed as in ``request_ids``
+        :param reported: Hex id the RPC's ``getRequestId`` answered
+        :param nonce: Marketplace nonce of the request
+        """
+        super().__init__(message)
+        self.expected = expected
+        self.reported = reported
+        self.nonce = nonce
+
+
+class MechPriceExceeded(_FieldsError):
+    """The mech's price for the call is above the caller's ``max_price``.
+
+    Raised before any deposit, signature or POST.
+    """
+
+    def __init__(self, message: str, *, price: int, max_price: int) -> None:
+        """
+        Initialize the refusal.
+
+        :param message: Human-readable error message
+        :param price: The mech's ``max_delivery_rate`` times the request count
+        :param max_price: The caller's cap
+        """
+        super().__init__(message)
+        self.price = price
+        self.max_price = max_price
+
+
+class MechInfo(NamedTuple):
+    """What the mech contract says about a mech."""
+
+    mech: str
+    service_id: int
+    payment_type: PaymentType
+    # per request, in the payment asset's base units
+    max_delivery_rate: int
 
 
 class _MechRefusal(ValueError):
@@ -363,6 +422,7 @@ class MarketplaceService(
         timeout: Optional[float] = None,
         nonces: Optional[Sequence[int]] = None,
         on_request_id: Optional[Callable[[bytes, int], None]] = None,
+        max_price: Optional[int] = None,
     ) -> RequestResult:
         """
         Send marketplace request(s) to mech(s).
@@ -383,8 +443,14 @@ class MarketplaceService(
             increasing, none below ``mapNonces(sender)``.
         :param on_request_id: Offchain only, synchronous: called with each raw
             32-byte request id and its nonce just before the request is
-            signed. If it raises, that request and the rest of the call are
-            neither signed nor sent; earlier ones were already sent.
+            signed, once the id derived locally from ``domainSeparator()``
+            has been checked against ``getRequestId``. If it raises, that
+            request and the rest of the call are neither signed nor sent;
+            earlier ones were already sent.
+        :param max_price: The most the call may pay, in the payment asset's
+            base units: the mech's ``max_delivery_rate`` times the number of
+            prompts above it raises :class:`MechPriceExceeded` before any
+            deposit, signature or POST. ``None`` sets no cap.
         :return: A :class:`RequestResult` with ``tx_hash`` and ``receipt``
             (both ``None`` on the offchain path, which has no transaction),
             ``request_ids``, and ``deliveries`` mapping each request ID to a
@@ -392,7 +458,9 @@ class MarketplaceService(
             delivered plus the gateway URL it was read from. ``deliveries``
             has the same shape regardless of whether delivery was on-chain
             or offchain. The offchain result also lists the ``nonces`` used.
-            A mech's HTTP error raises :class:`OffchainRequestRejected`.
+            A mech's HTTP error raises :class:`OffchainRequestRejected`; an RPC
+            whose ``getRequestId`` disagrees with the local derivation raises
+            :class:`RequestIdMismatch` before signing.
         """
         # Validate inputs
         if len(prompts) != len(tools):
@@ -411,13 +479,30 @@ class MarketplaceService(
             if any(b <= a for a, b in zip(nonces, nonces[1:])):
                 raise ValueError(f"Nonces {list(nonces)} must be strictly increasing")
 
-        # Get marketplace contract
-        marketplace_contract = self._get_marketplace_contract()
+        if max_price is not None and (
+            not isinstance(max_price, int) or isinstance(max_price, bool)
+        ):
+            raise ValueError(f"max_price {max_price!r} must be an integer")
 
-        # Fetch mech info (payment type, service ID, max delivery rate)
-        payment_type, service_id, max_delivery_rate = self._fetch_mech_info(
-            priority_mech
+        marketplace_contract = self.marketplace_contract()
+
+        info = self.mech_info(
+            priority_mech or self.mech_config.priority_mech_address or ""
         )
+        payment_type, service_id, max_delivery_rate = (
+            info.payment_type,
+            info.service_id,
+            info.max_delivery_rate,
+        )
+        price = max_delivery_rate * len(prompts)
+        if max_price is not None and price > max_price:
+            raise MechPriceExceeded(
+                f"Mech {info.mech} charges up to {price} for {len(prompts)} "
+                f"request(s) ({max_delivery_rate} each), above max_price "
+                f"{max_price}. Nothing was paid, signed or sent.",
+                price=price,
+                max_price=max_price,
+            )
 
         # One metadata read per request: the tool check, the terms notice and
         # the offchain URL lookup all derive from this document.
@@ -490,8 +575,6 @@ class MarketplaceService(
             # per-mech pricing and under-funds the approve whenever a mech's
             # rate exceeds it, making the marketplace's transferFrom revert
             # with "ERC20: transfer amount exceeds allowance".
-            price = max_delivery_rate * len(prompts)
-
             # Check balance
             logger.info(f"Checking {payment_type.name} token balance...")
             sender = self.executor.get_sender_address()
@@ -625,6 +708,16 @@ class MarketplaceService(
                     f"nonce {current_nonce} and can never settle."
                 )
 
+        # The id that is signed is derived locally; getRequestId is only a
+        # cross-check, so a lying RPC can cause a refusal but never a
+        # signature over bytes of its choosing.
+        domain_separator = bytes(
+            marketplace_contract.functions.domainSeparator().call()
+        )
+        marketplace_address = str(marketplace_contract.address)
+        mech_address = ensure_checksummed_address(priority_mech_address)
+        payment_type_bytes = bytes.fromhex(payment_type.value)
+
         # Prepare and send each request
         request_ids_hex: List[str] = []
 
@@ -643,24 +736,44 @@ class MarketplaceService(
                 f"content CID {data_hash_full}"
             )
 
-            # Calculate request ID
-            # payment_type.value is already a hex string, just add 0x prefix
-            payment_type_hex = "0x" + payment_type.value
             nonce = request_nonces[i]
-            request_id_bytes = marketplace_contract.functions.getRequestId(
-                ensure_checksummed_address(priority_mech_address),
-                sender,
-                data_hash,
-                max_delivery_rate,
-                payment_type_hex,
-                nonce,
-            ).call()
+            request_id_bytes = request_digest(
+                domain_separator=domain_separator,
+                marketplace=marketplace_address,
+                mech=mech_address,
+                requester=sender,
+                data_hash=bytes.fromhex(data_hash.removeprefix("0x")),
+                delivery_rate=max_delivery_rate,
+                payment_type=payment_type_bytes,
+                nonce=nonce,
+            )
+            reported = bytes(
+                marketplace_contract.functions.getRequestId(
+                    mech_address,
+                    sender,
+                    data_hash,
+                    max_delivery_rate,
+                    "0x" + payment_type.value,
+                    nonce,
+                ).call()
+            )
+            if reported != request_id_bytes:
+                raise RequestIdMismatch(
+                    f"The RPC's getRequestId answered {reported.hex()} for nonce "
+                    f"{nonce}, not the locally derived {request_id_bytes.hex()}; "
+                    f"nothing was signed or sent for it. Check the RPC "
+                    f"(MECHX_CHAIN_RPC or rpc_url)."
+                    + _accepted_note(request_ids_hex, request_nonces),
+                    expected=request_id_bytes.hex(),
+                    reported=reported.hex(),
+                    nonce=nonce,
+                )
 
             request_id_int = int.from_bytes(request_id_bytes, byteorder="big")
             request_id_hex = request_id_bytes.hex()
 
             if on_request_id is not None:
-                returned = cast(Any, on_request_id)(bytes(request_id_bytes), nonce)
+                returned = cast(Any, on_request_id)(request_id_bytes, nonce)
                 if inspect.isawaitable(returned):
                     if inspect.iscoroutine(returned):
                         returned.close()
@@ -1161,9 +1274,9 @@ class MarketplaceService(
                     f"Available tools: {', '.join(sorted(available_tools))}"
                 )
 
-    def _get_marketplace_contract(self) -> Web3Contract:
+    def marketplace_contract(self) -> Web3Contract:
         """
-        Get marketplace contract instance.
+        Get the marketplace contract instance for this service's chain and RPC.
 
         :return: Marketplace contract
         :raises ValueError: If marketplace not available on this chain
@@ -1180,22 +1293,19 @@ class MarketplaceService(
             self.ledger_api,
         )
 
-    def _fetch_mech_info(
-        self, priority_mech: Optional[str]
-    ) -> Tuple[PaymentType, int, int]:
+    def mech_info(self, mech: str) -> MechInfo:
         """
-        Fetch mech information from contract.
+        Read a mech's service id, payment type and price from its contract.
 
-        :param priority_mech: Priority mech address
-        :return: Tuple of (payment_type, service_id, max_delivery_rate)
+        :param mech: The mech address
+        :return: The mech's :class:`MechInfo`
+        :raises ValueError: If no mech address is given
         """
-        # Get mech contract
-        mech_address = priority_mech or self.mech_config.priority_mech_address
-        if not mech_address:
+        if not mech:
             raise ValueError("No mech address specified")
 
         abi = get_abi("IMech.json")
-        mech_contract = get_contract(mech_address, abi, self.ledger_api)
+        mech_contract = get_contract(mech, abi, self.ledger_api)
 
         # Fetch mech info
         payment_type_bytes = mech_contract.functions.paymentType().call()
@@ -1205,7 +1315,12 @@ class MarketplaceService(
         # Convert payment type bytes to PaymentType enum
         payment_type = PaymentType.from_value(payment_type_bytes.hex())
 
-        return payment_type, service_id, max_delivery_rate
+        return MechInfo(
+            mech=mech,
+            service_id=service_id,
+            payment_type=payment_type,
+            max_delivery_rate=max_delivery_rate,
+        )
 
     def _send_marketplace_request(  # pylint: disable=too-many-arguments,too-many-locals
         self,

@@ -37,11 +37,15 @@ from mech_client.domain.signing import LocalSigner
 from mech_client.domain.tools.manager import IDENTIFICATION_NOTE, ToolManager
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
+from mech_client.domain.request_id import request_digest
 from mech_client.services.marketplace_service import (
     MarketplaceService,
+    MechInfo,
+    MechPriceExceeded,
     OffchainRequestRejected,
     OffchainTopUpFailed,
     PaymentChallenge,
+    RequestIdMismatch,
 )
 from mech_client.utils.validators import ensure_checksummed_address
 from tests.unit.helpers import create_mock_signer
@@ -100,6 +104,57 @@ def _real_signing_signer() -> MagicMock:
         _TEST_ACCOUNT.unsafe_sign_hash(digest).signature
     )
     return signer
+
+
+MARKETPLACE_ADDRESS = "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB"
+# recorded from the deployed gnosis marketplace (see test_request_id.py)
+DOMAIN_SEPARATOR = bytes.fromhex(
+    "58fbb2508b962bcf6e2708fdfc23222115504128df851ae75ef8c66f2e0bdade"
+)
+
+
+def _derived_id(  # pylint: disable=too-many-arguments
+    nonce: int,
+    *,
+    requester: str = _TEST_ACCOUNT.address,
+    mech: str = MECH_ADDRESS,
+    data: str = "0x" + "b" * 64,
+    rate: int = 100,
+    payment_type: str = "0x" + PaymentType.NATIVE.value,
+) -> bytes:
+    """Return the request id the deployed marketplace answers for these inputs."""
+    return request_digest(
+        domain_separator=DOMAIN_SEPARATOR,
+        marketplace=MARKETPLACE_ADDRESS,
+        mech=ensure_checksummed_address(mech),
+        requester=ensure_checksummed_address(requester),
+        data_hash=bytes.fromhex(data.removeprefix("0x")),
+        delivery_rate=rate,
+        payment_type=bytes.fromhex(payment_type.removeprefix("0x")),
+        nonce=nonce,
+    )
+
+
+def _honest(contract: MagicMock) -> MagicMock:
+    """Make a marketplace mock answer getRequestId as the deployed contract does."""
+
+    def get_request_id(  # pylint: disable=too-many-arguments
+        mech: str, requester: str, data: str, rate: int, ptype: str, nonce: int
+    ) -> MagicMock:
+        request_id = _derived_id(
+            nonce,
+            requester=requester,
+            mech=mech,
+            data=data,
+            rate=rate,
+            payment_type=ptype,
+        )
+        return MagicMock(call=MagicMock(return_value=request_id))
+
+    contract.address = MARKETPLACE_ADDRESS
+    contract.functions.domainSeparator.return_value.call.return_value = DOMAIN_SEPARATOR
+    contract.functions.getRequestId.side_effect = get_request_id
+    return contract
 
 
 class TestMarketplaceServiceInitialization:
@@ -218,7 +273,7 @@ class TestMarketplaceServiceValidation:
 
 
 class TestGetMarketplaceContract:
-    """Tests for _get_marketplace_contract method."""
+    """Tests for marketplace_contract method."""
 
     @patch("mech_client.services.marketplace_service.get_contract")
     @patch("mech_client.services.marketplace_service.get_abi")
@@ -228,7 +283,7 @@ class TestGetMarketplaceContract:
     @patch("mech_client.services.marketplace_service.EthereumCrypto")
     @patch("mech_client.services.base_service.EthereumApi")
     @patch("mech_client.services.base_service.get_mech_config")
-    def test_get_marketplace_contract_success(
+    def test_marketplace_contract_success(
         self,
         mock_config: MagicMock,
         mock_ledger_api_cls: MagicMock,
@@ -264,9 +319,7 @@ class TestGetMarketplaceContract:
         )
 
         # Get contract
-        contract = (
-            service._get_marketplace_contract()
-        )  # pylint: disable=protected-access
+        contract = service.marketplace_contract()
 
         # Verify
         assert contract == mock_contract
@@ -277,7 +330,7 @@ class TestGetMarketplaceContract:
 
 
 class TestFetchMechInfo:
-    """Tests for _fetch_mech_info method."""
+    """Tests for mech_info method."""
 
     @patch("mech_client.services.marketplace_service.get_contract")
     @patch("mech_client.services.marketplace_service.get_abi")
@@ -287,7 +340,7 @@ class TestFetchMechInfo:
     @patch("mech_client.services.marketplace_service.EthereumCrypto")
     @patch("mech_client.services.base_service.EthereumApi")
     @patch("mech_client.services.base_service.get_mech_config")
-    def test_fetch_mech_info_success(
+    def test_mech_info_success(
         self,
         mock_config: MagicMock,
         mock_ledger_api_cls: MagicMock,
@@ -330,16 +383,10 @@ class TestFetchMechInfo:
         )
 
         # Fetch mech info
-        payment_type, service_id, max_rate = (
-            service._fetch_mech_info(  # pylint: disable=protected-access
-                "0x" + "9" * 40
-            )
-        )
+        info = service.mech_info("0x" + "9" * 40)
 
         # Verify
-        assert payment_type == PaymentType.NATIVE
-        assert service_id == 42
-        assert max_rate == 10**17
+        assert info == MechInfo("0x" + "9" * 40, 42, PaymentType.NATIVE, 10**17)
 
 
 class TestValidateTools:
@@ -605,7 +652,7 @@ def _build_service(
 
 
 class TestGetMarketplaceContractError:
-    """Test _get_marketplace_contract when contract is not configured."""
+    """Test marketplace_contract when contract is not configured."""
 
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
@@ -631,11 +678,11 @@ class TestGetMarketplaceContractError:
         )
 
         with pytest.raises(ValueError, match="Marketplace contract not available"):
-            service._get_marketplace_contract()  # pylint: disable=protected-access
+            service.marketplace_contract()
 
 
 class TestFetchMechInfoError:
-    """Test _fetch_mech_info when no mech address is specified."""
+    """Test mech_info when no mech address is specified."""
 
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
@@ -661,7 +708,7 @@ class TestFetchMechInfoError:
         )
 
         with pytest.raises(ValueError, match="No mech address specified"):
-            service._fetch_mech_info(None)  # pylint: disable=protected-access
+            service.mech_info("")
 
 
 class TestValidateToolsEdgeCases:
@@ -720,7 +767,9 @@ class TestValidateToolsEdgeCases:
         )
 
         # Should NOT raise — logs warning and returns silently
-        service._validate_tools(("some-tool",), 1, {})  # pylint: disable=protected-access
+        service._validate_tools(
+            ("some-tool",), 1, {}
+        )  # pylint: disable=protected-access
 
     @patch("mech_client.services.marketplace_service.IPFSClient")
     @patch("mech_client.services.marketplace_service.ToolManager")
@@ -749,7 +798,9 @@ class TestValidateToolsEdgeCases:
         )
 
         # Should NOT raise — logs warning and returns silently
-        service._validate_tools(("some-tool",), 1, {})  # pylint: disable=protected-access
+        service._validate_tools(
+            ("some-tool",), 1, {}
+        )  # pylint: disable=protected-access
 
 
 class TestSendMarketplaceRequestInvalidPaymentType:
@@ -823,13 +874,13 @@ class TestSendRequestNoPriorityMech:
         # Patch the internal helpers that run before the priority mech check
         with patch.object(
             service,
-            "_get_marketplace_contract",
+            "marketplace_contract",
             return_value=MagicMock(),
         ):
             with patch.object(
                 service,
-                "_fetch_mech_info",
-                return_value=(PaymentType.NATIVE, 1, 10**17),
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 1, PaymentType.NATIVE, 10**17),
             ):
                 with patch.object(service, "_validate_tools"):
                     with pytest.raises(ValueError, match="No priority mech address"):
@@ -901,13 +952,11 @@ class TestSendRequestOnchainFlow:
         mock_strategy.get_balance_tracker_address.return_value = "0x" + "c" * 40
         mock_payment_factory.create.return_value = mock_strategy
 
-        with patch.object(
-            service, "_get_marketplace_contract", return_value=mock_contract
-        ):
+        with patch.object(service, "marketplace_contract", return_value=mock_contract):
             with patch.object(
                 service,
-                "_fetch_mech_info",
-                return_value=(PaymentType.NATIVE, 1, 10**17),
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 1, PaymentType.NATIVE, 10**17),
             ):
                 with patch.object(service, "_validate_tools"):
                     with patch.object(
@@ -999,13 +1048,13 @@ class TestSendRequestOnchainFlow:
             call_order.append(f"wait:{tx_hash}") or {"status": 1}
         )
 
-        with patch.object(
-            service, "_get_marketplace_contract", return_value=mock_contract
-        ):
+        with patch.object(service, "marketplace_contract", return_value=mock_contract):
             with patch.object(
                 service,
-                "_fetch_mech_info",
-                return_value=(token_payment_type, 1, max_delivery_rate),
+                "mech_info",
+                return_value=MechInfo(
+                    MECH_ADDRESS, 1, token_payment_type, max_delivery_rate
+                ),
             ):
                 with patch.object(service, "_validate_tools"):
                     with patch.object(
@@ -1028,9 +1077,7 @@ class TestSendRequestOnchainFlow:
         # Approve receipt must be awaited before the request tx is sent.
         assert call_order[0] == "wait:0xapprovehash"
         assert "send_request" in call_order
-        assert call_order.index("wait:0xapprovehash") < call_order.index(
-            "send_request"
-        )
+        assert call_order.index("wait:0xapprovehash") < call_order.index("send_request")
         assert result["tx_hash"] == "0xtxhash"
 
     @pytest.mark.asyncio
@@ -1082,13 +1129,11 @@ class TestSendRequestOnchainFlow:
 
         mock_push_metadata.return_value = ("0x" + "b" * 64, "ipfs://hash")
 
-        with patch.object(
-            service, "_get_marketplace_contract", return_value=MagicMock()
-        ):
+        with patch.object(service, "marketplace_contract", return_value=MagicMock()):
             with patch.object(
                 service,
-                "_fetch_mech_info",
-                return_value=(PaymentType.USDC_TOKEN, 1, 10**17),
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 1, PaymentType.USDC_TOKEN, 10**17),
             ):
                 with patch.object(service, "_validate_tools"):
                     with pytest.raises(ValueError, match="Insufficient balance"):
@@ -1145,13 +1190,11 @@ class TestSendRequestOnchainFlow:
         mock_strategy = MagicMock()
         mock_payment_factory.create.return_value = mock_strategy
 
-        with patch.object(
-            service, "_get_marketplace_contract", return_value=mock_contract
-        ):
+        with patch.object(service, "marketplace_contract", return_value=mock_contract):
             with patch.object(
                 service,
-                "_fetch_mech_info",
-                return_value=(PaymentType.NATIVE, 1, 10**17),
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 1, PaymentType.NATIVE, 10**17),
             ):
                 with patch.object(service, "_validate_tools"):
                     with patch.object(
@@ -1219,13 +1262,13 @@ class TestSendRequestOnchainFlow:
 
         max_delivery_rate = 10**17
         mock_contract = MagicMock()
-        with patch.object(
-            service, "_get_marketplace_contract", return_value=mock_contract
-        ):
+        with patch.object(service, "marketplace_contract", return_value=mock_contract):
             with patch.object(
                 service,
-                "_fetch_mech_info",
-                return_value=(PaymentType.USDC_TOKEN, 1, max_delivery_rate),
+                "mech_info",
+                return_value=MechInfo(
+                    MECH_ADDRESS, 1, PaymentType.USDC_TOKEN, max_delivery_rate
+                ),
             ):
                 with patch.object(service, "_validate_tools"):
                     with patch.object(
@@ -1307,13 +1350,13 @@ class TestSendRequestOnchainFlow:
         mock_onchain_watcher_cls.return_value = mock_watcher
 
         mock_contract = MagicMock()
-        with patch.object(
-            service, "_get_marketplace_contract", return_value=mock_contract
-        ):
+        with patch.object(service, "marketplace_contract", return_value=mock_contract):
             with patch.object(
                 service,
-                "_fetch_mech_info",
-                return_value=(PaymentType.TOKEN_NVM_USDC, 1, 10**17),
+                "mech_info",
+                return_value=MechInfo(
+                    MECH_ADDRESS, 1, PaymentType.TOKEN_NVM_USDC, 10**17
+                ),
             ):
                 with patch.object(service, "_validate_tools"):
                     with patch.object(
@@ -1398,13 +1441,13 @@ class TestSendRequestOnchainFlow:
         tools = ("some-tool", "some-tool")
         mock_contract = MagicMock()
 
-        with patch.object(
-            service, "_get_marketplace_contract", return_value=mock_contract
-        ):
+        with patch.object(service, "marketplace_contract", return_value=mock_contract):
             with patch.object(
                 service,
-                "_fetch_mech_info",
-                return_value=(PaymentType.USDC_TOKEN, 1, max_delivery_rate),
+                "mech_info",
+                return_value=MechInfo(
+                    MECH_ADDRESS, 1, PaymentType.USDC_TOKEN, max_delivery_rate
+                ),
             ):
                 with patch.object(service, "_validate_tools"):
                     with patch.object(
@@ -1486,14 +1529,13 @@ class TestSendOffchainRequest:
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
         request_id_bytes = b"\x00" * 32
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
-            request_id_bytes
-        )
+        _honest(mock_contract)
 
         # Mock watcher
         mock_watcher = AsyncMock()
         mock_watcher.watch.return_value = {
-            "0" * 64: DeliveryResult(
+            "0"
+            * 64: DeliveryResult(
                 "0" * 64, data={"result": "offchain-result"}, url="ipfs://off"
             )
         }
@@ -1577,9 +1619,7 @@ class TestSendOffchainRequest:
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 3
         request_id_bytes = b"\xcd" * 32
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
-            request_id_bytes
-        )
+        _honest(mock_contract)
 
         mock_watcher = AsyncMock()
         mock_watcher.watch.return_value = {
@@ -1619,9 +1659,7 @@ class TestSendOffchainRequest:
 
         # Requester of record on all three surfaces is the EOA
         mock_contract.functions.mapNonces.assert_called_once_with(expected_sender)
-        assert (
-            mock_contract.functions.getRequestId.call_args.args[1] == expected_sender
-        )
+        assert mock_contract.functions.getRequestId.call_args.args[1] == expected_sender
         posted_payload = mock_requests.post.call_args.kwargs["data"]
         assert posted_payload["sender"] == expected_sender
 
@@ -1677,10 +1715,8 @@ class TestSendOffchainRequest:
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 7
-        request_id_bytes = b"\xab" * 32
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
-            request_id_bytes
-        )
+        request_id_bytes = _derived_id(7, requester=safe, rate=10**17)
+        _honest(mock_contract)
 
         mock_watcher = AsyncMock()
         mock_watcher.watch.return_value = {
@@ -1773,9 +1809,7 @@ class TestSendOffchainRequest:
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
-            b"\x00" * 32
-        )
+        _honest(mock_contract)
 
         with patch(
             "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash",
@@ -1842,9 +1876,7 @@ class TestSendOffchainRequest:
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
-            b"\x00" * 32
-        )
+        _honest(mock_contract)
 
         with patch(
             "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash",
@@ -1915,9 +1947,7 @@ class TestSendOffchainRequest:
 
         mock_contract = MagicMock()
         mock_contract.functions.mapNonces.return_value.call.return_value = 0
-        mock_contract.functions.getRequestId.return_value.call.return_value = (
-            b"\x00" * 32
-        )
+        _honest(mock_contract)
 
         with patch(
             "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash",
@@ -1969,9 +1999,7 @@ class TestSignRequestDigest:
         service = _build_offchain_service()
         service.signer = _real_signing_signer()
 
-        signature = service._sign_request_digest(
-            _TEST_ACCOUNT.address, self._digest()
-        )
+        signature = service._sign_request_digest(_TEST_ACCOUNT.address, self._digest())
 
         expected = bytes(_TEST_ACCOUNT.unsafe_sign_hash(self._digest()).signature)
         assert signature == "0x" + expected.hex()
@@ -1985,9 +2013,7 @@ class TestSignRequestDigest:
             address=_TEST_ACCOUNT.address, signature=low_v
         )
 
-        signature = service._sign_request_digest(
-            _TEST_ACCOUNT.address, self._digest()
-        )
+        signature = service._sign_request_digest(_TEST_ACCOUNT.address, self._digest())
 
         # The low-v original goes out; normalization is check-only
         assert signature == "0x" + low_v.hex()
@@ -2011,9 +2037,7 @@ class TestSignRequestDigest:
         service.signer = create_mock_signer(signature=b"\xab" * 64)
 
         with pytest.raises(ValueError, match="expected\\s+65 bytes"):
-            service._sign_request_digest(
-                create_mock_signer().address, self._digest()
-            )
+            service._sign_request_digest(create_mock_signer().address, self._digest())
 
     def test_unrecoverable_signature_is_rejected(self) -> None:
         """A malformed signature (r = s = 0) surfaces a diagnostic error."""
@@ -2021,9 +2045,7 @@ class TestSignRequestDigest:
         service.signer = create_mock_signer(signature=b"\x00" * 64 + b"\x1b")
 
         with pytest.raises(ValueError, match="cannot be recovered"):
-            service._sign_request_digest(
-                create_mock_signer().address, self._digest()
-            )
+            service._sign_request_digest(create_mock_signer().address, self._digest())
 
     def test_agent_mode_signs_via_safe_message_wrapper(self) -> None:
         """Agent-mode signing routes through sign_safe_message with the Safe."""
@@ -2204,13 +2226,11 @@ class TestSendRequestOffchainBranch:
             "receipt": None,
         }
 
-        with patch.object(
-            service, "_get_marketplace_contract", return_value=MagicMock()
-        ):
+        with patch.object(service, "marketplace_contract", return_value=MagicMock()):
             with patch.object(
                 service,
-                "_fetch_mech_info",
-                return_value=(PaymentType.NATIVE, 1, 10**17),
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 1, PaymentType.NATIVE, 10**17),
             ):
                 with patch.object(service, "_validate_tools"):
                     with patch.object(
@@ -2321,12 +2341,16 @@ class TestTermsNotice:
         # mech_client sets propagate=False on its root logger, so patch the
         # module logger directly rather than relying on caplog.
         with (
-            patch(f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=_resolver(outcome)),
+            patch(
+                f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=_resolver(outcome)
+            ),
             patch(f"{IDENTIFICATION}.logger"),
             patch(f"{SERVICE}.logger.info") as info,
             patch(f"{SERVICE}.logger.warning") as warning,
         ):
-            service._log_terms_notice(MECH_ADDRESS, metadata)  # pylint: disable=protected-access
+            service._log_terms_notice(
+                MECH_ADDRESS, metadata
+            )  # pylint: disable=protected-access
         return info, warning
 
     def test_valory_mech_gets_the_fixed_notice(self) -> None:
@@ -2397,11 +2421,11 @@ class TestTermsNotice:
 
         service.tool_manager.terms_report = record_notice
         with (
+            patch.object(service, "marketplace_contract", return_value=MagicMock()),
             patch.object(
-                service, "_get_marketplace_contract", return_value=MagicMock()
-            ),
-            patch.object(
-                service, "_fetch_mech_info", return_value=(PaymentType.NATIVE, 7, 1)
+                service,
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 7, PaymentType.NATIVE, 1),
             ),
             patch.object(service, "_validate_tools"),
             patch.object(service, "_send_offchain_request", side_effect=fake_offchain),
@@ -2441,11 +2465,11 @@ class TestTermsNotice:
         mock_push.side_effect = fake_push
         service.tool_manager.terms_report = record_notice
         with (
+            patch.object(service, "marketplace_contract", return_value=MagicMock()),
             patch.object(
-                service, "_get_marketplace_contract", return_value=MagicMock()
-            ),
-            patch.object(
-                service, "_fetch_mech_info", return_value=(PaymentType.NATIVE, 7, 1)
+                service,
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 7, PaymentType.NATIVE, 1),
             ),
             patch.object(service, "_validate_tools"),
             patch.object(service, "_send_marketplace_request", side_effect=fake_send),
@@ -2560,9 +2584,7 @@ class TestOffchain402Handling:
         the records.
         """
         resp = _mock_http_response(200, headers={"Payment-Receipt": "abc123"})
-        with patch(
-            "mech_client.services.marketplace_service.logger.info"
-        ) as mock_info:
+        with patch("mech_client.services.marketplace_service.logger.info") as mock_info:
             MarketplaceService._log_payment_receipt(resp)
         mock_info.assert_called_once()
         assert "abc123" in mock_info.call_args[0][0]
@@ -2570,9 +2592,7 @@ class TestOffchain402Handling:
     def test_log_payment_receipt_absent_emits_no_record(self) -> None:
         """No Payment-Receipt header means no log line written."""
         resp = _mock_http_response(200, headers={})
-        with patch(
-            "mech_client.services.marketplace_service.logger.info"
-        ) as mock_info:
+        with patch("mech_client.services.marketplace_service.logger.info") as mock_info:
             MarketplaceService._log_payment_receipt(resp)
         mock_info.assert_not_called()
 
@@ -2663,9 +2683,7 @@ class TestOffchain402Handling:
         """
         service = _build_offchain_service()
         with patch("mech_client.services.deposit_service.DepositService") as mock_ds:
-            with pytest.raises(
-                ValueError, match=r"refused.*1001.*safety cap of 1000"
-            ):
+            with pytest.raises(ValueError, match=r"refused.*1001.*safety cap of 1000"):
                 # Cap = 10 * 100 = 1000; shortfall = 1001 = above cap.
                 service._auto_deposit_for_402(
                     PaymentType.NATIVE,
@@ -2844,22 +2862,15 @@ class TestOffchain402Handling:
         assert "remaining shortfall 50" in str(exc_info.value)
 
 
-def _request_id_for(nonce: int) -> bytes:
-    """Return a distinct fake request id per nonce."""
-    return nonce.to_bytes(32, "big")
+def _request_id_for(nonce: int, requester: str = _TEST_ACCOUNT.address) -> bytes:
+    """Return the request id of prompt "a" to MECH_ADDRESS at rate 100."""
+    return _derived_id(nonce, requester=requester)
 
 
 def _nonce_contract(map_nonces: int) -> MagicMock:
-    """Build a marketplace mock whose getRequestId encodes the nonce."""
-
-    def get_request_id(
-        mech: str, sender: str, data_hash: str, rate: int, ptype: str, nonce: int
-    ) -> MagicMock:
-        return MagicMock(call=MagicMock(return_value=_request_id_for(nonce)))
-
-    contract = MagicMock()
+    """Build an honest marketplace mock at the given mapNonces."""
+    contract = _honest(MagicMock())
     contract.functions.mapNonces.return_value.call.return_value = map_nonces
-    contract.functions.getRequestId.side_effect = get_request_id
     return contract
 
 
@@ -2981,7 +2992,7 @@ class TestCallerOwnedNonces:
 
         await _send_offchain(service, contract, nonces=[7], on_request_id=hook)
 
-        assert seen == [(_request_id_for(7), 7, 0)]
+        assert seen == [(_request_id_for(7, requester=safe), 7, 0)]
         contract.functions.mapNonces.assert_called_once_with(
             ensure_checksummed_address(safe)
         )
@@ -3220,7 +3231,7 @@ class TestCallerOwnedNonces:
         self, service: MarketplaceService
     ) -> None:
         """A nonce count that differs from the prompts fails before any chain read."""
-        with patch.object(service, "_get_marketplace_contract") as mock_contract:
+        with patch.object(service, "marketplace_contract") as mock_contract:
             with pytest.raises(ValueError, match="nonces \\(1\\) must match"):
                 await service.send_request(
                     prompts=("a", "b"), tools=("t", "t"), use_offchain=True, nonces=[1]
@@ -3238,9 +3249,11 @@ class TestCallerOwnedNonces:
         service.tool_manager.terms_report.return_value = {"valory_operated": False}
 
         with (
-            patch.object(service, "_get_marketplace_contract"),
+            patch.object(service, "marketplace_contract"),
             patch.object(
-                service, "_fetch_mech_info", return_value=(PaymentType.NATIVE, 1, 1)
+                service,
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 1, PaymentType.NATIVE, 1),
             ),
             patch.object(service, "_validate_tools"),
             patch.object(
@@ -3267,7 +3280,7 @@ class TestCallerOwnedNonces:
         self, service: MarketplaceService, kwargs: Dict[str, Any]
     ) -> None:
         """Offchain-only arguments fail fast on-chain instead of being ignored."""
-        with patch.object(service, "_get_marketplace_contract") as mock_contract:
+        with patch.object(service, "marketplace_contract") as mock_contract:
             with pytest.raises(ValueError, match="only to offchain"):
                 await service.send_request(prompts=("a",), tools=("t",), **kwargs)
 
@@ -3287,7 +3300,7 @@ class TestCallerOwnedNonces:
         self, service: MarketplaceService, nonces: List[Any], match: str
     ) -> None:
         """Repeated, decreasing or non-integer nonces fail before any chain read."""
-        with patch.object(service, "_get_marketplace_contract") as mock_contract:
+        with patch.object(service, "marketplace_contract") as mock_contract:
             with pytest.raises(ValueError, match=match):
                 await service.send_request(
                     prompts=("a", "b"),
@@ -3378,3 +3391,186 @@ class TestCallerOwnedNonces:
         """Both exceptions are part of the public API."""
         assert mech_client.OffchainRequestRejected is OffchainRequestRejected
         assert mech_client.OffchainTopUpFailed is OffchainTopUpFailed
+
+
+class TestLocalRequestId:
+    """The signed id is derived locally; an RPC that disagrees is refused."""
+
+    @pytest.fixture
+    def service(self) -> MarketplaceService:
+        """Client-mode service with a real signer."""
+        service = _build_offchain_service()
+        service.signer = _real_signing_signer()
+        return service
+
+    @pytest.fixture
+    def mech_post(self) -> Any:
+        """Patch the mech's POST endpoint; tests set its responses."""
+        watcher = AsyncMock()
+        watcher.watch.return_value = {}
+        with (
+            patch(
+                "mech_client.infrastructure.ipfs.metadata.fetch_ipfs_hash",
+                return_value=("0x" + "b" * 64, "full-hash", '{"prompt":"a"}'),
+            ),
+            patch(f"{SERVICE}.requests.post") as post,
+            patch(f"{SERVICE}.OffchainDeliveryWatcher", return_value=watcher),
+        ):
+            yield post
+
+    @staticmethod
+    def _lying(contract: MagicMock, bad_nonce: int, answer: bytes) -> MagicMock:
+        """Make getRequestId answer ``answer`` for ``bad_nonce`` only."""
+        honest = contract.functions.getRequestId.side_effect
+
+        def get_request_id(*args: Any) -> MagicMock:
+            if args[-1] == bad_nonce:
+                return MagicMock(call=MagicMock(return_value=answer))
+            return honest(*args)
+
+        contract.functions.getRequestId.side_effect = get_request_id
+        return contract
+
+    @pytest.mark.asyncio
+    async def test_the_locally_derived_id_is_hooked_signed_and_sent(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """The hook, the signature and the payload all carry request_digest's id."""
+        mech_post.side_effect = [_mock_http_response(200)]
+        hook = MagicMock()
+        contract = _nonce_contract(5)
+
+        result = await _send_offchain(service, contract, on_request_id=hook)
+
+        expected = _request_id_for(5)
+        hook.assert_called_once_with(expected, 5)
+        service.signer.sign_message.assert_called_once_with(expected)
+        payload = mech_post.call_args.kwargs["data"]
+        assert payload["request_id"] == int.from_bytes(expected, "big")
+        assert result["request_ids"] == [expected.hex()]
+        contract.functions.getRequestId.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_a_mismatch_is_refused_before_the_hook_and_signing(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """A lying RPC can only cause a refusal: nothing is hooked, signed or sent."""
+        hook = MagicMock()
+        contract = self._lying(_nonce_contract(5), 5, b"\x66" * 32)
+
+        with pytest.raises(RequestIdMismatch) as e:
+            await _send_offchain(service, contract, on_request_id=hook)
+
+        assert isinstance(e.value, ValueError)
+        assert (e.value.expected, e.value.reported, e.value.nonce) == (
+            _request_id_for(5).hex(),
+            "66" * 32,
+            5,
+        )
+        hook.assert_not_called()
+        service.signer.sign_message.assert_not_called()
+        mech_post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_a_mismatch_mid_call_names_the_accepted_requests(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """The first request went out; the error says so, and the second is not signed."""
+        mech_post.side_effect = [_mock_http_response(200)]
+        contract = self._lying(_nonce_contract(5), 6, b"\x66" * 32)
+
+        with pytest.raises(RequestIdMismatch) as e:
+            await _send_offchain(service, contract, prompts=("a", "b"), nonces=[5, 6])
+
+        assert f"{_request_id_for(5).hex()} (nonce 5)" in str(e.value)
+        assert service.signer.sign_message.call_count == 1
+        assert mech_post.call_count == 1
+
+    def test_mismatch_survives_pickle_and_copy(self) -> None:
+        """Every field comes back after a round trip."""
+        err = RequestIdMismatch("bad", expected="aa", reported="bb", nonce=3)
+
+        for clone in (pickle.loads(pickle.dumps(err)), copy.copy(err)):
+            assert str(clone) == "bad"
+            assert (clone.expected, clone.reported, clone.nonce) == ("aa", "bb", 3)
+
+
+class TestPriceCap:
+    """max_price refuses a mech above it before anything is paid or signed."""
+
+    @pytest.fixture
+    def service(self) -> MarketplaceService:
+        """Client-mode service whose mech charges 10 per request."""
+        service = _build_offchain_service()
+        service.tool_manager = MagicMock()
+        service.tool_manager.terms_report.return_value = {"valory_operated": False}
+        return service
+
+    async def _send(self, service: MarketplaceService, **kwargs: Any) -> MagicMock:
+        """Send two prompts off-chain; return the patched offchain path."""
+        with (
+            patch.object(service, "marketplace_contract"),
+            patch.object(
+                service,
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 1, PaymentType.NATIVE, 10),
+            ),
+            patch.object(service, "_validate_tools"),
+            patch.object(
+                service, "_send_offchain_request", new_callable=AsyncMock
+            ) as mock_offchain,
+        ):
+            await service.send_request(
+                prompts=("a", "b"),
+                tools=("t", "t"),
+                priority_mech=MECH_ADDRESS,
+                use_offchain=True,
+                **kwargs,
+            )
+        return mock_offchain
+
+    @pytest.mark.asyncio
+    async def test_a_price_above_the_cap_is_refused_before_anything_is_sent(
+        self, service: MarketplaceService
+    ) -> None:
+        """2 requests x 10 > 19: refused with the price and the cap."""
+        with patch(f"{SERVICE}.PaymentStrategyFactory") as payment_factory:
+            with pytest.raises(MechPriceExceeded) as e:
+                await self._send(service, max_price=19)
+
+        assert isinstance(e.value, ValueError)
+        assert (e.value.price, e.value.max_price) == (20, 19)
+        service.tool_manager.fetch_tools_metadata.assert_not_called()
+        payment_factory.create.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("max_price", [20, None])
+    async def test_a_price_at_the_cap_or_no_cap_is_sent(
+        self, service: MarketplaceService, max_price: Optional[int]
+    ) -> None:
+        """Exactly at the cap is within it; no cap keeps today's behaviour."""
+        mock_offchain = await self._send(service, max_price=max_price)
+
+        mock_offchain.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("max_price", ["20", True, 2.5])
+    async def test_a_non_integer_cap_is_refused_early(
+        self, service: MarketplaceService, max_price: Any
+    ) -> None:
+        """A cap that is not an int fails before any chain read."""
+        with patch.object(service, "marketplace_contract") as mock_contract:
+            with pytest.raises(ValueError, match="max_price"):
+                await service.send_request(
+                    prompts=("a",), tools=("t",), max_price=max_price
+                )
+
+        mock_contract.assert_not_called()
+
+    def test_price_exceeded_survives_pickle_and_copy(self) -> None:
+        """Every field comes back after a round trip."""
+        err = MechPriceExceeded("too much", price=20, max_price=19)
+
+        for clone in (pickle.loads(pickle.dumps(err)), copy.copy(err)):
+            assert str(clone) == "too much"
+            assert (clone.price, clone.max_price) == (20, 19)
