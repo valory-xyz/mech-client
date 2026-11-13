@@ -1027,6 +1027,30 @@ class TestHardCancel:
         assert allocator.stalled_since("gnosis", SENDER) == clock.now
         assert _allocator(tmp_path, clock).stalled_since("gnosis", SENDER) == clock.now
 
+    def test_a_taken_probe_over_a_fresh_slot_restarts_later_clocks(
+        self, allocator: NonceAllocator, clock: Clock
+    ) -> None:
+        """After a cancel, a taken probe at 6 unstalls and 7's old delivery is forgiven."""
+        for nonce in (5, 6, 7):
+            with take(allocator, 5) as slot:
+                assert slot.nonce == nonce
+                slot.answered("accepted", mech=MECH_A, salt=f"s{nonce}")
+        with take(allocator, 5) as slot:
+            slot.answered("taken", mech=MECH_A, salt="")  # 8 taken elsewhere: stall
+        with allocator.hard_cancel("gnosis", SENDER, lambda: 5, stalled_for=0):
+            pass
+        _sync(allocator, 6)  # the on-chain request consumed 5
+        allocator.delivered("gnosis", SENDER, [7])
+        clock.now += 61  # past 7's settle timeout, not past 6's
+        with take(allocator, 6) as slot:
+            assert slot.nonce == 6  # the probe
+            slot.answered("taken", mech=MECH_A, salt="")  # the mech holds our 6
+        assert not allocator.stalled("gnosis", SENDER)
+        assert cast(dict, held(allocator, 7))["at"] == clock.now
+        assert cast(dict, held(allocator, 7))["delivered_at"] is None
+        with take(allocator, 6) as slot:
+            assert slot.nonce == 8
+
     def test_it_restarts_the_settle_clock_of_later_slots(
         self, allocator: NonceAllocator, clock: Clock
     ) -> None:
