@@ -398,6 +398,20 @@ def test_queues_survive_a_restart(tmp_path: Path, clock: Clock) -> None:
         assert slot.nonce == 6
 
 
+def test_an_unknown_slot_survives_a_restart_as_unknown(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """A lost answer stays unknown, so a later taken still recognises it as ours."""
+    first = _allocator(tmp_path, clock)
+    with take(first, 5) as slot:
+        slot.answered("unknown", mech=MECH_A, salt="s")
+    second = _allocator(tmp_path, clock)
+    queue = second._queue(  # pylint: disable=protected-access
+        second.key("gnosis", SENDER)
+    )
+    assert queue.slots[5].state == "unknown"
+
+
 def test_an_unreadable_queue_file_refuses_every_request(
     tmp_path: Path, clock: Clock
 ) -> None:
