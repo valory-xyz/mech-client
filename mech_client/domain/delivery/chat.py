@@ -20,11 +20,9 @@
 """The chat contract: messages in, completion and token usage out.
 
 The prompt is an OpenAI-style ``messages`` list as JSON, and the delivery
-carries the completion text plus token usage. The parse order is the
-delivery result itself, then a ``response`` or ``result`` field, then
-``content``, ``text`` or ``completion`` (or an OpenAI ``choices[0].message``).
-A native tool call the model returns unrequested comes back as a fenced bash
-block in the completion rather than being dropped.
+carries the completion text plus token usage. A native tool call the model
+returns unrequested comes back as a fenced bash block in the completion
+rather than being dropped.
 """
 
 import json

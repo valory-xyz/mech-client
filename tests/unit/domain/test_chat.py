@@ -61,6 +61,25 @@ def test_the_completion_is_found_in_parse_order() -> None:
     assert chat_report(json.dumps({"result": "d"})) == {"completion": "d", "usage": {}}
 
 
+@pytest.mark.parametrize(
+    ("delivery", "completion"),
+    [
+        ({"content": "c", "text": "t", "completion": "x"}, "c"),
+        ({"text": "t", "completion": "x"}, "t"),
+        ({"content": 1, "text": "t"}, "t"),  # only a string counts
+        ({"response": {"text": "r"}, "result": {"text": "s"}}, "r"),
+        ({"result": {"text": "s"}, "response": {"text": "r"}}, "r"),
+    ],
+)
+def test_the_first_candidate_in_parse_order_wins(
+    delivery: Any, completion: str
+) -> None:
+    """content beats text beats completion, and response beats result."""
+    report = chat_report(delivery)
+    assert report is not None
+    assert report["completion"] == completion
+
+
 def test_a_delivery_result_is_read_through_its_data() -> None:
     """send_request's deliveries values are accepted as they come."""
     delivery = DeliveryResult("ab", data={"result": "e"}, url=None)
