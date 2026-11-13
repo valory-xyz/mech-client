@@ -26,13 +26,16 @@ rather than being dropped.
 """
 
 import json
-from typing import Any, Dict, Optional, TypedDict
+from typing import Dict, Optional, TypedDict, Union
 
 from mech_client.domain.delivery.models import DeliveryResult
+from mech_client.utils.types import JSONValue
 
 TEXT_KEYS = ("content", "text", "completion")
 WRAPPER_KEYS = ("response", "result")
 USAGE_KEYS = ("prompt_tokens", "completion_tokens")
+# what makes a decoded object a delivery to descend into, not the completion
+SHAPE_KEYS = WRAPPER_KEYS + TEXT_KEYS + ("tool_calls", "choices")
 
 
 class ChatReport(TypedDict):
@@ -63,7 +66,7 @@ def is_chat_prompt(prompt: str) -> bool:
     )
 
 
-def _parse(value: Any) -> Any:
+def _parse(value: JSONValue) -> JSONValue:
     """Decode a JSON string, leaving anything else as it is.
 
     :param value: A delivery field
@@ -71,46 +74,52 @@ def _parse(value: Any) -> Any:
     """
     if isinstance(value, str):
         try:
-            return json.loads(value)
+            decoded: JSONValue = json.loads(value)
+            return decoded
         except (ValueError, RecursionError):  # an untrusted delivery: any depth
             return value
     return value
 
 
-def _parse_object(value: Any) -> Any:
-    """Decode a JSON object string; any other string is text and stays as is.
+def _unwrap(value: JSONValue) -> JSONValue:
+    """Decode a string that holds a JSON string or a delivery-shaped object.
 
-    A completion such as ``"42"`` or ``"true"`` is valid JSON too, and must
-    still be reported as the completion.
+    Anything else a string decodes to (a number, ``true``, a list, or an
+    object without the delivery's keys, as a model answering in JSON gives)
+    is the completion itself, so the string stays as is.
 
     :param value: A delivery field
-    :return: The decoded object, or the value itself
+    :return: The decoded string or object, or the value itself
     """
     decoded = _parse(value)
-    return decoded if isinstance(decoded, dict) else value
+    if isinstance(decoded, str):
+        return decoded
+    if isinstance(decoded, dict) and any(key in decoded for key in SHAPE_KEYS):
+        return decoded
+    return value
 
 
-def _message(data: Any) -> Any:
+def _message(data: JSONValue) -> JSONValue:
     """Descend to the completion: response/result, then OpenAI choices.
 
     :param data: The delivered content
     :return: The message holding the completion
     """
-    data = _parse_object(data)
+    data = _unwrap(data)
     for key in WRAPPER_KEYS:
         if isinstance(data, dict) and key in data:
-            data = _parse_object(data[key])
+            data = _unwrap(data[key])
             break
     if isinstance(data, dict) and isinstance(data.get("choices"), list):
         choices = data["choices"]
-        first = choices[0] if choices else None
+        first = choices[0] if isinstance(choices, list) and choices else None
         message = first.get("message") if isinstance(first, dict) else None
         if isinstance(message, dict):  # an untrusted delivery: any shape
             return {**data, **message}
     return data
 
 
-def _tool_call_block(call: Any) -> str:
+def _tool_call_block(call: JSONValue) -> str:
     """Render one native tool call as a fenced bash block.
 
     :param call: One entry of the message's ``tool_calls``
@@ -120,7 +129,7 @@ def _tool_call_block(call: Any) -> str:
     function = function if isinstance(function, dict) else {}
     arguments = _parse(function.get("arguments", ""))
     if isinstance(arguments, dict) and isinstance(arguments.get("command"), str):
-        body = arguments["command"]
+        body = str(arguments["command"])
     else:
         name = str(function.get("name") or "tool")
         rendered = arguments if isinstance(arguments, str) else json.dumps(arguments)
@@ -128,7 +137,35 @@ def _tool_call_block(call: Any) -> str:
     return f"```bash\n{body.strip()}\n```"
 
 
-def chat_report(delivery: Any) -> Optional[ChatReport]:
+def _text(message: Dict[str, JSONValue]) -> Optional[str]:
+    """Return the first string among the message's text keys.
+
+    :param message: The message holding the completion
+    :return: The text, or None
+    """
+    for key in TEXT_KEYS:
+        value = message.get(key)
+        if isinstance(value, str):
+            return value
+    return None
+
+
+def _usage(raw: JSONValue) -> Dict[str, int]:
+    """Read the integer token counts out of an untrusted usage block.
+
+    :param raw: The message's ``usage``
+    :return: Each count the mech reported as an integer (not a boolean)
+    """
+    usage = raw if isinstance(raw, dict) else {}
+    counts: Dict[str, int] = {}
+    for key in USAGE_KEYS:
+        value = usage.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            counts[key] = value
+    return counts
+
+
+def chat_report(delivery: Union[DeliveryResult, JSONValue]) -> Optional[ChatReport]:
     """
     Read the completion and usage out of a chat delivery.
 
@@ -140,28 +177,16 @@ def chat_report(delivery: Any) -> Optional[ChatReport]:
         ``deliveries``, or its content
     :return: The report, or None (see above)
     """
-    if isinstance(delivery, DeliveryResult):
-        delivery = delivery.data
-    message = _message(delivery)
+    data = delivery.data if isinstance(delivery, DeliveryResult) else delivery
+    message = _message(data)
     if isinstance(message, str):
         return {"completion": message, "usage": {}}
     if not isinstance(message, dict):
         return None
-    text = next(
-        (message[key] for key in TEXT_KEYS if isinstance(message.get(key), str)),
-        None,
-    )
+    text = _text(message)
     calls = message.get("tool_calls")
     blocks = [_tool_call_block(c) for c in calls] if isinstance(calls, list) else []
     if text is None and not blocks:
         return None
     completion = "\n\n".join(([text] if text else []) + blocks)
-    usage = message.get("usage")
-    return {
-        "completion": completion,
-        "usage": {
-            key: int(usage[key])
-            for key in USAGE_KEYS
-            if isinstance(usage, dict) and isinstance(usage.get(key), int)
-        },
-    }
+    return {"completion": completion, "usage": _usage(message.get("usage"))}

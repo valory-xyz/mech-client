@@ -80,7 +80,7 @@ def test_the_first_candidate_in_parse_order_wins(
     assert report["completion"] == completion
 
 
-@pytest.mark.parametrize("text", ["42", "true", "null", '["a"]'])
+@pytest.mark.parametrize("text", ["42", "true", "null", '["a"]', '{"answer": 42}'])
 def test_a_completion_that_is_valid_json_is_still_the_completion(text: str) -> None:
     """A model asked for a number answers "42": that text is the completion."""
     assert chat_report({"result": text}) == {"completion": text, "usage": {}}
@@ -92,6 +92,7 @@ def test_a_completion_that_is_valid_json_is_still_the_completion(text: str) -> N
     [
         ({"prompt_tokens": "n/a", "completion_tokens": None}, {}),
         ({"prompt_tokens": 4}, {"prompt_tokens": 4}),
+        ({"prompt_tokens": True, "completion_tokens": 2}, {"completion_tokens": 2}),
         ([4, 2], {}),
     ],
 )
@@ -105,6 +106,18 @@ def test_an_empty_content_beside_a_tool_call_adds_no_blank_lead() -> None:
     """The completion is the tool-call block alone."""
     report = chat_report({"content": "", "tool_calls": [{"function": {"name": "t"}}]})
     assert report == {"completion": "```bash\nt\n```", "usage": {}}
+
+
+def test_a_json_string_literal_is_its_text() -> None:
+    """A result JSON-encoded as a string, as mechs usually send it, is decoded."""
+    assert chat_report({"result": '"hi"'}) == {"completion": "hi", "usage": {}}
+
+
+def test_only_role_is_required_of_every_message() -> None:
+    """An assistant tool-call message may omit content; every message needs a role."""
+    tool_call = {"role": "assistant", "tool_calls": [{"function": {"name": "t"}}]}
+    assert is_chat_prompt(json.dumps([{"role": "user", "content": "hi"}, tool_call]))
+    assert not is_chat_prompt(json.dumps([{"role": "user"}, {"content": "no role"}]))
 
 
 def test_a_delivery_result_is_read_through_its_data() -> None:
