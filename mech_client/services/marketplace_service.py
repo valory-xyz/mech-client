@@ -505,7 +505,8 @@ class MarketplaceService(
 
         # One metadata read per request: the tool check, the terms notice and
         # the offchain URL lookup all derive from this document.
-        metadata = self.tool_manager.fetch_tools_metadata(service_id)
+        read = self.tool_manager.read_tools_metadata(service_id)
+        metadata = read.document
         self._validate_tools(tools, service_id, metadata)
 
         # Get priority mech address (use configured or provided)
@@ -520,7 +521,7 @@ class MarketplaceService(
         # Branch between on-chain and off-chain flows
         if use_offchain:
             offchain_url = self.tool_manager.offchain_url_from_metadata(
-                service_id, metadata
+                service_id, metadata, cause=read.error
             )
             logger.info(f"Discovered offchain URL for the mech: {offchain_url}")
 

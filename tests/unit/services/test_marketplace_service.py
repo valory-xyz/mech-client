@@ -35,6 +35,7 @@ from mech_client.domain.delivery import DeliveryResult
 from mech_client.domain.identification import VALORY_TERMS_NOTICE
 from mech_client.domain.signing import LocalSigner
 from mech_client.domain.tools.manager import IDENTIFICATION_NOTE, ToolManager
+from mech_client.domain.tools.models import MetadataRead
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.domain.request_id import request_digest
@@ -2403,7 +2404,9 @@ class TestTermsNotice:
         """The notice precedes the offchain send, for the priority mech and its document."""
         service = self._service()
         document = {"url": "https://mech.example"}
-        service.tool_manager.fetch_tools_metadata.return_value = document
+        service.tool_manager.read_tools_metadata.return_value = MetadataRead(
+            document, None
+        )
         calls: list = []
 
         async def fake_offchain(**_kwargs: Any) -> Dict[str, Any]:
@@ -2447,7 +2450,7 @@ class TestTermsNotice:
     ) -> None:
         """On-chain: the notice precedes the IPFS upload and the marketplace send."""
         service = self._service()
-        service.tool_manager.fetch_tools_metadata.return_value = {}
+        service.tool_manager.read_tools_metadata.return_value = MetadataRead({}, None)
         calls: list = []
 
         def fake_push(*_args: Any, **_kwargs: Any) -> tuple:
@@ -3541,7 +3544,7 @@ class TestPriceCap:
 
         assert isinstance(e.value, ValueError)
         assert (e.value.price, e.value.max_price) == (20, 19)
-        service.tool_manager.fetch_tools_metadata.assert_not_called()
+        service.tool_manager.read_tools_metadata.assert_not_called()
         payment_factory.create.assert_not_called()
 
     @pytest.mark.asyncio
@@ -3618,3 +3621,76 @@ class TestRpcUrlArgument:
                 max_delivery_rate=100,
             )
         assert mock_ds.call_args.kwargs["rpc_url"] == "https://caller.example"
+
+
+class TestSendRequestMechAndMetadata:
+    """Which mech send_request reads, and what it says when metadata is unreadable."""
+
+    @pytest.fixture
+    def service(self) -> MarketplaceService:
+        """Client-mode service whose config names a priority mech."""
+        service = _build_offchain_service()
+        service.mech_config.priority_mech_address = "0x" + "c" * 40
+        service.tool_manager = MagicMock()
+        service.tool_manager.terms_report.return_value = {"valory_operated": False}
+        service.tool_manager.offchain_url_from_metadata = (
+            ToolManager.offchain_url_from_metadata
+        )
+        return service
+
+    async def _send(
+        self, service: MarketplaceService, read: MetadataRead, **kwargs: Any
+    ) -> MagicMock:
+        """Send one off-chain prompt; return the patched mech_info."""
+        service.tool_manager.read_tools_metadata.return_value = read
+        with (
+            patch.object(service, "marketplace_contract"),
+            patch.object(
+                service,
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 1, PaymentType.NATIVE, 1),
+            ) as mech_info,
+            patch.object(service, "_validate_tools"),
+            patch.object(service, "_send_offchain_request", new_callable=AsyncMock),
+        ):
+            await service.send_request(
+                prompts=("a",), tools=("t",), use_offchain=True, **kwargs
+            )
+        return mech_info
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("priority_mech", "expected"),
+        [(None, "0x" + "c" * 40), ("0x" + "d" * 40, "0x" + "d" * 40)],
+    )
+    async def test_the_configured_mech_is_read_unless_one_is_given(
+        self,
+        service: MarketplaceService,
+        priority_mech: Optional[str],
+        expected: str,
+    ) -> None:
+        """priority_mech=None falls back to the config; an explicit one wins."""
+        read = MetadataRead({"url": "https://mech.example"}, None)
+
+        mech_info = await self._send(service, read, priority_mech=priority_mech)
+
+        mech_info.assert_called_once_with(expected)
+
+    @pytest.mark.asyncio
+    async def test_an_unreadable_document_names_its_cause(
+        self, service: MarketplaceService
+    ) -> None:
+        """A transient read failure is told apart from a mech that never published."""
+        with pytest.raises(ValueError) as e:
+            await self._send(service, MetadataRead(None, "Timeout: slow"))
+
+        assert "Could not fetch metadata for service 1 (Timeout: slow)" in str(e.value)
+        assert "may be transient" in str(e.value)
+
+    @pytest.mark.asyncio
+    async def test_a_document_without_a_usable_url_is_refused(
+        self, service: MarketplaceService
+    ) -> None:
+        """A non-string url is as missing as no url."""
+        with pytest.raises(ValueError, match="does not contain an offchain URL"):
+            await self._send(service, MetadataRead({"url": 42}, None))

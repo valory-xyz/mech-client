@@ -43,6 +43,7 @@ from mech_client.domain.tools.manager import (
     claimed_operator,
     offchain_blocker,
     payment_label,
+    usable_offchain_url,
 )
 from mech_client.domain.tools.models import (
     MetadataRead,
@@ -53,6 +54,7 @@ from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.infrastructure.subgraph.queries import MechRecord
 from mech_client.utils.errors import SubgraphError
 from mech_client.utils.errors.exceptions import ManifestError
+from web3.exceptions import ContractLogicError
 
 
 def create_mock_mech_config() -> MagicMock:
@@ -1326,9 +1328,14 @@ class TestReadToolsMetadata:
                 "Timeout: slow",
             ),
             (
-                RuntimeError("execution reverted"),
+                ContractLogicError("execution reverted"),
                 MagicMock(),
-                "RuntimeError: execution reverted",
+                "ContractLogicError: ('execution reverted', None)",
+            ),
+            (
+                "https://gateway/1",
+                MagicMock(side_effect=OSError("connection reset")),
+                "OSError: connection reset",
             ),
             (
                 "https://gateway/1",
@@ -1351,6 +1358,13 @@ class TestReadToolsMetadata:
     ) -> None:
         """RPC, gateway, JSON and shape failures all come back as the cause."""
         assert self._read(uri, get) == MetadataRead(None, cause)
+
+    def test_a_programming_error_propagates(self) -> None:
+        """Only read failures become the cause; a bug keeps its traceback."""
+        get = MagicMock(side_effect=TypeError("unexpected keyword"))
+
+        with pytest.raises(TypeError, match="unexpected keyword"):
+            self._read("https://gateway/1", get)
 
 
 class TestOffchainBlocker:
@@ -1379,3 +1393,19 @@ class TestOffchainBlocker:
     def test_a_document_with_a_url_has_no_blocker(self) -> None:
         """A url means the off-chain flow can reach the mech."""
         assert offchain_blocker(MetadataRead({"url": "https://m"}, None)) is None
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        ({"url": " https://m "}, "https://m"),
+        ({"url": "  "}, None),
+        ({"url": 42}, None),
+        ({}, None),
+        (["url"], None),
+        (None, None),
+    ],
+)
+def test_usable_offchain_url(metadata: Any, expected: Optional[str]) -> None:
+    """Only a non-blank string url is usable, stripped."""
+    assert usable_offchain_url(metadata) == expected

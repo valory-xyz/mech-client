@@ -56,6 +56,7 @@ from mech_client.infrastructure.subgraph.queries import (
 )
 from mech_client.utils.errors.exceptions import ManifestError
 from web3.constants import ADDRESS_ZERO
+from web3.exceptions import ContractLogicError, Web3Exception
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,17 @@ PAYMENT_LABELS = {
     PaymentType.TOKEN_NVM_USDC: "usdc_nvm",
 }
 UNKNOWN_PAYMENT = "unknown"
+# What reading the metadata document can fail with: the RPC (web3 errors,
+# ValueError), the gateway (requests errors are OSErrors) or the JSON
+# (ValueError). Anything else is a bug and propagates.
+METADATA_READ_ERRORS = (
+    requests.RequestException,
+    OSError,
+    ValueError,
+    NotImplementedError,
+    ContractLogicError,
+    Web3Exception,
+)
 OFFCHAIN_URL_MISSING = "no 'url' in metadata; this mech serves on-chain requests only"
 
 
@@ -170,10 +182,24 @@ def offchain_blocker(read: MetadataRead) -> Optional[str]:
     if read.document is None:
         cause = read.error or "no cause reported"
         return f"metadata unreadable ({cause}); may be transient or never published"
-    url = read.document.get("url")
-    if not isinstance(url, str) or not url.strip():
+    if usable_offchain_url(read.document) is None:
         return OFFCHAIN_URL_MISSING
     return None
+
+
+def usable_offchain_url(metadata: Any) -> Optional[str]:
+    """
+    Return the off-chain endpoint a metadata document publishes, if usable.
+
+    :param metadata: The parsed metadata document, or anything else
+    :return: The stripped ``url``, or None when it is missing, blank or not a string
+    """
+    if not isinstance(metadata, dict):
+        return None
+    url = metadata.get("url")
+    if not isinstance(url, str) or not url.strip():
+        return None
+    return url.strip()
 
 
 class ToolManager:
@@ -222,8 +248,7 @@ class ToolManager:
             )
             metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
             document = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
-        # every read failure (RPC, gateway, JSON) is reported as the cause
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except METADATA_READ_ERRORS as e:
             logger.error(f"Error fetching tools for service {service_id}: {e}")
             return MetadataRead(None, f"{type(e).__name__}: {e}")
         if not isinstance(document, dict):
@@ -257,23 +282,31 @@ class ToolManager:
         )
 
     @staticmethod
-    def offchain_url_from_metadata(service_id: int, metadata: Any) -> str:
+    def offchain_url_from_metadata(
+        service_id: int, metadata: Any, cause: Optional[str] = None
+    ) -> str:
         """
         Read the ``url`` field from an already fetched metadata document.
 
         :param service_id: The service ID of the mech (for error messages)
         :param metadata: The parsed metadata document, or None
+        :param cause: Why the document could not be read (``MetadataRead.error``)
         :return: The offchain URL string
         :raises ValueError: If there is no document or it has no URL
         """
         if not metadata:
+            detail = (
+                f" ({cause}); this may be transient or the mech never published it"
+                if cause
+                else ""
+            )
             raise ValueError(
-                f"Could not fetch metadata for service {service_id}. "
+                f"Could not fetch metadata for service {service_id}{detail}. "
                 f"Cannot discover offchain URL."
             )
 
-        url = (metadata.get("url") or "").strip()
-        if not url:
+        url = usable_offchain_url(metadata)
+        if url is None:
             raise ValueError(
                 f"Metadata for service {service_id} does not contain an offchain URL. "
                 f"The mech operator must publish a 'url' field in the metadata."
