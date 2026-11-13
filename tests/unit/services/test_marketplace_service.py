@@ -3684,13 +3684,15 @@ class TestSendRequestMechAndMetadata:
         with pytest.raises(ValueError) as e:
             await self._send(service, MetadataRead(None, "Timeout: slow"))
 
-        assert "Could not fetch metadata for service 1 (Timeout: slow)" in str(e.value)
-        assert "may be transient" in str(e.value)
+        assert str(e.value) == (
+            "Mech service 1: metadata unreadable (Timeout: slow); may be "
+            "transient or never published"
+        )
 
     @pytest.mark.asyncio
     async def test_a_document_without_a_usable_url_is_refused(
         self, service: MarketplaceService
     ) -> None:
         """A non-string url is as missing as no url."""
-        with pytest.raises(ValueError, match="does not contain an offchain URL"):
+        with pytest.raises(ValueError, match="no 'url' in metadata"):
             await self._send(service, MetadataRead({"url": 42}, None))

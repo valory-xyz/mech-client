@@ -54,7 +54,7 @@ from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.infrastructure.subgraph.queries import MechRecord
 from mech_client.utils.errors import SubgraphError
 from mech_client.utils.errors.exceptions import ManifestError
-from web3.exceptions import ContractLogicError
+from web3.exceptions import BadFunctionCallOutput, ContractLogicError
 
 
 def create_mock_mech_config() -> MagicMock:
@@ -504,11 +504,11 @@ class TestGetOffchainUrl:
         manager = ToolManager(chain_config="gnosis")
 
         # Mock fetch_tools_metadata to return metadata with url
-        manager.fetch_tools_metadata = MagicMock(  # type: ignore
-            return_value={
-                "url": "https://mech.example.com/",
-                "tools": ["openai-gpt-4"],
-            }
+        manager.read_tools_metadata = MagicMock(  # type: ignore
+            return_value=MetadataRead(
+                {"url": "https://mech.example.com/", "tools": ["openai-gpt-4"]},
+                None,
+            )
         )
 
         # Get offchain URL
@@ -516,7 +516,7 @@ class TestGetOffchainUrl:
 
         # Verify
         assert url == "https://mech.example.com/"
-        manager.fetch_tools_metadata.assert_called_once_with(42)
+        manager.read_tools_metadata.assert_called_once_with(42)
 
     @patch("mech_client.domain.tools.manager.EthereumApi")
     @patch("mech_client.domain.tools.manager.get_mech_config")
@@ -531,15 +531,14 @@ class TestGetOffchainUrl:
         manager = ToolManager(chain_config="gnosis")
 
         # Mock fetch_tools_metadata to return metadata without url
-        manager.fetch_tools_metadata = MagicMock(  # type: ignore
-            return_value={
-                "tools": ["openai-gpt-4"],
-                "toolMetadata": {},
-            }
+        manager.read_tools_metadata = MagicMock(  # type: ignore
+            return_value=MetadataRead(
+                {"tools": ["openai-gpt-4"], "toolMetadata": {}}, None
+            )
         )
 
         # Should raise ValueError
-        with pytest.raises(ValueError, match="does not contain an offchain URL"):
+        with pytest.raises(ValueError, match="Mech service 42: no 'url' in metadata"):
             manager.get_offchain_url(service_id=42)
 
     @patch("mech_client.domain.tools.manager.EthereumApi")
@@ -555,11 +554,17 @@ class TestGetOffchainUrl:
         manager = ToolManager(chain_config="gnosis")
 
         # Mock fetch_tools_metadata to return None
-        manager.fetch_tools_metadata = MagicMock(return_value=None)  # type: ignore
+        manager.read_tools_metadata = MagicMock(  # type: ignore
+            return_value=MetadataRead(None, "Timeout: slow")
+        )
 
         # Should raise ValueError
-        with pytest.raises(ValueError, match="Could not fetch metadata"):
+        with pytest.raises(ValueError) as e:
             manager.get_offchain_url(service_id=42)
+        assert str(e.value) == (
+            "Mech service 42: metadata unreadable (Timeout: slow); may be "
+            "transient or never published"
+        )
 
     @patch("mech_client.domain.tools.manager.EthereumApi")
     @patch("mech_client.domain.tools.manager.get_mech_config")
@@ -574,16 +579,22 @@ class TestGetOffchainUrl:
         manager = ToolManager(chain_config="gnosis")
 
         # Mock fetch_tools_metadata to return metadata with empty url
-        manager.fetch_tools_metadata = MagicMock(  # type: ignore
-            return_value={
-                "url": "  ",
-                "tools": ["openai-gpt-4"],
-            }
+        manager.read_tools_metadata = MagicMock(  # type: ignore
+            return_value=MetadataRead({"url": "  ", "tools": ["openai-gpt-4"]}, None)
         )
 
         # Should raise ValueError
-        with pytest.raises(ValueError, match="does not contain an offchain URL"):
+        with pytest.raises(ValueError, match="Mech service 42: no 'url' in metadata"):
             manager.get_offchain_url(service_id=42)
+
+    def test_a_bare_document_is_still_accepted(self) -> None:
+        """Callers passing the document itself keep working, with one wording."""
+        assert (
+            ToolManager.offchain_url_from_metadata(1, {"url": "https://m"})
+            == "https://m"
+        )
+        with pytest.raises(ValueError, match="metadata unreadable \\(no cause"):
+            ToolManager.offchain_url_from_metadata(1, None)
 
 
 class TestGetToolSchema:
@@ -1333,6 +1344,16 @@ class TestReadToolsMetadata:
                 "ContractLogicError: ('execution reverted', None)",
             ),
             (
+                BadFunctionCallOutput("empty response"),
+                MagicMock(),
+                "BadFunctionCallOutput: empty response",
+            ),
+            (
+                NotImplementedError("no tokenURI here"),
+                MagicMock(),
+                "NotImplementedError: no tokenURI here",
+            ),
+            (
                 "https://gateway/1",
                 MagicMock(side_effect=OSError("connection reset")),
                 "OSError: connection reset",
@@ -1358,6 +1379,46 @@ class TestReadToolsMetadata:
     ) -> None:
         """RPC, gateway, JSON and shape failures all come back as the cause."""
         assert self._read(uri, get) == MetadataRead(None, cause)
+
+    def test_a_gateway_error_status_is_unreadable_even_with_a_json_body(
+        self,
+    ) -> None:
+        """A 504 with a JSON object body is not taken for the document."""
+        response = requests.Response()
+        response.status_code = 504
+        response.reason = "Gateway Timeout"
+        response.url = "https://gateway/1"
+        response._content = (
+            b'{"error": "upstream timed out"}'  # pylint: disable=protected-access
+        )
+
+        read = self._read("https://gateway/1", MagicMock(return_value=response))
+
+        assert read.document is None
+        assert read.error == (
+            "HTTPError: 504 Server Error: Gateway Timeout for url: https://gateway/1"
+        )
+        assert offchain_blocker(read) is not None
+
+    def test_no_metadata_hash_contract_is_a_cause_not_an_error(self) -> None:
+        """read_tools_metadata reports it; fetch_tools_metadata still raises."""
+        config = create_mock_mech_config()
+        config.complementary_metadata_hash_address = (
+            "0x0000000000000000000000000000000000000000"
+        )
+        with (
+            patch(
+                "mech_client.domain.tools.manager.get_mech_config", return_value=config
+            ),
+            patch("mech_client.domain.tools.manager.EthereumApi"),
+        ):
+            manager = ToolManager(chain_config="celo")
+
+        assert manager.read_tools_metadata(1) == MetadataRead(
+            None, "metadata hash contract not deployed on celo"
+        )
+        with pytest.raises(ValueError, match="not yet implemented on celo"):
+            manager.fetch_tools_metadata(1)
 
     def test_a_programming_error_propagates(self) -> None:
         """Only read failures become the cause; a bug keeps its traceback."""

@@ -521,7 +521,7 @@ class MarketplaceService(
         # Branch between on-chain and off-chain flows
         if use_offchain:
             offchain_url = self.tool_manager.offchain_url_from_metadata(
-                service_id, metadata, cause=read.error
+                service_id, read
             )
             logger.info(f"Discovered offchain URL for the mech: {offchain_url}")
 
