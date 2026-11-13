@@ -222,9 +222,8 @@ class ToolManager:
             )
             metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
             document = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
-        except (
-            Exception
-        ) as e:  # pylint: disable=broad-exception-caught  # every read failure is reported as the cause
+        # every read failure (RPC, gateway, JSON) is reported as the cause
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error(f"Error fetching tools for service {service_id}: {e}")
             return MetadataRead(None, f"{type(e).__name__}: {e}")
         if not isinstance(document, dict):
@@ -237,10 +236,12 @@ class ToolManager:
         """
         Fetch tools metadata for specified service ID.
 
+        Propagates ``read_tools_metadata``'s ``ValueError`` when the metadata
+        hash address is not configured on this chain.
+
         :param service_id: The service ID of the mech
         :return: Dictionary containing tools and metadata, or None if unreadable
             (``read_tools_metadata`` says why)
-        :raises ValueError: If metadata hash address not configured
         """
         return self.read_tools_metadata(service_id).document
 

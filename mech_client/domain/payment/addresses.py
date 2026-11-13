@@ -69,13 +69,13 @@ def balance_tracker(chain: str, payment_type: PaymentType) -> Optional[str]:
     Name the balance tracker a prepaid top-up for this payment type pays.
 
     It is the contract ``DepositService`` and the auto-deposit after an
-    off-chain HTTP 402 send funds to.
+    off-chain HTTP 402 send funds to. An unknown chain propagates
+    ``get_chain_id``'s ``ValueError``.
 
     :param chain: Chain name
     :param payment_type: The mech's payment type
     :return: The tracker address, or None when this payment type is not topped
         up by a deposit on this chain (NVM subscriptions, or no tracker deployed)
-    :raises ValueError: If the chain is unknown
     """
     chain_id = get_chain_id(chain)
     trackers = DEPOSIT_TRACKERS.get(payment_type)

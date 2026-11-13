@@ -714,6 +714,7 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     :return: What ``send`` returned
     :raises NonceRefused: naming the rule, when the mech did not accept it
     """
+    refused_before_signing = NOT_SENT_ERRORS + tuple(not_sent)
     with allocator.reserve(
         chain, sender, mech, read_map_nonces, timeout=timeout, salt=salt
     ) as slot:
@@ -731,7 +732,7 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
                     salt=salt,
                 )
                 raise NonceRefused(REJECTION_RULES[outcome], _refusal(e)) from e
-            except NOT_SENT_ERRORS + not_sent:
+            except refused_before_signing:
                 slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
                 raise
             slot.answered(ACCEPTED, mech=mech, salt=salt)
