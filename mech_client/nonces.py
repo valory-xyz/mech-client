@@ -58,11 +58,11 @@ from typing import (
 )
 
 from mech_client.services.marketplace_service import (
-    RESPONSE_TIMEOUT_SECONDS,
     MechPriceExceeded,
     OffchainRequestRejected,
     OffchainRequestResult,
     OffchainTopUpFailed,
+    RESPONSE_TIMEOUT_SECONDS,
     RequestIdMismatch,
 )
 

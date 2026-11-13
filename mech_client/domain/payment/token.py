@@ -21,7 +21,7 @@
 
 from typing import Optional, TYPE_CHECKING
 
-from mech_client.domain.payment.addresses import token_address, tracker_address
+from mech_client.domain.payment import addresses
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
@@ -117,25 +117,25 @@ class TokenPaymentStrategy(PaymentStrategy):
         """
         Get the token balance tracker contract address for this chain.
 
-        Propagates ``ValueError`` from ``tracker_address`` when no tracker is
+        Propagates ``ValueError`` from ``addresses.tracker_address`` when no tracker is
         registered for the token on the active chain.
 
         :return: Balance tracker contract address
         """
         self._check_token_type()
-        return tracker_address(self.payment_type, self.chain_id)
+        return addresses.tracker_address(self.payment_type, self.chain_id)
 
     def get_payment_token_address(self) -> Optional[str]:
         """
         Get the payment token contract address.
 
-        Propagates ``ValueError`` from ``token_address`` when the token is not
+        Propagates ``ValueError`` from ``addresses.token_address`` when the token is not
         deployed on the active chain.
 
         :return: Token contract address
         """
         self._check_token_type()
-        return token_address(self.payment_type, self.chain_id)
+        return addresses.token_address(self.payment_type, self.chain_id)
 
     def _check_token_type(self) -> None:
         """Refuse a payment type that is not an OLAS or USDC token.
