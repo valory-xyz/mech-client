@@ -36,21 +36,29 @@ class TestToolServiceInitialization:
         service = ToolService(chain_config="gnosis")
 
         assert service.chain_config == "gnosis"
-        mock_tool_manager.assert_called_once_with("gnosis")
+        mock_tool_manager.assert_called_once_with("gnosis", rpc_url=None)
+
+    @patch("mech_client.services.tool_service.ToolManager")
+    def test_initialization_passes_its_rpc_url(
+        self, mock_tool_manager: MagicMock
+    ) -> None:
+        """ToolService(rpc_url=...) reads tools through that RPC."""
+        ToolService(chain_config="gnosis", rpc_url="https://caller.example")
+
+        mock_tool_manager.assert_called_once_with(
+            "gnosis", rpc_url="https://caller.example"
+        )
 
 
 class TestToolServiceOperations:
     """Tests for tool service operations."""
-
 
     @patch("mech_client.services.tool_service.ToolManager")
     def test_get_description(self, mock_tool_manager: MagicMock) -> None:
         """Test getting tool description."""
         mock_manager_instance = MagicMock()
         mock_tool_manager.return_value = mock_manager_instance
-        mock_manager_instance.get_tool_description.return_value = (
-            "GPT-4 language model"
-        )
+        mock_manager_instance.get_tool_description.return_value = "GPT-4 language model"
 
         service = ToolService(chain_config="gnosis")
         result = service.get_description(tool_id="1-openai-gpt-4")
