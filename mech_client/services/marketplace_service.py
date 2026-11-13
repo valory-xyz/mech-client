@@ -19,14 +19,18 @@
 
 """Marketplace service for orchestrating mech requests."""
 
+import functools
+import inspect
 import logging
 from dataclasses import dataclass
 from typing import (
     Any,
+    Callable,
     Dict,
     FrozenSet,
     List,
     Optional,
+    Sequence,
     Tuple,
     TypedDict,
     Union,
@@ -63,6 +67,7 @@ logger = logging.getLogger(__name__)
 # HTTP status the offchain mech returns when the requester's prepaid balance is
 # insufficient (structured 402 challenge, see mech task_execution handlers).
 HTTP_PAYMENT_REQUIRED = 402
+HTTP_SERVICE_UNAVAILABLE = 503
 # Outbound HTTP timeout (seconds) for the offchain request POST.
 OFFCHAIN_HTTP_TIMEOUT = 30
 # Hard cap on auto-deposit: refuse to top up more than this multiple of the
@@ -85,6 +90,21 @@ _MAX_AUTO_DEPOSIT_RATIO = 10
 _SUPPORTED_DEPOSIT_PAYMENT_TYPES: FrozenSet[PaymentType] = frozenset(
     {PaymentType.NATIVE, PaymentType.OLAS_TOKEN, PaymentType.USDC_TOKEN}
 )
+
+
+def _accepted_note(accepted_ids: List[str], request_nonces: List[int]) -> str:
+    """Name the requests accepted earlier in a failed call, if any.
+
+    :param accepted_ids: Hex ids accepted earlier in the call, in order
+    :param request_nonces: Nonces of every request in the call
+    :return: The note to append to the error message, or ""
+    """
+    if not accepted_ids:
+        return ""
+    accepted = ", ".join(
+        f"{rid} (nonce {n})" for rid, n in zip(accepted_ids, request_nonces)
+    )
+    return f" Accepted earlier in this call, not watched: {accepted}."
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -136,8 +156,103 @@ class OffchainRequestResult(TypedDict):
 
     tx_hash: None
     request_ids: List[str]
+    nonces: List[int]
     receipt: None
     deliveries: Dict[str, DeliveryResult]
+
+
+class _OffchainRequestError(ValueError):
+    """An error about one request of an offchain call."""
+
+    def __reduce__(self) -> Tuple[Any, ...]:
+        """Rebuild with the keyword-only fields, which ``args`` lacks.
+
+        :return: The callable and arguments that rebuild this exception
+        """
+        fields = {k: v for k, v in vars(self).items() if not k.startswith("_")}
+        return functools.partial(type(self), str(self), **fields), ()
+
+
+class OffchainRequestRejected(_OffchainRequestError):
+    """The mech answered an offchain request with an HTTP error."""
+
+    def __init__(  # pylint: disable=too-many-arguments  # the spec's fields, kw-only
+        self,
+        message: str,
+        *,
+        request_id: str,
+        nonce: int,
+        status: int,
+        reason: str,
+        unsent: List[int],
+        deposited: int = 0,
+    ) -> None:
+        """
+        Initialize the rejection.
+
+        :param message: Human-readable error message
+        :param request_id: Hex id of the rejected request, as in ``request_ids``
+        :param nonce: Marketplace nonce of the rejected request
+        :param status: HTTP status the mech answered with
+        :param reason: The mech's ``reason`` as a string, else the HTTP reason
+        :param unsent: Nonces of this call after the rejected one, not sent
+        :param deposited: Amount auto-deposited for this request before the
+            mech answered 402 again, else 0
+        """
+        super().__init__(message)
+        self.request_id = request_id
+        self.nonce = nonce
+        self.status = status
+        self.reason = reason
+        self.unsent = unsent
+        self.deposited = deposited
+
+    @property
+    def retryable(self) -> bool:
+        """True for HTTP 503; the mech uses it mostly, not only, for transient failures."""
+        return self.status == HTTP_SERVICE_UNAVAILABLE
+
+
+class OffchainTopUpFailed(_OffchainRequestError):
+    """The auto top-up after the mech's HTTP 402 failed; the request was not accepted."""
+
+    def __init__(
+        self, message: str, *, request_id: str, nonce: int, unsent: List[int]
+    ) -> None:
+        """
+        Initialize the failure.
+
+        :param message: Human-readable error message, naming the top-up's cause
+        :param request_id: Hex id of the request, as in ``request_ids``
+        :param nonce: Marketplace nonce of the request
+        :param unsent: Nonces of this call after this one, not sent
+        """
+        super().__init__(message)
+        self.request_id = request_id
+        self.nonce = nonce
+        self.unsent = unsent
+
+
+class _MechRefusal(ValueError):
+    """A 402 path the offchain request could not get past."""
+
+    def __init__(
+        self, message: str, response: requests.Response, deposited: int = 0
+    ) -> None:
+        """
+        Initialize the refusal.
+
+        :param message: Human-readable error message
+        :param response: The mech's last HTTP response
+        :param deposited: Amount auto-deposited before that response
+        """
+        super().__init__(message)
+        self.response = response
+        self.deposited = deposited
+
+
+class _TopUpFailure(ValueError):
+    """An auto top-up that failed on the requester's side."""
 
 
 #: The two are a discriminated union rather than one shape with optional
@@ -246,6 +361,8 @@ class MarketplaceService(
         auto_deposit: bool = False,
         extra_attributes: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
+        nonces: Optional[Sequence[int]] = None,
+        on_request_id: Optional[Callable[[bytes, int], None]] = None,
     ) -> RequestResult:
         """
         Send marketplace request(s) to mech(s).
@@ -257,21 +374,42 @@ class MarketplaceService(
         :param use_offchain: Use offchain mech (URL discovered from metadata)
         :param auto_deposit: On an offchain HTTP 402, top up the prepaid balance
             with the shortfall and retry once (only applies to the offchain path)
-        :param extra_attributes: Extra attributes for metadata
+        :param extra_attributes: Extra attributes for metadata. An
+            ``extra_attributes["nonce"]`` replaces the random metadata salt,
+            so the same inputs sign the same request id.
         :param timeout: Timeout for delivery watching
+        :param nonces: Offchain only: the marketplace nonce for each prompt,
+            instead of ``mapNonces(sender) + i``. Integers, strictly
+            increasing, none below ``mapNonces(sender)``.
+        :param on_request_id: Offchain only, synchronous: called with each raw
+            32-byte request id and its nonce just before the request is
+            signed. If it raises, that request and the rest of the call are
+            neither signed nor sent; earlier ones were already sent.
         :return: A :class:`RequestResult` with ``tx_hash`` and ``receipt``
             (both ``None`` on the offchain path, which has no transaction),
             ``request_ids``, and ``deliveries`` mapping each request ID to a
             :class:`DeliveryResult` carrying the parsed content the mech
             delivered plus the gateway URL it was read from. ``deliveries``
             has the same shape regardless of whether delivery was on-chain
-            or offchain.
+            or offchain. The offchain result also lists the ``nonces`` used.
+            A mech's HTTP error raises :class:`OffchainRequestRejected`.
         """
         # Validate inputs
         if len(prompts) != len(tools):
             raise ValueError(
                 f"Number of prompts ({len(prompts)}) must match number of tools ({len(tools)})"
             )
+        if not use_offchain and (nonces is not None or on_request_id is not None):
+            raise ValueError("nonces and on_request_id apply only to offchain requests")
+        if nonces is not None:
+            if len(nonces) != len(prompts):
+                raise ValueError(
+                    f"Number of nonces ({len(nonces)}) must match number of prompts ({len(prompts)})"
+                )
+            if not all(isinstance(n, int) and not isinstance(n, bool) for n in nonces):
+                raise ValueError(f"Nonces {list(nonces)} must be integers")
+            if any(b <= a for a, b in zip(nonces, nonces[1:])):
+                raise ValueError(f"Nonces {list(nonces)} must be strictly increasing")
 
         # Get marketplace contract
         marketplace_contract = self._get_marketplace_contract()
@@ -315,6 +453,8 @@ class MarketplaceService(
                 extra_attributes=extra_attributes,
                 timeout=timeout or 300.0,
                 auto_deposit=auto_deposit,
+                nonces=nonces,
+                on_request_id=on_request_id,
             )
 
         # On-chain flow
@@ -444,6 +584,8 @@ class MarketplaceService(
         extra_attributes: Optional[Dict[str, Any]],
         timeout: float,
         auto_deposit: bool = False,
+        nonces: Optional[Sequence[int]] = None,
+        on_request_id: Optional[Callable[[bytes, int], None]] = None,
     ) -> OffchainRequestResult:
         """
         Send offchain request to mech HTTP endpoint.
@@ -459,6 +601,8 @@ class MarketplaceService(
         :param extra_attributes: Extra attributes for metadata
         :param timeout: Delivery watching timeout
         :param auto_deposit: On a 402, deposit the shortfall and retry once
+        :param nonces: Marketplace nonce per prompt (see ``send_request``)
+        :param on_request_id: Pre-sign hook (see ``send_request``)
         :return: Dictionary with request results
         """
         logger.info("Sending offchain mech marketplace request...")
@@ -470,10 +614,19 @@ class MarketplaceService(
         # for the Safe branch, plain ecrecover for the EOA branch).
         sender = self._resolve_offchain_sender()
         current_nonce = marketplace_contract.functions.mapNonces(sender).call()
+        if nonces is None:
+            request_nonces = [current_nonce + i for i in range(len(prompts))]
+        else:
+            request_nonces = list(nonces)
+            stale = [n for n in request_nonces if n < current_nonce]
+            if stale:
+                raise ValueError(
+                    f"Nonce(s) {stale} are below the requester's marketplace "
+                    f"nonce {current_nonce} and can never settle."
+                )
 
         # Prepare and send each request
-        request_ids_hex = []
-        request_ids_int = []
+        request_ids_hex: List[str] = []
 
         for i, (prompt, tool) in enumerate(zip(prompts, tools)):
             # Prepare metadata (get hash and data without uploading)
@@ -493,7 +646,7 @@ class MarketplaceService(
             # Calculate request ID
             # payment_type.value is already a hex string, just add 0x prefix
             payment_type_hex = "0x" + payment_type.value
-            nonce = current_nonce + i
+            nonce = request_nonces[i]
             request_id_bytes = marketplace_contract.functions.getRequestId(
                 ensure_checksummed_address(priority_mech_address),
                 sender,
@@ -505,6 +658,16 @@ class MarketplaceService(
 
             request_id_int = int.from_bytes(request_id_bytes, byteorder="big")
             request_id_hex = request_id_bytes.hex()
+
+            if on_request_id is not None:
+                returned = cast(Any, on_request_id)(bytes(request_id_bytes), nonce)
+                if inspect.isawaitable(returned):
+                    if inspect.iscoroutine(returned):
+                        returned.close()
+                    raise TypeError(
+                        "on_request_id must be synchronous; an awaitable would "
+                        "never run before the request is signed"
+                    )
 
             # Signature encoding depends on how the marketplace verifies the
             # requester: Safe.isValidSignature (agent mode) requires the
@@ -529,24 +692,34 @@ class MarketplaceService(
                 response = self._post_offchain_request(
                     url, payload, payment_type, auto_deposit, max_delivery_rate
                 )
-                if not response.ok:
-                    reason = ""
-                    try:
-                        reason = response.json().get("reason", "")
-                    except Exception:  # pylint: disable=broad-except  # nosec B110
-                        reason = ""
-                    raise ValueError(
-                        f"Offchain request rejected: {reason or response.reason} "
-                        f"(HTTP {response.status_code})"
-                    )
-
-                request_ids_hex.append(request_id_hex)
-                request_ids_int.append(str(request_id_int))
-
-                logger.info(f"Created offchain request with ID {request_id_int}")
-
+            except _MechRefusal as e:
+                raise self._rejection(
+                    e.response,
+                    request_id_hex,
+                    request_nonces,
+                    request_ids_hex,
+                    str(e),
+                    e.deposited,
+                ) from e
+            except _TopUpFailure as e:
+                raise OffchainTopUpFailed(
+                    str(e) + _accepted_note(request_ids_hex, request_nonces),
+                    request_id=request_id_hex,
+                    nonce=nonce,
+                    unsent=request_nonces[i + 1 :],
+                ) from e
             except requests.exceptions.RequestException as e:
-                raise ValueError(f"Failed to send offchain request: {e}") from e
+                raise ValueError(
+                    f"Failed to send offchain request: {e}"
+                    + _accepted_note(request_ids_hex, request_nonces)
+                ) from e
+            if not response.ok:
+                raise self._rejection(
+                    response, request_id_hex, request_nonces, request_ids_hex
+                )
+
+            request_ids_hex.append(request_id_hex)
+            logger.info(f"Created offchain request with ID {request_id_int}")
 
         # Watch for offchain delivery
         logger.info("Waiting for offchain mech marketplace deliver...")
@@ -556,9 +729,49 @@ class MarketplaceService(
         return {
             "tx_hash": None,  # No on-chain transaction for offchain requests
             "request_ids": request_ids_hex,
+            "nonces": request_nonces,
             "deliveries": results,
             "receipt": None,  # No receipt for offchain requests
         }
+
+    @staticmethod
+    def _rejection(
+        response: requests.Response,
+        request_id: str,
+        request_nonces: List[int],
+        accepted_ids: List[str],
+        message: Optional[str] = None,
+        deposited: int = 0,
+    ) -> OffchainRequestRejected:
+        """Build the error for a request the mech answered with an HTTP error.
+
+        :param response: The mech's HTTP response
+        :param request_id: Hex id of the rejected request
+        :param request_nonces: Nonces of every request in the call
+        :param accepted_ids: Hex ids accepted earlier in the call, in order
+        :param message: Error message, else the generic rejection text
+        :param deposited: Amount auto-deposited before the response
+        :return: The rejection to raise
+        """
+        index = len(accepted_ids)
+        try:
+            reason = str(response.json().get("reason") or "")
+        except (ValueError, AttributeError):
+            reason = ""
+        reason = reason or response.reason
+        if message is None:
+            message = (
+                f"Offchain request rejected: {reason} (HTTP {response.status_code})"
+            )
+        return OffchainRequestRejected(
+            message + _accepted_note(accepted_ids, request_nonces),
+            request_id=request_id,
+            nonce=request_nonces[index],
+            status=response.status_code,
+            reason=reason,
+            unsent=request_nonces[index + 1 :],
+            deposited=deposited,
+        )
 
     def _resolve_offchain_sender(self) -> str:
         """Return the requester address bound into the offchain request.
@@ -703,21 +916,22 @@ class MarketplaceService(
         :param max_delivery_rate: the requester's signed per-request maximum,
             used to cap the auto-deposit amount (see ``_MAX_AUTO_DEPOSIT_RATIO``).
         :return: the (possibly retried) HTTP response.
-        :raises ValueError: on a 402 when auto-deposit is disabled, on a
-            non-positive shortfall that auto-deposit can't act on, on a deposit
-            request that would exceed the safety cap, or on a second 402 after
-            the deposit landed.
+        :raises _MechRefusal: on a 402 when auto-deposit is disabled, on a
+            non-positive shortfall that auto-deposit can't act on, or on a
+            second 402 after the deposit landed.
+        :raises _TopUpFailure: if the auto-deposit fails on the requester's side.
         """
         response = self._do_offchain_post(url, payload)
         if response.status_code == HTTP_PAYMENT_REQUIRED:
             challenge = self._parse_402_challenge(response)
             if not auto_deposit:
-                raise ValueError(
+                raise _MechRefusal(
                     "Offchain request requires payment: need "
                     f"{challenge.required} (current balance "
                     f"{challenge.current_balance}) deposited to "
                     f"{challenge.pay_to}. Re-run with auto-deposit enabled or "
-                    f"top up your prepaid balance. ({challenge.error})"
+                    f"top up your prepaid balance. ({challenge.error})",
+                    response,
                 )
             if challenge.shortfall <= 0:
                 # Auto-deposit can't do anything useful here: either the body
@@ -728,14 +942,20 @@ class MarketplaceService(
                 # situation honestly instead of running a no-op deposit + retry
                 # that would otherwise hit the second-402 path with a message
                 # claiming a deposit happened.
-                raise ValueError(
+                raise _MechRefusal(
                     "Offchain request rejected with HTTP 402 but the challenge "
                     f"reports no shortfall (required={challenge.required}, "
                     f"current balance={challenge.current_balance}). The mech "
                     f"may be returning a malformed body or a stale balance. "
-                    f"({challenge.error})"
+                    f"({challenge.error})",
+                    response,
                 )
-            self._auto_deposit_for_402(payment_type, challenge, max_delivery_rate)
+            try:
+                deposited = self._auto_deposit_for_402(
+                    payment_type, challenge, max_delivery_rate
+                )
+            except ValueError as e:
+                raise _TopUpFailure(str(e)) from e
             response = self._do_offchain_post(url, payload)
             if response.status_code == HTTP_PAYMENT_REQUIRED:
                 # The deposit tx already confirmed (DepositService waits for
@@ -745,13 +965,15 @@ class MarketplaceService(
                 # sees how much is still short and which balance tracker holds
                 # the deposit they just paid for.
                 retry = self._parse_402_challenge(response)
-                raise ValueError(
+                raise _MechRefusal(
                     "Auto-deposit did not clear the 402: deposited to "
                     f"{retry.pay_to} but the mech still requires "
                     f"{retry.required} (current balance {retry.current_balance}, "
                     f"remaining shortfall {retry.shortfall}). The deposit may "
                     f"not be mined yet, the price may have moved, or the asset "
-                    f"may be wrong. ({retry.error})"
+                    f"may be wrong. ({retry.error})",
+                    response,
+                    deposited=deposited,
                 )
         self._log_payment_receipt(response)
         return response
@@ -805,7 +1027,7 @@ class MarketplaceService(
         payment_type: PaymentType,
         challenge: PaymentChallenge,
         max_delivery_rate: int,
-    ) -> None:
+    ) -> int:
         """Deposit the 402 shortfall into the prepaid balance.
 
         Refuses to deposit when the shortfall exceeds
@@ -815,11 +1037,13 @@ class MarketplaceService(
         :param payment_type: the request's payment type (native vs token).
         :param challenge: the parsed 402 challenge.
         :param max_delivery_rate: the requester's signed per-request maximum.
+        :return: the amount deposited, in a confirmed transaction.
         :raises ValueError: if the payment type doesn't support auto-deposit,
-            or if the requested deposit would exceed the safety cap.
+            if the requested deposit would exceed the safety cap, or if the
+            deposit transaction reverted.
         """
         if challenge.shortfall <= 0:
-            return
+            return 0
         if payment_type not in _SUPPORTED_DEPOSIT_PAYMENT_TYPES:
             raise ValueError(
                 f"Auto-deposit is not supported for payment type {payment_type.name}"
@@ -860,16 +1084,22 @@ class MarketplaceService(
         # AND get a branch here; the assertion-shaped raise below catches the
         # mismatch if only the set is updated.
         if payment_type == PaymentType.NATIVE:
-            deposit_service.deposit_native(challenge.shortfall)
+            tx_hash = deposit_service.deposit_native(challenge.shortfall)
         elif payment_type == PaymentType.OLAS_TOKEN:
-            deposit_service.deposit_token(challenge.shortfall, "olas")
+            tx_hash = deposit_service.deposit_token(challenge.shortfall, "olas")
         elif payment_type == PaymentType.USDC_TOKEN:
-            deposit_service.deposit_token(challenge.shortfall, "usdc")
+            tx_hash = deposit_service.deposit_token(challenge.shortfall, "usdc")
         else:  # pragma: no cover - guarded by the membership check above
             raise ValueError(
                 f"Internal error: {payment_type.name} is listed as supported "
                 f"but has no deposit dispatch branch."
             )
+        # DepositService waits for the receipt but does not check its status.
+        if wait_for_receipt(tx_hash, self.ledger_api).get("status") != 1:
+            raise ValueError(
+                f"Auto-deposit transaction {tx_hash} reverted; nothing was deposited."
+            )
+        return challenge.shortfall
 
     @staticmethod
     def _log_payment_receipt(response: requests.Response) -> None:

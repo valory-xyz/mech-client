@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Base/Polygon Marketplace and registry commands require `MECHX_MARKETPLACE_BASE_SQUID_URL`, `MECHX_MARKETPLACE_POLYGON_SQUID_URL`, `MECHX_REGISTRY_BASE_SQUID_URL` and `MECHX_REGISTRY_POLYGON_SQUID_URL`. Committed endpoint defaults are blank; configure these before upgrading. Chain config now declares the independent `registry_subgraph_dialect` and endpoint-variable names.
 
+## [0.25.0] - 2026-11-12
+
+### ✨ Added
+
+- `send_request(..., nonces=[...])` sets the marketplace nonce of each offchain request, instead of `mapNonces(requester) + i`. The nonces must be integers, strictly increasing, one per prompt and none below `mapNonces`; otherwise `ValueError` is raised before anything is signed.
+- `send_request(..., on_request_id=fn)` calls `fn(request_id, nonce)` with the raw 32-byte id for each offchain request just before it is signed. If `fn` raises, that request and the rest of the call are neither signed nor sent. An async `fn` is refused.
+- Passing `nonces` or `on_request_id` without `use_offchain=True` raises `ValueError`.
+- The offchain result lists the `nonces` used, matching `request_ids`.
+- `OffchainRequestRejected`, a `ValueError`, raised when the mech answers an offchain request with an HTTP error, including its 402s. It carries `request_id`, `nonce`, `status`, the mech's `reason` as a string, `retryable` (HTTP 503), `unsent` (the later nonces of the call, not sent) and `deposited` (the amount auto-deposited in a confirmed transaction before the mech answered 402 again). Requests accepted earlier in the same call are named in its message and not watched. A transport error stays a plain `ValueError`.
+- `OffchainTopUpFailed`, a `ValueError`, raised when the auto top-up after the mech's 402 fails on the requester's side (safety cap, balance, reverted deposit), so the request was not accepted. It carries `request_id`, `nonce` and `unsent`, and its message names requests accepted earlier in the call.
 
 ## [0.24.0] - 2026-10-09
 
