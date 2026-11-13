@@ -108,6 +108,64 @@ def test_an_empty_content_beside_a_tool_call_adds_no_blank_lead() -> None:
     assert report == {"completion": "```bash\nt\n```", "usage": {}}
 
 
+BLOCK = "```bash\nt\n```"
+# per delivery key: an object using it that yields a completion, and one that does not
+YIELDING = {
+    "response": ({"response": "r"}, "r"),
+    "result": ({"result": "r"}, "r"),
+    "content": ({"content": "r"}, "r"),
+    "text": ({"text": "r"}, "r"),
+    "completion": ({"completion": "r"}, "r"),
+    "tool_calls": ({"tool_calls": [{"function": {"name": "t"}}]}, BLOCK),
+    "choices": ({"choices": [{"message": {"content": "r"}}]}, "r"),
+}
+NOT_YIELDING = {
+    "response": {"response": 5},
+    "result": {"result": None},
+    "content": {"content": 1},
+    "text": {"text": []},
+    "completion": {"completion": {}},
+    "tool_calls": {"tool_calls": "x"},
+    "choices": {"choices": []},
+}
+MESSAGE_KEYS = ["content", "text", "completion", "tool_calls", "choices"]
+
+
+@pytest.mark.parametrize("key", list(YIELDING))
+def test_a_delivery_string_with_each_key_is_decoded_when_it_yields(key: str) -> None:
+    """A whole delivery sent as a JSON string is read through its structure."""
+    obj, completion = YIELDING[key]
+    assert chat_report(json.dumps(obj)) == {"completion": completion, "usage": {}}
+
+
+@pytest.mark.parametrize("key", list(NOT_YIELDING))
+def test_a_delivery_string_with_each_key_stays_text_when_it_does_not(key: str) -> None:
+    """Without a completion through the structure, the string is the completion."""
+    text = json.dumps(NOT_YIELDING[key])
+    assert chat_report(text) == {"completion": text, "usage": {}}
+
+
+@pytest.mark.parametrize("key", MESSAGE_KEYS)
+def test_a_result_string_with_each_message_key_is_decoded_when_it_yields(
+    key: str,
+) -> None:
+    """A result JSON-encoded as a string is read as the message it holds."""
+    obj, completion = YIELDING[key]
+    report = chat_report({"result": json.dumps(obj)})
+    assert report == {"completion": completion, "usage": {}}
+
+
+@pytest.mark.parametrize(
+    "obj",
+    [NOT_YIELDING[key] for key in MESSAGE_KEYS]
+    + [{"result": "yes"}, {"response": "yes"}, {"answer": 42}],
+)
+def test_a_result_string_that_is_not_a_message_is_the_completion(obj: Any) -> None:
+    """One level only: a model's own JSON answer, wrapper keys included, is kept."""
+    text = json.dumps(obj)
+    assert chat_report({"result": text}) == {"completion": text, "usage": {}}
+
+
 def test_a_json_string_literal_is_its_text() -> None:
     """A result JSON-encoded as a string, as mechs usually send it, is decoded."""
     assert chat_report({"result": '"hi"'}) == {"completion": "hi", "usage": {}}
