@@ -99,8 +99,15 @@ PAYMENT_LABELS = {
 UNKNOWN_PAYMENT = "unknown"
 # What reading the metadata document can fail with: the RPC (web3 errors,
 # ValueError), the gateway (requests errors, HTTP statuses included, are
-# OSErrors) or the JSON (ValueError). Anything else is a bug and propagates.
-METADATA_READ_ERRORS = (OSError, ValueError, NotImplementedError, Web3Exception)
+# OSErrors) or the JSON (ValueError, or RecursionError for a document nested
+# past the decoder's limit). Anything else is a bug and propagates.
+METADATA_READ_ERRORS = (
+    OSError,
+    ValueError,
+    NotImplementedError,
+    RecursionError,
+    Web3Exception,
+)
 OFFCHAIN_URL_MISSING = "no 'url' in metadata; this mech serves on-chain requests only"
 
 
@@ -232,13 +239,13 @@ class ToolManager:
                 None, f"metadata hash contract not deployed on {self.chain_config}"
             )
 
+        # packaging: a missing or broken ABI is a bug, not an unreadable document
+        metadata_contract = get_contract(
+            self.mech_config.complementary_metadata_hash_address,
+            get_abi("ComplementaryServiceMetadata.json"),
+            self.ledger_api,
+        )
         try:
-            abi = get_abi("ComplementaryServiceMetadata.json")
-            metadata_contract = get_contract(
-                self.mech_config.complementary_metadata_hash_address,
-                abi,
-                self.ledger_api,
-            )
             metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
             response = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT)
             response.raise_for_status()

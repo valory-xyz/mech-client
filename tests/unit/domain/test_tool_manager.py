@@ -19,6 +19,7 @@
 
 """Tests for tool manager."""
 
+import json
 import socket
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -503,7 +504,6 @@ class TestGetOffchainUrl:
         # Create manager
         manager = ToolManager(chain_config="gnosis")
 
-        # Mock fetch_tools_metadata to return metadata with url
         manager.read_tools_metadata = MagicMock(  # type: ignore
             return_value=MetadataRead(
                 {"url": "https://mech.example.com/", "tools": ["openai-gpt-4"]},
@@ -530,7 +530,6 @@ class TestGetOffchainUrl:
         # Create manager
         manager = ToolManager(chain_config="gnosis")
 
-        # Mock fetch_tools_metadata to return metadata without url
         manager.read_tools_metadata = MagicMock(  # type: ignore
             return_value=MetadataRead(
                 {"tools": ["openai-gpt-4"], "toolMetadata": {}}, None
@@ -553,7 +552,6 @@ class TestGetOffchainUrl:
         # Create manager
         manager = ToolManager(chain_config="gnosis")
 
-        # Mock fetch_tools_metadata to return None
         manager.read_tools_metadata = MagicMock(  # type: ignore
             return_value=MetadataRead(None, "Timeout: slow")
         )
@@ -578,7 +576,6 @@ class TestGetOffchainUrl:
         # Create manager
         manager = ToolManager(chain_config="gnosis")
 
-        # Mock fetch_tools_metadata to return metadata with empty url
         manager.read_tools_metadata = MagicMock(  # type: ignore
             return_value=MetadataRead({"url": "  ", "tools": ["openai-gpt-4"]}, None)
         )
@@ -1419,6 +1416,36 @@ class TestReadToolsMetadata:
         )
         with pytest.raises(ValueError, match="not yet implemented on celo"):
             manager.fetch_tools_metadata(1)
+
+    def test_a_document_nested_past_the_decoder_limit_is_unreadable(self) -> None:
+        """RecursionError from the JSON decoder is a cause, not a crash."""
+        response = MagicMock()
+        response.json.side_effect = RecursionError("maximum recursion depth exceeded")
+
+        read = self._read("https://gateway/1", MagicMock(return_value=response))
+
+        assert read == MetadataRead(
+            None, "RecursionError: maximum recursion depth exceeded"
+        )
+
+    @pytest.mark.parametrize(
+        "error", [FileNotFoundError("no abi"), json.JSONDecodeError("bad", "", 0)]
+    )
+    def test_a_broken_abi_is_not_reported_as_unreadable_metadata(
+        self, error: Exception
+    ) -> None:
+        """A packaging bug propagates instead of reading as a transient failure."""
+        with (
+            patch(
+                "mech_client.domain.tools.manager.get_mech_config",
+                return_value=create_mock_mech_config(),
+            ),
+            patch("mech_client.domain.tools.manager.EthereumApi"),
+            patch("mech_client.domain.tools.manager.get_abi", side_effect=error),
+        ):
+            manager = ToolManager(chain_config="gnosis")
+            with pytest.raises(type(error)):
+                manager.read_tools_metadata(1)
 
     def test_a_programming_error_propagates(self) -> None:
         """Only read failures become the cause; a bug keeps its traceback."""
