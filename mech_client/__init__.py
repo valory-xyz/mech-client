@@ -37,11 +37,22 @@ instead of ``crypto``:
 
 __version__ = "0.26.0"
 
+# Chat contract
+from mech_client.domain.delivery.chat import ChatReport, chat_report, is_chat_prompt
+
+# Payment addresses
+from mech_client.domain.payment.addresses import balance_tracker, payment_token
+
+# Request id
+from mech_client.domain.request_id import request_digest
+
 # Signing
 from mech_client.domain.signing import LocalSigner, Signer
 
 # Domain models
+from mech_client.domain.tools.manager import ToolManager, offchain_blocker
 from mech_client.domain.tools.models import (
+    MetadataRead,
     ToolInfo,
     ToolSchema,
     ToolsForMarketplaceMech,
@@ -50,13 +61,38 @@ from mech_client.domain.tools.models import (
 # Configuration
 from mech_client.infrastructure.config.loader import get_mech_config
 from mech_client.infrastructure.config.payment_config import PaymentType
+
+# Off-chain nonce allocation
+from mech_client.nonces import (
+    NonceAllocator,
+    NonceRefused,
+    NonceRule,
+    Outcome,
+    RULE_ANSWER_UNKNOWN,
+    RULE_IN_FLIGHT,
+    RULE_NONCE_GAP,
+    RULE_NONCE_TAKEN,
+    RULE_QUEUE_LOCKED,
+    RULE_QUEUE_NOT_STALLED,
+    RULE_QUEUE_UNREADABLE,
+    RULE_QUEUE_UNWRITABLE,
+    RULE_REQUEST_REJECTED,
+    Reservation,
+    outcome_of,
+    send_with_nonce,
+)
 from mech_client.services.deposit_service import DepositService
 
 # Services - Main entry points for library users
 from mech_client.services.marketplace_service import (
     MarketplaceService,
+    MechInfo,
+    MechPriceExceeded,
     OffchainRequestRejected,
+    OffchainRequestResult,
     OffchainTopUpFailed,
+    PreSignHook,
+    RequestIdMismatch,
 )
 from mech_client.services.setup_service import SetupService
 from mech_client.services.subscription_service import SubscriptionService
@@ -90,6 +126,38 @@ __all__ = [
     # Configuration
     "get_mech_config",
     "PaymentType",
+    "payment_token",
+    "balance_tracker",
+    # Marketplace
+    "MechInfo",
+    "OffchainRequestResult",
+    "request_digest",
+    # Off-chain nonce allocation
+    "NonceAllocator",
+    "NonceRefused",
+    "NonceRule",
+    "RULE_IN_FLIGHT",
+    "RULE_NONCE_GAP",
+    "RULE_NONCE_TAKEN",
+    "RULE_REQUEST_REJECTED",
+    "RULE_ANSWER_UNKNOWN",
+    "RULE_QUEUE_UNREADABLE",
+    "RULE_QUEUE_UNWRITABLE",
+    "RULE_QUEUE_NOT_STALLED",
+    "RULE_QUEUE_LOCKED",
+    "Outcome",
+    "Reservation",
+    "outcome_of",
+    "send_with_nonce",
+    "PreSignHook",
+    # Tools and off-chain capability
+    "ToolManager",
+    "MetadataRead",
+    "offchain_blocker",
+    # Chat contract
+    "ChatReport",
+    "chat_report",
+    "is_chat_prompt",
     # Signing
     "Signer",
     "LocalSigner",
@@ -112,4 +180,6 @@ __all__ = [
     "DeliveryTimeoutError",
     "OffchainRequestRejected",
     "OffchainTopUpFailed",
+    "RequestIdMismatch",
+    "MechPriceExceeded",
 ]

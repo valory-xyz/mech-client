@@ -21,10 +21,10 @@
 
 from typing import Optional, TYPE_CHECKING
 
+from mech_client.domain.payment.addresses import tracker_address
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
-from mech_client.infrastructure.config import CHAIN_TO_NATIVE_BALANCE_TRACKER
 from mech_client.utils.validators import ensure_checksummed_address
 
 if TYPE_CHECKING:
@@ -75,12 +75,12 @@ class NativePaymentStrategy(PaymentStrategy):
         """
         Get the native balance tracker contract address for this chain.
 
-        Propagates ``ValueError`` from ``_lookup_balance_tracker`` when no
-        native balance tracker is registered for the active chain.
+        Propagates ``ValueError`` from ``tracker_address`` when no native
+        balance tracker is registered for the active chain.
 
         :return: Balance tracker contract address
         """
-        return self._lookup_balance_tracker(CHAIN_TO_NATIVE_BALANCE_TRACKER, "Native")
+        return tracker_address(self.payment_type, self.chain_id)
 
     def get_payment_token_address(self) -> Optional[str]:
         """

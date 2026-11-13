@@ -469,6 +469,8 @@ report = manager.mech_report(mech, metadata)         # dict with the same fields
 
 Call `manager.mech_report_or_terms(mech, metadata)` before paying: when the metadata or the chain record cannot be read it returns the Valory terms check alone, with a `report_note` saying why.
 
+To know why the metadata could not be read, use `manager.read_tools_metadata(service_id)`: it returns `MetadataRead(document, error)`, holding exactly one of the two, and never raises for an unreadable document. `offchain_blocker(read)` (from `mech_client`) turns it into the reason a Mech cannot take offchain requests, or `None`.
+
 
 You can use the Mech Client as a library in your Python project:
 

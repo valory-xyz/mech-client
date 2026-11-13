@@ -589,6 +589,64 @@ except OffchainRequestRejected as e:
 
 `extra_attributes["nonce"]` is unrelated to the marketplace nonce: it fixes the metadata salt, which is otherwise random. A resend signs the same request id only with the same salt, prompt, tool, marketplace nonce, mech, rate and requester.
 
+The request id that is hooked, signed and sent is always derived locally from the marketplace's `domainSeparator()` (`mech_client.request_digest`). `getRequestId` is still called over the RPC as a cross-check; if it answers anything else, `RequestIdMismatch` (a `ValueError` with `expected`, `reported` and `nonce`) is raised before `on_request_id` and before signing, so a lying RPC can only cause a refusal.
+
+### Allocating offchain nonces
+
+`mapNonces(requester)` only moves when a delivery settles, and the mech admits only the requester's next slot (`mapNonces` + accepted + settling). `NonceAllocator` keeps that queue for you, one per requester and chain, and only one allocator may use a store at a time, across processes too (it locks `mech_nonces.lock`, refuses a second one as `mech-queue-locked`, and `close()` releases it): one mech in flight, requests posted in nonce order, a slot held until `mapNonces` passes it. It persists its slots in `mech_nonces.json` under the directory you give it (created if missing), before each POST, so a restart never reissues a held nonce; a store that cannot be read or written refuses requests (`mech-queue-unreadable`, `mech-queue-unwritable`).
+
+```python
+import asyncio
+from pathlib import Path
+
+from mech_client import NonceAllocator, NonceRefused, send_with_nonce
+from mech_client.domain.delivery import OffchainDeliveryWatcher
+
+allocator = NonceAllocator(Path("~/.my-app").expanduser(), settle_timeout=1800, gap_retries=3)
+contract = service.marketplace_contract()
+sender = service.requester()  # the Safe in agent mode, else the signer's EOA, as send_request signs
+
+def send(nonce: int, hook):
+    # The queue lock is held until send returns, so keep the delivery wait
+    # short here and watch for the delivery outside the allocator.
+    return asyncio.run(service.send_request(
+        prompts=(prompt,), tools=(tool,), priority_mech=mech, use_offchain=True,
+        nonces=[nonce], on_request_id=hook, extra_attributes={"nonce": salt},
+        max_price=cap, timeout=1,
+    ))
+
+try:
+    result = send_with_nonce(
+        allocator, chain="gnosis", sender=sender, mech=mech, salt=salt,
+        read_map_nonces=lambda: contract.functions.mapNonces(sender).call(),
+        send=send, not_sent=(), timeout=60,
+    )
+except NonceRefused as e:
+    print(e.rule, e)  # one of the RULE_* constants, e.g. RULE_IN_FLIGHT, RULE_NONCE_GAP
+else:
+    # Outside the lock: the next request from this requester can go out now.
+    url = service.tool_manager.get_offchain_url(service.mech_info(mech).service_id)
+    deliveries = asyncio.run(OffchainDeliveryWatcher(url, timeout=300).watch(result["request_ids"]))
+    allocator.delivered("gnosis", sender, [
+        n for rid, n in zip(result["request_ids"], result["nonces"]) if rid in deliveries
+    ])
+```
+
+The allocator's lock covers whatever `send` does, so `send` should only send. `send(nonce, hook)` must pass `hook` (a `PreSignHook`) to `send_request` as `on_request_id`; a caller's own pre-sign hook goes to `send_with_nonce(on_request_id=...)`, which runs it inside `hook`. `send_request` calls the hook's `mark_received()` on entry and `mark_posting()` right before the POST, after signing: a failure after it was received but before posting (an unknown tool, a missing offchain URL, an RPC error, a refused or async hook, a signer error) reached no mech and frees the nonce. If `send` never passes the hook on, nothing tells those failures apart, so a failure holds the nonce as `unknown` and is logged. A 503 resends the same nonce and id up to `gap_retries` times. `outcome_of(error)` maps `OffchainRequestRejected` / `OffchainTopUpFailed` to what the answer means for the nonce: `retry` (503), `taken` (the 401 for a stale or duplicate nonce), `not_accepted` (any other 4xx, or a failed top-up) or `unknown` (other 5xx). An exception listed in `not_sent` (for failures after posting began that still reached no mech) also frees the nonce; any other failure once posting holds it as `unknown`, and is logged. Call `allocator.delivered(chain, sender, nonces)` when deliveries arrive. A slot's `settle_timeout` counts from its delivery, or, when no delivery was seen, from the end of the request's response timeout; a slot `mapNonces` has not passed by then stalls the queue, which then only probes at `mapNonces` until one is accepted. Once that probe is accepted, or answered `taken` over a slot of ours that is not itself overdue (the mech holds that request, and `mapNonces` has moved on to it), the stall clears and the later slots' settle clocks restart. A `taken` over the overdue slot `mapNonces` is stuck on leaves the stall and its clock as they are, so `hard_cancel` becomes allowed. An on-chain request from the same requester goes inside `allocator.exclusive(...)`. As a last resort, `allocator.hard_cancel(chain, sender, read_map_nonces, stalled_for=...)` yields `mapNonces` for one on-chain request once the queue has been stalled (`stalled_since`) at least that long, and restarts the stall clock (and the later slots' settle clocks) when it exits, so each cancel needs its own window; you decide who confirms that payment.
+
+### Price cap, mech info and RPC
+
+- `send_request(..., max_price=p)` raises `MechPriceExceeded` (`price`, `max_price`) before any deposit, signature or POST when the mech's `max_delivery_rate` times the number of prompts exceeds `p`, in the payment asset's base units. The cap covers that request price only; an auto-deposit after a 402 is bounded by its own cap.
+- `service.mech_info(mech)` returns `MechInfo(mech, service_id, payment_type, max_delivery_rate)`; `service.marketplace_contract()` returns the marketplace contract, and `service.requester()` the requester of record.
+- `payment_token(payment_type, chain)` names the token a mech is paid in (`None` for native), and `balance_tracker(chain, payment_type)` the tracker a prepaid top-up pays (`None` where no deposit applies).
+- `MarketplaceService`, `DepositService`, `ToolService` and `ToolManager` take `rpc_url=...` (a blank one is refused), so a process can talk to several chains without setting the process-wide `MECHX_CHAIN_RPC`. Left out, the RPC comes from `MECHX_CHAIN_RPC`, then the operate config (agent mode), then the default.
+
+### Offchain capability and chat
+
+`ToolManager.read_tools_metadata(service_id)` returns `MetadataRead(document, error)` and never raises for an unreadable document (a gateway error status, or a chain with no metadata contract, is a cause too; causes are redacted). A `MetadataRead` holds exactly one of the two (`MetadataRead.ok(document)`, `MetadataRead.failed(error)`). `offchain_blocker(read)` gives a short reason, naming the cause, why a mech cannot take offchain requests, or `None`.
+
+For chat tools the prompt is an OpenAI-style messages list as JSON (`is_chat_prompt(prompt)`), and `chat_report(delivery)` returns `{"completion", "usage"}` from a delivery, or `None`; `None` also covers a delivery that could not be fetched, so check `delivery.data` first to tell the two apart.
+
 You can also use the Mech Client to programmatically fetch tools for marketplace mechs in your Python project, as well as retrieve descriptions and input/output schemas for specific tools given their unique identifier.
 
 1. Set up the private key as specified [above](#set-up-the-private-key). Store the resulting key file (e.g., `ethereum_private_key.txt`) in a convenient and secure location.

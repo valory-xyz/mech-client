@@ -644,3 +644,121 @@ class TestMechConfigRequiresItsDialect:
                 price=1,
                 mech_marketplace_contract="0x" + "3" * 40,
             )
+
+
+class TestRpcOverride:
+    """A caller-given RPC wins over MECHX_CHAIN_RPC and the operate config."""
+
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    @patch("mech_client.infrastructure.config.chain_config.get_rpc_chain_id")
+    def test_ledger_config_takes_the_override_and_reads_no_other_rpc(
+        self,
+        mock_chain_id: MagicMock,
+        mock_operate: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The override is the address; no env var, operate config or mismatch probe.
+
+        The other ledger env overrides still apply alongside it.
+        """
+        monkeypatch.setenv("MECHX_CHAIN_RPC", "https://env.example")
+        monkeypatch.setenv("MECHX_LEDGER_CHAIN_ID", "4663")
+        config = LedgerConfig(
+            address="https://default.example",
+            chain_id=100,
+            poa_chain=False,
+            default_gas_price_strategy="eip1559",
+            is_gas_estimation_enabled=True,
+            agent_mode=True,
+            chain_config="gnosis",
+            rpc_override="https://caller.example",
+        )
+
+        assert config.address == "https://caller.example"
+        assert config.chain_id == 4663
+        mock_chain_id.assert_not_called()
+        mock_operate.assert_not_called()
+
+    @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
+    def test_mech_config_takes_the_override(
+        self, mock_operate: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The override is the rpc_url, whatever MECHX_CHAIN_RPC says.
+
+        The other env overrides still apply alongside it.
+        """
+        monkeypatch.setenv("MECHX_CHAIN_RPC", "https://env.example")
+        monkeypatch.setenv("MECHX_GAS_LIMIT", "777")
+        config = MechConfig(
+            complementary_metadata_hash_address="0x" + "0" * 40,
+            rpc_url="https://default.example",
+            ledger_config=MagicMock(),
+            gas_limit=1,
+            transaction_url="",
+            subgraph_url="",
+            price=1,
+            mech_marketplace_contract="0x" + "0" * 40,
+            subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
+            agent_mode=True,
+            chain_config="gnosis",
+            rpc_override="https://caller.example",
+        )
+
+        assert config.rpc_url == "https://caller.example"
+        assert config.gas_limit == 777
+        mock_operate.assert_not_called()
+
+    @patch("mech_client.infrastructure.config.chain_config.get_rpc_chain_id")
+    def test_get_mech_config_passes_the_rpc_to_both_configs(
+        self, mock_chain_id: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """get_mech_config(rpc_url=...) sets the ledger and the mech config alike."""
+        from mech_client.infrastructure.config import (  # pylint: disable=import-outside-toplevel
+            get_mech_config,
+        )
+
+        monkeypatch.setenv("MECHX_CHAIN_RPC", "https://env.example")
+        config = get_mech_config("gnosis", rpc_url="https://caller.example")
+
+        assert config.rpc_url == "https://caller.example"
+        assert config.ledger_config.address == "https://caller.example"
+        mock_chain_id.assert_not_called()
+        monkeypatch.delenv("MECHX_CHAIN_RPC")
+        assert get_mech_config("gnosis").rpc_url != "https://caller.example"
+
+    @pytest.mark.parametrize("blank", ["", "   "])
+    def test_a_blank_override_is_refused(self, blank: str) -> None:
+        """A blank rpc_url is a caller error, not "use the default"."""
+        with pytest.raises(ValueError, match="rpc_url must not be blank"):
+            LedgerConfig(
+                address="https://default.example",
+                chain_id=100,
+                poa_chain=False,
+                default_gas_price_strategy="eip1559",
+                is_gas_estimation_enabled=True,
+                rpc_override=blank,
+            )
+        from mech_client.infrastructure.config import (  # pylint: disable=import-outside-toplevel
+            get_mech_config,
+        )
+
+        with pytest.raises(ValueError, match="rpc_url must not be blank"):
+            get_mech_config("gnosis", rpc_url=blank)
+
+    def test_a_blank_override_is_refused_by_mech_config(self) -> None:
+        """MechConfig refuses it too, when built on its own."""
+        with pytest.raises(ValueError, match="rpc_url must not be blank"):
+            MechConfig(
+                complementary_metadata_hash_address="0x" + "0" * 40,
+                rpc_url="https://default.example",
+                ledger_config=MagicMock(),
+                gas_limit=1,
+                transaction_url="",
+                subgraph_url="",
+                price=1,
+                mech_marketplace_contract="0x" + "0" * 40,
+                subgraph_dialect="graph",
+                registry_subgraph_dialect="graph",
+                rpc_override="  ",
+            )

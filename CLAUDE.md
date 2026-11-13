@@ -288,9 +288,12 @@ All functions must have type hints. Mypy runs with `--disallow-untyped-defs`.
 All configuration values can be overridden via `MECHX_*` environment variables using `EnvironmentConfig`:
 
 **Priority order:**
-1. Environment variable (via `EnvironmentConfig`) - highest priority
-2. Stored operate config (agent mode only, for RPC)
-3. Default from `mech_client/configs/mechs.json` - lowest priority
+1. For the RPC only: the `rpc_url` argument of `MarketplaceService`, `DepositService`, `ToolService` or `ToolManager` (passed down as `get_mech_config(rpc_url=...)`) - highest priority, and neither the env var nor the operate config is read; a blank one raises `ValueError`
+2. Environment variable (via `EnvironmentConfig`)
+3. Stored operate config (agent mode only, for RPC)
+4. Default from `mech_client/configs/mechs.json` - lowest priority
+
+`MECHX_CHAIN_RPC` is process-global, so a library caller serving several chains passes `rpc_url` instead. Anything a service builds for itself (its `ToolManager`, the auto-deposit's `DepositService`) must inherit the service's `rpc_url`.
 
 **Implementation:**
 ```python
@@ -362,6 +365,17 @@ class MyContract(NVMContractWrapper):
 ```python
 from mech_client.infrastructure.config.constants import CHAIN_ID_GNOSIS, CHAIN_ID_TO_NAME
 ```
+
+### 12. Off-chain Payer Contract
+
+What an off-chain marketplace payer (Connect, a facilitator, pmini) needs lives here, not in each client, and is exported from `mech_client`:
+
+- **Request id**: always derived locally (`domain/request_id.py`). `getRequestId` stays as a cross-check; a mismatch raises `RequestIdMismatch` before `on_request_id` and before signing. Never sign the RPC's answer.
+- **Nonces**: `mech_client/nonces.py` (`NonceAllocator`, `send_with_nonce`, `outcome_of`). One allocator per store, enforced by a lock on `mech_nonces.lock`. Its store format (`mech_nonces.json`, `chain:sender` keys) is a compatibility surface: Connect's existing stores are read as-is, so add fields only as optional ones. `send_with_nonce` tells a request that reached no mech by its `PreSignHook` (`send(nonce, hook)`, passed on as `on_request_id`): `send_request` must call `mark_received()` first thing and `mark_posting()` right before the POST, and nothing that can fail without reaching the mech may come after that mark.
+- **Price cap**: `send_request(max_price=...)` is checked against `mech_info().max_delivery_rate` before any deposit, signature or POST.
+- **Metadata**: `ToolManager.read_tools_metadata` never raises for an unreadable document; the cause is in `MetadataRead.error`. Causes are redacted (`mech_client/utils/redaction.py` owns the rule). Never interpolate a library exception's text into an error a caller sees: name its type, chain it with `from e`, and log `redacted_cause(e)`. The off-chain failure text has one owner, `offchain_blocker`.
+- **Requester**: `MarketplaceService.requester()` is the address off-chain requests are signed for (Safe in agent mode, else EOA); key nonce queues on it.
+- On-chain request ids stay unprefixed hex in `request_ids` and `deliveries`; callers rely on it.
 
 ## Common Refactoring Pitfalls
 

@@ -27,7 +27,9 @@ from mech_client.infrastructure.config.constants import MECH_CONFIGS
 
 
 def get_mech_config(
-    chain_config: Optional[str] = None, agent_mode: bool = False
+    chain_config: Optional[str] = None,
+    agent_mode: bool = False,
+    rpc_url: Optional[str] = None,
 ) -> MechConfig:
     """Load mech configuration for a specific chain.
 
@@ -40,6 +42,8 @@ def get_mech_config(
     :param chain_config: Chain name (gnosis, base, polygon, optimism, robinhood).
                         If None, uses first chain in config.
     :param agent_mode: Whether running in agent mode (uses stored operate config)
+    :param rpc_url: RPC endpoint to use instead of MECHX_CHAIN_RPC, the operate
+        config and the mechs.json default; None keeps that lookup
     :return: MechConfig instance with loaded configuration
     :raises ValueError: If the chain entry lacks subgraph_dialect or registry_subgraph_dialect
     """
@@ -61,7 +65,10 @@ def get_mech_config(
 
         # Create LedgerConfig with agent_mode and chain_config context
         ledger_config = LedgerConfig(
-            **ledger_config_data, agent_mode=agent_mode, chain_config=chain_config
+            **ledger_config_data,
+            agent_mode=agent_mode,
+            chain_config=chain_config,
+            rpc_override=rpc_url,
         )
 
         mech_config = MechConfig(
@@ -69,5 +76,24 @@ def get_mech_config(
             ledger_config=ledger_config,
             agent_mode=agent_mode,
             chain_config=chain_config,
+            rpc_override=rpc_url,
         )
         return mech_config
+
+
+def get_chain_id(chain_config: str) -> int:
+    """Return a chain's id as ``mechs.json`` configures it.
+
+    Reads the file only: no environment override, RPC or operate lookup.
+
+    :param chain_config: Chain name (gnosis, base, polygon, optimism, robinhood)
+    :return: The chain id
+    :raises ValueError: If the chain is not in ``mechs.json``
+    """
+    with open(MECH_CONFIGS, "r", encoding="UTF-8") as file:
+        data = json.load(file)
+    if chain_config not in data:
+        raise ValueError(
+            f"Unknown chain {chain_config!r}; expected one of {sorted(data)}"
+        )
+    return int(data[chain_config]["ledger_config"]["chain_id"])

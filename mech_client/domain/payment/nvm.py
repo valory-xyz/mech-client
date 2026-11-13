@@ -21,14 +21,11 @@
 
 from typing import Optional, TYPE_CHECKING
 
+from mech_client.domain.payment.addresses import token_address, tracker_address
 from mech_client.domain.payment.base import PaymentStrategy
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
-from mech_client.infrastructure.config import (
-    CHAIN_TO_NATIVE_BALANCE_TRACKER,
-    CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
-    PaymentType,
-)
+from mech_client.infrastructure.config import PaymentType
 from mech_client.utils.validators import ensure_checksummed_address
 
 if TYPE_CHECKING:
@@ -87,40 +84,28 @@ class NVMPaymentStrategy(PaymentStrategy):
         """
         Get the NVM balance tracker contract address for this chain.
 
+        Native NVM uses the native tracker and USDC NVM the USDC one; a missing
+        tracker propagates ``ValueError`` from ``tracker_address``.
+
         :return: Balance tracker contract address
-        :raises ValueError: If NVM balance tracker not available for this chain/type
+        :raises ValueError: If the payment type is not an NVM type
         """
-        if self.payment_type == PaymentType.NATIVE_NVM:
-            # NVM native subscription uses native balance tracker
-            return self._lookup_balance_tracker(
-                CHAIN_TO_NATIVE_BALANCE_TRACKER, "NVM native"
-            )
-        if self.payment_type == PaymentType.TOKEN_NVM_USDC:
-            # NVM USDC subscription uses USDC balance tracker
-            return self._lookup_balance_tracker(
-                CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC, "NVM USDC"
-            )
-        raise ValueError(f"Unknown NVM payment type: {self.payment_type}")
+        if not self.payment_type.is_nvm():
+            raise ValueError(f"Unknown NVM payment type: {self.payment_type}")
+        return tracker_address(self.payment_type, self.chain_id)
 
     def get_payment_token_address(self) -> Optional[str]:
         """
         Get the payment token contract address for NVM subscriptions.
 
+        A USDC token not deployed on the chain propagates ``ValueError`` from
+        ``token_address``.
+
         :return: None for native NVM, USDC address for USDC NVM
         """
-        if self.payment_type == PaymentType.NATIVE_NVM:
-            return None  # Native NVM doesn't use a token
-        if self.payment_type == PaymentType.TOKEN_NVM_USDC:
-            # For USDC NVM, we use the USDC token address
-            from mech_client.infrastructure.config import (  # pylint: disable=import-outside-toplevel
-                CHAIN_TO_PRICE_TOKEN_USDC,
-            )
-
-            token_address = CHAIN_TO_PRICE_TOKEN_USDC.get(self.chain_id, "")
-            if not token_address:
-                raise ValueError(f"USDC token not available for chain {self.chain_id}")
-            return token_address
-        return None
+        if not self.payment_type.is_nvm():
+            return None
+        return token_address(self.payment_type, self.chain_id)
 
     def check_subscription_balance(
         self,

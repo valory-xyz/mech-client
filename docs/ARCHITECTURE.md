@@ -228,9 +228,14 @@ class BaseTransactionService:
         crypto: EthereumCrypto,
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
+        signer: Optional[Signer] = None,
+        rpc_url: Optional[str] = None,
     ):
         # Initializes: mech_config, ledger_api, executor
         # Subclasses get these automatically
+        # rpc_url wins over MECHX_CHAIN_RPC and the operate config; None keeps
+        # that lookup. MarketplaceService passes it on to its ToolManager and to
+        # the DepositService its auto-deposit builds.
 
 class MarketplaceService(BaseTransactionService):
     # Inherits ledger_api, executor, mech_config
@@ -276,6 +281,36 @@ class MarketplaceService:
         return {"tx_hash": tx_hash, "results": results}
 ```
 
+#### Off-chain payer contract
+
+`MarketplaceService` also exposes what an off-chain marketplace payer needs:
+
+- The request id is derived locally (`domain/request_id.py`, `request_digest`)
+  from `domainSeparator()`. `getRequestId` is still called; a disagreement
+  raises `RequestIdMismatch` before `on_request_id` and before signing.
+- `send_request(max_price=...)` raises `MechPriceExceeded` before any deposit,
+  signature or POST when `max_delivery_rate * len(prompts)` exceeds the cap.
+- `mech_info(mech)` returns `MechInfo`; `marketplace_contract()` returns the
+  marketplace contract.
+
+#### Off-chain nonce allocation (`nonces.py`)
+
+`mapNonces(sender)` only moves on settlement, and the mech admits only
+`mapNonces + accepted + settling`, so a payer allocates nonces itself.
+`NonceAllocator` keeps one queue per (chain, sender): one mech in flight, the
+queue lock held from `reserve` until the mech answers (POSTs in nonce order), a
+slot held until `mapNonces > n`. Slots, salts and the stall are persisted in
+`mech_nonces.json` under the caller's `store_path` before each POST; an
+unreadable or unwritable store refuses with `NonceRefused`, and a lock on
+`mech_nonces.lock` keeps the store to one allocator, across processes too. `outcome_of` maps
+`OffchainRequestRejected` / `OffchainTopUpFailed` to an `Outcome`, and
+`send_with_nonce` drives one send through a reservation (503 resends the same
+nonce; a failure after `send_request` received the `PreSignHook` it hands
+`send`, but before it marked the hook posting (right before the POST), frees
+the nonce). `exclusive` holds the queue for an on-chain request; `hard_cancel`
+yields `mapNonces` for one on-chain request once the queue has been stalled
+for at least `stalled_for` seconds (`stalled_since`).
+
 ### Domain Layer (`domain/`)
 
 **Purpose**: Implement core business logic and business rules.
@@ -288,6 +323,8 @@ Handle different payment mechanisms:
 - `token.py`: ERC20 token payments (OLAS, USDC)
 - `nvm.py`: NVM subscription payments
 - `factory.py`: Payment strategy factory
+- `addresses.py`: `payment_token` (None for native) and `balance_tracker` (the
+  tracker a prepaid top-up pays), from mech-client's contract tables
 
 **Key Abstractions**:
 ```python
@@ -355,6 +392,7 @@ Handle response delivery mechanisms:
 - `offchain_watcher.py`: Offchain endpoint polling
 - `base.py`: Delivery watcher interface
 - `models.py`: `DeliveryResult`, the shape both watchers return
+- `chat.py`: the chat contract (`is_chat_prompt`, `chat_report` → `ChatReport`)
 
 **Key Abstractions**:
 ```python
@@ -371,8 +409,11 @@ an endpoint envelope on the other.
 
 #### Tool Managers (`domain/tools/`)
 Handle tool metadata and discovery:
-- `marketplace_manager.py`: Marketplace tool operations
-- `metadata.py`: Tool metadata structures
+- `manager.py`: `ToolManager`. `read_tools_metadata` returns
+  `MetadataRead(document, error)` and never raises for an unreadable
+  document; `fetch_tools_metadata` returns its `document`.
+  `offchain_blocker(read)` says why a mech cannot take off-chain requests.
+- `models.py`: Tool metadata structures and `MetadataRead`
 
 **Design Principles**:
 - Pure business logic
@@ -619,6 +660,8 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 | `SubscriptionService` | Service | NVM subscription management |
 | `ToolService` | Service | Tool metadata operations |
 | `SetupService` | Service | Agent mode setup |
+| `NonceAllocator` / `send_with_nonce` | Library | Off-chain marketplace nonce allocation |
+| `request_digest` | Domain | Local derivation of the marketplace request id |
 
 ### Payment Components
 
@@ -629,6 +672,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 | `TokenPaymentStrategy` | Domain | ERC20 token payments |
 | `NVMPaymentStrategy` | Domain | NVM subscription payments |
 | `PaymentStrategyFactory` | Domain | Strategy creation |
+| `payment_token` / `balance_tracker` | Domain | Payment token and top-up tracker per chain |
 
 ### Execution Components
 
@@ -648,6 +692,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 | `OnchainDeliveryWatcher` | Domain | On-chain event watching |
 | `OffchainDeliveryWatcher` | Domain | Offchain endpoint polling |
 | `DeliveryResult` | Domain | Resolved delivery (content + URL) |
+| `chat_report` / `ChatReport` | Domain | Completion and usage of a chat delivery |
 | `wait_for_receipt` | Infrastructure | Transaction receipt polling |
 | `result_file` | Infrastructure | Reads delivered results from the IPFS gateway |
 
@@ -656,7 +701,7 @@ class OnchainDeliveryWatcher(DeliveryWatcher):
 | Component | Layer | Purpose |
 |-----------|-------|---------|
 | `ToolManager` | Domain | Tool operations interface |
-| `MarketplaceToolManager` | Domain | Marketplace tool ops |
+| `MetadataRead` / `offchain_blocker` | Domain | Metadata read with its failure cause; off-chain capability |
 | `ToolInfo` | Domain | Tool metadata structure |
 | `ToolService` | Service | Tool service orchestration |
 

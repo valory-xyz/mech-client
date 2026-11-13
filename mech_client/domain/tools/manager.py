@@ -19,12 +19,11 @@
 
 """Tool manager for fetching and managing mech tools."""
 
-import json
 import logging
 import unicodedata
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 from urllib.parse import urlparse
 
 import requests
@@ -41,7 +40,11 @@ from mech_client.domain.operator import (
     read_operator,
     verify_domain,
 )
-from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
+from mech_client.domain.tools.models import (
+    MetadataRead,
+    ToolInfo,
+    ToolsForMarketplaceMech,
+)
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.config.loader import get_mech_config
@@ -52,7 +55,9 @@ from mech_client.infrastructure.subgraph.queries import (
     query_mech_record,
 )
 from mech_client.utils.errors.exceptions import ManifestError
+from mech_client.utils.redaction import redacted_cause
 from web3.constants import ADDRESS_ZERO
+from web3.exceptions import Web3Exception
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +98,21 @@ PAYMENT_LABELS = {
     PaymentType.TOKEN_NVM_USDC: "usdc_nvm",
 }
 UNKNOWN_PAYMENT = "unknown"
+# What reading the metadata document can fail with, each reported as the
+# read's cause: the RPC (web3 errors, ValueError, NotImplementedError), the
+# gateway (requests errors, HTTP error statuses included, are OSErrors) or the
+# JSON (ValueError, or RecursionError for a document nested past the
+# decoder's limit). A document that is not a JSON object, and a chain with no
+# metadata hash contract, are causes too. Anything else is a bug and
+# propagates.
+METADATA_READ_ERRORS = (
+    OSError,
+    ValueError,
+    NotImplementedError,
+    RecursionError,
+    Web3Exception,
+)
+OFFCHAIN_URL_MISSING = "no 'url' in metadata; this mech serves on-chain requests only"
 
 
 def payment_label(payment_type: str) -> str:
@@ -151,6 +171,42 @@ def claimed_operator(
     return block
 
 
+def offchain_blocker(read: MetadataRead) -> Optional[str]:
+    """
+    Say why a mech cannot serve an off-chain request, or None if it can.
+
+    The off-chain flow resolves the mech's endpoint from the ``url`` field of
+    its service metadata, so an unreadable document and one without a ``url``
+    both rule it out, with different advice: a failed read may succeed next
+    time, while a mech that published no ``url`` serves on-chain only.
+
+    :param read: The metadata read from ``ToolManager.read_tools_metadata``
+    :return: The reason, or None when the document names an endpoint
+    """
+    if read.document is None:
+        return (
+            f"metadata unreadable ({read.error}); may be transient or never published"
+        )
+    if usable_offchain_url(read.document) is None:
+        return OFFCHAIN_URL_MISSING
+    return None
+
+
+def usable_offchain_url(metadata: Any) -> Optional[str]:
+    """
+    Return the off-chain endpoint a metadata document publishes, if usable.
+
+    :param metadata: The parsed metadata document, or anything else
+    :return: The stripped ``url``, or None when it is missing, blank or not a string
+    """
+    if not isinstance(metadata, dict):
+        return None
+    url = metadata.get("url")
+    if not isinstance(url, str) or not url.strip():
+        return None
+    return url.strip()
+
+
 class ToolManager:
     """Manager for fetching and caching tool information.
 
@@ -158,44 +214,78 @@ class ToolManager:
     retrieving tool schemas from marketplace mechs.
     """
 
-    def __init__(self, chain_config: str):
+    def __init__(self, chain_config: str, rpc_url: Optional[str] = None):
         """
         Initialize tool manager.
 
         :param chain_config: Chain configuration name (gnosis, base, etc.)
+        :param rpc_url: RPC endpoint; None keeps the MECHX_CHAIN_RPC /
+            mechs.json lookup
         """
         self.chain_config = chain_config
-        self.mech_config = get_mech_config(chain_config)
+        self.mech_config = get_mech_config(chain_config, rpc_url=rpc_url)
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
+
+    def read_tools_metadata(self, service_id: int) -> MetadataRead:
+        """
+        Read the service metadata document, keeping why a read failed.
+
+        Queries the complementary metadata hash contract to get the metadata
+        URI, then fetches the metadata from that URI. A document that cannot
+        be read never raises: the cause is in ``error`` (see
+        ``METADATA_READ_ERRORS``), redacted.
+        A missing or broken packaged ABI still raises.
+
+        :param service_id: The service ID of the mech
+        :return: The document, or None with the cause
+        """
+        if not self._metadata_hash_deployed():
+            return MetadataRead.failed(
+                f"metadata hash contract not deployed on {self.chain_config}"
+            )
+
+        # packaging: a missing or broken ABI is a bug, not an unreadable document
+        metadata_contract = get_contract(
+            self.mech_config.complementary_metadata_hash_address,
+            get_abi("ComplementaryServiceMetadata.json"),
+            self.ledger_api,
+        )
+        try:
+            metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
+            response = requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT)
+            response.raise_for_status()
+            document = response.json()
+        except METADATA_READ_ERRORS as e:
+            cause = redacted_cause(e)
+            logger.error(f"Error fetching tools for service {service_id}: {cause}")
+            return MetadataRead.failed(cause)
+        if not isinstance(document, dict):
+            cause = f"expected a JSON object, got {type(document).__name__}"
+            logger.error(f"Unusable metadata for service {service_id}: {cause}")
+            return MetadataRead.failed(cause)
+        return MetadataRead.ok(document)
 
     def fetch_tools_metadata(self, service_id: int) -> Optional[Dict[str, Any]]:
         """
         Fetch tools metadata for specified service ID.
 
-        Queries the complementary metadata hash contract to get the metadata
-        URI, then fetches the metadata from that URI.
-
         :param service_id: The service ID of the mech
-        :return: Dictionary containing tools and metadata, or None if error
-        :raises ValueError: If metadata hash address not configured
+        :return: Dictionary containing tools and metadata, or None if unreadable
+            (``read_tools_metadata`` says why)
+        :raises ValueError: If no metadata hash contract is deployed on the chain
         """
-        if self.mech_config.complementary_metadata_hash_address == ADDRESS_ZERO:
+        if not self._metadata_hash_deployed():
             raise ValueError(
                 f"Metadata hash not yet implemented on {self.chain_config}"
             )
+        return self.read_tools_metadata(service_id).document
 
-        try:
-            abi = get_abi("ComplementaryServiceMetadata.json")
-            metadata_contract = get_contract(
-                self.mech_config.complementary_metadata_hash_address,
-                abi,
-                self.ledger_api,
-            )
-            metadata_uri = metadata_contract.functions.tokenURI(service_id).call()
-            return requests.get(metadata_uri, timeout=DEFAULT_TIMEOUT).json()
-        except (json.JSONDecodeError, NotImplementedError, IOError) as e:
-            logger.error(f"Error fetching tools for service {service_id}: {e}")
-            return None
+    def _metadata_hash_deployed(self) -> bool:
+        """Whether this chain has a complementary metadata hash contract.
+
+        :return: False when its configured address is the zero address
+        """
+        return self.mech_config.complementary_metadata_hash_address != ADDRESS_ZERO
 
     def get_offchain_url(self, service_id: int) -> str:
         """
@@ -205,32 +295,32 @@ class ToolManager:
         :return: The offchain URL string
         """
         return self.offchain_url_from_metadata(
-            service_id, self.fetch_tools_metadata(service_id)
+            service_id, self.read_tools_metadata(service_id)
         )
 
     @staticmethod
-    def offchain_url_from_metadata(service_id: int, metadata: Any) -> str:
+    def offchain_url_from_metadata(
+        service_id: int, read: Union[MetadataRead, Dict[str, Any], None]
+    ) -> str:
         """
-        Read the ``url`` field from an already fetched metadata document.
+        Read the off-chain endpoint out of an already read metadata document.
 
         :param service_id: The service ID of the mech (for error messages)
-        :param metadata: The parsed metadata document, or None
+        :param read: The ``read_tools_metadata`` result; a bare document (or
+            None) is still accepted
         :return: The offchain URL string
-        :raises ValueError: If there is no document or it has no URL
+        :raises ValueError: ``offchain_blocker``'s reason when there is no
+            usable URL
         """
-        if not metadata:
-            raise ValueError(
-                f"Could not fetch metadata for service {service_id}. "
-                f"Cannot discover offchain URL."
+        if not isinstance(read, MetadataRead):
+            read = (
+                MetadataRead.ok(read)
+                if isinstance(read, dict)
+                else MetadataRead.failed("no document was read")
             )
-
-        url = (metadata.get("url") or "").strip()
-        if not url:
-            raise ValueError(
-                f"Metadata for service {service_id} does not contain an offchain URL. "
-                f"The mech operator must publish a 'url' field in the metadata."
-            )
-
+        url = usable_offchain_url(read.document)
+        if url is None:
+            raise ValueError(f"Mech service {service_id}: {offchain_blocker(read)}")
         return url
 
     @staticmethod
