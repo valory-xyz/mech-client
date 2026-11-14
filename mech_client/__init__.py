@@ -95,6 +95,7 @@ from mech_client.services.marketplace_service import (
     OnchainRequestResult,
     PreSignHook,
     RequestIdMismatch,
+    RequestIdRpcError,
     RequestResult,
 )
 from mech_client.services.setup_service import SetupService
@@ -187,5 +188,6 @@ __all__ = [
     "OffchainRequestRejected",
     "OffchainTopUpFailed",
     "RequestIdMismatch",
+    "RequestIdRpcError",
     "MechPriceExceeded",
 ]

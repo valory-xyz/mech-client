@@ -38,6 +38,7 @@ def test_the_off_chain_payer_api_is_exported() -> None:
         "PreSignHook": marketplace_service.PreSignHook,
         "request_digest": request_digest,
         "RequestIdMismatch": marketplace_service.RequestIdMismatch,
+        "RequestIdRpcError": marketplace_service.RequestIdRpcError,
         "MechPriceExceeded": marketplace_service.MechPriceExceeded,
         "MechInfo": marketplace_service.MechInfo,
         "OffchainRequestResult": marketplace_service.OffchainRequestResult,
