@@ -65,6 +65,7 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes,too-f
         agent_mode: bool,
         ethereum_client: Optional[EthereumClient] = None,
         safe_address: Optional[str] = None,
+        rpc_url: Optional[str] = None,
     ):
         """
         Initialize subscription service.
@@ -74,6 +75,8 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes,too-f
         :param agent_mode: True for agent mode (Safe), False for client mode (EOA)
         :param ethereum_client: Ethereum client (required for agent mode)
         :param safe_address: Safe address (required for agent mode)
+        :param rpc_url: RPC endpoint for this service; None reads
+            MECHX_CHAIN_RPC, then the operate config (agent mode), then mechs.json
         """
         self.chain_config = chain_config
         self.crypto = crypto
@@ -82,7 +85,9 @@ class SubscriptionService:  # pylint: disable=too-many-instance-attributes,too-f
         self.safe_address = safe_address
 
         # Load mech configuration and create ledger API (pass agent_mode to load RPC from operate config in agent mode)
-        mech_config = get_mech_config(chain_config, agent_mode=agent_mode)
+        mech_config = get_mech_config(
+            chain_config, agent_mode=agent_mode, rpc_url=rpc_url
+        )
         self.ledger_api = EthereumApi(**asdict(mech_config.ledger_config))
 
         # Load NVM configuration

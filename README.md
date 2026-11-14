@@ -639,7 +639,7 @@ The allocator's lock covers whatever `send` does, so `send` should only send. `s
 - `send_request(..., max_price=p)` raises `MechPriceExceeded` (`price`, `max_price`) before any deposit, signature or POST when the mech's `max_delivery_rate` times the number of prompts exceeds `p`, in the payment asset's base units. The cap covers that request price only; an auto-deposit after a 402 is bounded by its own cap.
 - `service.mech_info(mech)` returns `MechInfo(mech, service_id, payment_type, max_delivery_rate)`; `service.marketplace_contract()` returns the marketplace contract, and `service.requester()` the requester of record.
 - `payment_token(payment_type, chain)` names the token a mech is paid in (`None` for native), and `balance_tracker(chain, payment_type)` the tracker a prepaid top-up pays (`None` for NVM subscriptions). Both use the chain id payments use, `MECHX_LEDGER_CHAIN_ID` included, and raise `ValueError` for an unknown chain or a token or tracker not deployed on it.
-- `MarketplaceService`, `DepositService`, `ToolService` and `ToolManager` take `rpc_url=...` (a blank one is refused), so a process can talk to several chains without setting the process-wide `MECHX_CHAIN_RPC`. Left out, the RPC comes from `MECHX_CHAIN_RPC`, then the operate config (agent mode), then the default.
+- `MarketplaceService`, `DepositService`, `SubscriptionService`, `ToolService` and `ToolManager` take `rpc_url=...` (a blank one is refused), so a process can talk to several chains without setting the process-wide `MECHX_CHAIN_RPC`. Left out, the RPC comes from `MECHX_CHAIN_RPC`, then the operate config (agent mode), then the default.
 
 ### Offchain capability and chat
 

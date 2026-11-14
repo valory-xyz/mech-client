@@ -288,7 +288,7 @@ All functions must have type hints. Mypy runs with `--disallow-untyped-defs`.
 All configuration values can be overridden via `MECHX_*` environment variables using `EnvironmentConfig`:
 
 **Priority order:**
-1. For the RPC only: the `rpc_url` argument of `MarketplaceService`, `DepositService`, `ToolService` or `ToolManager` (passed down as `get_mech_config(rpc_url=...)`) - highest priority, and neither the env var nor the operate config is read; a blank one raises `ValueError`
+1. For the RPC only: the `rpc_url` argument of `MarketplaceService`, `DepositService`, `SubscriptionService`, `ToolService` or `ToolManager` (passed down as `get_mech_config(rpc_url=...)`) - highest priority, and neither the env var nor the operate config is read; a blank one raises `ValueError`
 2. Environment variable (via `EnvironmentConfig`)
 3. Stored operate config (agent mode only, for RPC)
 4. Default from `mech_client/configs/mechs.json` - lowest priority
