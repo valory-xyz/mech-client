@@ -107,8 +107,10 @@ def get_chain_id(chain_config: str) -> int:
 def ledger_chain_id(chain_config: str) -> int:
     """Return the chain id a chain's ledger, and so its payments, use.
 
+    A chain not in ``mechs.json`` raises ``get_chain_id``'s ``ValueError``,
+    override or not.
+
     :param chain_config: Chain name
     :return: ``MECHX_LEDGER_CHAIN_ID`` if set, else ``mechs.json``'s id
-    :raises ValueError: If the chain is not in ``mechs.json``, override or not
     """
     return effective_chain_id(get_chain_id(chain_config), EnvironmentConfig.load())

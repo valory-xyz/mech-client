@@ -107,7 +107,9 @@ def _accepted_note(accepted_ids: List[str], request_nonces: List[int]) -> str:
     return f" Accepted earlier in this call, not watched: {accepted}."
 
 
-def _derivation_failed(e: Exception, nonce: Optional[int], note: str = "") -> ValueError:
+def _derivation_failed(
+    e: Exception, nonce: Optional[int], note: str = ""
+) -> ValueError:
     """Log a failed request-id derivation and build the error a caller sees.
 
     A library error's text can carry the RPC URL and its key, so the log gets
