@@ -144,7 +144,8 @@ if sys.platform == "win32":  # pragma: no cover - the branch for this platform r
         msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
     def _sync_dir(directory: Path) -> None:
-        """Windows cannot open a directory to flush it; its rename is durable."""
+        """Leave the rename to Windows, which cannot open a directory to fsync it."""
+        del directory
 
 else:  # pragma: no cover - the branch for this platform runs
     import fcntl
