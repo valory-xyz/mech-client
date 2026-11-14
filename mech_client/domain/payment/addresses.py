@@ -28,6 +28,7 @@ from mech_client.infrastructure.config.contract_addresses import (
     CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS,
     CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
 )
+from mech_client.infrastructure.config.environment import EnvironmentConfig
 from mech_client.infrastructure.config.loader import get_chain_id
 from mech_client.infrastructure.config.payment_config import PaymentType
 
@@ -98,18 +99,29 @@ def tracker_address(payment_type: PaymentType, chain_id: int) -> str:
     return _lookup(BALANCE_TRACKERS[payment_type], chain_id, "balance tracker")
 
 
+def _paying_chain_id(chain: str) -> int:
+    """Return the chain id payments use, as ``LedgerConfig`` resolves it.
+
+    :param chain: Chain name
+    :return: ``MECHX_LEDGER_CHAIN_ID`` if set, else the chain's own id
+    """
+    chain_id = get_chain_id(chain)  # an unknown chain raises even with the override
+    override = EnvironmentConfig.load().mechx_ledger_chain_id
+    return chain_id if override is None else override
+
+
 def payment_token(payment_type: PaymentType, chain: str) -> Optional[str]:
     """
     Name the token a mech with this payment type is paid in on a chain.
 
-    An unknown chain propagates ``get_chain_id``'s ``ValueError``, and a token
-    not deployed on the chain ``token_address``'s.
+    The chain id honours ``MECHX_LEDGER_CHAIN_ID``, as payments do. An unknown
+    chain, or a token not deployed on the chain, raises ``ValueError``.
 
     :param payment_type: The mech's payment type
     :param chain: Chain name
     :return: The token address, or None when the mech is paid in the native asset
     """
-    return token_address(payment_type, get_chain_id(chain))
+    return token_address(payment_type, _paying_chain_id(chain))
 
 
 def balance_tracker(chain: str, payment_type: PaymentType) -> Optional[str]:
@@ -117,16 +129,16 @@ def balance_tracker(chain: str, payment_type: PaymentType) -> Optional[str]:
     Name the balance tracker a prepaid top-up for this payment type pays.
 
     It is the contract ``DepositService`` and the auto-deposit after an
-    off-chain HTTP 402 send funds to. An unknown chain propagates
-    ``get_chain_id``'s ``ValueError``.
+    off-chain HTTP 402 send funds to; the chain id honours
+    ``MECHX_LEDGER_CHAIN_ID``, as they do. As with ``payment_token``, an
+    unknown chain, or a tracker not deployed on the chain, raises ``ValueError``.
 
     :param chain: Chain name
     :param payment_type: The mech's payment type
     :return: The tracker address, or None when this payment type is not topped
-        up by a deposit on this chain (NVM subscriptions, or no tracker deployed)
+        up by a deposit (NVM subscriptions)
     """
-    chain_id = get_chain_id(chain)
+    chain_id = _paying_chain_id(chain)
     if payment_type not in DEPOSIT_PAYMENT_TYPES:
         return None
-    table, _ = BALANCE_TRACKERS[payment_type]
-    return table.get(chain_id) or None
+    return tracker_address(payment_type, chain_id)
