@@ -51,6 +51,17 @@ def get_rpc_chain_id(rpc_url: str, timeout: float = 5.0) -> Optional[int]:
     return None
 
 
+def effective_chain_id(configured: int, env_config: EnvironmentConfig) -> int:
+    """Return the chain id a ledger uses: ``MECHX_LEDGER_CHAIN_ID`` if set.
+
+    :param configured: The chain id ``mechs.json`` configures
+    :param env_config: The loaded environment configuration
+    :return: The override if set, else ``configured``
+    """
+    override = env_config.mechx_ledger_chain_id
+    return configured if override is None else override
+
+
 def _checked_override(rpc_override: str) -> str:
     """Return a caller-given RPC endpoint, refusing a blank one.
 
@@ -105,8 +116,7 @@ class LedgerConfig:
         else:
             self._resolve_rpc(env_config)
 
-        if env_config.mechx_ledger_chain_id is not None:
-            self.chain_id = env_config.mechx_ledger_chain_id
+        self.chain_id = effective_chain_id(self.chain_id, env_config)
 
         if env_config.mechx_ledger_poa_chain is not None:
             self.poa_chain = env_config.mechx_ledger_poa_chain

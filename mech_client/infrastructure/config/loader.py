@@ -22,8 +22,13 @@
 import json
 from typing import Optional
 
-from mech_client.infrastructure.config.chain_config import LedgerConfig, MechConfig
+from mech_client.infrastructure.config.chain_config import (
+    LedgerConfig,
+    MechConfig,
+    effective_chain_id,
+)
 from mech_client.infrastructure.config.constants import MECH_CONFIGS
+from mech_client.infrastructure.config.environment import EnvironmentConfig
 
 
 def get_mech_config(
@@ -97,3 +102,13 @@ def get_chain_id(chain_config: str) -> int:
             f"Unknown chain {chain_config!r}; expected one of {sorted(data)}"
         )
     return int(data[chain_config]["ledger_config"]["chain_id"])
+
+
+def ledger_chain_id(chain_config: str) -> int:
+    """Return the chain id a chain's ledger, and so its payments, use.
+
+    :param chain_config: Chain name
+    :return: ``MECHX_LEDGER_CHAIN_ID`` if set, else ``mechs.json``'s id
+    :raises ValueError: If the chain is not in ``mechs.json``, override or not
+    """
+    return effective_chain_id(get_chain_id(chain_config), EnvironmentConfig.load())

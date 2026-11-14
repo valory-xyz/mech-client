@@ -28,8 +28,7 @@ from mech_client.infrastructure.config.contract_addresses import (
     CHAIN_TO_TOKEN_BALANCE_TRACKER_OLAS,
     CHAIN_TO_TOKEN_BALANCE_TRACKER_USDC,
 )
-from mech_client.infrastructure.config.environment import EnvironmentConfig
-from mech_client.infrastructure.config.loader import get_chain_id
+from mech_client.infrastructure.config.loader import ledger_chain_id
 from mech_client.infrastructure.config.payment_config import PaymentType
 
 # Each table is keyed by chain id, with the label its errors name. Native
@@ -99,17 +98,6 @@ def tracker_address(payment_type: PaymentType, chain_id: int) -> str:
     return _lookup(BALANCE_TRACKERS[payment_type], chain_id, "balance tracker")
 
 
-def _paying_chain_id(chain: str) -> int:
-    """Return the chain id payments use, as ``LedgerConfig`` resolves it.
-
-    :param chain: Chain name
-    :return: ``MECHX_LEDGER_CHAIN_ID`` if set, else the chain's own id
-    """
-    chain_id = get_chain_id(chain)  # an unknown chain raises even with the override
-    override = EnvironmentConfig.load().mechx_ledger_chain_id
-    return chain_id if override is None else override
-
-
 def payment_token(payment_type: PaymentType, chain: str) -> Optional[str]:
     """
     Name the token a mech with this payment type is paid in on a chain.
@@ -121,7 +109,7 @@ def payment_token(payment_type: PaymentType, chain: str) -> Optional[str]:
     :param chain: Chain name
     :return: The token address, or None when the mech is paid in the native asset
     """
-    return token_address(payment_type, _paying_chain_id(chain))
+    return token_address(payment_type, ledger_chain_id(chain))
 
 
 def balance_tracker(chain: str, payment_type: PaymentType) -> Optional[str]:
@@ -138,7 +126,7 @@ def balance_tracker(chain: str, payment_type: PaymentType) -> Optional[str]:
     :return: The tracker address, or None when this payment type is not topped
         up by a deposit (NVM subscriptions)
     """
-    chain_id = _paying_chain_id(chain)
+    chain_id = ledger_chain_id(chain)
     if payment_type not in DEPOSIT_PAYMENT_TYPES:
         return None
     return tracker_address(payment_type, chain_id)

@@ -19,10 +19,12 @@
 
 """Tests for configuration loader."""
 
+from typing import Dict
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 from mech_client.infrastructure.config import LedgerConfig, MechConfig, get_mech_config
+from mech_client.infrastructure.config.loader import ledger_chain_id
 
 
 class TestGetMechConfig:
@@ -488,3 +490,24 @@ class TestMechConfigPriorityOrder:
         # Should not load from operate when chain_config is None
         mock_load_rpc.assert_not_called()
         assert config.rpc_url == "https://default.rpc.com"
+
+
+class TestLedgerChainId:
+    """ledger_chain_id resolves the chain id as LedgerConfig does."""
+
+    @pytest.mark.parametrize(
+        ("env", "expected"), [({}, 100), ({"MECHX_LEDGER_CHAIN_ID": "8453"}, 8453)]
+    )
+    def test_it_agrees_with_the_ledger_config(
+        self, env: Dict[str, str], expected: int
+    ) -> None:
+        """Payments and the ledger pay on one chain id, override or not."""
+        with patch.dict("os.environ", env, clear=True):
+            assert ledger_chain_id("gnosis") == expected
+            assert get_mech_config("gnosis").ledger_config.chain_id == expected
+
+    def test_an_unknown_chain_raises_even_with_the_override(self) -> None:
+        """The override moves a known chain's id; it does not invent a chain."""
+        with patch.dict("os.environ", {"MECHX_LEDGER_CHAIN_ID": "8453"}, clear=True):
+            with pytest.raises(ValueError, match="Unknown chain"):
+                ledger_chain_id("nowhere")
