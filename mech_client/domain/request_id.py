@@ -39,7 +39,7 @@ def request_digest(  # pylint: disable=too-many-arguments  # the id's preimage, 
     marketplace: str,
     mech: str,
     requester: str,
-    data_hash: bytes,
+    data: bytes,
     delivery_rate: int,
     payment_type: bytes,
     nonce: int,
@@ -57,7 +57,8 @@ def request_digest(  # pylint: disable=too-many-arguments  # the id's preimage, 
     :param marketplace: The marketplace contract address
     :param mech: The priority mech address
     :param requester: The requester of record (Safe in agent mode, else EOA)
-    :param data_hash: The request data bytes (the truncated IPFS hash)
+    :param data: The request's data, hashed here (for an off-chain request,
+        the truncated IPFS hash of its metadata)
     :param delivery_rate: The signed maximum delivery rate
     :param payment_type: The 32-byte payment type
     :param nonce: The marketplace nonce
@@ -70,7 +71,7 @@ def request_digest(  # pylint: disable=too-many-arguments  # the id's preimage, 
                 marketplace,
                 mech,
                 requester,
-                keccak(data_hash),
+                keccak(data),
                 delivery_rate,
                 payment_type,
                 nonce,

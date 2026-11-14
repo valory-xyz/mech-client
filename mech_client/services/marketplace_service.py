@@ -794,7 +794,7 @@ class MarketplaceService(
                     marketplace=marketplace_address,
                     mech=mech_address,
                     requester=sender,
-                    data_hash=bytes.fromhex(data_hash.removeprefix("0x")),
+                    data=bytes.fromhex(data_hash.removeprefix("0x")),
                     delivery_rate=max_delivery_rate,
                     payment_type=payment_type_bytes,
                     nonce=nonce,
