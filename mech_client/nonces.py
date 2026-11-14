@@ -42,6 +42,7 @@ import errno
 import functools
 import json
 import logging
+import os
 import sys
 import threading
 import time
@@ -106,6 +107,7 @@ NonceRule = Literal[
     "mech-queue-unwritable",
     "mech-queue-not-stalled",
     "mech-queue-locked",
+    "mech-queue-closed",
 ]
 RULE_IN_FLIGHT: NonceRule = "mech-in-flight"
 RULE_NONCE_GAP: NonceRule = "mech-nonce-gap"
@@ -116,6 +118,7 @@ RULE_QUEUE_UNREADABLE: NonceRule = "mech-queue-unreadable"
 RULE_QUEUE_UNWRITABLE: NonceRule = "mech-queue-unwritable"
 RULE_QUEUE_NOT_STALLED: NonceRule = "mech-queue-not-stalled"
 RULE_QUEUE_LOCKED: NonceRule = "mech-queue-locked"
+RULE_QUEUE_CLOSED: NonceRule = "mech-queue-closed"
 REJECTION_RULES: Dict[Outcome, NonceRule] = {
     RETRY: RULE_NONCE_GAP,
     TAKEN: RULE_NONCE_TAKEN,
@@ -135,11 +138,30 @@ if sys.platform == "win32":  # pragma: no cover - the branch for this platform r
         handle.seek(0)
         msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
 
+    def _unlock_file(handle: IO[str]) -> None:
+        # Windows does not promise to drop the lock as soon as the handle closes
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
+    def _sync_dir(directory: Path) -> None:
+        """Windows cannot open a directory to flush it; its rename is durable."""
+
 else:  # pragma: no cover - the branch for this platform runs
     import fcntl
 
     def _lock_file(handle: IO[str]) -> None:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def _unlock_file(handle: IO[str]) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    def _sync_dir(directory: Path) -> None:
+        """Flush a rename in ``directory`` to disk."""
+        fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 class NonceRefused(Exception):
@@ -300,6 +322,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         self._queues: Dict[str, _Queue] = {}
         self._broken = False
         self._unwritable = False
+        self._closed = False
         self._lock_handle: Optional[IO[str]] = None
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -317,7 +340,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         try:
             _lock_file(self._lock_handle)
         except OSError as e:
-            self.close()
+            self._lock_handle.close()
+            self._lock_handle = None
             if isinstance(e, BlockingIOError) or e.errno in _LOCK_HELD_ERRNOS:
                 raise NonceRefused(
                     RULE_QUEUE_LOCKED,
@@ -334,10 +358,19 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         self._load()
 
     def close(self) -> None:
-        """Release the store for another allocator."""
-        if self._lock_handle is not None:
-            self._lock_handle.close()
-            self._lock_handle = None
+        """Release the store for another allocator; this one refuses from then on.
+
+        A send already inside ``reserve`` still gets its answer, but nothing is
+        written any more: the store is the next allocator's.
+        """
+        with self._save_lock:
+            self._closed = True
+            if self._lock_handle is not None:
+                try:
+                    _unlock_file(self._lock_handle)
+                finally:
+                    self._lock_handle.close()
+                    self._lock_handle = None
 
     @property
     def gap_retries(self) -> int:
@@ -450,8 +483,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         :param timeout: Seconds to wait for the lock and for another mech
         :param salt: The request's metadata salt
         :yield: The reservation; call ``answered`` with the mech's answer
-        :raises NonceRefused: ``mech-in-flight``, ``mech-queue-unreadable`` or
-            ``mech-queue-unwritable``
+        :raises NonceRefused: ``mech-in-flight``, ``mech-queue-closed``,
+            ``mech-queue-unreadable`` or ``mech-queue-unwritable``
         """
         self._check_usable()
         key = self.key(chain, sender)
@@ -481,7 +514,9 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             prior = queue.slots.get(nonce)  # held already only for a probe
             queue.slots[nonce] = _Slot(UNKNOWN, mech.lower(), salt, self._clock())
             self._save()
-            if self._unwritable:  # held in memory only: a restart would reissue n
+            # held in memory only (unwritable, or closed under us): a restart
+            # would reissue n
+            if self._unwritable or self._closed:
                 self._restore(queue, nonce, prior)
                 self._check_usable()
             reservation = Reservation(
@@ -522,8 +557,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         :param read_map_nonces: Reads mapNonces(sender) from the marketplace
         :param timeout: Seconds to wait for the lock and for an empty queue
         :yield: Nothing; send the on-chain request inside the context
-        :raises NonceRefused: ``mech-in-flight``, ``mech-queue-unreadable`` or
-            ``mech-queue-unwritable``
+        :raises NonceRefused: ``mech-in-flight``, ``mech-queue-closed``,
+            ``mech-queue-unreadable`` or ``mech-queue-unwritable``
         """
         self._check_usable()
         key = self.key(chain, sender)
@@ -562,8 +597,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         :yield: n = mapNonces, the nonce the on-chain request consumes
         :raises NonceRefused: ``mech-queue-not-stalled`` unless stalled for at
             least ``stalled_for`` seconds; ``mech-in-flight`` while another
-            request from the sender is being sent; ``mech-queue-unreadable``
-            or ``mech-queue-unwritable``
+            request from the sender is being sent; ``mech-queue-closed``,
+            ``mech-queue-unreadable`` or ``mech-queue-unwritable``
         """
         self._check_usable()
         key = self.key(chain, sender)
@@ -629,16 +664,23 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             queue.lock.release()
 
     def _check_usable(self) -> None:
-        """Refuse while the store cannot be read or written.
+        """Refuse once closed, or while the store cannot be read or written.
 
-        :raises NonceRefused: ``mech-queue-unreadable`` or ``mech-queue-unwritable``
+        :raises NonceRefused: ``mech-queue-closed``, ``mech-queue-unreadable``
+            or ``mech-queue-unwritable``
         """
+        if self._closed:
+            raise NonceRefused(
+                RULE_QUEUE_CLOSED,
+                f"this allocator was closed and no longer holds {self._path.parent}; "
+                "open a new one on the store",
+            )
         if self._broken:
             raise NonceRefused(
                 RULE_QUEUE_UNREADABLE,
                 f"{self._path} could not be read, so held nonces cannot be "
                 "told from free ones; no mech request is sent until it is "
-                "restored or removed",
+                "restored or removed and the allocator is reloaded",
             )
         if self._unwritable:
             raise NonceRefused(
@@ -757,6 +799,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
     def _save(self) -> None:
         """Write every queue down; a failure refuses requests, never an answer."""
         with self._save_lock:
+            if self._closed:
+                return
             try:
                 self._write()
             except OSError as e:
@@ -786,8 +830,14 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             for key, queue in queues
         }
         tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        # durable before the POST: a rename that outlives a power loss without
+        # its data would leave the store unreadable, or reissue n
+        with open(tmp, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(state, indent=2))
+            handle.flush()
+            os.fsync(handle.fileno())
         tmp.replace(self._path)
+        _sync_dir(self._path.parent)
 
 
 def _slot_state(raw: Any) -> SlotState:

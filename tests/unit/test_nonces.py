@@ -906,6 +906,75 @@ def test_another_process_holding_the_store_is_refused(
     assert open_elsewhere() == "opened"
 
 
+def test_a_closed_allocator_refuses_and_writes_nothing(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """Closed, it is no second payer: it hands out nothing and never saves over the next one."""
+    first = _allocator(tmp_path, clock)
+    with take(first, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="a5")
+    first.close()
+    with pytest.raises(NonceRefused) as refused:
+        _enter(take(first, 5))
+    assert refused.value.rule == "mech-queue-closed"
+    second = _allocator(tmp_path, clock)
+    with take(second, 5) as slot:
+        assert slot.nonce == 6
+        slot.answered("accepted", mech=MECH_A, salt="b6")
+    first.delivered("gnosis", SENDER, [5])  # would save first's stale queues
+    assert salt_of(second, 6) == "b6"
+    assert cast(dict, held(second, 5))["delivered_at"] is None
+    second.close()
+
+
+def test_a_close_mid_reserve_never_sends_an_unsaved_slot(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """Closed between the check and the placeholder's save: n is not handed out."""
+    allocator = _allocator(tmp_path, clock)
+
+    def read_then_close() -> int:
+        allocator.close()
+        return 5
+
+    with pytest.raises(NonceRefused) as refused:
+        _enter(allocator.reserve("gnosis", SENDER, MECH_A, read_then_close, timeout=1))
+    assert refused.value.rule == "mech-queue-closed"
+    assert held(allocator, 5) is None
+
+
+def test_close_unlocks_before_closing_the_handle(tmp_path: Path, clock: Clock) -> None:
+    """The lock is released explicitly; Windows may keep it past a bare close."""
+    allocator = _allocator(tmp_path, clock)
+    handle = allocator._lock_handle  # pylint: disable=protected-access
+    with patch.object(nonces, "_unlock_file", wraps=nonces._unlock_file) as unlock:
+        allocator.close()
+    unlock.assert_called_once_with(handle)
+    assert cast(Any, handle).closed
+
+
+def test_a_write_is_flushed_to_disk_before_its_rename(
+    allocator: NonceAllocator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The placeholder must survive a power loss: data, then rename, then directory."""
+    events: List[str] = []
+    real_fsync, real_replace = nonces.os.fsync, Path.replace
+
+    def fsync(fd: int) -> None:
+        events.append("fsync")
+        real_fsync(fd)
+
+    def replace(self: Path, target: Path) -> Path:
+        events.append("replace")
+        return real_replace(self, target)
+
+    monkeypatch.setattr(nonces.os, "fsync", fsync)
+    monkeypatch.setattr(Path, "replace", replace)
+    with take(allocator, 5) as slot:
+        assert events == ["fsync", "replace", "fsync"]
+        slot.answered("accepted", mech=MECH_A, salt="")
+
+
 @pytest.mark.parametrize(
     "error",
     [BlockingIOError(errno.EAGAIN, "busy"), OSError(errno.EACCES, "locked")],
@@ -982,16 +1051,16 @@ def test_an_unwritable_store_refuses_requests_not_answers(
     allocator: NonceAllocator, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A failed write never fails an accepted request; it stops the next one."""
-    real_write = Path.write_text
+    real_replace = Path.replace
     writes: List[int] = []
 
-    def full_after_one(self: Path, *args: Any, **kwargs: Any) -> int:
+    def full_after_one(self: Path, target: Path) -> Path:
         writes.append(1)
         if len(writes) > 1:
             raise OSError(28, "No space left on device")
-        return real_write(self, *args, **kwargs)
+        return real_replace(self, target)
 
-    monkeypatch.setattr(Path, "write_text", full_after_one)
+    monkeypatch.setattr(Path, "replace", full_after_one)
     with take(allocator, 5) as slot:  # the placeholder is on disk
         slot.answered("accepted", mech=MECH_A, salt="")  # does not raise
     for context in (
@@ -1012,7 +1081,7 @@ def test_a_placeholder_that_cannot_be_saved_is_never_sent(
     def full(*_args: Any, **_kwargs: Any) -> None:
         raise OSError(28, "No space left on device")
 
-    monkeypatch.setattr(Path, "write_text", full)
+    monkeypatch.setattr(Path, "replace", full)
     with pytest.raises(NonceRefused) as refused:  # before the body would run
         _enter(take(allocator, 5))
     assert refused.value.rule == "mech-queue-unwritable"
