@@ -673,10 +673,14 @@ def test_send_with_nonce_retries_a_gap_then_succeeds(
 
 def test_send_with_nonce_refuses_a_persistent_gap(allocator: NonceAllocator) -> None:
     """After gap_retries resends the request is refused as mech-nonce-gap; n is free."""
-    sent, error = _send(allocator, [reject(503)] * (GAP_RETRIES + 1))
+    sent, error = _send(
+        allocator, [reject(503, "in-flight limit", 5)] * (GAP_RETRIES + 1)
+    )
     assert len(sent) == GAP_RETRIES + 1
     assert isinstance(error, NonceRefused)
     assert error.rule == "mech-nonce-gap"
+    # every 503 is read as a gap, so the mech's own reason is what tells them apart
+    assert "HTTP 503 (in-flight limit) to nonce 5" in str(error)
     assert salt_of(allocator, 5) is None
 
 

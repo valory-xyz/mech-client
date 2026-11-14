@@ -504,6 +504,10 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             while True:
                 map_nonces = read_map_nonces()
                 self._sync(key, queue, map_nonces)
+                # Settlement rebuilds each id from one contiguous counter per
+                # sender, so a sender's requests to two mechs cannot overlap:
+                # while one mech holds a slot, every other mech waits, however
+                # long that mech's queue stays busy.
                 others = {s.mech for s in queue.slots.values()} - {mech.lower()}
                 if not others:
                     break
@@ -945,6 +949,12 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     received and not posting (see ``PreSignHook``), or is in ``not_sent``;
     otherwise the slot is held as ``unknown``. A 503 resends the same nonce
     and id, up to the allocator's ``gap_retries`` times, with a fresh hook.
+
+    It sends a new request, never a held one: a stalled queue's probe at a
+    held nonce carries the caller's request and ``salt``, so its id differs
+    from the held request's and the mech answers it ``taken``, not as a
+    duplicate. The store keeps a held slot's salt, not its prompt or tool,
+    so the held id cannot be rebuilt here.
 
     :param allocator: The allocator
     :param chain: Chain name
