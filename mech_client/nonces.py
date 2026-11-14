@@ -372,7 +372,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         """Release the store for another allocator; this one refuses from then on.
 
         A send already inside ``reserve`` still gets its answer, but nothing is
-        written any more: the store is the next allocator's.
+        written any more (the unwritten answer is logged): the store is the
+        next allocator's.
         """
         with self._save_lock:
             self._closed = True
@@ -771,7 +772,14 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             )
         elif outcome == NOT_ACCEPTED:
             self._restore(queue, nonce, prior)  # n is reused next
-        self._save()
+        if not self._save():
+            logger.warning(
+                "mech nonce %s on %s answered %r after this allocator was "
+                "closed; not written, so the store still holds it as unknown",
+                nonce,
+                key,
+                outcome,
+            )
 
     @staticmethod
     def _restore(queue: _Queue, nonce: int, prior: Optional[_Slot]) -> None:
@@ -826,11 +834,14 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             stalled_at=stalled_at,
         )
 
-    def _save(self) -> None:
-        """Write every queue down; a failure refuses requests, never an answer."""
+    def _save(self) -> bool:
+        """Write every queue down; a failure refuses requests, never an answer.
+
+        :return: False if skipped because the allocator is closed
+        """
         with self._save_lock:
             if self._closed:
-                return
+                return False
             try:
                 self._write()
             except OSError as e:
@@ -838,6 +849,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                     "could not write %s (%s); mech requests refused", self._path, e
                 )
                 self._unwritable = True
+            return True
 
     def _write(self) -> None:
         with self._lock:

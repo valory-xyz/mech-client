@@ -1059,6 +1059,25 @@ def test_a_closed_allocator_refuses_and_writes_nothing(
     second.close()
 
 
+def test_an_answer_after_close_is_logged_and_not_written(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """The store is the next allocator's: a late answer says what it did not write."""
+    first = _allocator(tmp_path, clock)
+    with patch.object(nonces.logger, "warning") as warning:
+        with take(first, 5) as slot:
+            first.close()
+            second = _allocator(tmp_path, clock)
+            before = second._path.read_text()  # pylint: disable=protected-access
+            slot.answered("accepted", mech=MECH_A, salt="a5")  # does not raise
+    message = warning.call_args.args[0] % warning.call_args.args[1:]
+    assert "5" in message and f"gnosis:{SENDER}" in message
+    assert "'accepted'" in message
+    assert second._path.read_text() == before  # pylint: disable=protected-access
+    assert cast(dict, held(second, 5))["state"] == "unknown"
+    second.close()
+
+
 def test_a_close_mid_reserve_never_sends_an_unsaved_slot(
     tmp_path: Path, clock: Clock
 ) -> None:
