@@ -92,8 +92,10 @@ from mech_client.services.marketplace_service import (
     OffchainRequestRejected,
     OffchainRequestResult,
     OffchainTopUpFailed,
+    OnchainRequestResult,
     PreSignHook,
     RequestIdMismatch,
+    RequestResult,
 )
 from mech_client.services.setup_service import SetupService
 from mech_client.services.subscription_service import SubscriptionService
@@ -132,6 +134,8 @@ __all__ = [
     # Marketplace
     "MechInfo",
     "OffchainRequestResult",
+    "OnchainRequestResult",
+    "RequestResult",
     "request_digest",
     # Off-chain nonce allocation
     "NonceAllocator",

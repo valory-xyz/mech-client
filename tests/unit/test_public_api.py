@@ -41,6 +41,8 @@ def test_the_off_chain_payer_api_is_exported() -> None:
         "MechPriceExceeded": marketplace_service.MechPriceExceeded,
         "MechInfo": marketplace_service.MechInfo,
         "OffchainRequestResult": marketplace_service.OffchainRequestResult,
+        "OnchainRequestResult": marketplace_service.OnchainRequestResult,
+        "RequestResult": marketplace_service.RequestResult,
         "payment_token": addresses.payment_token,
         "balance_tracker": addresses.balance_tracker,
         "ToolManager": manager.ToolManager,
