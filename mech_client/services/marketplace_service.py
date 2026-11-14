@@ -107,6 +107,25 @@ def _accepted_note(accepted_ids: List[str], request_nonces: List[int]) -> str:
     return f" Accepted earlier in this call, not watched: {accepted}."
 
 
+def _derivation_failed(e: Exception, nonce: Optional[int], note: str = "") -> ValueError:
+    """Log a failed request-id derivation and build the error a caller sees.
+
+    A library error's text can carry the RPC URL and its key, so the log gets
+    it redacted and the error names only its type.
+
+    :param e: The RPC or transport failure
+    :param nonce: The nonce whose id was being derived, None if not yet chosen
+    :param note: Appended to the message, e.g. the requests accepted earlier
+    :return: The ValueError to raise from ``e``
+    """
+    which = "the next nonce" if nonce is None else f"nonce {nonce}"
+    logger.warning(f"Request id derivation failed for {which}: {redacted_cause(e)}")
+    return ValueError(
+        f"Failed to derive the request id for {which} ({type(e).__name__}); "
+        "see the log or the chained cause." + note
+    )
+
+
 def _safe_int(value: Any, default: int = 0) -> int:
     """Coerce ``value`` to ``int`` with a numeric fallback.
 
@@ -753,7 +772,11 @@ class MarketplaceService(
         # verified against this address downstream (Safe.isValidSignature
         # for the Safe branch, plain ecrecover for the EOA branch).
         sender = self.requester()
-        current_nonce = marketplace_contract.functions.mapNonces(sender).call()
+        first_nonce = next(iter(nonces or []), None)
+        try:
+            current_nonce = marketplace_contract.functions.mapNonces(sender).call()
+        except (OSError, ValueError, Web3Exception) as e:
+            raise _derivation_failed(e, first_nonce) from e
         if nonces is None:
             request_nonces = [current_nonce + i for i in range(len(prompts))]
         else:
@@ -767,9 +790,12 @@ class MarketplaceService(
 
         # The signed id is derived locally, so a lying RPC can only cause a
         # mismatch; getRequestId is a cross-check.
-        domain_separator = bytes(
-            marketplace_contract.functions.domainSeparator().call()
-        )
+        try:
+            domain_separator = bytes(
+                marketplace_contract.functions.domainSeparator().call()
+            )
+        except (OSError, ValueError, Web3Exception) as e:
+            raise _derivation_failed(e, next(iter(request_nonces), None)) from e
         marketplace_address = str(marketplace_contract.address)
         mech_address = ensure_checksummed_address(priority_mech_address)
         payment_type_bytes = bytes.fromhex(payment_type.value)
@@ -810,15 +836,8 @@ class MarketplaceService(
                     ).call()
                 )
             except (OSError, ValueError, Web3Exception) as e:
-                # a library error's text can carry the RPC URL and its key
-                logger.warning(
-                    f"Request id derivation failed for nonce {nonce}: "
-                    f"{redacted_cause(e)}"
-                )
-                raise ValueError(
-                    f"Failed to derive the request id for nonce {nonce} "
-                    f"({type(e).__name__}); see the log or the chained cause."
-                    + _accepted_note(request_ids_hex, request_nonces)
+                raise _derivation_failed(
+                    e, nonce, _accepted_note(request_ids_hex, request_nonces)
                 ) from e
             logger.info(
                 f"Prompt sent directly to the mech (not published to IPFS); "

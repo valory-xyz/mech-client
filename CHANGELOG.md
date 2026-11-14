@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A failed request-id derivation, a failed off-chain POST and an unrecoverable signature name only the exception type in their message; the cause is chained and its redacted text logged, with the nonce (and, for a POST, the request id). An auto top-up failure's message is redacted.
 - When an off-chain request cannot discover the mech's URL, the error is `offchain_blocker`'s reason, naming the cause of a failed read. `ToolManager.offchain_url_from_metadata(service_id, read)` takes the `MetadataRead` (a bare document is still accepted).
 - Fetching the metadata document checks the HTTP status: a gateway error with a JSON body is no longer taken for the document.
-- An RPC or transport failure while deriving a request id is a `ValueError` naming the nonce and the exception type, on the first request of a call as on a later one; in a multi-request off-chain call it also names the requests already accepted.
+- An RPC or transport failure while deriving an off-chain request id, in its `mapNonces`, `domainSeparator` or `getRequestId` read, is a `ValueError` naming the nonce ("the next nonce" when `mapNonces` fails before one is chosen) and the exception type, on the first request of a call as on a later one; in a multi-request off-chain call it also names the requests already accepted.
 
 ## [0.25.0] - 2026-11-12
 

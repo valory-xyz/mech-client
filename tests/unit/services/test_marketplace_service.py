@@ -3743,6 +3743,63 @@ class TestLocalRequestId:
         assert "SECRETKEY" not in warning
         mech_post.assert_not_called()
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("kwargs", "named"), [({"nonces": [7]}, "nonce 7"), ({}, "the next nonce")]
+    )
+    async def test_a_map_nonces_failure_names_only_its_type(
+        self,
+        service: MarketplaceService,
+        mech_post: MagicMock,
+        kwargs: Dict[str, Any],
+        named: str,
+    ) -> None:
+        """The mapNonces read keeps the keyed RPC URL out of the error and the log."""
+        contract = _nonce_contract(5)
+        contract.functions.mapNonces.return_value.call.side_effect = Web3Exception(
+            "rpc down: https://rpc.example/v3/SECRETKEY"
+        )
+
+        with patch(
+            "mech_client.services.marketplace_service.logger.warning"
+        ) as mock_warn, pytest.raises(ValueError) as e:
+            await _send_offchain(service, contract, **kwargs)
+
+        assert type(e.value) is ValueError  # pylint: disable=unidiomatic-typecheck
+        assert isinstance(e.value.__cause__, Web3Exception)
+        assert f"{named} (Web3Exception)" in str(e.value)
+        assert "SECRETKEY" not in str(e.value)
+        (warning,) = mock_warn.call_args[0]
+        assert named in warning and "Web3Exception" in warning
+        assert "SECRETKEY" not in warning
+        mech_post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_a_domain_separator_failure_names_only_its_type(
+        self, service: MarketplaceService, mech_post: MagicMock
+    ) -> None:
+        """The domainSeparator read keeps the keyed RPC URL out of the error and the log."""
+        contract = _nonce_contract(5)
+        contract.functions.domainSeparator.return_value.call.side_effect = OSError(
+            "HTTPSConnectionPool(host='rpc.example'): Max retries exceeded with "
+            "url: /v3/SECRETKEY"
+        )
+
+        with patch(
+            "mech_client.services.marketplace_service.logger.warning"
+        ) as mock_warn, pytest.raises(ValueError) as e:
+            await _send_offchain(service, contract)
+
+        assert type(e.value) is ValueError  # pylint: disable=unidiomatic-typecheck
+        assert isinstance(e.value.__cause__, OSError)
+        assert "nonce 5 (OSError)" in str(e.value)
+        assert "SECRETKEY" not in str(e.value)
+        (warning,) = mock_warn.call_args[0]
+        assert "nonce 5" in warning and "OSError" in warning
+        assert "SECRETKEY" not in warning
+        service.signer.sign_message.assert_not_called()
+        mech_post.assert_not_called()
+
     def test_mismatch_survives_pickle_and_copy(self) -> None:
         """Every field comes back after a round trip."""
         err = RequestIdMismatch("bad", expected="aa", reported="bb", nonce=3)
