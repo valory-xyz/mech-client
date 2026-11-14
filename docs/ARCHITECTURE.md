@@ -297,12 +297,15 @@ class MarketplaceService:
 
 `mapNonces(sender)` only moves on settlement, and the mech admits only
 `mapNonces + accepted + settling`, so a payer allocates nonces itself.
-`NonceAllocator` keeps one queue per (chain, sender): one mech in flight, the
+`NonceAllocator` keeps one queue per (chain, sender): one mech in flight (forced
+by settlement's one counter per sender; a `taken` with no slot of ours holds
+the answering mech too), the
 queue lock held from `reserve` until the mech answers (POSTs in nonce order), a
 slot held until `mapNonces > n`. Slots, salts and the stall are persisted in
 `mech_nonces.json` under the caller's `store_path` before each POST; an
 unreadable or unwritable store refuses with `NonceRefused`, and a lock on
-`mech_nonces.lock` keeps the store to one allocator, across processes too. `outcome_of` maps
+`mech_nonces.lock` keeps the store to one allocator, across processes too;
+a closed allocator refuses and writes nothing. `outcome_of` maps
 `OffchainRequestRejected` / `OffchainTopUpFailed` to an `Outcome`, and
 `send_with_nonce` drives one send through a reservation (503 resends the same
 nonce; a failure after `send_request` received the `PreSignHook` it hands
