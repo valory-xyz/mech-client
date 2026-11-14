@@ -59,6 +59,7 @@ from mech_client.infrastructure.blockchain.receipt_waiter import (
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.ipfs import IPFSClient, push_metadata_to_ipfs
 from mech_client.services.base_service import BaseTransactionService
+from mech_client.utils.errors.exceptions import RpcError
 from mech_client.utils.redaction import redacted, redacted_cause
 from mech_client.utils.validators import ensure_checksummed_address
 from safe_eth.eth import EthereumClient
@@ -90,6 +91,12 @@ OFFCHAIN_HTTP_TIMEOUT = 30
 # wallet drained. 10x is generous for legitimate price moves between
 # signature and request, tight enough that catastrophic drain stays bounded.
 _MAX_AUTO_DEPOSIT_RATIO = 10
+# What handle_cli_errors answers with its MECHX_CHAIN_RPC hint
+_RPC_TRANSPORT_ERRORS = (
+    requests.exceptions.HTTPError,
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+)
 
 
 def _accepted_note(accepted_ids: List[str], request_nonces: List[int]) -> str:
@@ -122,10 +129,13 @@ def _derivation_failed(
     """
     which = "the next nonce" if nonce is None else f"nonce {nonce}"
     logger.warning(f"Request id derivation failed for {which}: {redacted_cause(e)}")
-    return ValueError(
+    message = (
         f"Failed to derive the request id for {which} ({type(e).__name__}); "
         "see the log or the chained cause." + note
     )
+    if isinstance(e, _RPC_TRANSPORT_ERRORS):
+        return RequestIdRpcError(message)
+    return ValueError(message)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -280,6 +290,14 @@ class RequestIdMismatch(_FieldsError):
         self.expected = expected
         self.reported = reported
         self.nonce = nonce
+
+
+class RequestIdRpcError(RpcError, ValueError):
+    """The RPC could not be reached while deriving an off-chain request id.
+
+    A ``ValueError``, as every derivation failure is, and an ``RpcError``, so
+    the CLI points at the RPC.
+    """
 
 
 class MechPriceExceeded(_FieldsError):

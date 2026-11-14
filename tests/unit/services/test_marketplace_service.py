@@ -29,6 +29,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 import requests
+from click import ClickException
 from eth_account import Account
 from eth_account.messages import encode_defunct
 from web3.exceptions import Web3Exception
@@ -53,6 +54,8 @@ from mech_client.services.marketplace_service import (
     PreSignHook,
     RequestIdMismatch,
 )
+from mech_client.utils.errors import RpcError
+from mech_client.utils.errors.handlers import handle_cli_errors
 from mech_client.utils.validators import ensure_checksummed_address
 from tests.unit.helpers import create_mock_signer
 
@@ -3799,6 +3802,50 @@ class TestLocalRequestId:
         assert "SECRETKEY" not in warning
         service.signer.sign_message.assert_not_called()
         mech_post.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("read", ["mapNonces", "domainSeparator", "getRequestId"])
+    @pytest.mark.parametrize(
+        "cause",
+        [
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.HTTPError,
+        ],
+    )
+    async def test_an_unreachable_rpc_is_a_value_error_the_cli_points_at_the_rpc(
+        self,
+        service: MarketplaceService,
+        mech_post: MagicMock,
+        read: str,
+        cause: type,
+    ) -> None:
+        """Library callers still catch ValueError; the CLI adds its MECHX_CHAIN_RPC hint."""
+        contract = _nonce_contract(5)
+        failing = getattr(contract.functions, read)
+        failing.side_effect = None
+        failing.return_value.call.side_effect = cause(
+            "Max retries exceeded with url: /v3/SECRETKEY"
+        )
+
+        with pytest.raises(ValueError) as e:
+            await _send_offchain(service, contract)
+
+        assert isinstance(e.value, RpcError)
+        assert isinstance(e.value.__cause__, cause)
+        assert f"({cause.__name__})" in str(e.value)
+        assert "SECRETKEY" not in str(e.value)
+        mech_post.assert_not_called()
+
+        @handle_cli_errors
+        def command() -> None:
+            raise e.value
+
+        with pytest.raises(ClickException) as shown:
+            command()
+        assert "Failed to derive the request id" in shown.value.message
+        assert "MECHX_CHAIN_RPC" in shown.value.message
+        assert "SECRETKEY" not in shown.value.message
 
     def test_mismatch_survives_pickle_and_copy(self) -> None:
         """Every field comes back after a round trip."""
