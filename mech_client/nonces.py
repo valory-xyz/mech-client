@@ -372,7 +372,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         """Release the store for another allocator; this one refuses from then on.
 
         A send already inside ``reserve`` still gets its answer, but nothing is
-        written any more (the unwritten answer is logged): the store is the
+        written any more (each unwritten change is logged): the store is the
         next allocator's.
         """
         with self._save_lock:
@@ -434,7 +434,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         :param sender: Requester address
         :param nonces: Nonces whose deliveries were seen
         """
-        queue = self._queue(self.key(chain, sender))
+        key = self.key(chain, sender)
+        queue = self._queue(key)
         now = self._clock()
         with queue.lock:
             marked = [n for n in nonces if n in queue.slots]
@@ -442,7 +443,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 if queue.slots[nonce].delivered_at is None:
                     queue.slots[nonce].delivered_at = now
         if marked:
-            self._save()
+            self._save(f"the deliveries of mech nonces {marked} on {key}")
 
     def _sync(self, key: str, queue: _Queue, map_nonces: int) -> None:
         """Free every slot below mapNonces (settled), and stall an overdue queue.
@@ -460,7 +461,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             logger.warning("mech nonce queue %s stalled: a slot never settled", key)
             queue.stalled_at = now
         if settled or overdue:
-            self._save()
+            self._save(f"the settled and stalled slots of {key}")
 
     def _overdue(self, slot: _Slot, now: float) -> bool:
         """Whether mapNonces should have passed a held slot by now.
@@ -525,14 +526,14 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 nonce = map_nonces  # the probe that can clear the stall
             else:
                 nonce = map_nonces + len(queue.slots)
-            prior = queue.slots.get(nonce)  # held already only for a probe
+            # held already only for a probe, and then on disk as it is: a
+            # crash mid-probe must reload that slot with its settle clock
+            prior = queue.slots.get(nonce)
             if prior is None:
                 # written down before the POST: if the process dies mid-send
                 # the mech may hold n, and a restart must not hand it out again
                 queue.slots[nonce] = _Slot(UNKNOWN, mech.lower(), salt, self._clock())
-                self._save()
-            # a probe's n is already held on disk; a crash mid-probe must
-            # reload that slot as it was, its settle clock included
+                self._save(f"the reservation of mech nonce {nonce} on {key}")
             # held in memory only (unwritable, or closed under us): a restart
             # would reissue n
             if self._unwritable or self._closed:
@@ -646,7 +647,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 now = self._clock()
                 queue.stalled_at = now
                 self._restart_settle_clocks(queue, map_nonces, now)
-                self._save()
+                self._save(f"the hard cancel of mech nonce {map_nonces} on {key}")
 
     @staticmethod
     def _restart_settle_clocks(queue: _Queue, nonce: int, now: float) -> None:
@@ -769,14 +770,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             )
         elif outcome == NOT_ACCEPTED:
             self._restore(queue, nonce, prior)  # n is reused next
-        if not self._save():
-            logger.warning(
-                "mech nonce %s on %s answered %r after this allocator was "
-                "closed; not written, so the store still holds it as unknown",
-                nonce,
-                key,
-                outcome,
-            )
+        self._save(f"mech nonce {nonce} on {key} answered {outcome!r}")
 
     @staticmethod
     def _restore(queue: _Queue, nonce: int, prior: Optional[_Slot]) -> None:
@@ -831,14 +825,22 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             stalled_at=stalled_at,
         )
 
-    def _save(self) -> bool:
+    def _save(self, change: str) -> None:
         """Write every queue down; a failure refuses requests, never an answer.
 
-        :return: False if skipped because the allocator is closed
+        Once closed, nothing is written (the store is the next allocator's),
+        and the skipped change is logged.
+
+        :param change: What is being saved, for that log
         """
         with self._save_lock:
             if self._closed:
-                return False
+                logger.warning(
+                    "%s not written to %s: this allocator was closed",
+                    change,
+                    self._path,
+                )
+                return
             try:
                 self._write()
             except OSError as e:
@@ -846,7 +848,6 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                     "could not write %s (%s); mech requests refused", self._path, e
                 )
                 self._unwritable = True
-            return True
 
     def _write(self) -> None:
         with self._lock:

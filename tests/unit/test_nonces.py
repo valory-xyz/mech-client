@@ -1103,6 +1103,33 @@ def test_an_answer_after_close_is_logged_and_not_written(
     second.close()
 
 
+def test_every_change_after_close_is_logged_naming_the_store(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """A hard cancel or a delivery that ends after close says what it did not write."""
+    first = _allocator(tmp_path, clock)
+    with take(first, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="a5")
+    with take(first, 5) as slot:
+        slot.answered("taken", mech=MECH_A, salt="")  # 6 taken elsewhere: stall
+    stalled_at = first.stalled_since("gnosis", SENDER)
+    clock.now += 10
+    with patch.object(nonces.logger, "warning") as warning:
+        with first.hard_cancel("gnosis", SENDER, lambda: 5, stalled_for=0):
+            first.close()
+        first.delivered("gnosis", SENDER, [5])
+    messages = [c.args[0] % c.args[1:] for c in warning.call_args_list]
+    store = str(tmp_path / nonces.NONCES_FILE)
+    assert len(messages) == 2
+    assert all(store in m and f"gnosis:{SENDER}" in m for m in messages)
+    assert "hard cancel of mech nonce 5" in messages[0]
+    assert "deliveries of mech nonces [5]" in messages[1]
+    second = _allocator(tmp_path, clock)
+    assert second.stalled_since("gnosis", SENDER) == stalled_at
+    assert cast(dict, held(second, 5))["delivered_at"] is None
+    second.close()
+
+
 def test_a_close_mid_reserve_never_sends_an_unsaved_slot(
     tmp_path: Path, clock: Clock
 ) -> None:
