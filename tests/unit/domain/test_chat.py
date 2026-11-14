@@ -166,6 +166,15 @@ def test_a_result_string_that_is_not_a_message_is_the_completion(obj: Any) -> No
     assert chat_report({"result": text}) == {"completion": text, "usage": {}}
 
 
+@pytest.mark.parametrize(
+    "delivery",
+    [{"content": ""}, '{"content": ""}', {"result": '{"content": ""}'}],
+)
+def test_an_empty_completion_reads_the_same_decoded_or_not(delivery: Any) -> None:
+    """An empty content is a completion, whether the message came as JSON text or not."""
+    assert chat_report(delivery) == {"completion": "", "usage": {}}
+
+
 def test_a_json_string_literal_is_its_text() -> None:
     """A result JSON-encoded as a string, as mechs usually send it, is decoded."""
     assert chat_report({"result": '"hi"'}) == {"completion": "hi", "usage": {}}

@@ -144,7 +144,7 @@ def _decode(
     decoded = _parse(value)
     if isinstance(decoded, str):
         return decoded
-    if isinstance(decoded, dict) and completion_of(decoded):
+    if isinstance(decoded, dict) and completion_of(decoded) is not None:
         return decoded
     return value
 
