@@ -268,8 +268,8 @@ class Reservation:
         """
         Record the mech's answer to this nonce; a reservation is answered once.
 
-        ``retry`` is not an answer: the caller resends the same nonce, under the
-        placeholder, and answers what the resend got.
+        ``retry`` is not an answer: the caller resends the same nonce under this
+        reservation, and answers what the resend got.
 
         :param outcome: What the answer means for the nonce
         :param mech: The mech the request went to
@@ -525,17 +525,14 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 nonce = map_nonces  # the probe that can clear the stall
             else:
                 nonce = map_nonces + len(queue.slots)
-            # written down before the POST: if the process dies mid-send the
-            # mech may hold n, and a restart must not hand it out again
             prior = queue.slots.get(nonce)  # held already only for a probe
-            queue.slots[nonce] = _Slot(
-                UNKNOWN,
-                mech.lower(),
-                salt,
-                self._clock(),
-                taken=prior is not None and prior.taken,
-            )
-            self._save()
+            if prior is None:
+                # written down before the POST: if the process dies mid-send
+                # the mech may hold n, and a restart must not hand it out again
+                queue.slots[nonce] = _Slot(UNKNOWN, mech.lower(), salt, self._clock())
+                self._save()
+            # a probe's n is already held on disk; a crash mid-probe must
+            # reload that slot as it was, its settle clock included
             # held in memory only (unwritable, or closed under us): a restart
             # would reissue n
             if self._unwritable or self._closed:
@@ -783,7 +780,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
 
     @staticmethod
     def _restore(queue: _Queue, nonce: int, prior: Optional[_Slot]) -> None:
-        """Put back what held n before the placeholder, or free n.
+        """Put back what held n before this reservation, or free n.
 
         :param queue: The queue
         :param nonce: The nonce

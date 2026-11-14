@@ -462,6 +462,31 @@ def test_an_unknown_probe_over_the_stuck_slot_keeps_its_clock(
     assert cast(dict, held(allocator, 5))["at"] == stuck_at
 
 
+def test_a_crash_mid_probe_keeps_the_stuck_slot_as_it_was(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """The probe writes nothing over the held slot, so a restart still sees it stuck."""
+    first = _allocator(tmp_path, clock)
+    with take(first, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="s5")
+    first.delivered("gnosis", SENDER, [5])
+    clock.now += 61
+    _sync(first, 5)
+    stalled_at = first.stalled_since("gnosis", SENDER)
+    stuck = cast(dict, held(first, 5))
+    clock.now += 300
+    with take(first, 5) as probe:
+        assert probe.nonce == 5
+        first.close()  # the process dies before the mech answers
+        second = _allocator(tmp_path, clock)
+        with take(second, 5) as slot:
+            assert slot.nonce == 5
+            slot.answered("taken", mech=MECH_A, salt="probe")
+    assert second.stalled_since("gnosis", SENDER) == stalled_at
+    assert cast(dict, held(second, 5)) == stuck
+    second.close()
+
+
 def test_an_unknown_probe_over_a_taken_marker_keeps_the_marker(
     allocator: NonceAllocator, clock: Clock
 ) -> None:
@@ -472,7 +497,7 @@ def test_an_unknown_probe_over_a_taken_marker_keeps_the_marker(
     marker_at = clock.now
     clock.now += 5
     with take(allocator, 5) as slot:
-        assert cast(dict, held(allocator, 5))["taken"] is True  # the placeholder
+        assert cast(dict, held(allocator, 5))["taken"] is True  # the probed slot
         slot.answered("unknown", mech=MECH_A, salt="probe1")
     with take(allocator, 5) as slot:
         slot.answered("taken", mech=MECH_A, salt="probe2")
@@ -956,7 +981,7 @@ def test_a_rejected_probe_puts_back_what_it_replaced(allocator: NonceAllocator) 
         slot.answered("not_accepted", mech=MECH_A, salt="")
     assert cast(dict, held(allocator, 5))["salt"] == "kept"
     with take(allocator, 5) as slot:
-        slot.answered("retry", mech=MECH_A, salt="")  # resent under the placeholder
+        slot.answered("retry", mech=MECH_A, salt="")  # resent, same reservation
     # the resend's answer never came: 5 is still held, as our accepted slot
     assert cast(dict, held(allocator, 5))["state"] == "accepted"
 
