@@ -554,7 +554,7 @@ def test_outcomes_follow_the_mechs_answers() -> None:
     """503 retries; the stale-nonce 401 is taken; 4xx not accepted; else unknown."""
     assert outcome_of(reject(503)) == "retry"
     assert outcome_of(reject(401, nonces.NONCE_TAKEN_REASON)) == "taken"
-    assert outcome_of(reject(401, "bad signature")) == "not_accepted"
+    assert outcome_of(reject(401, "bad signature")) == "unknown"  # held, not freed
     assert outcome_of(reject(402)) == "not_accepted"
     deposited = OffchainRequestRejected(
         "x", request_id="01", nonce=0, status=402, reason="r", unsent=[], deposited=9
@@ -566,6 +566,30 @@ def test_outcomes_follow_the_mechs_answers() -> None:
     assert outcome_of(reject(500)) == "unknown"
     top_up = OffchainTopUpFailed("cap", request_id="01", nonce=0, unsent=[])
     assert outcome_of(top_up) == "not_accepted"
+
+
+def test_the_taken_reason_is_the_mechs_verbatim() -> None:
+    """Matched exactly: a drift here would turn every taken 401 into unknown."""
+    assert nonces.NONCE_TAKEN_REASON == "wire nonce below sender's next expected slot"
+
+
+def test_retry_leaves_the_reservation_open_for_the_resends_answer(
+    allocator: NonceAllocator,
+) -> None:
+    """A caller driving a reservation answers retry on a 503, resends, then answers."""
+    with take(allocator, 5) as slot:
+        slot.answered("retry", mech=MECH_A, salt="s5")
+        assert slot.outcome is None
+        slot.answered("accepted", mech=MECH_A, salt="s5")
+        assert slot.outcome == "accepted"
+    assert cast(dict, held(allocator, 5))["state"] == "accepted"
+
+
+def test_retry_alone_holds_the_nonce_as_unknown(allocator: NonceAllocator) -> None:
+    """A resend may have reached the mech: left after retry, n is held."""
+    with take(allocator, 5) as slot:
+        slot.answered("retry", mech=MECH_A, salt="s5")
+    assert cast(dict, held(allocator, 5))["state"] == "unknown"
 
 
 class BeforeHook(NamedTuple):

@@ -267,6 +267,9 @@ class Reservation:
         """
         Record the mech's answer to this nonce; a reservation is answered once.
 
+        ``retry`` is not an answer: the caller resends the same nonce, under the
+        placeholder, and answers what the resend got.
+
         :param outcome: What the answer means for the nonce
         :param mech: The mech the request went to
         :param salt: The request's metadata salt, kept so a resend reuses its id
@@ -276,6 +279,8 @@ class Reservation:
             raise RuntimeError(
                 f"nonce {self._nonce} was already answered {self._outcome!r}"
             )
+        if outcome == RETRY:
+            return
         self._outcome = outcome
         self._record(self._nonce, outcome, mech=mech, salt=salt, prior=self._prior)
 
@@ -751,7 +756,6 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             queue.slots[nonce] = _Slot(UNKNOWN, mech.lower(), salt, now)
         elif outcome == NOT_ACCEPTED:
             self._restore(queue, nonce, prior)  # n is reused next
-        # RETRY: the caller resends the same nonce, under the placeholder
         self._save()
 
     @staticmethod
@@ -889,15 +893,17 @@ def outcome_of(error: Union[OffchainRequestRejected, OffchainTopUpFailed]) -> Ou
 
     :param error: The rejection or top-up failure ``send_request`` raised
     :return: ``not_accepted`` for a top-up failure; for an HTTP answer,
-        ``retry`` on 503, ``taken`` on the stale-nonce 401, ``not_accepted``
-        on any other 4xx, else ``unknown``
+        ``retry`` on 503, ``taken`` on the stale-nonce 401, ``unknown`` on
+        any other 401, ``not_accepted`` on any other 4xx, else ``unknown``
     """
     if isinstance(error, OffchainTopUpFailed):
         return NOT_ACCEPTED
     if error.retryable:
         return RETRY
-    if error.status == HTTP_UNAUTHORIZED and error.reason == NONCE_TAKEN_REASON:
-        return TAKEN
+    if error.status == HTTP_UNAUTHORIZED:
+        # an unrecognised 401 may be the stale-nonce one reworded: freeing n
+        # would reissue a nonce the mech still holds
+        return TAKEN if error.reason == NONCE_TAKEN_REASON else UNKNOWN
     if error.status in HTTP_CLIENT_ERRORS:
         return NOT_ACCEPTED
     return UNKNOWN
