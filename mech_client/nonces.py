@@ -869,7 +869,17 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             handle.flush()
             os.fsync(handle.fileno())
         tmp.replace(self._path)
-        _sync_dir(self._path.parent)
+        try:
+            _sync_dir(self._path.parent)
+        except OSError as e:
+            # the rename has landed; some mounts (FUSE, SMB, WSL drvfs) cannot
+            # fsync a directory, and refusing every request there is worse
+            logger.warning(
+                "could not sync directory %s (errno %s); mech_nonces.json was "
+                "written, but its rename may not survive a power loss",
+                self._path.parent,
+                e.errno,
+            )
 
 
 def _slot_state(raw: Any) -> SlotState:

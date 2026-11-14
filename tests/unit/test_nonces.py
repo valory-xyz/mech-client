@@ -1111,6 +1111,27 @@ def test_a_write_is_flushed_to_disk_before_its_rename(
         slot.answered("accepted", mech=MECH_A, salt="")
 
 
+def test_a_directory_that_cannot_be_synced_still_takes_requests(
+    allocator: NonceAllocator,
+) -> None:
+    """The rename has landed: a mount that cannot fsync a directory only warns."""
+    with (
+        patch.object(
+            nonces, "_sync_dir", side_effect=OSError(errno.EINVAL, "Invalid argument")
+        ),
+        patch.object(nonces.logger, "warning") as warning,
+    ):
+        with take(allocator, 5) as slot:
+            slot.answered("accepted", mech=MECH_A, salt="a5")
+        with take(allocator, 5) as slot:
+            assert slot.nonce == 6
+            slot.answered("accepted", mech=MECH_A, salt="a6")
+    message = warning.call_args.args[0] % warning.call_args.args[1:]
+    assert str(allocator._path.parent) in message  # pylint: disable=protected-access
+    assert f"errno {errno.EINVAL}" in message
+    assert salt_of(allocator, 6) == "a6"
+
+
 @pytest.mark.parametrize(
     "error",
     [BlockingIOError(errno.EAGAIN, "busy"), OSError(errno.EACCES, "locked")],
