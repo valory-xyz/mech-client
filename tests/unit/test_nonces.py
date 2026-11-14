@@ -359,7 +359,70 @@ def test_taken_resolves_our_unknown_or_stalls(
     }
     assert allocator.stalled_since("gnosis", SENDER) is None
     with take(allocator, 5) as slot:
-        assert slot.nonce == 6  # resumed past 5
+        assert slot.nonce == 7  # resumed past 5 and the 6 the mech holds
+
+
+def test_taken_with_no_slot_of_ours_keeps_that_mech_in_flight(
+    allocator: NonceAllocator, clock: Clock
+) -> None:
+    """The mech holds n for a request we lost: another mech must not be sent n too."""
+    with take(allocator, 5) as slot:
+        slot.answered("taken", mech=MECH_A, salt="s5")
+    assert held(allocator, 5) == {
+        "state": "unknown",
+        "mech": MECH_A,
+        "salt": "",
+        "at": clock.now,
+        "delivered_at": None,
+        "taken": True,
+    }
+    with pytest.raises(NonceRefused) as refused:
+        _enter(take(allocator, 5, MECH_B, timeout=0))
+    assert refused.value.rule == "mech-in-flight"
+    with take(allocator, 6, MECH_B) as slot:  # mapNonces passed 5: settled
+        assert slot.nonce == 6
+
+
+def test_a_taken_marker_survives_a_restart(tmp_path: Path, clock: Clock) -> None:
+    """Persisted as an optional field: a restart still keeps the other mech out."""
+    first = _allocator(tmp_path, clock)
+    with take(first, 5) as slot:
+        slot.answered("taken", mech=MECH_A, salt="")
+    first.close()
+    second = _allocator(tmp_path, clock)
+    with take(second, 5) as slot:  # the probe over the marker, taken again
+        slot.answered("taken", mech=MECH_A, salt="")
+    assert cast(dict, held(second, 5))["taken"] is True
+    assert second.stalled("gnosis", SENDER)
+    second.close()
+
+
+def test_a_taken_flag_that_is_not_a_boolean_is_unreadable(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """A store whose flag cannot be read cannot tell whose the slot is."""
+    (tmp_path / nonces.NONCES_FILE).write_text(
+        json.dumps(
+            {
+                f"gnosis:{SENDER}": {
+                    "slots": {
+                        "5": {
+                            "state": "unknown",
+                            "mech": MECH_A,
+                            "salt": "",
+                            "at": 1,
+                            "taken": "yes",
+                        }
+                    }
+                }
+            }
+        )
+    )
+    allocator = _allocator(tmp_path, clock)
+    with pytest.raises(NonceRefused) as refused:
+        _enter(take(allocator, 5))
+    assert refused.value.rule == "mech-queue-unreadable"
+    allocator.close()
 
 
 def test_taken_over_the_stuck_slot_keeps_the_stall_and_its_clock(
@@ -599,7 +662,7 @@ def test_send_with_nonce_refuses_a_persistent_gap(allocator: NonceAllocator) -> 
         (
             reject(401, nonces.NONCE_TAKEN_REASON, 5),
             "mech-nonce-taken",
-            False,
+            True,
             "HTTP 401",
         ),
         (reject(402, "payment required", 5), "mech-request-rejected", False, "402"),
@@ -1180,7 +1243,7 @@ class TestHardCancel:
             assert slot.nonce == 5
             slot.answered("taken", mech=MECH_A, salt="")
         assert allocator.stalled_since("gnosis", SENDER) == stalled_at
-        assert held(allocator, 5) is None
+        assert cast(dict, held(allocator, 5))["at"] == stalled_at  # still theirs
 
     def test_it_yields_map_nonces_and_the_next_sync_frees_only_that_slot(
         self, allocator: NonceAllocator, clock: Clock
@@ -1255,7 +1318,7 @@ class TestHardCancel:
         assert cast(dict, held(allocator, 7))["at"] == clock.now
         assert cast(dict, held(allocator, 7))["delivered_at"] is None
         with take(allocator, 6) as slot:
-            assert slot.nonce == 8
+            assert slot.nonce == 9  # 8 is still held by the other request
 
     def test_it_restarts_the_settle_clock_of_later_slots(
         self, allocator: NonceAllocator, clock: Clock

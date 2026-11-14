@@ -188,13 +188,18 @@ class NonceRefused(Exception):
 
 @dataclass
 class _Slot:
-    """One held nonce: who it was sent to, its salt, and what the mech said."""
+    """One held nonce: who it was sent to, its salt, and what the mech said.
+
+    ``taken`` marks a nonce the mech answered as already held by a request
+    that is not one of ours: it keeps that mech in flight until settlement.
+    """
 
     state: SlotState
     mech: str
     salt: str
     at: float
     delivered_at: Optional[float] = None
+    taken: bool = False
 
     def settle_from(self) -> float:
         """Return when mapNonces should start to pass this slot.
@@ -719,7 +724,10 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 self._restart_settle_clocks(queue, nonce, now)
             queue.stalled_at = None
         elif outcome == TAKEN:
-            if prior is not None:
+            if prior is not None and prior.taken:
+                # still held by the request that is not ours: nothing changes
+                queue.slots[nonce] = prior
+            elif prior is not None:
                 # a probe over our own slot at mapNonces: the mech holds that
                 # request, so it was accepted
                 queue.slots[nonce] = _Slot(
@@ -733,8 +741,10 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 # else it is the stuck one: the stall, and its clock, stand
             else:
                 # another signer took n, or the mech still settles slots we
-                # think free: sending more would only gap behind it
-                queue.slots.pop(nonce, None)
+                # think free: sending more would only gap behind it. That mech
+                # holds n, so keep it in flight until mapNonces passes n: a
+                # request to another mech would be taken at n as well
+                queue.slots[nonce] = _Slot(UNKNOWN, mech.lower(), "", now, taken=True)
                 if not queue.stalled:
                     queue.stalled_at = now
         elif outcome == UNKNOWN:
@@ -790,6 +800,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                     s["salt"],
                     float(s["at"]),
                     _optional_time(s.get("delivered_at")),
+                    _optional_flag(s.get("taken", False)),
                 )
                 for n, s in entry.get("slots", {}).items()
             },
@@ -823,6 +834,8 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                         "salt": s.salt,
                         "at": s.at,
                         "delivered_at": s.delivered_at,
+                        # optional, so a store without it stays readable
+                        **({"taken": True} if s.taken else {}),
                     }
                     for n, s in sorted(dict(queue.slots).items())
                 },
@@ -856,6 +869,18 @@ def _slot_state(raw: Any) -> SlotState:
 
 def _optional_time(raw: Any) -> Optional[float]:
     return None if raw is None else float(raw)
+
+
+def _optional_flag(raw: Any) -> bool:
+    """Check a persisted optional flag.
+
+    :param raw: The stored value
+    :return: The flag
+    :raises ValueError: If it is not a boolean
+    """
+    if not isinstance(raw, bool):
+        raise ValueError(f"flag {raw!r} is not a boolean")
+    return raw
 
 
 def outcome_of(error: Union[OffchainRequestRejected, OffchainTopUpFailed]) -> Outcome:
