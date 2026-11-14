@@ -527,7 +527,13 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             # written down before the POST: if the process dies mid-send the
             # mech may hold n, and a restart must not hand it out again
             prior = queue.slots.get(nonce)  # held already only for a probe
-            queue.slots[nonce] = _Slot(UNKNOWN, mech.lower(), salt, self._clock())
+            queue.slots[nonce] = _Slot(
+                UNKNOWN,
+                mech.lower(),
+                salt,
+                self._clock(),
+                taken=prior is not None and prior.taken,
+            )
             self._save()
             # held in memory only (unwritable, or closed under us): a restart
             # would reissue n
@@ -758,7 +764,11 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 if not queue.stalled:
                     queue.stalled_at = now
         elif outcome == UNKNOWN:
-            queue.slots[nonce] = _Slot(UNKNOWN, mech.lower(), salt, now)
+            # n stays held either way; a probe's unknown answer says nothing
+            # new about the slot it probed, so its clock and marker stand
+            queue.slots[nonce] = (
+                prior if prior is not None else _Slot(UNKNOWN, mech.lower(), salt, now)
+            )
         elif outcome == NOT_ACCEPTED:
             self._restore(queue, nonce, prior)  # n is reused next
         self._save()

@@ -445,6 +445,46 @@ def test_taken_over_the_stuck_slot_keeps_the_stall_and_its_clock(
         assert nonce == 5
 
 
+def test_an_unknown_probe_over_the_stuck_slot_keeps_its_clock(
+    allocator: NonceAllocator, clock: Clock
+) -> None:
+    """A 5xx to the probe, then the stale-nonce 401: the stuck slot still stalls."""
+    _overdue_queue(allocator, clock)
+    stalled_at = allocator.stalled_since("gnosis", SENDER)
+    stuck_at = cast(dict, held(allocator, 5))["at"]
+    clock.now += 300
+    with take(allocator, 5) as slot:
+        slot.answered("unknown", mech=MECH_A, salt="probe1")
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 5
+        slot.answered("taken", mech=MECH_A, salt="probe2")
+    assert allocator.stalled_since("gnosis", SENDER) == stalled_at
+    assert cast(dict, held(allocator, 5))["at"] == stuck_at
+
+
+def test_an_unknown_probe_over_a_taken_marker_keeps_the_marker(
+    allocator: NonceAllocator, clock: Clock
+) -> None:
+    """The marker survives an unknown probe, and a crash mid-probe, so the stall stands."""
+    with take(allocator, 5) as slot:
+        slot.answered("taken", mech=MECH_A, salt="")
+    stalled_at = allocator.stalled_since("gnosis", SENDER)
+    marker_at = clock.now
+    clock.now += 5
+    with take(allocator, 5) as slot:
+        assert cast(dict, held(allocator, 5))["taken"] is True  # the placeholder
+        slot.answered("unknown", mech=MECH_A, salt="probe1")
+    with take(allocator, 5) as slot:
+        slot.answered("taken", mech=MECH_A, salt="probe2")
+    assert allocator.stalled_since("gnosis", SENDER) == stalled_at
+    marker = cast(dict, held(allocator, 5))
+    assert (marker["state"], marker["at"], marker["taken"]) == (
+        "unknown",
+        marker_at,
+        True,
+    )
+
+
 def test_an_overdue_slot_stalls_the_queue(
     allocator: NonceAllocator, clock: Clock
 ) -> None:
@@ -917,7 +957,8 @@ def test_a_rejected_probe_puts_back_what_it_replaced(allocator: NonceAllocator) 
     assert cast(dict, held(allocator, 5))["salt"] == "kept"
     with take(allocator, 5) as slot:
         slot.answered("retry", mech=MECH_A, salt="")  # resent under the placeholder
-    assert cast(dict, held(allocator, 5))["state"] == "unknown"
+    # the resend's answer never came: 5 is still held, as our accepted slot
+    assert cast(dict, held(allocator, 5))["state"] == "accepted"
 
 
 def _hold_lock(allocator: NonceAllocator) -> Tuple[threading.Event, threading.Thread]:
