@@ -3256,13 +3256,19 @@ class TestCallerOwnedNonces:
             "exceeded with url: /send_signed_requests?key=SECRETKEY"
         )
 
-        with pytest.raises(ValueError, match="Failed to send") as e:
+        with patch(
+            "mech_client.services.marketplace_service.logger.warning"
+        ) as mock_warn, pytest.raises(ValueError, match="Failed to send") as e:
             await _send_offchain(service, _nonce_contract(5))
 
         assert not isinstance(e.value, OffchainRequestRejected)
         assert "(ConnectionError)" in str(e.value)
         assert "SECRETKEY" not in str(e.value)
         assert isinstance(e.value.__cause__, requests.exceptions.ConnectionError)
+        (warning,) = mock_warn.call_args[0]
+        assert f"nonce 5 (request {_request_id_for(5).hex()})" in warning
+        assert "ConnectionError" in warning
+        assert "SECRETKEY" not in warning
 
     @pytest.mark.asyncio
     async def test_send_request_refuses_a_nonce_count_mismatch_early(
@@ -3713,16 +3719,28 @@ class TestLocalRequestId:
         assert mech_post.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_an_rpc_failure_on_the_first_request_propagates_as_is(
+    async def test_an_rpc_failure_on_the_first_request_names_only_its_type(
         self, service: MarketplaceService, mech_post: MagicMock
     ) -> None:
-        """Nothing was accepted yet, so there is nothing to name."""
+        """The keyed RPC URL stays out of the error and the log on the first request too."""
         contract = _nonce_contract(5)
-        contract.functions.getRequestId.side_effect = Web3Exception("rpc down")
+        contract.functions.getRequestId.side_effect = Web3Exception(
+            "rpc down: https://rpc.example/v3/SECRETKEY"
+        )
 
-        with pytest.raises(Web3Exception, match="rpc down"):
+        with patch(
+            "mech_client.services.marketplace_service.logger.warning"
+        ) as mock_warn, pytest.raises(ValueError) as e:
             await _send_offchain(service, contract)
 
+        assert type(e.value) is ValueError  # pylint: disable=unidiomatic-typecheck
+        assert isinstance(e.value.__cause__, Web3Exception)
+        assert "nonce 5 (Web3Exception)" in str(e.value)
+        assert "SECRETKEY" not in str(e.value)
+        assert "Accepted earlier" not in str(e.value)
+        (warning,) = mock_warn.call_args[0]
+        assert "nonce 5" in warning and "Web3Exception" in warning
+        assert "SECRETKEY" not in warning
         mech_post.assert_not_called()
 
     def test_mismatch_survives_pickle_and_copy(self) -> None:

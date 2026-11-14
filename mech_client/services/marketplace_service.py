@@ -810,9 +810,7 @@ class MarketplaceService(
                     ).call()
                 )
             except (OSError, ValueError, Web3Exception) as e:
-                if not request_ids_hex:
-                    raise
-                # earlier requests went out: say so, as a transport error does
+                # a library error's text can carry the RPC URL and its key
                 logger.warning(
                     f"Request id derivation failed for nonce {nonce}: "
                     f"{redacted_cause(e)}"
@@ -893,7 +891,10 @@ class MarketplaceService(
                     unsent=request_nonces[i + 1 :],
                 ) from e
             except requests.exceptions.RequestException as e:
-                logger.warning(f"Offchain POST failed: {redacted_cause(e)}")
+                logger.warning(
+                    f"Offchain POST failed for nonce {nonce} "
+                    f"(request {request_id_hex}): {redacted_cause(e)}"
+                )
                 raise ValueError(
                     f"Failed to send offchain request ({type(e).__name__}); "
                     f"see the log or the chained cause."
