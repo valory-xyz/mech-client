@@ -978,10 +978,12 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     Reserve a nonce, send with it, and record what the mech answered.
 
     ``send(nonce, hook)`` must pass ``hook`` to ``send_request`` as
-    ``on_request_id``. A failure frees the nonce only if the hook was
-    received and not posting (see ``PreSignHook``), or is in ``not_sent``;
-    otherwise the slot is held as ``unknown``. A 503 resends the same nonce
-    and id, up to the allocator's ``gap_retries`` times, with a fresh hook.
+    ``on_request_id``. A failure frees the nonce when it reached no mech
+    (the hook was received but not posting, see ``PreSignHook``, or the
+    exception is in ``not_sent``), or when the mech answered ``not_accepted``
+    (see ``outcome_of``); otherwise the slot is held as ``unknown``. A 503
+    resends the same nonce and id, up to the allocator's ``gap_retries``
+    times, with a fresh hook.
 
     It sends a new request, never a held one: a stalled queue's probe at a
     held nonce carries the caller's request and ``salt``, so its id differs
