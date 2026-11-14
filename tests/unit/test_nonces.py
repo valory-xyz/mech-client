@@ -1047,7 +1047,10 @@ def test_close_unlocks_before_closing_the_handle(tmp_path: Path, clock: Clock) -
 def test_a_write_is_flushed_to_disk_before_its_rename(
     allocator: NonceAllocator, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The placeholder must survive a power loss: data, then rename, then directory."""
+    """The placeholder must survive a power loss: data, then rename, then directory.
+
+    Windows cannot open a directory to fsync it, so there the rename is the last step.
+    """
     events: List[str] = []
     real_fsync, real_replace = nonces.os.fsync, Path.replace
 
@@ -1062,7 +1065,8 @@ def test_a_write_is_flushed_to_disk_before_its_rename(
     monkeypatch.setattr(nonces.os, "fsync", fsync)
     monkeypatch.setattr(Path, "replace", replace)
     with take(allocator, 5) as slot:
-        assert events == ["fsync", "replace", "fsync"]
+        directory_sync = [] if sys.platform == "win32" else ["fsync"]
+        assert events == ["fsync", "replace", *directory_sync]
         slot.answered("accepted", mech=MECH_A, salt="")
 
 
