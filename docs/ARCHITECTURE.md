@@ -313,7 +313,9 @@ a closed allocator refuses and writes nothing. `outcome_of` maps
 nonce; a failure after `send_request` received the `PreSignHook` it hands
 `send`, but before it marked the hook posting (right before the POST), frees
 the nonce; once posting, the slot stays held whatever the mech answered,
-`not_sent` exceptions included). `exclusive` holds the queue for an on-chain request; `hard_cancel`
+`not_sent` exceptions included, except a 503 that still stands after
+`gap_retries` resends, which frees it because the mech admitted nothing; the
+rule and that one exception are stated in `nonces.py`'s module docstring). `exclusive` holds the queue for an on-chain request; `hard_cancel`
 yields `mapNonces` for one on-chain request once the queue has been stalled
 for at least `stalled_for` seconds (`stalled_since`).
 

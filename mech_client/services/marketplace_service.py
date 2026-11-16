@@ -1287,8 +1287,8 @@ class MarketplaceService(
             move; ``None`` leaves only the ratio bound.
         :return: the amount deposited, in a confirmed transaction.
         :raises ValueError: if the payment type doesn't support auto-deposit,
-            if the requested deposit would exceed the safety cap, or if the
-            deposit transaction reverted.
+            if the requested deposit would exceed the safety cap or the
+            caller's ``max_price``, or if the deposit transaction reverted.
         """
         if challenge.shortfall <= 0:
             return 0
