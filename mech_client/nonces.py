@@ -278,17 +278,19 @@ class Reservation:
         ``retry`` is not an answer: the caller resends the same nonce under this
         reservation, and answers what the resend got.
 
-        A slot is freed only when nothing left the process for it, with the
-        one exception the module docstring names: a ``not_accepted`` answer
-        to a posted request is recorded as ``unknown``, so n stays held until
-        ``mapNonces`` passes it.
+        A ``not_accepted`` answer with ``posted`` set is recorded as
+        ``unknown``, so n stays held until ``mapNonces`` passes it; the module
+        docstring states the rule and its one exception.
 
         :param outcome: What the answer means for the nonce
         :param mech: The mech the request went to
         :param salt: The request's metadata salt, kept so a resend reuses its id
-        :param posted: Whether the request's payload left the process
-            (``PreSignHook.posting``); required, so a caller that does not
-            say cannot free a posted slot
+        :param posted: Whether the mech may hold the request: ``True`` once
+            its payload was POSTed (``PreSignHook.posting``), ``False`` when
+            nothing was POSTed or after a 503 still standing past
+            ``gap_retries`` resends, which the mech admitted nothing for.
+            Required, so a caller that does not say cannot free a slot the
+            mech may hold
         :raises RuntimeError: If it was already answered
         """
         if self._outcome is not None:
@@ -998,16 +1000,12 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     Reserve a nonce, send with it, and record what the mech answered.
 
     ``send(nonce, hook)`` must pass ``hook`` to ``send_request`` as
-    ``on_request_id``. The nonce is freed only when nothing left the process
-    for it (the module docstring names the one exception): the hook was
-    received but not posting (see ``PreSignHook``), or the exception is in
-    ``not_sent`` and the hook is not posting. A request that was posted keeps
-    its slot whatever the answer: a rejection or a failed top-up after the
-    POST holds n as ``unknown`` (see ``outcome_of`` for the rule each answer
-    is refused under). A 503 resends the same nonce and id, up to the
-    allocator's ``gap_retries`` times, with a fresh hook; a 503 still standing
-    after those is that one exception, and frees n, because the mech
-    admitted nothing.
+    ``on_request_id``; whether the nonce is freed or held follows the rule the
+    module docstring states, read from the hook (see ``PreSignHook``), and
+    ``outcome_of`` names the rule each answer is refused under. A 503 resends
+    the same nonce and id, up to the allocator's ``gap_retries`` times, with a
+    fresh hook that carries what earlier sends deposited, so the request's
+    auto-deposits stay within one ``max_price`` across its resends.
 
     It sends a new request, never a held one: a stalled queue's probe at a
     held nonce carries the caller's request and ``salt``, so its id differs
