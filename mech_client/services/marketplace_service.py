@@ -573,10 +573,11 @@ class MarketplaceService(
         :param max_price: The most the requests may cost, in the payment
             asset's base units. When the mech's ``max_delivery_rate`` times
             the number of prompts exceeds it, :class:`MechPriceExceeded` is
-            raised before any deposit, signature or POST. It also bounds
-            each auto-deposit after an HTTP 402: a shortfall above it is
-            refused (:class:`OffchainTopUpFailed`) before any deposit is
-            sent. ``None`` sets no cap; the auto-deposit keeps its
+            raised before any deposit, signature or POST. It also bounds the
+            call's auto-deposits after an HTTP 402: together they never
+            exceed it, and a shortfall that would take them past it is
+            refused (:class:`OffchainTopUpFailed`) before that deposit is
+            sent. ``None`` sets no cap; each auto-deposit keeps its
             ``_MAX_AUTO_DEPOSIT_RATIO`` bound either way.
         :return: A :class:`RequestResult` with ``tx_hash`` and ``receipt``
             (both ``None`` on the offchain path, which has no transaction),
