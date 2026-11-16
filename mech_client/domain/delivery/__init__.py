@@ -20,12 +20,16 @@
 """Delivery mechanisms for mech responses."""
 
 from mech_client.domain.delivery.base import DeliveryWatcher
+from mech_client.domain.delivery.chat import ChatReport, chat_report, is_chat_prompt
 from mech_client.domain.delivery.constants import DEFAULT_TIMEOUT, WAIT_SLEEP
 from mech_client.domain.delivery.models import DeliveryResult
 from mech_client.domain.delivery.offchain_watcher import OffchainDeliveryWatcher
 from mech_client.domain.delivery.onchain_watcher import OnchainDeliveryWatcher
 
 __all__ = [
+    "ChatReport",
+    "chat_report",
+    "is_chat_prompt",
     "DeliveryResult",
     "DeliveryWatcher",
     "OffchainDeliveryWatcher",

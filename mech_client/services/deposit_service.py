@@ -52,6 +52,7 @@ class DepositService(
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
         signer: Optional[Signer] = None,
+        rpc_url: Optional[str] = None,
     ):
         """
         Initialize deposit service.
@@ -62,6 +63,8 @@ class DepositService(
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
         :param signer: Signer for externalized signing (alternative to crypto)
+        :param rpc_url: RPC endpoint for this service; None keeps the
+            MECHX_CHAIN_RPC / operate config / mechs.json lookup
         """
         super().__init__(
             chain_config=chain_config,
@@ -70,6 +73,7 @@ class DepositService(
             safe_address=safe_address,
             ethereum_client=ethereum_client,
             signer=signer,
+            rpc_url=rpc_url,
         )
 
     def deposit_native(self, amount: int) -> str:

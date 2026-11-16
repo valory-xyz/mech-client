@@ -55,6 +55,7 @@ class BaseTransactionService:  # pylint: disable=too-few-public-methods,too-many
         safe_address: Optional[str] = None,
         ethereum_client: Optional[EthereumClient] = None,
         signer: Optional[Signer] = None,
+        rpc_url: Optional[str] = None,
     ):
         """
         Initialize base transaction service.
@@ -65,6 +66,8 @@ class BaseTransactionService:  # pylint: disable=too-few-public-methods,too-many
         :param safe_address: Safe address (required for agent mode)
         :param ethereum_client: Ethereum client (required for agent mode)
         :param signer: Signer for externalized signing (alternative to crypto)
+        :param rpc_url: RPC endpoint for this service; None reads
+            MECHX_CHAIN_RPC, then the operate config (agent mode), then mechs.json
         :raises ValueError: If neither crypto nor signer is provided
         """
         if crypto is None and signer is None:
@@ -74,10 +77,11 @@ class BaseTransactionService:  # pylint: disable=too-few-public-methods,too-many
         self.agent_mode = agent_mode
         self.safe_address = safe_address
         self.ethereum_client = ethereum_client
+        self.rpc_url = rpc_url
 
         # Load configuration (pass agent_mode to load RPC from operate config in agent mode)
         self.mech_config: MechConfig = get_mech_config(
-            chain_config, agent_mode=agent_mode
+            chain_config, agent_mode=agent_mode, rpc_url=rpc_url
         )
         self.ledger_api = EthereumApi(**asdict(self.mech_config.ledger_config))
 

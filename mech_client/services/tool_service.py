@@ -19,7 +19,7 @@
 
 """Tool service for managing mech tools."""
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from mech_client.domain.tools import ToolManager, ToolsForMarketplaceMech
 
@@ -31,14 +31,16 @@ class ToolService:
     and retrieving schemas.
     """
 
-    def __init__(self, chain_config: str):
+    def __init__(self, chain_config: str, rpc_url: Optional[str] = None):
         """
         Initialize tool service.
 
         :param chain_config: Chain configuration name (gnosis, base, etc.)
+        :param rpc_url: RPC endpoint; None keeps the MECHX_CHAIN_RPC /
+            mechs.json lookup
         """
         self.chain_config = chain_config
-        self.tool_manager = ToolManager(chain_config)
+        self.tool_manager = ToolManager(chain_config, rpc_url=rpc_url)
 
     def get_description(self, tool_id: str) -> str:
         """
