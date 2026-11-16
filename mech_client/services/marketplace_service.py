@@ -391,6 +391,26 @@ class PreSignHook:
         return None if self._inner is None else self._inner(request_id, nonce)
 
 
+@dataclass
+class _DepositBudget:
+    """What one ``send_request`` call's 402 auto-deposits may move together.
+
+    The deposits of one call never exceed its ``max_price`` in total; with
+    ``max_price=None`` only ``_MAX_AUTO_DEPOSIT_RATIO`` bounds each deposit.
+    """
+
+    max_price: Optional[int]
+    deposited: int = 0
+
+    def allows(self, amount: int) -> bool:
+        """Whether ``amount`` more fits within the call's ``max_price``.
+
+        :param amount: the deposit about to be sent
+        :return: True when it fits, or when there is no ``max_price``
+        """
+        return self.max_price is None or self.deposited + amount <= self.max_price
+
+
 class _MechRefusal(ValueError):
     """A 402 path the offchain request could not get past."""
 
@@ -786,7 +806,8 @@ class MarketplaceService(
         :param auto_deposit: On a 402, deposit the shortfall and retry once
         :param nonces: Marketplace nonce per prompt (see ``send_request``)
         :param on_request_id: Pre-sign hook (see ``send_request``)
-        :param max_price: The most an auto-deposit may move (see ``send_request``)
+        :param max_price: The most the call's auto-deposits may move together
+            (see ``send_request``)
         :return: Dictionary with request results
         """
         logger.info("Sending offchain mech marketplace request...")
@@ -798,6 +819,7 @@ class MarketplaceService(
         # for the Safe branch, plain ecrecover for the EOA branch).
         sender = self.requester()
         first_nonce = next(iter(nonces or []), None)
+        deposit_budget = _DepositBudget(max_price)
         try:
             current_nonce = marketplace_contract.functions.mapNonces(sender).call()
         except (OSError, ValueError, Web3Exception) as e:
@@ -921,7 +943,7 @@ class MarketplaceService(
                     payment_type,
                     auto_deposit,
                     max_delivery_rate,
-                    max_price=max_price,
+                    deposit_budget=deposit_budget,
                 )
             except _MechRefusal as e:
                 raise self._rejection(
@@ -1138,7 +1160,7 @@ class MarketplaceService(
         auto_deposit: bool,
         max_delivery_rate: int,
         *,
-        max_price: Optional[int] = None,
+        deposit_budget: Optional[_DepositBudget] = None,
     ) -> requests.Response:
         """POST an offchain request, handling a structured HTTP 402.
 
@@ -1148,7 +1170,7 @@ class MarketplaceService(
         ``max_delivery_rate`` (the requester's signed per-request maximum) is
         used as a hard ceiling on the auto-deposit amount so a hostile or
         buggy mech can't drain the wallet by returning an inflated ``required``,
-        and so is the caller's ``max_price``.
+        and the call's ``deposit_budget`` bounds all its deposits together.
         A ``Payment-Receipt`` header on the response is logged.
 
         :param url: the mech's ``/send_signed_requests`` endpoint.
@@ -1157,8 +1179,9 @@ class MarketplaceService(
         :param auto_deposit: whether to auto-deposit + retry once on a 402.
         :param max_delivery_rate: the requester's signed per-request maximum,
             used to cap the auto-deposit amount (see ``_MAX_AUTO_DEPOSIT_RATIO``).
-        :param max_price: the caller's ``max_price``, the most the auto-deposit
-            may move; ``None`` leaves only the ratio bound.
+        :param deposit_budget: what the call's deposits may still move, shared
+            by every request of one ``send_request`` call; ``None`` leaves only
+            the ratio bound.
         :return: the (possibly retried) HTTP response.
         :raises _MechRefusal: on a 402 when auto-deposit is disabled, on a
             non-positive shortfall that auto-deposit can't act on, or on a
@@ -1196,7 +1219,10 @@ class MarketplaceService(
                 )
             try:
                 deposited = self._auto_deposit_for_402(
-                    payment_type, challenge, max_delivery_rate, max_price=max_price
+                    payment_type,
+                    challenge,
+                    max_delivery_rate,
+                    deposit_budget=deposit_budget,
                 )
             except ValueError as e:
                 raise _TopUpFailure(redacted(str(e), limit=None)) from e
@@ -1272,23 +1298,26 @@ class MarketplaceService(
         challenge: PaymentChallenge,
         max_delivery_rate: int,
         *,
-        max_price: Optional[int] = None,
+        deposit_budget: Optional[_DepositBudget] = None,
     ) -> int:
         """Deposit the 402 shortfall into the prepaid balance.
 
         Refuses to deposit when the shortfall exceeds
         ``_MAX_AUTO_DEPOSIT_RATIO * max_delivery_rate`` — see the constant's
-        docstring for why the cap exists — or the caller's ``max_price``.
+        docstring for why the cap exists — or when it would take the call's
+        deposits together past its ``max_price``.
 
         :param payment_type: the request's payment type (native vs token).
         :param challenge: the parsed 402 challenge.
         :param max_delivery_rate: the requester's signed per-request maximum.
-        :param max_price: the caller's ``max_price``, the most a deposit may
-            move; ``None`` leaves only the ratio bound.
+        :param deposit_budget: what the call's deposits may still move; a
+            confirmed deposit is recorded on it. ``None`` leaves only the
+            ratio bound.
         :return: the amount deposited, in a confirmed transaction.
         :raises ValueError: if the payment type doesn't support auto-deposit,
-            if the requested deposit would exceed the safety cap or the
-            caller's ``max_price``, or if the deposit transaction reverted.
+            if the requested deposit would exceed the safety cap or take the
+            call's deposits past its ``max_price``, or if the deposit
+            transaction reverted.
         """
         if challenge.shortfall <= 0:
             return 0
@@ -1312,11 +1341,15 @@ class MarketplaceService(
                 f"amount manually so it leaves your wallet under your direct "
                 f"control."
             )
-        if max_price is not None and challenge.shortfall > max_price:
+        if deposit_budget is not None and not deposit_budget.allows(
+            challenge.shortfall
+        ):
             raise ValueError(
                 f"Auto-deposit refused: mech demanded a {challenge.shortfall} "
-                f"shortfall, above your max_price of {max_price}. Raise "
-                f"max_price or deposit the amount manually."
+                f"shortfall; with the {deposit_budget.deposited} this call "
+                f"already deposited, that is above your max_price of "
+                f"{deposit_budget.max_price}. Raise max_price or deposit the "
+                f"amount manually."
             )
         # Imported here to avoid a circular import at module load.
         from mech_client.services.deposit_service import (  # pylint: disable=import-outside-toplevel
@@ -1353,6 +1386,8 @@ class MarketplaceService(
             raise ValueError(
                 f"Auto-deposit transaction {tx_hash} reverted; nothing was deposited."
             )
+        if deposit_budget is not None:
+            deposit_budget.deposited += challenge.shortfall
         return challenge.shortfall
 
     @staticmethod

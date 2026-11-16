@@ -290,8 +290,9 @@ class MarketplaceService:
   raises `RequestIdMismatch` before `on_request_id` and before signing.
 - `send_request(max_price=...)` raises `MechPriceExceeded` before any deposit,
   signature or POST when `max_delivery_rate * len(prompts)` exceeds the cap,
-  and bounds each 402 auto-deposit too (`OffchainTopUpFailed` before any
-  deposit is sent), on top of its `_MAX_AUTO_DEPOSIT_RATIO` bound.
+  and bounds the call's 402 auto-deposits together: they never exceed
+  `max_price` in total (`OffchainTopUpFailed` before the deposit that would
+  pass it is sent), on top of each one's `_MAX_AUTO_DEPOSIT_RATIO` bound.
 - `mech_info(mech)` returns `MechInfo`; `marketplace_contract()` returns the
   marketplace contract.
 

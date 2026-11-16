@@ -3214,6 +3214,54 @@ class TestCallerOwnedNonces:
             assert mech_post.call_count == 1
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("second", "deposits"), [(201, [300]), (200, [300, 200])]
+    )
+    async def test_the_deposits_of_one_call_together_never_exceed_max_price(
+        self,
+        service: MarketplaceService,
+        mech_post: MagicMock,
+        second: int,
+        deposits: list,
+    ) -> None:
+        """Each request's 402 draws on one max_price shared by the whole call."""
+        mech_post.side_effect = [
+            _mock_http_response(402, {"required": "300", "currentBalance": "0"}),
+            _mock_http_response(200),
+            _mock_http_response(
+                402, {"required": str(second), "currentBalance": "0"}
+            ),
+            _mock_http_response(200),
+        ]
+
+        with (
+            patch("mech_client.services.deposit_service.DepositService") as service_cls,
+            patch(f"{SERVICE}.wait_for_receipt", return_value={"status": 1}),
+        ):
+            if len(deposits) == 2:
+                await _send_offchain(
+                    service,
+                    _nonce_contract(5),
+                    prompts=("a", "b"),
+                    auto_deposit=True,
+                    max_price=500,
+                )
+            else:
+                with pytest.raises(
+                    OffchainTopUpFailed, match="300 this call already deposited"
+                ):
+                    await _send_offchain(
+                        service,
+                        _nonce_contract(5),
+                        prompts=("a", "b"),
+                        auto_deposit=True,
+                        max_price=500,
+                    )
+
+        sent = [c.args[0] for c in service_cls.return_value.deposit_native.call_args_list]
+        assert sent == deposits
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(("shortfall", "deposited"), [(1001, False), (1000, True)])
     async def test_an_auto_deposit_without_max_price_is_bounded_by_the_ratio(
         self,
