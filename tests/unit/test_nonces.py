@@ -165,24 +165,24 @@ def test_nonces_follow_map_nonces_and_held_slots(allocator: NonceAllocator) -> N
     """Allocate mapNonces + held slots; hold each until mapNonces passes it."""
     with take(allocator, 5) as slot:
         assert slot.nonce == 5
-        slot.answered("accepted", mech=MECH_A, salt="s5")
+        slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
     with take(allocator, 5) as slot:
         assert slot.nonce == 6  # 5 is held: unsettled, never reissued
-        slot.answered("accepted", mech=MECH_A, salt="s6")
+        slot.answered("accepted", mech=MECH_A, salt="s6", posted=True)
     assert salt_of(allocator, 6) == "s6"
     with take(allocator, 6) as slot:
         assert slot.nonce == 7  # 5 settled; 6 still held
-        slot.answered("not_accepted", mech=MECH_A, salt="")
+        slot.answered("not_accepted", mech=MECH_A, salt="", posted=False)
     with take(allocator, 6) as slot:
         assert slot.nonce == 7  # not accepted: reused
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
     assert salt_of(allocator, 99) is None
 
 
 def test_one_mech_in_flight_per_sender(allocator: NonceAllocator, clock: Clock) -> None:
     """A second mech waits for the first's slots to settle, then is refused."""
     with take(allocator, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
     with pytest.raises(NonceRefused) as refused:
         _enter(take(allocator, 5, MECH_B, timeout=5))
     assert refused.value.rule == "mech-in-flight"
@@ -204,7 +204,7 @@ def test_an_unanswered_reservation_is_held_as_unknown(
 def test_a_checksummed_mech_is_the_same_mech(allocator: NonceAllocator) -> None:
     """The mech's address in any case is one mech: its own slot never blocks it."""
     with take(allocator, 5, MECH_A.lower()) as slot:
-        slot.answered("accepted", mech=MECH_A.lower(), salt="")
+        slot.answered("accepted", mech=MECH_A.lower(), salt="", posted=True)
     with take(allocator, 5, MECH_A.upper().replace("0X", "0x"), timeout=0) as slot:
         assert slot.nonce == 6
 
@@ -213,7 +213,7 @@ def test_a_checksummed_sender_is_the_same_sender(allocator: NonceAllocator) -> N
     """The sender's address in any case is one queue: its slots are counted once."""
     checksummed = "0x" + "aB" * 20
     with allocator.reserve("Gnosis", checksummed, MECH_A, lambda: 5, timeout=1) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
     with allocator.reserve(
         "gnosis", checksummed.lower(), MECH_A, lambda: 5, timeout=1
     ) as slot:
@@ -226,9 +226,9 @@ def test_a_checksummed_sender_is_the_same_sender(allocator: NonceAllocator) -> N
 def _overdue_queue(allocator: NonceAllocator, clock: Clock) -> None:
     """Hold 5 (unknown) and 6 (accepted, delivered long ago), both overdue: stalled."""
     with take(allocator, 5) as slot:
-        slot.answered("unknown", mech=MECH_A, salt="s5")
+        slot.answered("unknown", mech=MECH_A, salt="s5", posted=True)
     with take(allocator, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="s6")
+        slot.answered("accepted", mech=MECH_A, salt="s6", posted=True)
     allocator.delivered("gnosis", SENDER, [6])
     clock.now += nonces.RESPONSE_TIMEOUT_SECONDS + 61
     _sync(allocator, 5)
@@ -242,7 +242,7 @@ def test_an_accepted_probe_restarts_the_settle_clock_of_later_slots(
     _overdue_queue(allocator, clock)
     with take(allocator, 5) as slot:
         assert slot.nonce == 5
-        slot.answered("accepted", mech=MECH_A, salt="s5")
+        slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
     assert cast(dict, held(allocator, 6))["delivered_at"] is None
     with take(allocator, 5) as slot:
         assert slot.nonce == 7
@@ -255,7 +255,7 @@ def test_a_store_path_that_does_not_exist_is_created(
     """A fresh store directory is created, and the first reserve is saved there."""
     allocator = _allocator(tmp_path / "a" / "b", clock)
     with take(allocator, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
     assert (tmp_path / "a" / "b" / nonces.NONCES_FILE).exists()
 
 
@@ -325,7 +325,7 @@ def test_reserve_rereads_map_nonces_while_another_mech_settles(
 ) -> None:
     """MECH_B waits for MECH_A's 5 to settle, then gets 6 within its timeout."""
     with take(allocator, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
     map_nonces = iter([5, 5, 6])
     with allocator.reserve(
         "gnosis", SENDER, MECH_B, lambda: next(map_nonces), timeout=30
@@ -339,17 +339,17 @@ def test_taken_resolves_our_unknown_or_stalls(
 ) -> None:
     """Taken on a probe over our own unknown slot unstalls; otherwise it stalls."""
     with take(allocator, 5) as slot:
-        slot.answered("unknown", mech=MECH_A, salt="s5")
+        slot.answered("unknown", mech=MECH_A, salt="s5", posted=True)
     assert allocator.stalled_since("gnosis", SENDER) is None
     with take(allocator, 5) as slot:
         assert slot.nonce == 6
-        slot.answered("taken", mech=MECH_A, salt="")  # someone else holds 6
+        slot.answered("taken", mech=MECH_A, salt="", posted=True)  # someone else holds 6
     assert allocator.stalled("gnosis", SENDER)
     assert allocator.stalled_since("gnosis", SENDER) == clock.now
     clock.now += 5
     with take(allocator, 5) as slot:
         assert slot.nonce == 5  # stalled: only the probe at mapNonces
-        slot.answered("taken", mech=MECH_A, salt="")  # our own unknown 5
+        slot.answered("taken", mech=MECH_A, salt="", posted=True)  # our own unknown 5
     assert held(allocator, 5) == {
         "state": "accepted",
         "mech": MECH_A,
@@ -367,7 +367,7 @@ def test_taken_with_no_slot_of_ours_keeps_that_mech_in_flight(
 ) -> None:
     """The mech holds n for a request we lost: another mech must not be sent n too."""
     with take(allocator, 5) as slot:
-        slot.answered("taken", mech=MECH_A, salt="s5")
+        slot.answered("taken", mech=MECH_A, salt="s5", posted=True)
     assert held(allocator, 5) == {
         "state": "unknown",
         "mech": MECH_A,
@@ -387,11 +387,11 @@ def test_a_taken_marker_survives_a_restart(tmp_path: Path, clock: Clock) -> None
     """Persisted as an optional field: a restart still keeps the other mech out."""
     first = _allocator(tmp_path, clock)
     with take(first, 5) as slot:
-        slot.answered("taken", mech=MECH_A, salt="")
+        slot.answered("taken", mech=MECH_A, salt="", posted=True)
     first.close()
     second = _allocator(tmp_path, clock)
     with take(second, 5) as slot:  # the probe over the marker, taken again
-        slot.answered("taken", mech=MECH_A, salt="")
+        slot.answered("taken", mech=MECH_A, salt="", posted=True)
     assert cast(dict, held(second, 5))["taken"] is True
     assert second.stalled("gnosis", SENDER)
     second.close()
@@ -438,7 +438,7 @@ def test_taken_over_the_stuck_slot_keeps_the_stall_and_its_clock(
         clock.now += 300
         with take(allocator, 5) as slot:
             assert slot.nonce == 5  # always the probe at the stuck nonce
-            slot.answered("taken", mech=MECH_A, salt="")
+            slot.answered("taken", mech=MECH_A, salt="", posted=True)
         assert allocator.stalled_since("gnosis", SENDER) == stalled_at
     assert cast(dict, held(allocator, 5))["state"] == "accepted"  # it is ours
     with allocator.hard_cancel("gnosis", SENDER, lambda: 5, stalled_for=900) as nonce:
@@ -454,10 +454,10 @@ def test_an_unknown_probe_over_the_stuck_slot_keeps_its_clock(
     stuck_at = cast(dict, held(allocator, 5))["at"]
     clock.now += 300
     with take(allocator, 5) as slot:
-        slot.answered("unknown", mech=MECH_A, salt="probe1")
+        slot.answered("unknown", mech=MECH_A, salt="probe1", posted=True)
     with take(allocator, 5) as slot:
         assert slot.nonce == 5
-        slot.answered("taken", mech=MECH_A, salt="probe2")
+        slot.answered("taken", mech=MECH_A, salt="probe2", posted=True)
     assert allocator.stalled_since("gnosis", SENDER) == stalled_at
     assert cast(dict, held(allocator, 5))["at"] == stuck_at
 
@@ -468,7 +468,7 @@ def test_a_crash_mid_probe_keeps_the_stuck_slot_as_it_was(
     """The probe writes nothing over the held slot, so a restart still sees it stuck."""
     first = _allocator(tmp_path, clock)
     with take(first, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="s5")
+        slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
     first.delivered("gnosis", SENDER, [5])
     clock.now += 61
     _sync(first, 5)
@@ -481,7 +481,7 @@ def test_a_crash_mid_probe_keeps_the_stuck_slot_as_it_was(
         second = _allocator(tmp_path, clock)
         with take(second, 5) as slot:
             assert slot.nonce == 5
-            slot.answered("taken", mech=MECH_A, salt="probe")
+            slot.answered("taken", mech=MECH_A, salt="probe", posted=True)
     assert second.stalled_since("gnosis", SENDER) == stalled_at
     assert cast(dict, held(second, 5)) == stuck
     second.close()
@@ -492,15 +492,15 @@ def test_an_unknown_probe_over_a_taken_marker_keeps_the_marker(
 ) -> None:
     """The marker survives an unknown probe, and a crash mid-probe, so the stall stands."""
     with take(allocator, 5) as slot:
-        slot.answered("taken", mech=MECH_A, salt="")
+        slot.answered("taken", mech=MECH_A, salt="", posted=True)
     stalled_at = allocator.stalled_since("gnosis", SENDER)
     marker_at = clock.now
     clock.now += 5
     with take(allocator, 5) as slot:
         assert cast(dict, held(allocator, 5))["taken"] is True  # the probed slot
-        slot.answered("unknown", mech=MECH_A, salt="probe1")
+        slot.answered("unknown", mech=MECH_A, salt="probe1", posted=True)
     with take(allocator, 5) as slot:
-        slot.answered("taken", mech=MECH_A, salt="probe2")
+        slot.answered("taken", mech=MECH_A, salt="probe2", posted=True)
     assert allocator.stalled_since("gnosis", SENDER) == stalled_at
     marker = cast(dict, held(allocator, 5))
     assert (marker["state"], marker["at"], marker["taken"]) == (
@@ -520,7 +520,7 @@ def test_an_overdue_slot_stalls_the_queue(
     stalls nothing.
     """
     with take(allocator, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
     clock.now += nonces.RESPONSE_TIMEOUT_SECONDS
     _sync(allocator, 5)
     assert not allocator.stalled("gnosis", SENDER)  # still within the settle time
@@ -535,7 +535,7 @@ def test_a_delivery_starts_the_settle_clock(
 ) -> None:
     """Delivered, then not settled within the settle timeout: stop sending."""
     with take(allocator, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
     clock.now += 10
     allocator.delivered("gnosis", SENDER, [5, 9])  # 9 is not held: ignored
     assert cast(dict, held(allocator, 5))["delivered_at"] == clock.now
@@ -557,7 +557,7 @@ def test_queues_survive_a_restart(tmp_path: Path, clock: Clock) -> None:
     """Held slots, salts and the stall are read back, so nothing is reissued."""
     first = _allocator(tmp_path, clock)
     with take(first, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="salt")
+        slot.answered("accepted", mech=MECH_A, salt="salt", posted=True)
     first.close()
     second = _allocator(tmp_path, clock)
     assert salt_of(second, 5) == "salt"
@@ -571,7 +571,7 @@ def test_an_unknown_slot_survives_a_restart_as_unknown(
     """A lost answer stays unknown, so a later taken still recognises it as ours."""
     first = _allocator(tmp_path, clock)
     with take(first, 5) as slot:
-        slot.answered("unknown", mech=MECH_A, salt="s")
+        slot.answered("unknown", mech=MECH_A, salt="s", posted=True)
     first.close()
     second = _allocator(tmp_path, clock)
     queue = second._queue(  # pylint: disable=protected-access
@@ -604,7 +604,7 @@ def test_on_chain_requests_wait_for_an_empty_queue(
     with allocator.exclusive("gnosis", SENDER, lambda: 5, timeout=1):
         pass
     with take(allocator, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
     start = clock.now
     with pytest.raises(NonceRefused, match="on-chain request must wait"):
         _enter(allocator.exclusive("gnosis", SENDER, lambda: 5, timeout=3))
@@ -643,9 +643,9 @@ def test_retry_leaves_the_reservation_open_for_the_resends_answer(
 ) -> None:
     """A caller driving a reservation answers retry on a 503, resends, then answers."""
     with take(allocator, 5) as slot:
-        slot.answered("retry", mech=MECH_A, salt="s5")
+        slot.answered("retry", mech=MECH_A, salt="s5", posted=True)
         assert slot.outcome is None
-        slot.answered("accepted", mech=MECH_A, salt="s5")
+        slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
         assert slot.outcome == "accepted"
     assert cast(dict, held(allocator, 5))["state"] == "accepted"
 
@@ -653,7 +653,7 @@ def test_retry_leaves_the_reservation_open_for_the_resends_answer(
 def test_retry_alone_holds_the_nonce_as_unknown(allocator: NonceAllocator) -> None:
     """A resend may have reached the mech: left after retry, n is held."""
     with take(allocator, 5) as slot:
-        slot.answered("retry", mech=MECH_A, salt="s5")
+        slot.answered("retry", mech=MECH_A, salt="s5", posted=True)
     assert cast(dict, held(allocator, 5))["state"] == "unknown"
 
 
@@ -860,8 +860,20 @@ def test_a_direct_answer_to_a_posted_request_keeps_its_slot(
     assert cast(dict, held(allocator, 5))["state"] == "unknown"
     with take(allocator, 5) as slot:
         assert slot.nonce == 6
-        slot.answered("not_accepted", mech=MECH_A, salt="")
+        slot.answered("not_accepted", mech=MECH_A, salt="", posted=False)
     assert held(allocator, 6) is None  # not posted: n is free
+
+
+def test_a_direct_answer_that_omits_posted_cannot_free_a_posted_slot(
+    allocator: NonceAllocator,
+) -> None:
+    """posted is required: an answer that does not say leaves n held."""
+    with pytest.raises(TypeError, match="posted"):
+        with take(allocator, 5) as slot:
+            slot.answered("not_accepted", mech=MECH_A, salt="s5")  # type: ignore[call-arg]
+    assert cast(dict, held(allocator, 5))["state"] == "unknown"
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 6
 
 
 @pytest.mark.parametrize(
@@ -990,7 +1002,7 @@ def test_the_slot_is_on_disk_before_the_post(allocator: NonceAllocator) -> None:
     """A crash mid-send leaves n held: it was written down before sending."""
     with take(allocator, 5) as slot:
         assert cast(dict, held(allocator, 5))["state"] == "unknown"
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
     assert cast(dict, held(allocator, 5))["state"] == "accepted"
 
 
@@ -998,7 +1010,7 @@ def test_a_restart_keeps_the_stall_and_its_time(tmp_path: Path, clock: Clock) ->
     """A stalled queue is still stalled after a restart, since the same time."""
     first = _allocator(tmp_path, clock)
     with take(first, 5) as slot:
-        slot.answered("taken", mech=MECH_A, salt="")
+        slot.answered("taken", mech=MECH_A, salt="", posted=True)
     stalled_at = clock.now
     clock.now += 100
     first.close()
@@ -1024,7 +1036,7 @@ def test_the_settle_timeout_boundary_and_an_overdue_unknown(
 ) -> None:
     """Exactly at the timeout is not overdue; past it, accepted or unknown stalls."""
     with take(allocator, 5) as slot:
-        slot.answered("unknown", mech=MECH_A, salt="")
+        slot.answered("unknown", mech=MECH_A, salt="", posted=True)
     clock.now += nonces.RESPONSE_TIMEOUT_SECONDS + 60
     _sync(allocator, 5)
     assert not allocator.stalled("gnosis", SENDER)
@@ -1036,16 +1048,16 @@ def test_the_settle_timeout_boundary_and_an_overdue_unknown(
 def test_a_rejected_probe_puts_back_what_it_replaced(allocator: NonceAllocator) -> None:
     """A stalled queue probes at mapNonces over a held slot; a refusal restores it."""
     with take(allocator, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="kept")
+        slot.answered("accepted", mech=MECH_A, salt="kept", posted=True)
     with take(allocator, 5) as slot:
         assert slot.nonce == 6
-        slot.answered("taken", mech=MECH_A, salt="")
+        slot.answered("taken", mech=MECH_A, salt="", posted=True)
     with take(allocator, 5) as slot:
         assert slot.nonce == 5  # the probe, over our accepted 5
-        slot.answered("not_accepted", mech=MECH_A, salt="")
+        slot.answered("not_accepted", mech=MECH_A, salt="", posted=False)
     assert cast(dict, held(allocator, 5))["salt"] == "kept"
     with take(allocator, 5) as slot:
-        slot.answered("retry", mech=MECH_A, salt="")  # resent, same reservation
+        slot.answered("retry", mech=MECH_A, salt="", posted=True)  # resent, same reservation
     # the resend's answer never came: 5 is still held, as our accepted slot
     assert cast(dict, held(allocator, 5))["state"] == "accepted"
 
@@ -1058,7 +1070,7 @@ def _hold_lock(allocator: NonceAllocator) -> Tuple[threading.Event, threading.Th
         with take(allocator, 5) as slot:
             entered.set()
             release.wait(5)
-            slot.answered("accepted", mech=MECH_A, salt="")
+            slot.answered("accepted", mech=MECH_A, salt="", posted=True)
 
     worker = threading.Thread(target=hold)
     worker.start()
@@ -1069,7 +1081,7 @@ def _hold_lock(allocator: NonceAllocator) -> Tuple[threading.Event, threading.Th
 def test_delivered_waits_for_the_queue_lock(allocator: NonceAllocator) -> None:
     """delivered and _sync both change a queue's slots under its own lock."""
     with take(allocator, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
     release, worker = _hold_lock(allocator)  # holds 6 in flight
     marker = threading.Thread(target=allocator.delivered, args=("gnosis", SENDER, [5]))
     marker.start()
@@ -1133,7 +1145,7 @@ def test_a_closed_allocator_refuses_and_writes_nothing(
     """Closed, it is no second payer: it hands out nothing and never saves over the next one."""
     first = _allocator(tmp_path, clock)
     with take(first, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="a5")
+        slot.answered("accepted", mech=MECH_A, salt="a5", posted=True)
     first.close()
     with pytest.raises(NonceRefused) as refused:
         _enter(take(first, 5))
@@ -1141,7 +1153,7 @@ def test_a_closed_allocator_refuses_and_writes_nothing(
     second = _allocator(tmp_path, clock)
     with take(second, 5) as slot:
         assert slot.nonce == 6
-        slot.answered("accepted", mech=MECH_A, salt="b6")
+        slot.answered("accepted", mech=MECH_A, salt="b6", posted=True)
     first.delivered("gnosis", SENDER, [5])  # would save first's stale queues
     assert salt_of(second, 6) == "b6"
     assert cast(dict, held(second, 5))["delivered_at"] is None
@@ -1158,7 +1170,7 @@ def test_an_answer_after_close_is_logged_and_not_written(
             first.close()
             second = _allocator(tmp_path, clock)
             before = second._path.read_text()  # pylint: disable=protected-access
-            slot.answered("accepted", mech=MECH_A, salt="a5")  # does not raise
+            slot.answered("accepted", mech=MECH_A, salt="a5", posted=True)  # does not raise
     message = warning.call_args.args[0] % warning.call_args.args[1:]
     assert "5" in message and f"gnosis:{SENDER}" in message
     assert "'accepted'" in message
@@ -1173,9 +1185,9 @@ def test_every_change_after_close_is_logged_naming_the_store(
     """A hard cancel or a delivery that ends after close says what it did not write."""
     first = _allocator(tmp_path, clock)
     with take(first, 5) as slot:
-        slot.answered("accepted", mech=MECH_A, salt="a5")
+        slot.answered("accepted", mech=MECH_A, salt="a5", posted=True)
     with take(first, 5) as slot:
-        slot.answered("taken", mech=MECH_A, salt="")  # 6 taken elsewhere: stall
+        slot.answered("taken", mech=MECH_A, salt="", posted=True)  # 6 taken elsewhere: stall
     stalled_at = first.stalled_since("gnosis", SENDER)
     clock.now += 10
     with patch.object(nonces.logger, "warning") as warning:
@@ -1243,7 +1255,7 @@ def test_a_write_is_flushed_to_disk_before_its_rename(
     with take(allocator, 5) as slot:
         directory_sync = [] if sys.platform == "win32" else ["fsync"]
         assert events == ["fsync", "replace", *directory_sync]
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
 
 
 def test_a_directory_that_cannot_be_synced_still_takes_requests(
@@ -1257,10 +1269,10 @@ def test_a_directory_that_cannot_be_synced_still_takes_requests(
         patch.object(nonces.logger, "warning") as warning,
     ):
         with take(allocator, 5) as slot:
-            slot.answered("accepted", mech=MECH_A, salt="a5")
+            slot.answered("accepted", mech=MECH_A, salt="a5", posted=True)
         with take(allocator, 5) as slot:
             assert slot.nonce == 6
-            slot.answered("accepted", mech=MECH_A, salt="a6")
+            slot.answered("accepted", mech=MECH_A, salt="a6", posted=True)
     message = warning.call_args.args[0] % warning.call_args.args[1:]
     assert str(allocator._path.parent) in message  # pylint: disable=protected-access
     assert f"errno {errno.EINVAL}" in message
@@ -1314,9 +1326,9 @@ def test_a_reservation_is_answered_once(allocator: NonceAllocator) -> None:
     """A second answer would replay the first's prior; its fields are read-only."""
     with take(allocator, 5) as slot:
         assert (slot.nonce, slot.prior, slot.outcome) == (5, None, None)
-        slot.answered("accepted", mech=MECH_A, salt="")
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)
         with pytest.raises(RuntimeError, match="already answered"):
-            slot.answered("not_accepted", mech=MECH_A, salt="")
+            slot.answered("not_accepted", mech=MECH_A, salt="", posted=False)
         with pytest.raises(AttributeError):
             slot.nonce = 6  # type: ignore[misc]
         with pytest.raises(AttributeError):
@@ -1354,7 +1366,7 @@ def test_an_unwritable_store_refuses_requests_not_answers(
 
     monkeypatch.setattr(Path, "replace", full_after_one)
     with take(allocator, 5) as slot:  # the placeholder is on disk
-        slot.answered("accepted", mech=MECH_A, salt="")  # does not raise
+        slot.answered("accepted", mech=MECH_A, salt="", posted=True)  # does not raise
     for context in (
         take(allocator, 6),
         allocator.exclusive("gnosis", SENDER, lambda: 5, timeout=1),
@@ -1436,9 +1448,9 @@ class TestHardCancel:
         for nonce in (5, 6):
             with take(allocator, 5) as slot:
                 assert slot.nonce == nonce
-                slot.answered("accepted", mech=MECH_A, salt=f"s{nonce}")
+                slot.answered("accepted", mech=MECH_A, salt=f"s{nonce}", posted=True)
         with take(allocator, 5) as slot:
-            slot.answered("taken", mech=MECH_A, salt="")
+            slot.answered("taken", mech=MECH_A, salt="", posted=True)
 
     def test_a_queue_that_is_not_stalled_is_refused(
         self, allocator: NonceAllocator
@@ -1465,12 +1477,12 @@ class TestHardCancel:
     ) -> None:
         """Probes another signer keeps taking do not restart the hard-cancel wait."""
         with take(allocator, 5) as slot:
-            slot.answered("taken", mech=MECH_A, salt="")  # not ours
+            slot.answered("taken", mech=MECH_A, salt="", posted=True)  # not ours
         stalled_at = clock.now
         clock.now += 300
         with take(allocator, 5) as slot:
             assert slot.nonce == 5
-            slot.answered("taken", mech=MECH_A, salt="")
+            slot.answered("taken", mech=MECH_A, salt="", posted=True)
         assert allocator.stalled_since("gnosis", SENDER) == stalled_at
         assert cast(dict, held(allocator, 5))["at"] == stalled_at  # still theirs
 
@@ -1488,7 +1500,7 @@ class TestHardCancel:
         with take(allocator, 6) as slot:
             assert slot.nonce == 6  # still stalled: the probe at mapNonces
             # the mech already holds our 6, so it answers as the deployed one does
-            slot.answered("taken", mech=MECH_A, salt="")
+            slot.answered("taken", mech=MECH_A, salt="", posted=True)
         assert held(allocator, 5) is None
         assert salt_of(allocator, 6) == "s6"
         assert not allocator.stalled("gnosis", SENDER)
@@ -1532,9 +1544,9 @@ class TestHardCancel:
         for nonce in (5, 6, 7):
             with take(allocator, 5) as slot:
                 assert slot.nonce == nonce
-                slot.answered("accepted", mech=MECH_A, salt=f"s{nonce}")
+                slot.answered("accepted", mech=MECH_A, salt=f"s{nonce}", posted=True)
         with take(allocator, 5) as slot:
-            slot.answered("taken", mech=MECH_A, salt="")  # 8 taken elsewhere: stall
+            slot.answered("taken", mech=MECH_A, salt="", posted=True)  # 8 taken elsewhere: stall
         with allocator.hard_cancel("gnosis", SENDER, lambda: 5, stalled_for=0):
             pass
         _sync(allocator, 6)  # the on-chain request consumed 5
@@ -1542,7 +1554,7 @@ class TestHardCancel:
         clock.now += 61  # past 7's settle timeout, not past 6's
         with take(allocator, 6) as slot:
             assert slot.nonce == 6  # the probe
-            slot.answered("taken", mech=MECH_A, salt="")  # the mech holds our 6
+            slot.answered("taken", mech=MECH_A, salt="", posted=True)  # the mech holds our 6
         assert not allocator.stalled("gnosis", SENDER)
         assert cast(dict, held(allocator, 7))["at"] == clock.now
         assert cast(dict, held(allocator, 7))["delivered_at"] is None
@@ -1562,7 +1574,7 @@ class TestHardCancel:
         assert cast(dict, held(allocator, 6))["delivered_at"] is None
         with take(allocator, 6) as slot:  # still stalled from the cancel: probe 6
             assert slot.nonce == 6
-            slot.answered("taken", mech=MECH_A, salt="")  # the mech holds our 6
+            slot.answered("taken", mech=MECH_A, salt="", posted=True)  # the mech holds our 6
         with take(allocator, 6) as slot:
             assert slot.nonce == 7
 

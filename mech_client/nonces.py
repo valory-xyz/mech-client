@@ -266,9 +266,7 @@ class Reservation:
         """The recorded answer, or None until ``answered`` is called."""
         return self._outcome
 
-    def answered(
-        self, outcome: Outcome, *, mech: str, salt: str, posted: bool = False
-    ) -> None:
+    def answered(self, outcome: Outcome, *, mech: str, salt: str, posted: bool) -> None:
         """
         Record the mech's answer to this nonce; a reservation is answered once.
 
@@ -283,7 +281,8 @@ class Reservation:
         :param mech: The mech the request went to
         :param salt: The request's metadata salt, kept so a resend reuses its id
         :param posted: Whether the request's payload left the process
-            (``PreSignHook.posting``)
+            (``PreSignHook.posting``); required, so a caller that does not
+            say cannot free a posted slot
         :raises RuntimeError: If it was already answered
         """
         if self._outcome is not None:
@@ -566,7 +565,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                         nonce,
                         key,
                     )
-                    reservation.answered(UNKNOWN, mech=mech, salt=salt)
+                    reservation.answered(UNKNOWN, mech=mech, salt=salt, posted=False)
 
     @contextlib.contextmanager
     def exclusive(
@@ -1041,7 +1040,7 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
                     allocator.sleep(GAP_RETRY_SECONDS)
                     continue
                 if outcome == RETRY:  # a standing gap: the mech admitted nothing
-                    slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
+                    slot.answered(NOT_ACCEPTED, mech=mech, salt=salt, posted=False)
                 else:  # an answer to a POST: the payload left the process
                     slot.answered(outcome, mech=mech, salt=salt, posted=True)
                 raise NonceRefused(
@@ -1054,10 +1053,10 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
                 if not hook.received:
                     logger.error(_HOOK_NOT_PASSED, slot.nonce)
                 elif not hook.posting:
-                    slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
+                    slot.answered(NOT_ACCEPTED, mech=mech, salt=salt, posted=False)
                 raise
             if not hook.received:
                 logger.warning(_HOOK_NOT_PASSED, slot.nonce)
-            slot.answered(ACCEPTED, mech=mech, salt=salt)
+            slot.answered(ACCEPTED, mech=mech, salt=salt, posted=True)
             return result
     raise AssertionError("unreachable")  # pragma: no cover

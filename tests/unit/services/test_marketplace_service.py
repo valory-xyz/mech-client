@@ -3575,7 +3575,7 @@ class TestCallerOwnedNonces:
         with allocator.reserve(
             "gnosis", service.requester(), MECH_ADDRESS, lambda: 5, timeout=1
         ) as slot:
-            slot.answered("not_accepted", mech=MECH_ADDRESS, salt="")
+            slot.answered("not_accepted", mech=MECH_ADDRESS, salt="", posted=False)
             return slot.nonce
 
     def test_an_async_hook_through_send_with_nonce_is_refused_unsigned(
