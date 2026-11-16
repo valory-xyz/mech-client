@@ -340,16 +340,40 @@ class PreSignHook:
     signed. A caller can then tell a failure that reached no mech (received,
     not posting) from one that may have (posting), and both from a hook that
     never reached ``send_request`` at all.
+
+    ``deposited`` is what the request's 402 auto-deposits have moved so far.
+    A resend of the same request is handed a new hook that starts from it,
+    so the request's deposits, across every resend, stay within one
+    ``max_price``.
     """
 
-    def __init__(self, inner: Optional[Callable[[bytes, int], Any]] = None) -> None:
+    def __init__(
+        self,
+        inner: Optional[Callable[[bytes, int], Any]] = None,
+        *,
+        deposited: int = 0,
+    ) -> None:
         """
         Initialize the hook.
 
         :param inner: The caller's own ``on_request_id``, run when called
+        :param deposited: What earlier sends of the same request deposited
         """
         self._inner = inner
         self._stage = _HOOK_NEW
+        self._deposited = deposited
+
+    @property
+    def deposited(self) -> int:
+        """What the request's auto-deposits have moved, earlier resends included."""
+        return self._deposited
+
+    def record_deposit(self, amount: int) -> None:
+        """Count a confirmed auto-deposit (``send_request`` calls this).
+
+        :param amount: The amount the deposit moved
+        """
+        self._deposited += amount
 
     @property
     def received(self) -> bool:
@@ -395,12 +419,24 @@ class PreSignHook:
 class _DepositBudget:
     """What one ``send_request`` call's 402 auto-deposits may move together.
 
-    The deposits of one call never exceed its ``max_price`` in total; with
-    ``max_price=None`` only ``_MAX_AUTO_DEPOSIT_RATIO`` bounds each deposit.
+    The deposits of one call never exceed its ``max_price`` in total, and a
+    call made with a ``PreSignHook`` starts from what earlier resends of the
+    same request deposited; with ``max_price=None`` only
+    ``_MAX_AUTO_DEPOSIT_RATIO`` bounds each deposit.
     """
 
     max_price: Optional[int]
     deposited: int = 0
+    hook: Optional["PreSignHook"] = None
+
+    def record(self, amount: int) -> None:
+        """Count a confirmed deposit here and on the request's hook.
+
+        :param amount: The amount the deposit moved
+        """
+        self.deposited += amount
+        if self.hook is not None:
+            self.hook.record_deposit(amount)
 
     def allows(self, amount: int) -> bool:
         """Whether ``amount`` more fits within the call's ``max_price``.
@@ -820,7 +856,10 @@ class MarketplaceService(
         # for the Safe branch, plain ecrecover for the EOA branch).
         sender = self.requester()
         first_nonce = next(iter(nonces or []), None)
-        deposit_budget = _DepositBudget(max_price)
+        hook = on_request_id if isinstance(on_request_id, PreSignHook) else None
+        deposit_budget = _DepositBudget(
+            max_price, deposited=hook.deposited if hook else 0, hook=hook
+        )
         try:
             current_nonce = marketplace_contract.functions.mapNonces(sender).call()
         except (OSError, ValueError, Web3Exception) as e:
@@ -1347,8 +1386,8 @@ class MarketplaceService(
         ):
             raise ValueError(
                 f"Auto-deposit refused: mech demanded a {challenge.shortfall} "
-                f"shortfall; with the {deposit_budget.deposited} this call "
-                f"already deposited, that is above your max_price of "
+                f"shortfall; with the {deposit_budget.deposited} already "
+                f"deposited for these requests, that is above your max_price of "
                 f"{deposit_budget.max_price}. Raise max_price or deposit the "
                 f"amount manually."
             )
@@ -1388,7 +1427,7 @@ class MarketplaceService(
                 f"Auto-deposit transaction {tx_hash} reverted; nothing was deposited."
             )
         if deposit_budget is not None:
-            deposit_budget.deposited += challenge.shortfall
+            deposit_budget.record(challenge.shortfall)
         return challenge.shortfall
 
     @staticmethod

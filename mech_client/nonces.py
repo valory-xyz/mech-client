@@ -1034,13 +1034,15 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     with allocator.reserve(
         chain, sender, mech, read_map_nonces, timeout=timeout, salt=salt
     ) as slot:
+        deposited = 0  # one request's auto-deposits, across every resend
         for attempt in range(allocator.gap_retries + 1):
-            hook = PreSignHook(on_request_id)
+            hook = PreSignHook(on_request_id, deposited=deposited)
             try:
                 result = send(slot.nonce, hook)
             except (OffchainRequestRejected, OffchainTopUpFailed) as e:
                 outcome = outcome_of(e)
                 if outcome == RETRY and attempt < allocator.gap_retries:
+                    deposited = hook.deposited
                     allocator.sleep(GAP_RETRY_SECONDS)
                     continue
                 if outcome == RETRY:  # a standing gap: the mech admitted nothing

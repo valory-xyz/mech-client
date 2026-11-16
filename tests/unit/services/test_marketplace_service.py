@@ -3248,7 +3248,7 @@ class TestCallerOwnedNonces:
                 )
             else:
                 with pytest.raises(
-                    OffchainTopUpFailed, match="300 this call already deposited"
+                    OffchainTopUpFailed, match="300 already deposited for these requests"
                 ):
                     await _send_offchain(
                         service,
@@ -3561,13 +3561,16 @@ class TestCallerOwnedNonces:
         tmp_path: Path,
         contract: MagicMock,
         request: Optional[Dict[str, Any]] = None,
+        gap_retries: int = 0,
         **kwargs: Any,
     ) -> Tuple[NonceAllocator, Any]:
         """Send one request through send_with_nonce and the real send_request.
 
         ``request`` adds keyword arguments to ``send_request``.
         """
-        allocator = NonceAllocator(tmp_path, settle_timeout=60, gap_retries=0)
+        allocator = NonceAllocator(
+            tmp_path, settle_timeout=60, gap_retries=gap_retries, sleep=lambda _: None
+        )
 
         service.tool_manager = MagicMock()
         service.tool_manager.terms_report.return_value = {"valory_operated": False}
@@ -3706,6 +3709,43 @@ class TestCallerOwnedNonces:
 
         assert isinstance(raised, ValueError)
         assert self._next_nonce(allocator, service) == 6
+
+    @pytest.mark.parametrize(("second", "deposits"), [(201, [300]), (200, [300, 200])])
+    def test_one_request_s_deposits_across_its_resends_never_exceed_max_price(
+        self,
+        service: MarketplaceService,
+        mech_post: MagicMock,
+        tmp_path: Path,
+        second: int,
+        deposits: list,
+    ) -> None:
+        """A 503 resend of the request draws on the max_price its first send drew on."""
+        mech_post.side_effect = [
+            _mock_http_response(402, {"required": "300", "currentBalance": "0"}),
+            _mock_http_response(503, {"error": "gap"}),
+            _mock_http_response(
+                402, {"required": str(second), "currentBalance": "0"}
+            ),
+            _mock_http_response(200),
+        ]
+
+        with (
+            patch("mech_client.services.deposit_service.DepositService") as service_cls,
+            patch(f"{SERVICE}.wait_for_receipt", return_value={"status": 1}),
+        ):
+            _, raised = self._through_allocator(
+                service,
+                tmp_path,
+                _nonce_contract(5),
+                request={"auto_deposit": True, "max_price": 500},
+                gap_retries=1,
+            )
+
+        sent = [c.args[0] for c in service_cls.return_value.deposit_native.call_args_list]
+        assert sent == deposits
+        if len(deposits) == 1:
+            assert isinstance(raised, NonceRefused)
+            assert "300 already deposited for these requests" in str(raised.__cause__)
 
     def test_an_auto_deposit_above_max_price_keeps_the_posted_nonce_held(
         self, service: MarketplaceService, mech_post: MagicMock, tmp_path: Path
