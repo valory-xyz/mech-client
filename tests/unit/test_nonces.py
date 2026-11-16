@@ -850,6 +850,31 @@ def test_a_posted_not_sent_exception_keeps_its_slot(
     assert sent == [6]
 
 
+def test_a_posted_not_sent_exception_is_logged_as_held(
+    allocator: NonceAllocator,
+) -> None:
+    """The log names the nonce and queue it holds; the caller's type is re-raised."""
+    with patch.object(nonces.logger, "warning") as warning:
+        _, error = _send(allocator, [KeyError("after the POST")])
+    assert type(error) is KeyError  # pylint: disable=unidiomatic-typecheck
+    warning.assert_called_once_with(
+        nonces._HELD_AS_UNKNOWN,  # pylint: disable=protected-access
+        5,
+        NonceAllocator.key("gnosis", SENDER),
+    )
+
+
+def test_a_not_sent_exception_before_the_post_logs_no_held_slot(
+    allocator: NonceAllocator,
+) -> None:
+    """Before the POST the slot is freed, so nothing is logged as held."""
+    with patch.object(nonces.logger, "warning") as warning:
+        _, error = _send(allocator, [AfterHook(KeyError("before the POST"))])
+    assert isinstance(error, KeyError)
+    warning.assert_not_called()
+    assert held(allocator, 5) is None
+
+
 def test_a_direct_answer_to_a_posted_request_keeps_its_slot(
     allocator: NonceAllocator,
 ) -> None:

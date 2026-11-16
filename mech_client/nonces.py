@@ -88,6 +88,9 @@ _HOOK_NOT_PASSED = (
     "send for nonce %s never passed send_with_nonce's hook to send_request as "
     "on_request_id; a failure is held as unknown"
 )
+_HELD_AS_UNKNOWN = (
+    "mech nonce %s on %s held as unknown: the request may have reached the mech"
+)
 
 Outcome = Literal["accepted", "retry", "not_accepted", "taken", "unknown"]
 # what a held slot can be: the only outcomes that keep a nonce held
@@ -559,12 +562,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 if reservation.outcome is None:
                     # an exception mid-send: whether the mech stored the
                     # request is unknown, so the slot stays held
-                    logger.warning(
-                        "mech nonce %s on %s held as unknown: the request may "
-                        "have reached the mech",
-                        nonce,
-                        key,
-                    )
+                    logger.warning(_HELD_AS_UNKNOWN, nonce, key)
                     reservation.answered(UNKNOWN, mech=mech, salt=salt, posted=False)
 
     @contextlib.contextmanager
@@ -1020,7 +1018,8 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     :param read_map_nonces: Reads mapNonces(sender) from the marketplace
     :param send: Sends one off-chain request with the given nonce and hook
     :param not_sent: Exceptions ``send`` raises that reached no mech; one
-        raised once the hook is posting holds n all the same
+        raised once the hook is posting holds n all the same, is logged as
+        held, and is re-raised as itself
     :param timeout: Seconds ``reserve`` may wait
     :param on_request_id: The caller's own pre-sign hook, run by ``hook``
     :return: What ``send`` returned
@@ -1047,6 +1046,10 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
                     REJECTION_RULES[outcome], _refusal(e, slot.outcome == UNKNOWN)
                 ) from e
             except not_sent:
+                if hook.posting:
+                    logger.warning(
+                        _HELD_AS_UNKNOWN, slot.nonce, allocator.key(chain, sender)
+                    )
                 slot.answered(NOT_ACCEPTED, mech=mech, salt=salt, posted=hook.posting)
                 raise
             except Exception:
