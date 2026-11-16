@@ -43,7 +43,7 @@ from mech_client.domain.tools.manager import IDENTIFICATION_NOTE, ToolManager
 from mech_client.domain.tools.models import MetadataRead
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
-from mech_client.nonces import NonceAllocator, send_with_nonce
+from mech_client.nonces import NonceAllocator, NonceRefused, send_with_nonce
 from mech_client.services.marketplace_service import (
     MarketplaceService,
     MechInfo,
@@ -3177,6 +3177,79 @@ class TestCallerOwnedNonces:
         assert f"{_request_id_for(5).hex()} (nonce 5)" in str(e.value)
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(("shortfall", "deposited"), [(501, False), (500, True)])
+    async def test_an_auto_deposit_never_exceeds_max_price(
+        self,
+        service: MarketplaceService,
+        mech_post: MagicMock,
+        shortfall: int,
+        deposited: bool,
+    ) -> None:
+        """With a rate (100) below max_price, a top-up above max_price is never sent."""
+        mech_post.side_effect = [
+            _mock_http_response(
+                402, {"required": str(shortfall), "currentBalance": "0"}
+            ),
+            _mock_http_response(200),
+        ]
+
+        with (
+            patch("mech_client.services.deposit_service.DepositService") as deposits,
+            patch(f"{SERVICE}.wait_for_receipt", return_value={"status": 1}),
+        ):
+            if deposited:
+                await _send_offchain(
+                    service, _nonce_contract(5), auto_deposit=True, max_price=500
+                )
+            else:
+                with pytest.raises(OffchainTopUpFailed, match="max_price of 500"):
+                    await _send_offchain(
+                        service, _nonce_contract(5), auto_deposit=True, max_price=500
+                    )
+
+        if deposited:
+            deposits.return_value.deposit_native.assert_called_once_with(500)
+        else:
+            deposits.assert_not_called()
+            assert mech_post.call_count == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("shortfall", "deposited"), [(1001, False), (1000, True)])
+    async def test_an_auto_deposit_without_max_price_is_bounded_by_the_ratio(
+        self,
+        service: MarketplaceService,
+        mech_post: MagicMock,
+        shortfall: int,
+        deposited: bool,
+    ) -> None:
+        """max_price=None leaves the bound at _MAX_AUTO_DEPOSIT_RATIO x the rate."""
+        mech_post.side_effect = [
+            _mock_http_response(
+                402, {"required": str(shortfall), "currentBalance": "0"}
+            ),
+            _mock_http_response(200),
+        ]
+
+        with (
+            patch("mech_client.services.deposit_service.DepositService") as deposits,
+            patch(f"{SERVICE}.wait_for_receipt", return_value={"status": 1}),
+        ):
+            if deposited:
+                await _send_offchain(
+                    service, _nonce_contract(5), auto_deposit=True, max_price=None
+                )
+            else:
+                with pytest.raises(OffchainTopUpFailed, match="safety cap of 1000"):
+                    await _send_offchain(
+                        service, _nonce_contract(5), auto_deposit=True, max_price=None
+                    )
+
+        if deposited:
+            deposits.return_value.deposit_native.assert_called_once_with(1000)
+        else:
+            deposits.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_reverted_top_up_is_a_top_up_failure(
         self, service: MarketplaceService, mech_post: MagicMock
     ) -> None:
@@ -3439,9 +3512,13 @@ class TestCallerOwnedNonces:
         service: MarketplaceService,
         tmp_path: Path,
         contract: MagicMock,
+        request: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Tuple[NonceAllocator, Any]:
-        """Send one request through send_with_nonce and the real send_request."""
+        """Send one request through send_with_nonce and the real send_request.
+
+        ``request`` adds keyword arguments to ``send_request``.
+        """
         allocator = NonceAllocator(tmp_path, settle_timeout=60, gap_retries=0)
 
         service.tool_manager = MagicMock()
@@ -3471,6 +3548,7 @@ class TestCallerOwnedNonces:
                         use_offchain=True,
                         nonces=[nonce],
                         on_request_id=hook,
+                        **(request or {}),
                     )
                 )
 
@@ -3579,6 +3657,29 @@ class TestCallerOwnedNonces:
         )
 
         assert isinstance(raised, ValueError)
+        assert self._next_nonce(allocator, service) == 6
+
+    def test_an_auto_deposit_above_max_price_keeps_the_posted_nonce_held(
+        self, service: MarketplaceService, mech_post: MagicMock, tmp_path: Path
+    ) -> None:
+        """The refused top-up follows the POST, so the slot stays held."""
+        mech_post.side_effect = [
+            _mock_http_response(402, {"required": "600", "currentBalance": "0"})
+        ]
+
+        with patch("mech_client.services.deposit_service.DepositService") as deposits:
+            allocator, raised = self._through_allocator(
+                service,
+                tmp_path,
+                _nonce_contract(5),
+                request={"auto_deposit": True, "max_price": 500},
+            )
+
+        assert isinstance(raised, NonceRefused)
+        assert isinstance(raised.__cause__, OffchainTopUpFailed)
+        assert "max_price of 500" in str(raised)
+        deposits.assert_not_called()
+        assert mech_post.call_count == 1
         assert self._next_nonce(allocator, service) == 6
 
     def test_a_pre_sign_hook_only_moves_forward(self) -> None:
