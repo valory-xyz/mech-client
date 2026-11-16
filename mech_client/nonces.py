@@ -32,6 +32,8 @@ a stale or duplicate nonce), and settlement rebuilds every id from
 - the queue's lock is held from ``reserve`` until the mech answers, so POSTs
   go out in nonce order and at most one slot is ever reserved but unanswered;
 - a slot is held until ``mapNonces > n`` (settlement), never on a timer;
+- a slot is freed only when nothing left the process for it: once its
+  request was posted, it stays held whatever the mech answered;
 - every held slot, its metadata salt and the stall are persisted in a JSON
   file under the caller's ``store_path``, written before the POST, so a
   restart never reissues a held nonce.
@@ -264,16 +266,24 @@ class Reservation:
         """The recorded answer, or None until ``answered`` is called."""
         return self._outcome
 
-    def answered(self, outcome: Outcome, *, mech: str, salt: str) -> None:
+    def answered(
+        self, outcome: Outcome, *, mech: str, salt: str, posted: bool = False
+    ) -> None:
         """
         Record the mech's answer to this nonce; a reservation is answered once.
 
         ``retry`` is not an answer: the caller resends the same nonce under this
         reservation, and answers what the resend got.
 
+        A slot is freed only when nothing left the process for it: a
+        ``not_accepted`` answer to a posted request is recorded as ``unknown``,
+        so n stays held until ``mapNonces`` passes it.
+
         :param outcome: What the answer means for the nonce
         :param mech: The mech the request went to
         :param salt: The request's metadata salt, kept so a resend reuses its id
+        :param posted: Whether the request's payload left the process
+            (``PreSignHook.posting``)
         :raises RuntimeError: If it was already answered
         """
         if self._outcome is not None:
@@ -282,6 +292,8 @@ class Reservation:
             )
         if outcome == RETRY:
             return
+        if posted and outcome == NOT_ACCEPTED:
+            outcome = UNKNOWN
         self._outcome = outcome
         self._record(self._nonce, outcome, mech=mech, salt=salt, prior=self._prior)
 
@@ -929,7 +941,9 @@ def outcome_of(error: Union[OffchainRequestRejected, OffchainTopUpFailed]) -> Ou
     :param error: The rejection or top-up failure ``send_request`` raised
     :return: ``not_accepted`` for a top-up failure; for an HTTP answer,
         ``retry`` on 503, ``taken`` on the stale-nonce 401, ``unknown`` on
-        any other 401, ``not_accepted`` on any other 4xx, else ``unknown``
+        any other 401, ``not_accepted`` on any other 4xx, else ``unknown``.
+        Answered with ``posted=True`` (see ``Reservation.answered``), a
+        ``not_accepted`` holds n as ``unknown``.
     """
     if isinstance(error, OffchainTopUpFailed):
         return NOT_ACCEPTED
@@ -944,17 +958,25 @@ def outcome_of(error: Union[OffchainRequestRejected, OffchainTopUpFailed]) -> Ou
     return UNKNOWN
 
 
-def _refusal(error: Union[OffchainRequestRejected, OffchainTopUpFailed]) -> str:
+def _refusal(
+    error: Union[OffchainRequestRejected, OffchainTopUpFailed], held: bool
+) -> str:
     """Describe a failed off-chain request for its NonceRefused.
 
     :param error: The rejection or top-up failure
+    :param held: Whether its nonce stays held
     :return: The detail
     """
     if isinstance(error, OffchainTopUpFailed):
-        return f"the auto top-up for nonce {error.nonce} failed: {error}"
-    return (
-        f"the mech answered HTTP {error.status} ({error.reason}) to nonce {error.nonce}"
-    )
+        detail = f"the auto top-up for nonce {error.nonce} failed: {error}"
+    else:
+        detail = (
+            f"the mech answered HTTP {error.status} ({error.reason}) to nonce "
+            f"{error.nonce}"
+        )
+    if held:
+        detail = f"{detail.rstrip('.')}; the nonce stays held until it settles"
+    return detail
 
 
 # too-many-arguments: keyword-only; the allocator plus what identifies,
@@ -976,12 +998,14 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     Reserve a nonce, send with it, and record what the mech answered.
 
     ``send(nonce, hook)`` must pass ``hook`` to ``send_request`` as
-    ``on_request_id``. A failure frees the nonce when it reached no mech
-    (the hook was received but not posting, see ``PreSignHook``, or the
-    exception is in ``not_sent``), or when the mech answered ``not_accepted``
-    (see ``outcome_of``); otherwise the slot is held as ``unknown``. A 503
+    ``on_request_id``. A failure frees the nonce only when nothing left the
+    process for it: the hook was received but not posting (see
+    ``PreSignHook``), or the exception is in ``not_sent`` and the hook is not
+    posting. A request that was posted keeps its slot whatever the answer:
+    a rejection or a failed top-up after the POST holds n as ``unknown``
+    (see ``outcome_of`` for the rule each answer is refused under). A 503
     resends the same nonce and id, up to the allocator's ``gap_retries``
-    times, with a fresh hook.
+    times, with a fresh hook, and a 503 still standing after those frees n.
 
     It sends a new request, never a held one: a stalled queue's probe at a
     held nonce carries the caller's request and ``salt``, so its id differs
@@ -996,8 +1020,8 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     :param salt: The request's metadata salt (``extra_attributes["nonce"]``)
     :param read_map_nonces: Reads mapNonces(sender) from the marketplace
     :param send: Sends one off-chain request with the given nonce and hook
-    :param not_sent: Exceptions ``send`` raises after posting began that
-        still reached no mech
+    :param not_sent: Exceptions ``send`` raises that reached no mech; one
+        raised once the hook is posting holds n all the same
     :param timeout: Seconds ``reserve`` may wait
     :param on_request_id: The caller's own pre-sign hook, run by ``hook``
     :return: What ``send`` returned
@@ -1016,14 +1040,15 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
                 if outcome == RETRY and attempt < allocator.gap_retries:
                     allocator.sleep(GAP_RETRY_SECONDS)
                     continue
-                slot.answered(
-                    NOT_ACCEPTED if outcome == RETRY else outcome,
-                    mech=mech,
-                    salt=salt,
-                )
-                raise NonceRefused(REJECTION_RULES[outcome], _refusal(e)) from e
+                if outcome == RETRY:  # a standing gap: the mech admitted nothing
+                    slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
+                else:  # an answer to a POST: the payload left the process
+                    slot.answered(outcome, mech=mech, salt=salt, posted=True)
+                raise NonceRefused(
+                    REJECTION_RULES[outcome], _refusal(e, slot.outcome == UNKNOWN)
+                ) from e
             except not_sent:
-                slot.answered(NOT_ACCEPTED, mech=mech, salt=salt)
+                slot.answered(NOT_ACCEPTED, mech=mech, salt=salt, posted=hook.posting)
                 raise
             except Exception:
                 if not hook.received:

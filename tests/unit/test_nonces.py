@@ -758,12 +758,12 @@ def test_send_with_nonce_refuses_a_persistent_gap(allocator: NonceAllocator) -> 
             True,
             "HTTP 401",
         ),
-        (reject(402, "payment required", 5), "mech-request-rejected", False, "402"),
+        (reject(402, "payment required", 5), "mech-request-rejected", True, "402"),
         (reject(500, "boom", 5), "mech-answer-unknown", True, "HTTP 500 (boom)"),
         (
             OffchainTopUpFailed("over the cap", request_id="01", nonce=5, unsent=[]),
             "mech-request-rejected",
-            False,
+            True,
             "top-up for nonce 5 failed: over the cap",
         ),
     ],
@@ -771,7 +771,7 @@ def test_send_with_nonce_refuses_a_persistent_gap(allocator: NonceAllocator) -> 
 def test_send_with_nonce_names_each_rejection(
     allocator: NonceAllocator, answer: Exception, rule: str, is_held: bool, detail: str
 ) -> None:
-    """Each answer names its rule, and holds the slot only when it may be stored."""
+    """Each answer names its rule; a posted request's slot is held."""
     _, error = _send(allocator, [answer])
     assert isinstance(error, NonceRefused)
     assert error.rule == rule
@@ -783,7 +783,8 @@ def test_send_with_nonce_names_each_rejection(
 @pytest.mark.parametrize(
     "refusal",
     [
-        KeyError("refused"),
+        HookNotPassed(KeyError("refused")),
+        AfterHook(KeyError("refused")),
         BeforeHook(
             RequestIdMismatch("lying rpc", expected="aa", reported="bb", nonce=5)
         ),
@@ -793,11 +794,74 @@ def test_send_with_nonce_names_each_rejection(
 def test_send_with_nonce_frees_a_nonce_never_sent(
     allocator: NonceAllocator, refusal: Any
 ) -> None:
-    """Refused before signing (mech-client's own), or listed in not_sent: n is free."""
+    """Refused before the POST (mech-client's own, or listed in not_sent): n is free."""
     sent, error = _send(allocator, [refusal])
     assert error is getattr(refusal, "error", refusal)
     sent, _ = _send(allocator, [{"ok": 1}])
     assert sent == [5]  # the freed 5 was reused
+
+
+def _deposited_402() -> OffchainRequestRejected:
+    """Return a 402 the mech answered after an auto-deposit landed."""
+    return OffchainRequestRejected(
+        "HTTP 402",
+        request_id="01",
+        nonce=5,
+        status=402,
+        reason="payment required",
+        unsent=[],
+        deposited=9,
+    )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        reject(400, "bad request", 5),
+        reject(402, "payment required", 5),
+        _deposited_402(),
+        reject(403, "forbidden", 5),
+        reject(404, "not found", 5),
+        reject(422, "unprocessable", 5),
+        OffchainTopUpFailed("over the cap", request_id="01", nonce=5, unsent=[]),
+    ],
+)
+def test_a_posted_request_keeps_its_slot_whatever_the_answer(
+    allocator: NonceAllocator, answer: Exception
+) -> None:
+    """A rejection or a failed top-up after the POST holds n; the next send gets n+1."""
+    _, error = _send(allocator, [answer])
+    assert isinstance(error, NonceRefused)
+    assert error.rule == "mech-request-rejected"  # the mech's rejection, still
+    assert "stays held" in str(error)
+    assert cast(dict, held(allocator, 5))["state"] == "unknown"
+    sent, _ = _send(allocator, [{"ok": 1}])
+    assert sent == [6]
+
+
+def test_a_posted_not_sent_exception_keeps_its_slot(
+    allocator: NonceAllocator,
+) -> None:
+    """An exception named in not_sent, raised once posting, holds n all the same."""
+    _, error = _send(allocator, [KeyError("after the POST")])
+    assert isinstance(error, KeyError)
+    assert cast(dict, held(allocator, 5))["state"] == "unknown"
+    sent, _ = _send(allocator, [{"ok": 1}])
+    assert sent == [6]
+
+
+def test_a_direct_answer_to_a_posted_request_keeps_its_slot(
+    allocator: NonceAllocator,
+) -> None:
+    """A caller driving a reservation says it posted; not_accepted then holds n."""
+    with take(allocator, 5) as slot:
+        slot.answered("not_accepted", mech=MECH_A, salt="s5", posted=True)
+        assert slot.outcome == "unknown"
+    assert cast(dict, held(allocator, 5))["state"] == "unknown"
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 6
+        slot.answered("not_accepted", mech=MECH_A, salt="")
+    assert held(allocator, 6) is None  # not posted: n is free
 
 
 @pytest.mark.parametrize(
