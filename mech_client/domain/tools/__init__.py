@@ -19,11 +19,17 @@
 
 """Tool management, validation, and schema handling."""
 
-from mech_client.domain.tools.manager import ToolManager
-from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
+from mech_client.domain.tools.manager import ToolManager, offchain_blocker
+from mech_client.domain.tools.models import (
+    MetadataRead,
+    ToolInfo,
+    ToolsForMarketplaceMech,
+)
 
 __all__ = [
+    "MetadataRead",
     "ToolManager",
+    "offchain_blocker",
     "ToolInfo",
     "ToolsForMarketplaceMech",
 ]

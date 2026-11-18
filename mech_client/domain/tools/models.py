@@ -20,7 +20,7 @@
 """Tool data models."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -64,3 +64,48 @@ class ToolSchema:
     description: str
     input_schema: Dict[str, Any]
     output_schema: Dict[str, Any]
+
+
+@dataclass(frozen=True)
+class MetadataRead:
+    """A service-metadata read: exactly one of the document or why it failed.
+
+    The cause travels with the result because the failures it separates need
+    opposite responses: a gateway that timed out may answer on the next call,
+    while a mech that never published metadata never will.
+
+    Attributes:
+        document: The parsed metadata document, or None if unreadable
+        error: Why the document could not be read, or None if it was read
+    """
+
+    document: Optional[Dict[str, Any]]
+    error: Optional[str]
+
+    def __post_init__(self) -> None:
+        """Refuse a read with both a document and an error, or neither.
+
+        :raises ValueError: Unless exactly one of them is set
+        """
+        if (self.document is None) == (self.error is None):
+            raise ValueError("a MetadataRead has exactly one of document or error")
+
+    @classmethod
+    def ok(cls, document: Dict[str, Any]) -> "MetadataRead":
+        """
+        Build a successful read.
+
+        :param document: The parsed metadata document
+        :return: The read
+        """
+        return cls(document, None)
+
+    @classmethod
+    def failed(cls, error: str) -> "MetadataRead":
+        """
+        Build a failed read.
+
+        :param error: Why the document could not be read
+        :return: The read
+        """
+        return cls(None, error)

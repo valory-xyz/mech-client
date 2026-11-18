@@ -131,7 +131,9 @@ def mech_list(chain_config: str) -> None:
     reads each mech's terms link from its published metadata, and marks the
     mechs the identification check confirms as Valory operated.
 
-    Uses default subgraph URL from configuration. Can be overridden with
+    Base/Polygon require MECHX_MARKETPLACE_BASE_SQUID_URL or
+    MECHX_MARKETPLACE_POLYGON_SQUID_URL from your deployment operator.
+    Other chains use configured defaults. Can be overridden with
     MECHX_SUBGRAPH_URL environment variable.
 
     Example: mechx mech list --chain-config gnosis

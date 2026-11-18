@@ -37,8 +37,8 @@ from mech_client.domain.tools.manager import (
     DELIVERY_NOTE,
     DOMAIN_CHECK_FAILED_NOTE,
     EXPECTED_COST_NOTE,
+    MANIFEST_HASH_CAUSE,
     MANIFEST_HASH_NOTE,
-    MANIFEST_HTTP_NOTE,
     MANIFEST_UNREADABLE_NOTE,
     NAME_NOTE,
     IDENTIFICATION_NOTE,
@@ -46,16 +46,25 @@ from mech_client.domain.tools.manager import (
     ToolManager,
     claimed_operator,
     manifest_matches_uri,
+    offchain_blocker,
     payment_asset,
     payment_label,
+    usable_offchain_url,
 )
-from mech_client.infrastructure.ipfs.local_cid import compute_cidv1_bytes
-from mech_client.domain.tools.models import ToolInfo, ToolsForMarketplaceMech
+from mech_client.domain.tools.models import (
+    MetadataRead,
+    ToolInfo,
+    ToolsForMarketplaceMech,
+)
 from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.infrastructure.config.payment_config import PaymentType
+from mech_client.infrastructure.ipfs.local_cid import compute_cidv1_bytes
 from mech_client.infrastructure.subgraph.queries import MechRecord
 from mech_client.utils.errors import SubgraphError
 from mech_client.utils.errors.exceptions import ManifestError
+from urllib3 import HTTPSConnectionPool
+from urllib3.exceptions import MaxRetryError, ReadTimeoutError
+from web3.exceptions import BadFunctionCallOutput, ContractLogicError
 
 
 def create_mock_mech_config() -> MagicMock:
@@ -94,7 +103,7 @@ class TestToolManagerInitialization:
 
         # Verify initialization
         assert manager.chain_config == "gnosis"
-        mock_config.assert_called_once_with("gnosis")
+        mock_config.assert_called_once_with("gnosis", rpc_url=None)
         mock_ledger_api.assert_called_once()
 
 
@@ -103,16 +112,20 @@ class TestParseToolId:
 
     def test_parse_valid_tool_id(self) -> None:
         """Test parsing valid tool ID."""
-        service_id, tool_name = ToolManager._parse_tool_id(  # pylint: disable=protected-access
-            "42-openai-gpt-4"
+        service_id, tool_name = (
+            ToolManager._parse_tool_id(  # pylint: disable=protected-access
+                "42-openai-gpt-4"
+            )
         )
         assert service_id == 42
         assert tool_name == "openai-gpt-4"
 
     def test_parse_tool_id_with_multiple_dashes(self) -> None:
         """Test parsing tool ID with multiple dashes in tool name."""
-        service_id, tool_name = ToolManager._parse_tool_id(  # pylint: disable=protected-access
-            "1-stability-ai-sdxl-1-0"
+        service_id, tool_name = (
+            ToolManager._parse_tool_id(  # pylint: disable=protected-access
+                "1-stability-ai-sdxl-1-0"
+            )
         )
         assert service_id == 1
         assert tool_name == "stability-ai-sdxl-1-0"
@@ -145,6 +158,20 @@ TOOLS_MANIFEST: Dict[str, Any] = {
 }
 
 
+# deeper than the JSON decoder recurses, small enough for one IPFS block
+DEEPLY_NESTED = 100_000
+
+
+def _published_uri(pinned: bytes) -> str:
+    """
+    Name the on-chain metadata URI for bytes an operator pinned.
+
+    :param pinned: the pinned bytes
+    :return: the gateway URI ending in their CID
+    """
+    return GATEWAY + "f" + compute_cidv1_bytes(pinned).hex()
+
+
 def _published(document: Any, body: Optional[bytes] = None) -> tuple:
     """
     Publish a manifest the way the contract and a gateway present it.
@@ -154,7 +181,7 @@ def _published(document: Any, body: Optional[bytes] = None) -> tuple:
     :return: the on-chain metadata URI and the HTTP response for it
     """
     pinned = json.dumps(document).encode()
-    uri = GATEWAY + "f" + compute_cidv1_bytes(pinned).hex()
+    uri = _published_uri(pinned)
     response = MagicMock()
     response.content = pinned if body is None else body
     return uri, response
@@ -283,16 +310,18 @@ class TestFetchToolsMetadata:
     ) -> None:
         """An error page is not a manifest that failed the hash check; the status is what is logged."""
         uri, _ = _published(TOOLS_MANIFEST)
-        response = MagicMock()
-        response.ok = False
+        response = requests.Response()
         response.status_code = status
-        response.content = b"upstream request timeout"
+        response.url = uri
+        response._content = b"upstream request timeout"  # pylint: disable=protected-access
 
         with patch("mech_client.domain.tools.manager.logger.error") as error:
             metadata = self._fetch(mock_config, mock_get_contract, mock_requests, uri, response)
 
         assert metadata is None
-        error.assert_called_once_with(MANIFEST_HTTP_NOTE.format(status=status, service_id=1))
+        (logged,), _ = error.call_args
+        assert f"HTTPError: {status}" in logged
+        assert logged != MANIFEST_HASH_NOTE.format(service_id=1)
 
     def test_a_uri_without_a_cid_cannot_be_checked_and_is_not_used(
         self,
@@ -587,12 +616,11 @@ class TestGetOffchainUrl:
         # Create manager
         manager = ToolManager(chain_config="gnosis")
 
-        # Mock fetch_tools_metadata to return metadata with url
-        manager.fetch_tools_metadata = MagicMock(  # type: ignore
-            return_value={
-                "url": "https://mech.example.com/",
-                "tools": ["openai-gpt-4"],
-            }
+        manager.read_tools_metadata = MagicMock(  # type: ignore
+            return_value=MetadataRead(
+                {"url": "https://mech.example.com/", "tools": ["openai-gpt-4"]},
+                None,
+            )
         )
 
         # Get offchain URL
@@ -600,7 +628,7 @@ class TestGetOffchainUrl:
 
         # Verify
         assert url == "https://mech.example.com/"
-        manager.fetch_tools_metadata.assert_called_once_with(42)
+        manager.read_tools_metadata.assert_called_once_with(42)
 
     @patch("mech_client.domain.tools.manager.EthereumApi")
     @patch("mech_client.domain.tools.manager.get_mech_config")
@@ -614,16 +642,14 @@ class TestGetOffchainUrl:
         # Create manager
         manager = ToolManager(chain_config="gnosis")
 
-        # Mock fetch_tools_metadata to return metadata without url
-        manager.fetch_tools_metadata = MagicMock(  # type: ignore
-            return_value={
-                "tools": ["openai-gpt-4"],
-                "toolMetadata": {},
-            }
+        manager.read_tools_metadata = MagicMock(  # type: ignore
+            return_value=MetadataRead(
+                {"tools": ["openai-gpt-4"], "toolMetadata": {}}, None
+            )
         )
 
         # Should raise ValueError
-        with pytest.raises(ValueError, match="does not contain an offchain URL"):
+        with pytest.raises(ValueError, match="Mech service 42: no 'url' in metadata"):
             manager.get_offchain_url(service_id=42)
 
     @patch("mech_client.domain.tools.manager.EthereumApi")
@@ -638,12 +664,17 @@ class TestGetOffchainUrl:
         # Create manager
         manager = ToolManager(chain_config="gnosis")
 
-        # Mock fetch_tools_metadata to return None
-        manager.fetch_tools_metadata = MagicMock(return_value=None)  # type: ignore
+        manager.read_tools_metadata = MagicMock(  # type: ignore
+            return_value=MetadataRead(None, "Timeout: slow")
+        )
 
         # Should raise ValueError
-        with pytest.raises(ValueError, match="Could not fetch metadata"):
+        with pytest.raises(ValueError) as e:
             manager.get_offchain_url(service_id=42)
+        assert str(e.value) == (
+            "Mech service 42: metadata unreadable (Timeout: slow); may be "
+            "transient or never published"
+        )
 
     @patch("mech_client.domain.tools.manager.EthereumApi")
     @patch("mech_client.domain.tools.manager.get_mech_config")
@@ -657,17 +688,24 @@ class TestGetOffchainUrl:
         # Create manager
         manager = ToolManager(chain_config="gnosis")
 
-        # Mock fetch_tools_metadata to return metadata with empty url
-        manager.fetch_tools_metadata = MagicMock(  # type: ignore
-            return_value={
-                "url": "  ",
-                "tools": ["openai-gpt-4"],
-            }
+        manager.read_tools_metadata = MagicMock(  # type: ignore
+            return_value=MetadataRead({"url": "  ", "tools": ["openai-gpt-4"]}, None)
         )
 
         # Should raise ValueError
-        with pytest.raises(ValueError, match="does not contain an offchain URL"):
+        with pytest.raises(ValueError, match="Mech service 42: no 'url' in metadata"):
             manager.get_offchain_url(service_id=42)
+
+    def test_a_bare_document_is_still_accepted(self) -> None:
+        """Callers passing the document itself keep working, with one wording."""
+        assert (
+            ToolManager.offchain_url_from_metadata(1, {"url": "https://m"})
+            == "https://m"
+        )
+        with pytest.raises(
+            ValueError, match="metadata unreadable \\(no document was read\\)"
+        ):
+            ToolManager.offchain_url_from_metadata(1, None)
 
 
 class TestGetToolSchema:
@@ -791,8 +829,14 @@ class TestExtractTermsUrl:
     @pytest.mark.parametrize(
         ("metadata", "expected"),
         [
-            ({"termsUrl": "https://www.valory.xyz/terms/mechs"}, "https://www.valory.xyz/terms/mechs"),
-            ({"termsUrl": "  https://example.test/terms  "}, "https://example.test/terms"),
+            (
+                {"termsUrl": "https://www.valory.xyz/terms/mechs"},
+                "https://www.valory.xyz/terms/mechs",
+            ),
+            (
+                {"termsUrl": "  https://example.test/terms  "},
+                "https://example.test/terms",
+            ),
             ({"tools": []}, None),  # field absent
             ({"termsUrl": ""}, None),  # empty string
             ({"termsUrl": "   "}, None),  # whitespace only
@@ -811,14 +855,35 @@ class TestExtractTermsUrl:
             ({"termsUrl": "https://example.test/\x1b[31m"}, None),  # control char
             ({"termsUrl": "https://example.test/\u202e"}, None),  # bidi override
             ({"termsUrl": "https://[::1/terms"}, None),  # unparseable host
-            ({"termsUrl": "https://example.test/" + "a" * 2027}, "https://example.test/" + "a" * 2027),  # at the cap
+            (
+                {"termsUrl": "https://example.test/" + "a" * 2027},
+                "https://example.test/" + "a" * 2027,
+            ),  # at the cap
             ({"termsUrl": "https://example.test/" + "a" * 2028}, None),  # over the cap
         ],
         ids=[
-            "present", "stripped", "absent", "empty", "whitespace", "null",
-            "int", "list_value", "dict_value", "list_document", "scalar_document", "none",
-            "http", "javascript", "no_host", "no_scheme", "inner_space",
-            "control_char", "bidi_override", "bad_ipv6", "at_cap", "over_cap",
+            "present",
+            "stripped",
+            "absent",
+            "empty",
+            "whitespace",
+            "null",
+            "int",
+            "list_value",
+            "dict_value",
+            "list_document",
+            "scalar_document",
+            "none",
+            "http",
+            "javascript",
+            "no_host",
+            "no_scheme",
+            "inner_space",
+            "control_char",
+            "bidi_override",
+            "bad_ipv6",
+            "at_cap",
+            "over_cap",
         ],
     )
     def test_extract_terms_url(self, metadata: Any, expected: Optional[str]) -> None:
@@ -917,7 +982,9 @@ class TestTermsReport:
     ) -> None:
         """Only a confirmed Valory mech gets the statement; a published link always passes."""
         with (
-            patch(f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=_resolver(outcome)),
+            patch(
+                f"{IDENTIFICATION}.socket.getaddrinfo", side_effect=_resolver(outcome)
+            ),
             patch(f"{IDENTIFICATION}.logger"),
         ):
             assert manager.terms_report(GNOSIS_MECH, metadata) == expected
@@ -1130,9 +1197,11 @@ class TestClaimedOperator:
         self, error: Exception
     ) -> None:
         """Nothing the proof fetch raises escapes; the claim stays, unverified, with the note."""
-        with patch(f"{MANAGER}.query_erc8004_agent_id", return_value=2182), patch(
-            f"{MANAGER}.verify_domain", side_effect=error
-        ), patch(f"{MANAGER}.logger") as logger:
+        with (
+            patch(f"{MANAGER}.query_erc8004_agent_id", return_value=2182),
+            patch(f"{MANAGER}.verify_domain", side_effect=error),
+            patch(f"{MANAGER}.logger") as logger,
+        ):
             block = claimed_operator("gnosis", 100, 2182, OPERATOR_MANIFEST)
         assert block is not None
         assert block["claimed_name"] == "Valory"
@@ -1325,7 +1394,9 @@ class TestMechReportOrTerms:
         claim.assert_not_called()
         logger.warning.assert_called_once()
 
-    def test_a_readable_record_gives_the_full_report(self, manager: ToolManager) -> None:
+    def test_a_readable_record_gives_the_full_report(
+        self, manager: ToolManager
+    ) -> None:
         """With the record in hand it is the full report, queried once."""
         with (
             patch(f"{MANAGER}.query_mech_record", return_value=_record()) as query,
@@ -1363,3 +1434,317 @@ class TestDeliveryRecord:
         with patch(f"{MANAGER}.datetime") as clock:
             clock.now.return_value = CREATED_AT - timedelta(days=2)
             assert ToolManager.delivery_record(_record())["age_days"] == 0
+
+
+@patch("mech_client.domain.tools.manager.EthereumApi")
+@patch("mech_client.domain.tools.manager.get_mech_config")
+def test_tool_manager_passes_its_rpc_url(
+    mock_config: MagicMock, mock_ledger_api: MagicMock
+) -> None:
+    """ToolManager(rpc_url=...) reads the chain through that RPC."""
+    mock_config.return_value.ledger_config = MagicMock()
+    with patch("mech_client.domain.tools.manager.asdict", return_value={}):
+        ToolManager("gnosis", rpc_url="https://caller.example")
+
+    mock_config.assert_called_once_with("gnosis", rpc_url="https://caller.example")
+
+
+class TestReadToolsMetadata:
+    """read_tools_metadata keeps the cause of an unreadable document."""
+
+    @staticmethod
+    def _read(uri: Any, get: MagicMock) -> MetadataRead:
+        """Read metadata where tokenURI answers ``uri`` (or raises it) and GET is ``get``."""
+        contract = MagicMock()
+        token_uri = contract.functions.tokenURI.return_value.call
+        if isinstance(uri, Exception):
+            token_uri.side_effect = uri
+        else:
+            token_uri.return_value = uri
+        with (
+            patch(
+                "mech_client.domain.tools.manager.get_mech_config",
+                return_value=create_mock_mech_config(),
+            ),
+            patch("mech_client.domain.tools.manager.EthereumApi"),
+            patch("mech_client.domain.tools.manager.get_abi"),
+            patch(
+                "mech_client.domain.tools.manager.get_contract", return_value=contract
+            ),
+            patch("mech_client.domain.tools.manager.requests.get", get),
+        ):
+            return ToolManager(chain_config="gnosis").read_tools_metadata(1)
+
+    def test_a_readable_document_has_no_error(self) -> None:
+        """The document comes back with error None."""
+        document = {"tools": ["t"], "url": "https://mech.example"}
+        uri, response = _published(document)
+
+        assert self._read(uri, MagicMock(return_value=response)) == MetadataRead(
+            document, None
+        )
+
+    def test_a_document_that_does_not_hash_to_its_uri_names_that_cause(
+        self,
+    ) -> None:
+        """A substituted document is unreadable, with the hash check as the cause."""
+        uri, response = _published(TOOLS_MANIFEST, body=b'{"tools": []}')
+
+        assert self._read(uri, MagicMock(return_value=response)) == MetadataRead(
+            None, MANIFEST_HASH_CAUSE
+        )
+
+    @pytest.mark.parametrize(
+        ("uri", "get", "cause"),
+        [
+            (
+                "https://gateway/1",
+                MagicMock(side_effect=requests.exceptions.Timeout("slow")),
+                "Timeout: slow",
+            ),
+            (
+                ContractLogicError("execution reverted"),
+                MagicMock(),
+                "ContractLogicError: ('execution reverted', None)",
+            ),
+            (
+                BadFunctionCallOutput("empty response"),
+                MagicMock(),
+                "BadFunctionCallOutput: empty response",
+            ),
+            (
+                NotImplementedError("no tokenURI here"),
+                MagicMock(),
+                "NotImplementedError: no tokenURI here",
+            ),
+            (
+                "https://gateway/1",
+                MagicMock(side_effect=OSError("connection reset")),
+                "OSError: connection reset",
+            ),
+            (
+                _published_uri(b"not json"),
+                MagicMock(return_value=MagicMock(content=b"not json")),
+                "JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
+            ),
+            (
+                _published_uri(b"[1]"),
+                MagicMock(return_value=MagicMock(content=b"[1]")),
+                "expected a JSON object, got list",
+            ),
+        ],
+    )
+    def test_an_unreadable_document_never_raises_and_names_its_cause(
+        self, uri: Any, get: MagicMock, cause: str
+    ) -> None:
+        """RPC, gateway, JSON and shape failures all come back as the cause."""
+        assert self._read(uri, get) == MetadataRead(None, cause)
+
+    def test_a_gateway_error_status_is_unreadable_even_with_a_json_body(
+        self,
+    ) -> None:
+        """A 504 with a JSON object body is not taken for the document."""
+        response = requests.Response()
+        response.status_code = 504
+        response.reason = "Gateway Timeout"
+        response.url = "https://gateway/1"
+        response._content = (
+            b'{"error": "upstream timed out"}'  # pylint: disable=protected-access
+        )
+
+        read = self._read("https://gateway/1", MagicMock(return_value=response))
+
+        assert read.document is None
+        assert read.error == (
+            "HTTPError: 504 Server Error: Gateway Timeout for url: https://gateway/..."
+        )
+        assert offchain_blocker(read) is not None
+
+    def test_no_metadata_hash_contract_is_a_cause_not_an_error(self) -> None:
+        """read_tools_metadata reports it; fetch_tools_metadata still raises."""
+        config = create_mock_mech_config()
+        config.complementary_metadata_hash_address = (
+            "0x0000000000000000000000000000000000000000"
+        )
+        with (
+            patch(
+                "mech_client.domain.tools.manager.get_mech_config", return_value=config
+            ),
+            patch("mech_client.domain.tools.manager.EthereumApi"),
+        ):
+            manager = ToolManager(chain_config="celo")
+
+        assert manager.read_tools_metadata(1) == MetadataRead(
+            None, "metadata hash contract not deployed on celo"
+        )
+        with pytest.raises(ValueError, match="not yet implemented on celo"):
+            manager.fetch_tools_metadata(1)
+
+    def test_a_document_nested_past_the_decoder_limit_is_unreadable(self) -> None:
+        """RecursionError from the JSON decoder is a cause, not a crash."""
+        nested = b"[" * DEEPLY_NESTED + b"]" * DEEPLY_NESTED
+        response = MagicMock(content=nested)
+
+        read = self._read(_published_uri(nested), MagicMock(return_value=response))
+
+        assert read.document is None
+        assert read.error is not None
+        assert read.error.startswith("RecursionError: ")
+
+    @pytest.mark.parametrize(
+        "error", [FileNotFoundError("no abi"), json.JSONDecodeError("bad", "", 0)]
+    )
+    def test_a_broken_abi_is_not_reported_as_unreadable_metadata(
+        self, error: Exception
+    ) -> None:
+        """A packaging bug propagates instead of reading as a transient failure."""
+        with (
+            patch(
+                "mech_client.domain.tools.manager.get_mech_config",
+                return_value=create_mock_mech_config(),
+            ),
+            patch("mech_client.domain.tools.manager.EthereumApi"),
+            patch("mech_client.domain.tools.manager.get_abi", side_effect=error),
+        ):
+            manager = ToolManager(chain_config="gnosis")
+            with pytest.raises(type(error)):
+                manager.read_tools_metadata(1)
+
+    def test_a_keyed_url_in_the_error_never_reaches_the_cause(self) -> None:
+        """An RPC or gateway URL's path, query and credentials are cut off."""
+        keyed = (
+            "401 Client Error: Unauthorized for url: "
+            "https://user:pw@rpc.example/v2/SECRETKEY?apikey=ALSO"
+        )
+        get = MagicMock(side_effect=requests.HTTPError(keyed))
+
+        read = self._read("https://gateway/1", get)
+        blocker = offchain_blocker(read)
+
+        assert read.error == (
+            "HTTPError: 401 Client Error: Unauthorized for url: https://rpc.example/..."
+        )
+        assert blocker is not None
+        for secret in ("SECRETKEY", "ALSO", "user", "pw@"):
+            assert secret not in blocker
+        with pytest.raises(ValueError) as e:
+            ToolManager.offchain_url_from_metadata(1, read)
+        assert "SECRETKEY" not in str(e.value)
+
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            (
+                requests.ConnectionError(
+                    MaxRetryError(
+                        HTTPSConnectionPool("rpc.example", 443),
+                        "/v3/SECRETKEY?apikey=ALSO",
+                        reason=None,
+                    )
+                ),
+                "ConnectionError: HTTPSConnectionPool(host='rpc.example', port=443):"
+                " Max retries exceeded with url: /... (Caused by None)",
+            ),
+            (
+                requests.ConnectTimeout(
+                    MaxRetryError(
+                        HTTPSConnectionPool("rpc.example", 443),
+                        "https://u:p@rpc.example/v3/SECRETKEY",
+                        reason=None,
+                    )
+                ),
+                "ConnectTimeout: HTTPSConnectionPool(host='rpc.example', port=443):"
+                " Max retries exceeded with url: https://rpc.example/... "
+                "(Caused by None)",
+            ),
+            (
+                requests.ReadTimeout(
+                    ReadTimeoutError(
+                        HTTPSConnectionPool("rpc.example", 443),
+                        "/v3/SECRETKEY?apikey=ALSO",
+                        "Read timed out. (read timeout=10)",
+                    )
+                ),
+                "ReadTimeout: HTTPSConnectionPool(host='rpc.example', port=443):"
+                " Read timed out. (read timeout=10)",
+            ),
+            (
+                ValueError("bad token ?apikey=ALSO here"),
+                "ValueError: bad token ?... here",
+            ),
+        ],
+    )
+    def test_urllib3_paths_and_queries_never_reach_the_cause(
+        self, error: Exception, expected: str
+    ) -> None:
+        """The scheme-less path urllib3 prints is cut too, from the RPC call."""
+        read = self._read(error, MagicMock())
+
+        assert read.error == expected
+        for secret in ("SECRETKEY", "ALSO", "u:p"):
+            assert secret not in (offchain_blocker(read) or "")
+
+    def test_a_long_cause_is_cut_short(self) -> None:
+        """A cause is a short description, not the whole exception."""
+        read = self._read(OSError("y" * 500), MagicMock())
+
+        assert read.error == "OSError: " + "y" * 200 + "..."
+
+    def test_a_programming_error_propagates(self) -> None:
+        """Only read failures become the cause; a bug keeps its traceback."""
+        get = MagicMock(side_effect=TypeError("unexpected keyword"))
+
+        with pytest.raises(TypeError, match="unexpected keyword"):
+            self._read("https://gateway/1", get)
+
+
+class TestOffchainBlocker:
+    """offchain_blocker separates a failed read from a mech with no endpoint."""
+
+    def test_an_unreadable_document_may_be_transient(self) -> None:
+        """The cause is quoted, and the advice allows a retry."""
+        assert offchain_blocker(MetadataRead(None, "Timeout: slow")) == (
+            "metadata unreadable (Timeout: slow); may be transient or never published"
+        )
+
+    @pytest.mark.parametrize(
+        ("document", "error"), [(None, None), ({"url": "https://m"}, "slow")]
+    )
+    def test_a_read_has_exactly_one_of_document_or_error(
+        self, document: Any, error: Any
+    ) -> None:
+        """Neither and both are refused; the constructors build the two valid reads."""
+        with pytest.raises(ValueError, match="exactly one"):
+            MetadataRead(document, error)
+        assert MetadataRead.ok({"a": 1}) == MetadataRead({"a": 1}, None)
+        assert MetadataRead.failed("slow") == MetadataRead(None, "slow")
+
+    @pytest.mark.parametrize("url", [None, "", "  ", 42])
+    def test_a_document_without_a_url_is_on_chain_only(self, url: Any) -> None:
+        """No usable url: the mech serves on-chain requests only."""
+        document: Dict[str, Any] = {"tools": []}
+        if url is not None:
+            document["url"] = url
+        assert offchain_blocker(MetadataRead(document, None)) == (
+            "no 'url' in metadata; this mech serves on-chain requests only"
+        )
+
+    def test_a_document_with_a_url_has_no_blocker(self) -> None:
+        """A url means the off-chain flow can reach the mech."""
+        assert offchain_blocker(MetadataRead({"url": "https://m"}, None)) is None
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        ({"url": " https://m "}, "https://m"),
+        ({"url": "  "}, None),
+        ({"url": 42}, None),
+        ({}, None),
+        (["url"], None),
+        (None, None),
+    ],
+)
+def test_usable_offchain_url(metadata: Any, expected: Optional[str]) -> None:
+    """Only a non-blank string url is usable, stripped."""
+    assert usable_offchain_url(metadata) == expected

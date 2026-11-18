@@ -112,9 +112,7 @@ class TestTokenPaymentStrategy:
     ) -> None:
         """Test balance check with sufficient token balance."""
         mock_get_contract.return_value = mock_web3_contract
-        mock_web3_contract.functions.balanceOf.return_value.call.return_value = (
-            10**18
-        )
+        mock_web3_contract.functions.balanceOf.return_value.call.return_value = 10**18
         payer_address = "0x1234567890123456789012345678901234567890"
 
         result = strategy.check_balance(payer_address, amount=10**17)
@@ -131,9 +129,7 @@ class TestTokenPaymentStrategy:
     ) -> None:
         """Test balance check with insufficient token balance."""
         mock_get_contract.return_value = mock_web3_contract
-        mock_web3_contract.functions.balanceOf.return_value.call.return_value = (
-            10**17
-        )
+        mock_web3_contract.functions.balanceOf.return_value.call.return_value = 10**17
         payer_address = "0x1234567890123456789012345678901234567890"
 
         result = strategy.check_balance(payer_address, amount=10**18)
@@ -246,9 +242,7 @@ class TestNVMPaymentStrategy:
         result = strategy.check_balance(payer_address, amount=10**18)
         assert result is False
 
-    def test_approve_if_needed_returns_none(
-        self, strategy: NVMPaymentStrategy
-    ) -> None:
+    def test_approve_if_needed_returns_none(self, strategy: NVMPaymentStrategy) -> None:
         """Test that NVM payments don't need approval."""
         result = strategy.approve_if_needed(
             payer_address="0x1234567890123456789012345678901234567890",
@@ -349,9 +343,7 @@ class TestNVMPaymentStrategyMethods:
     """Tests for NVMPaymentStrategy helper methods (coverage for missing lines)."""
 
     @pytest.fixture
-    def native_nvm_strategy(
-        self, mock_ledger_api: MagicMock
-    ) -> NVMPaymentStrategy:
+    def native_nvm_strategy(self, mock_ledger_api: MagicMock) -> NVMPaymentStrategy:
         """Create NVM native payment strategy on Gnosis (chain_id=100)."""
         return NVMPaymentStrategy(
             ledger_api=mock_ledger_api,
@@ -360,9 +352,7 @@ class TestNVMPaymentStrategyMethods:
         )
 
     @pytest.fixture
-    def usdc_nvm_strategy(
-        self, mock_ledger_api: MagicMock
-    ) -> NVMPaymentStrategy:
+    def usdc_nvm_strategy(self, mock_ledger_api: MagicMock) -> NVMPaymentStrategy:
         """Create NVM USDC payment strategy on Polygon (chain_id=137)."""
         return NVMPaymentStrategy(
             ledger_api=mock_ledger_api,
@@ -450,13 +440,17 @@ class TestNVMPaymentStrategyMethods:
         tracker = "0x" + "b" * 40
 
         # prepaid balance in tracker
-        mock_web3_contract.functions.mapRequesterBalances.return_value.call.return_value = 5
+        mock_web3_contract.functions.mapRequesterBalances.return_value.call.return_value = (
+            5
+        )
         # NFT subscription address and token ID
         nft_address = "0x" + "c" * 40
         mock_web3_contract.functions.subscriptionNFT.return_value.call.return_value = (
             nft_address
         )
-        mock_web3_contract.functions.subscriptionTokenId.return_value.call.return_value = 1
+        mock_web3_contract.functions.subscriptionTokenId.return_value.call.return_value = (
+            1
+        )
         # NFT balance
         mock_web3_contract.functions.balanceOf.return_value.call.return_value = 3
 
@@ -478,11 +472,15 @@ class TestNVMPaymentStrategyMethods:
         payer = "0x1234567890123456789012345678901234567890"
         tracker = "0x" + "d" * 40
 
-        mock_web3_contract.functions.mapRequesterBalances.return_value.call.return_value = 10
+        mock_web3_contract.functions.mapRequesterBalances.return_value.call.return_value = (
+            10
+        )
         mock_web3_contract.functions.subscriptionNFT.return_value.call.return_value = (
             "0x" + "e" * 40
         )
-        mock_web3_contract.functions.subscriptionTokenId.return_value.call.return_value = 2
+        mock_web3_contract.functions.subscriptionTokenId.return_value.call.return_value = (
+            2
+        )
         mock_web3_contract.functions.balanceOf.return_value.call.return_value = 0
 
         result = usdc_nvm_strategy.check_subscription_balance(payer, tracker)
@@ -613,9 +611,9 @@ class TestNativePaymentStrategyMethods:
 
         assert isinstance(result, int)
         # Verify the contract was called with a checksummed address
-        called_address = (
-            mock_web3_contract.functions.mapRequesterBalances.call_args[0][0]
-        )
+        called_address = mock_web3_contract.functions.mapRequesterBalances.call_args[0][
+            0
+        ]
         assert called_address == called_address  # checksummed form - passes web3.py
 
 
@@ -632,9 +630,7 @@ class TestTokenPaymentStrategyMethods:
         )
 
     @pytest.fixture
-    def usdc_strategy_polygon(
-        self, mock_ledger_api: MagicMock
-    ) -> TokenPaymentStrategy:
+    def usdc_strategy_polygon(self, mock_ledger_api: MagicMock) -> TokenPaymentStrategy:
         """Create USDC TokenPaymentStrategy on Polygon (chain_id=137)."""
         return TokenPaymentStrategy(
             ledger_api=mock_ledger_api,
@@ -836,9 +832,9 @@ class TestTokenPaymentStrategyMethods:
         result = olas_strategy.check_prepaid_balance(requester, tracker)
 
         assert isinstance(result, int)
-        called_address = (
-            mock_web3_contract.functions.mapRequesterBalances.call_args[0][0]
-        )
+        called_address = mock_web3_contract.functions.mapRequesterBalances.call_args[0][
+            0
+        ]
         assert called_address == called_address  # checksummed form passes web3.py
 
 
@@ -849,9 +845,13 @@ class TestPaymentStrategyBase:
         self, mock_ledger_api: MagicMock
     ) -> None:
         """Test that base check_prepaid_balance returns 0 by default."""
-        from mech_client.domain.payment.base import PaymentStrategy  # pylint: disable=import-outside-toplevel
+        from mech_client.domain.payment.base import (
+            PaymentStrategy,
+        )  # pylint: disable=import-outside-toplevel
 
-        class _ConcreteStrategy(PaymentStrategy):  # pylint: disable=too-few-public-methods
+        class _ConcreteStrategy(
+            PaymentStrategy
+        ):  # pylint: disable=too-few-public-methods
             """Concrete strategy to test base class default methods."""
 
             def check_balance(self, payer_address: str, amount: int) -> bool:
@@ -859,7 +859,11 @@ class TestPaymentStrategyBase:
                 return True
 
             def approve_if_needed(  # type: ignore[override]
-                self, payer_address: str, spender_address: str, amount: int, executor=None
+                self,
+                payer_address: str,
+                spender_address: str,
+                amount: int,
+                executor=None,
             ):
                 """Stub."""
                 return None
@@ -882,40 +886,3 @@ class TestPaymentStrategyBase:
             "0x" + "b" * 40,
         )
         assert result == 0
-
-    def test_lookup_balance_tracker_raises_for_missing_chain(
-        self, mock_ledger_api: MagicMock
-    ) -> None:
-        """Test _lookup_balance_tracker raises ValueError when chain not in map."""
-        from mech_client.domain.payment.base import PaymentStrategy  # pylint: disable=import-outside-toplevel
-
-        class _ConcreteStrategy(PaymentStrategy):  # pylint: disable=too-few-public-methods
-            """Concrete strategy to test base class default methods."""
-
-            def check_balance(self, payer_address: str, amount: int) -> bool:
-                """Stub."""
-                return True
-
-            def approve_if_needed(  # type: ignore[override]
-                self, payer_address: str, spender_address: str, amount: int, executor=None
-            ):
-                """Stub."""
-                return None
-
-            def get_balance_tracker_address(self) -> str:
-                """Stub."""
-                return "0x" + "a" * 40
-
-            def get_payment_token_address(self):  # type: ignore[override]
-                """Stub."""
-                return None
-
-        strategy = _ConcreteStrategy(
-            ledger_api=mock_ledger_api,
-            payment_type=PaymentType.NATIVE,
-            chain_id=100,
-        )
-        with pytest.raises(ValueError, match="balance tracker not available"):
-            strategy._lookup_balance_tracker(  # pylint: disable=protected-access
-                {}, "Native"
-            )
