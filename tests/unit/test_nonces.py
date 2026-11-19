@@ -44,6 +44,7 @@ from typing import (
 import pytest
 
 from mech_client import nonces
+from mech_client.domain.delivery.models import DeliveryResult
 from mech_client.nonces import (
     NonceAllocator,
     NonceRefused,
@@ -60,6 +61,7 @@ from mech_client.services.marketplace_service import (
 )
 
 SENDER = "0x" + "22" * 20
+REQUEST_ID = "01"  # the hex request id of the stub mech's one request
 MECH_A = "0x" + "a1" * 20
 MECH_B = "0x" + "b2" * 20
 GAP_RETRIES = 3
@@ -725,6 +727,21 @@ def _send(
     return sent, result
 
 
+def _call(data: Any, nonce: int = 5) -> Dict[str, Any]:
+    """Return what send_request returns for one request, delivered with ``data``.
+
+    ``data`` is the delivery's content: the mech's envelope for an inline
+    answer, or None when no result file could be read.
+    """
+    return {
+        "tx_hash": None,
+        "request_ids": [REQUEST_ID],
+        "nonces": [nonce],
+        "deliveries": {REQUEST_ID: DeliveryResult(request_id=REQUEST_ID, data=data)},
+        "receipt": None,
+    }
+
+
 def test_send_with_nonce_retries_a_gap_then_succeeds(
     allocator: NonceAllocator, clock: Clock
 ) -> None:
@@ -1023,6 +1040,63 @@ def test_send_with_nonce_holds_a_lost_answer(allocator: NonceAllocator) -> None:
         assert slot.nonce == 6
 
 
+def test_send_with_nonce_frees_a_nonce_the_mech_rejected(
+    allocator: NonceAllocator,
+) -> None:
+    """A delivery carrying status rejected frees n: the next request reuses it."""
+    sent, result = _send(allocator, [_call({"status": "rejected", "reason": "no"})])
+    assert sent == [5]
+    assert result["deliveries"]  # the caller is still handed the delivery
+    assert held(allocator, 5) is None
+    sent, _ = _send(allocator, [_call({"status": "ok"})])
+    assert sent == [5]  # reused, not skipped
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"status": "ok", "content_cid": "ba"},
+        {"status": "REJECTED"},
+        {"reason": "no status at all"},
+        {"status": None},
+        "rejected",
+        None,
+    ],
+)
+def test_send_with_nonce_holds_a_nonce_not_delivered_as_rejected(
+    allocator: NonceAllocator, data: Any
+) -> None:
+    """Only the mech's own rejected status frees n; any other payload holds it."""
+    _, result = _send(allocator, [_call(data)])
+    assert result["nonces"] == [5]  # the payload was read, not tripped over
+    assert salt_of(allocator, 5) == "s"
+
+
+def test_send_with_nonce_holds_a_nonce_whose_delivery_never_arrived(
+    allocator: NonceAllocator,
+) -> None:
+    """A watch that timed out carries no delivery for the request: n stays held."""
+    result = _call({"status": "rejected"})
+    result["deliveries"] = {}
+    _, returned = _send(allocator, [result])
+    assert returned["deliveries"] == {}
+    assert salt_of(allocator, 5) == "s"
+
+
+def test_each_request_of_a_call_pairs_with_its_own_nonce() -> None:
+    """request_ids and nonces are in send order, so each delivery names its nonce."""
+    result = {
+        "request_ids": ["01", "02"],
+        "nonces": [5, 6],
+        "deliveries": {
+            "01": DeliveryResult(request_id="01", data={"status": "ok"}),
+            "02": DeliveryResult(request_id="02", data={"status": "rejected"}),
+        },
+    }
+    # pylint: disable-next=protected-access
+    assert nonces._rejected_nonces(cast(Any, result)) == [6]
+
+
 def test_the_slot_is_on_disk_before_the_post(allocator: NonceAllocator) -> None:
     """A crash mid-send leaves n held: it was written down before sending."""
     with take(allocator, 5) as slot:
@@ -1085,6 +1159,49 @@ def test_a_rejected_probe_puts_back_what_it_replaced(allocator: NonceAllocator) 
         slot.answered("retry", mech=MECH_A, salt="", posted=True)  # resent, same reservation
     # the resend's answer never came: 5 is still held, as our accepted slot
     assert cast(dict, held(allocator, 5))["state"] == "accepted"
+
+
+def test_rejected_frees_the_slot_for_the_next_request(
+    allocator: NonceAllocator,
+) -> None:
+    """The mech discarded the request, so n is free and handed out again."""
+    with take(allocator, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
+    allocator.rejected("gnosis", SENDER, [5])
+    assert held(allocator, 5) is None  # gone from the store, not just from memory
+    assert not allocator.stalled("gnosis", SENDER)
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 5  # mapNonces still equals it
+
+
+def test_rejected_leaves_a_nonce_it_does_not_hold(allocator: NonceAllocator) -> None:
+    """A nonce never held, or already settled, is a no-op: the held one stands."""
+    with take(allocator, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
+    allocator.rejected("gnosis", SENDER, [4, 6])
+    assert salt_of(allocator, 5) == "s5"
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 6
+
+
+def test_rejected_keeps_a_slot_held_as_unknown(allocator: NonceAllocator) -> None:
+    """An unknown slot keeps its own rule: only mapNonces passing it frees it."""
+    with take(allocator, 5) as slot:
+        slot.answered("unknown", mech=MECH_A, salt="s5", posted=True)
+    allocator.rejected("gnosis", SENDER, [5])
+    assert salt_of(allocator, 5) == "s5"
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 6
+
+
+def test_rejected_leaves_the_stall_as_it_found_it(
+    allocator: NonceAllocator, clock: Clock
+) -> None:
+    """Freeing a rejected slot is not an accepted request: it clears no stall."""
+    _overdue_queue(allocator, clock)
+    allocator.rejected("gnosis", SENDER, [6])
+    assert held(allocator, 6) is None
+    assert allocator.stalled("gnosis", SENDER)
 
 
 def _hold_lock(allocator: NonceAllocator) -> Tuple[threading.Event, threading.Thread]:
