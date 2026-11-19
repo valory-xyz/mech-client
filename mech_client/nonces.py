@@ -92,8 +92,7 @@ POLL_SECONDS = 2.0
 GAP_RETRY_SECONDS = 2.0
 # the mech's 401 for a stale or duplicate nonce, verbatim: n is taken
 NONCE_TAKEN_REASON = "wire nonce below sender's next expected slot"
-# the status a delivery carries when the mech discarded the request instead of
-# settling it, so it holds nothing at that nonce
+# the status the mech's delivery carries for a request it discarded
 DELIVERY_REJECTED = "rejected"
 _HOOK_NOT_PASSED = (
     "send for nonce %s never passed send_with_nonce's hook to send_request as "
@@ -105,10 +104,14 @@ _HELD_AS_UNKNOWN = (
 _REJECTED_FREED = "mech nonces %s on %s freed: the mech rejected their deliveries"
 _REJECTED_KEPT = (
     "mech nonces %s on %s stay held though the mech rejected their deliveries: "
-    "not held as accepted, or a later slot is held above them"
+    "held by another request, not held as accepted, or a later slot is held "
+    "above them"
 )
 
-Outcome = Literal["accepted", "retry", "not_accepted", "taken", "unknown", "rejected"]
+Outcome = Literal["accepted", "retry", "not_accepted", "taken", "unknown"]
+# what a reservation can be answered: an answer to the POST, or the rejection
+# a later delivery carried, which no HTTP answer maps to
+Answer = Union[Outcome, Literal["rejected"]]
 # what a held slot can be: the only outcomes that keep a nonce held
 SlotState = Literal["accepted", "unknown"]
 ACCEPTED: Literal["accepted"] = "accepted"
@@ -116,7 +119,7 @@ RETRY: Outcome = "retry"
 NOT_ACCEPTED: Outcome = "not_accepted"
 TAKEN: Outcome = "taken"
 UNKNOWN: Literal["unknown"] = "unknown"
-REJECTED: Literal["rejected"] = "rejected"
+REJECTED: Literal["rejected"] = "rejected"  # not an Outcome: see Answer
 SLOT_STATES = (ACCEPTED, UNKNOWN)
 
 NonceRule = Literal[
@@ -269,7 +272,7 @@ class Reservation:
         self._record = record
         self._nonce = nonce
         self._prior = prior
-        self._outcome: Optional[Outcome] = None
+        self._outcome: Optional[Answer] = None
 
     @property
     def nonce(self) -> int:
@@ -282,11 +285,11 @@ class Reservation:
         return self._prior
 
     @property
-    def outcome(self) -> Optional[Outcome]:
+    def outcome(self) -> Optional[Answer]:
         """The recorded answer, or None until ``answered`` is called."""
         return self._outcome
 
-    def answered(self, outcome: Outcome, *, mech: str, salt: str, posted: bool) -> None:
+    def answered(self, outcome: Answer, *, mech: str, salt: str, posted: bool) -> None:
         """
         Record the mech's answer to this nonce; a reservation is answered once.
 
@@ -299,7 +302,10 @@ class Reservation:
         answer for a posted request the mech delivered a rejection for: it
         frees n, since the mech discarded the request without settling it,
         and frees a slot a stalled queue's probe ran over with it, which the
-        mech proved it does not hold by admitting the probe.
+        mech proved it does not hold by admitting the probe. It is the one
+        answer ``posted`` does not gate: a delivery arrived, so the mech had
+        the request and has since discarded it. ``outcome_of`` never returns
+        it, which is why it is an ``Answer`` and not an ``Outcome``.
 
         :param outcome: What the answer means for the nonce
         :param mech: The mech the request went to
@@ -483,37 +489,47 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         if marked:
             self._save(f"the deliveries of mech nonces {marked} on {key}")
 
-    def rejected(self, chain: str, sender: str, nonces: Iterable[int]) -> None:
+    def rejected(
+        self, chain: str, sender: str, slots: Iterable[Tuple[int, str]]
+    ) -> None:
         """
         Free each accepted slot whose delivery carried the mech's rejection.
 
         A rejected delivery is the mech saying it discarded the request
         without settling it, so it holds nothing at that nonce and
         ``mapNonces`` still equals it: the next ``reserve`` for this sender
-        hands the same nonce out again. Left alone, and logged, is a nonce
-        that is not held, one held as ``unknown`` (the mech may still hold
-        that request, so ``mech-answer-unknown`` keeps it) and one a later
-        slot is held above (see ``_tops_the_queue``). The queue's stall is
-        untouched either way.
+        hands the same nonce out again. Left alone, and logged, is a slot
+        whose salt is not the rejected request's, one held as ``unknown``
+        (the mech may still hold that request, so ``mech-answer-unknown``
+        keeps it) and one a later slot is held above (see
+        ``_tops_the_queue``). The queue's stall is untouched either way.
 
-        Nonces are freed from the top down, so rejecting a whole batch frees
+        A rejected nonce is handed out again, so a slot is named by its
+        request, not by its nonce alone: a late or repeated call for one
+        rejection then leaves the next request's slot at that nonce alone.
+        ``send_with_nonce`` answers its own reservation ``rejected``, so
+        calling this for that delivery too is such a repeat.
+
+        Slots are freed from the top down, so rejecting a whole batch frees
         all of it.
 
         It waits for the queue's lock, so do not call it inside ``reserve``.
 
         :param chain: Chain name
         :param sender: Requester address
-        :param nonces: Nonces whose delivery carried a rejection
+        :param slots: The nonce and metadata salt of each rejected request,
+            the salt being ``send_request``'s ``extra_attributes["nonce"]``
         """
         key = self.key(chain, sender)
         queue = self._queue(key)
         freed, kept = [], []
         with queue.lock:
-            for nonce in sorted(set(nonces), reverse=True):
+            for nonce, salt in sorted(set(slots), reverse=True):
                 slot = queue.slots.get(nonce)
                 if (
                     slot is None
                     or slot.state != ACCEPTED
+                    or slot.salt != salt
                     or not self._tops_the_queue(queue, nonce)
                 ):
                     kept.append(nonce)
@@ -807,7 +823,7 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
         self,
         key: str,
         nonce: int,
-        outcome: Outcome,
+        outcome: Answer,
         *,
         mech: str,
         salt: str,
@@ -860,12 +876,9 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                 prior if prior is not None else _Slot(UNKNOWN, mech.lower(), salt, now)
             )
         elif outcome == REJECTED:
-            # the mech accepted the POST and then discarded the request
-            # instead of settling it, so nothing of ours is held at n. A probe
-            # is admitted at mapNonces only while the mech holds nothing of
-            # ours there, so a slot it ran over is not held either, which is
-            # the evidence ACCEPTED acts on too; and the POST was accepted, so
-            # the stall clears as it does for ACCEPTED
+            # nothing of ours is held at n, nor at a slot a probe ran over
+            # (see Reservation.answered); the POST was accepted, so the stall
+            # clears as it does for ACCEPTED
             if self._tops_the_queue(queue, nonce):
                 del queue.slots[nonce]  # the probed slot, or the placeholder
                 logger.info(_REJECTED_FREED, [nonce], key)
@@ -1198,7 +1211,7 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
                 logger.warning(_HOOK_NOT_PASSED, slot.nonce)
             # still under the queue's lock, so the answer and the delivery it
             # carries settle the slot in one write, before the next reserve
-            posted_outcome: Outcome = (
+            posted_outcome: Answer = (
                 REJECTED if slot.nonce in _rejected_nonces(result) else ACCEPTED
             )
             slot.answered(posted_outcome, mech=mech, salt=salt, posted=True)

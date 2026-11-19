@@ -1076,6 +1076,19 @@ def test_send_with_nonce_holds_a_nonce_not_delivered_as_rejected(
     assert salt_of(allocator, 5) == "s"
 
 
+def test_send_with_nonce_frees_only_the_nonce_its_own_delivery_rejected(
+    allocator: NonceAllocator,
+) -> None:
+    """A rejection carried for another nonce of the call is not this slot's."""
+    result = _call({"status": "rejected"})
+    result["nonces"] = [6]  # the rejected delivery belongs to another request
+    _, returned = _send(allocator, [result])
+    assert returned["nonces"] == [6]
+    assert salt_of(allocator, 5) == "s"  # the reserved nonce stays held
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 6
+
+
 def test_send_with_nonce_holds_a_nonce_whose_delivery_never_arrived(
     allocator: NonceAllocator,
 ) -> None:
@@ -1105,6 +1118,9 @@ def test_a_rejected_delivery_keeps_a_probed_slot_under_a_later_one(
     assert result["nonces"] == [5]
     assert cast(dict, held(allocator, 5))["salt"] == "s5"  # the probed slot
     assert salt_of(allocator, 6) == "s6"
+    # the POST was accepted, so 6 gets its settle clock back, as for ACCEPTED
+    assert cast(dict, held(allocator, 6))["at"] == clock.now
+    assert cast(dict, held(allocator, 6))["delivered_at"] is None
     assert not allocator.stalled("gnosis", SENDER)
 
 
@@ -1156,6 +1172,7 @@ def test_a_rejected_delivery_holds_a_probe_a_gapped_store_held_above(
     assert salt_of(allocator, 5) == "s"  # held: freeing it would gap under 6
     assert salt_of(allocator, 6) == "s6"
     assert any("stay held" in i for i in infos)
+    assert not allocator.stalled("gnosis", SENDER)  # the POST was accepted
     allocator.close()
 
 
@@ -1247,7 +1264,7 @@ def test_rejected_frees_the_slot_for_the_next_request(
     )
     with take(allocator, 5) as slot:
         slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
-    allocator.rejected("gnosis", SENDER, [5])
+    allocator.rejected("gnosis", SENDER, [(5, "s5")])
     assert any("freed" in i for i in infos)
     assert held(allocator, 5) is None  # gone from the store, not just from memory
     assert not allocator.stalled("gnosis", SENDER)
@@ -1259,7 +1276,7 @@ def test_rejected_leaves_a_nonce_it_does_not_hold(allocator: NonceAllocator) -> 
     """A nonce never held, or already settled, is a no-op: the held one stands."""
     with take(allocator, 5) as slot:
         slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
-    allocator.rejected("gnosis", SENDER, [4, 6])
+    allocator.rejected("gnosis", SENDER, [(4, "s4"), (6, "s6")])
     assert salt_of(allocator, 5) == "s5"
     with take(allocator, 5) as slot:
         assert slot.nonce == 6
@@ -1269,7 +1286,7 @@ def test_rejected_keeps_a_slot_held_as_unknown(allocator: NonceAllocator) -> Non
     """An unknown slot keeps its own rule: only mapNonces passing it frees it."""
     with take(allocator, 5) as slot:
         slot.answered("unknown", mech=MECH_A, salt="s5", posted=True)
-    allocator.rejected("gnosis", SENDER, [5])
+    allocator.rejected("gnosis", SENDER, [(5, "s5")])
     assert salt_of(allocator, 5) == "s5"
     with take(allocator, 5) as slot:
         assert slot.nonce == 6
@@ -1287,12 +1304,33 @@ def test_rejected_keeps_a_slot_a_later_one_is_held_above(
         slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
     with take(allocator, 5) as slot:
         slot.answered("accepted", mech=MECH_A, salt="s6", posted=True)
-    allocator.rejected("gnosis", SENDER, [5])
+    allocator.rejected("gnosis", SENDER, [(5, "s5")])
     assert salt_of(allocator, 5) == "s5"  # 6 is live above it
     assert salt_of(allocator, 6) == "s6"
     assert any("stay held" in i for i in infos)
     with take(allocator, 5) as slot:
         assert slot.nonce == 7
+
+
+def test_rejected_leaves_the_next_request_holding_a_reissued_nonce(
+    allocator: NonceAllocator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A repeat for the request that freed n must not free what reserved n next."""
+    with take(allocator, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="first", posted=True)
+    allocator.rejected("gnosis", SENDER, [(5, "first")])
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 5  # reissued to the next request
+        slot.answered("accepted", mech=MECH_A, salt="second", posted=True)
+    infos: List[str] = []
+    monkeypatch.setattr(
+        nonces.logger, "info", lambda msg, *args: infos.append(msg % args)
+    )
+    allocator.rejected("gnosis", SENDER, [(5, "first")])  # the late repeat
+    assert salt_of(allocator, 5) == "second"
+    assert any("stay held" in i for i in infos)
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 6
 
 
 def test_rejected_frees_a_batch_from_the_top_down(allocator: NonceAllocator) -> None:
@@ -1301,7 +1339,7 @@ def test_rejected_frees_a_batch_from_the_top_down(allocator: NonceAllocator) -> 
         slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
     with take(allocator, 5) as slot:
         slot.answered("accepted", mech=MECH_A, salt="s6", posted=True)
-    allocator.rejected("gnosis", SENDER, [5, 6])
+    allocator.rejected("gnosis", SENDER, [(5, "s5"), (6, "s6")])
     assert held(allocator, 5) is None
     assert held(allocator, 6) is None
     with take(allocator, 5) as slot:
@@ -1313,7 +1351,7 @@ def test_rejected_leaves_the_stall_as_it_found_it(
 ) -> None:
     """Freeing a rejected slot is not an accepted request: it clears no stall."""
     _overdue_queue(allocator, clock)
-    allocator.rejected("gnosis", SENDER, [6])
+    allocator.rejected("gnosis", SENDER, [(6, "s6")])
     assert held(allocator, 6) is None
     assert allocator.stalled("gnosis", SENDER)
 
