@@ -62,6 +62,7 @@ from mech_client.services.marketplace_service import (
 
 SENDER = "0x" + "22" * 20
 REQUEST_ID = "01"  # the hex request id of the stub mech's one request
+GATEWAY_URL = "https://gateway.example/ipfs/ba/1"  # a read result file's url
 MECH_A = "0x" + "a1" * 20
 MECH_B = "0x" + "b2" * 20
 GAP_RETRIES = 3
@@ -727,17 +728,20 @@ def _send(
     return sent, result
 
 
-def _call(data: Any, nonce: int = 5) -> Dict[str, Any]:
+def _call(data: Any, url: Optional[str] = None) -> Dict[str, Any]:
     """Return what send_request returns for one request, delivered with ``data``.
 
     ``data`` is the delivery's content: the mech's envelope for an inline
-    answer, or None when no result file could be read.
+    answer, or None when no result file could be read. ``url`` is the result
+    file it was read from, which an inline answer never has.
     """
     return {
         "tx_hash": None,
         "request_ids": [REQUEST_ID],
-        "nonces": [nonce],
-        "deliveries": {REQUEST_ID: DeliveryResult(request_id=REQUEST_ID, data=data)},
+        "nonces": [5],
+        "deliveries": {
+            REQUEST_ID: DeliveryResult(request_id=REQUEST_ID, data=data, url=url)
+        },
         "receipt": None,
     }
 
@@ -1083,6 +1087,60 @@ def test_send_with_nonce_holds_a_nonce_whose_delivery_never_arrived(
     assert salt_of(allocator, 5) == "s"
 
 
+def test_send_with_nonce_holds_a_nonce_whose_result_file_says_rejected(
+    allocator: NonceAllocator,
+) -> None:
+    """A pinned result file is tool output: only the mech's inline answer frees n."""
+    _, result = _send(allocator, [_call({"status": "rejected"}, url=GATEWAY_URL)])
+    assert result["nonces"] == [5]
+    assert salt_of(allocator, 5) == "s"
+
+
+def test_a_rejected_delivery_for_a_probe_keeps_what_it_probed_over(
+    allocator: NonceAllocator, clock: Clock
+) -> None:
+    """The probe's own request is gone; the slot it probed over is still held."""
+    _overdue_queue(allocator, clock)
+    _, result = _send(allocator, [_call({"status": "rejected"})])
+    assert result["nonces"] == [5]
+    assert cast(dict, held(allocator, 5))["salt"] == "s5"  # the probed slot
+    assert not allocator.stalled("gnosis", SENDER)
+
+
+def test_a_rejected_delivery_holds_a_probe_a_gapped_store_held_above(
+    tmp_path: Path, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A store that already has a gap must not be given a second one."""
+    (tmp_path / nonces.NONCES_FILE).write_text(
+        json.dumps(
+            {
+                f"gnosis:{SENDER}": {
+                    "stalled": True,
+                    "slots": {
+                        "6": {
+                            "state": "accepted",
+                            "mech": MECH_A,
+                            "salt": "s6",
+                            "at": 1000,
+                        }
+                    },
+                }
+            }
+        )
+    )
+    allocator = _allocator(tmp_path, clock)
+    infos: List[str] = []
+    monkeypatch.setattr(
+        nonces.logger, "info", lambda msg, *args: infos.append(msg % args)
+    )
+    _, result = _send(allocator, [_call({"status": "rejected"})])
+    assert result["nonces"] == [5]
+    assert salt_of(allocator, 5) == "s"  # held: freeing it would gap under 6
+    assert salt_of(allocator, 6) == "s6"
+    assert any("stay held" in i for i in infos)
+    allocator.close()
+
+
 def test_each_request_of_a_call_pairs_with_its_own_nonce() -> None:
     """request_ids and nonces are in send order, so each delivery names its nonce."""
     result = {
@@ -1162,12 +1220,17 @@ def test_a_rejected_probe_puts_back_what_it_replaced(allocator: NonceAllocator) 
 
 
 def test_rejected_frees_the_slot_for_the_next_request(
-    allocator: NonceAllocator,
+    allocator: NonceAllocator, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The mech discarded the request, so n is free and handed out again."""
+    infos: List[str] = []
+    monkeypatch.setattr(
+        nonces.logger, "info", lambda msg, *args: infos.append(msg % args)
+    )
     with take(allocator, 5) as slot:
         slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
     allocator.rejected("gnosis", SENDER, [5])
+    assert any("freed" in i for i in infos)
     assert held(allocator, 5) is None  # gone from the store, not just from memory
     assert not allocator.stalled("gnosis", SENDER)
     with take(allocator, 5) as slot:
@@ -1192,6 +1255,39 @@ def test_rejected_keeps_a_slot_held_as_unknown(allocator: NonceAllocator) -> Non
     assert salt_of(allocator, 5) == "s5"
     with take(allocator, 5) as slot:
         assert slot.nonce == 6
+
+
+def test_rejected_keeps_a_slot_a_later_one_is_held_above(
+    allocator: NonceAllocator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The next nonce is mapNonces + held slots, so only the top slot may go."""
+    infos: List[str] = []
+    monkeypatch.setattr(
+        nonces.logger, "info", lambda msg, *args: infos.append(msg % args)
+    )
+    with take(allocator, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
+    with take(allocator, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="s6", posted=True)
+    allocator.rejected("gnosis", SENDER, [5])
+    assert salt_of(allocator, 5) == "s5"  # 6 is live above it
+    assert salt_of(allocator, 6) == "s6"
+    assert any("stay held" in i for i in infos)
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 7
+
+
+def test_rejected_frees_a_batch_from_the_top_down(allocator: NonceAllocator) -> None:
+    """Every held slot rejected together is freed, the top one first."""
+    with take(allocator, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="s5", posted=True)
+    with take(allocator, 5) as slot:
+        slot.answered("accepted", mech=MECH_A, salt="s6", posted=True)
+    allocator.rejected("gnosis", SENDER, [5, 6])
+    assert held(allocator, 5) is None
+    assert held(allocator, 6) is None
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 5
 
 
 def test_rejected_leaves_the_stall_as_it_found_it(
