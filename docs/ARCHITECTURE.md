@@ -312,7 +312,7 @@ a closed allocator refuses and writes nothing. `outcome_of` maps
 `OffchainRequestRejected` / `OffchainTopUpFailed` to an `Outcome`, and
 `send_with_nonce` drives one send through a reservation (503 resends the same
 nonce; whether a failure frees or holds the nonce follows the rule, and its
-one exception, stated in `nonces.py`'s module docstring, read from the
+exceptions, stated in `nonces.py`'s module docstring, read from the
 `PreSignHook` it hands `send`). `exclusive` holds the queue for an on-chain request; `hard_cancel`
 yields `mapNonces` for one on-chain request once the queue has been stalled
 for at least `stalled_for` seconds (`stalled_since`).

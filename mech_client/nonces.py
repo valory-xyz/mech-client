@@ -33,9 +33,11 @@ a stale or duplicate nonce), and settlement rebuilds every id from
   go out in nonce order and at most one slot is ever reserved but unanswered;
 - a slot is held until ``mapNonces > n`` (settlement), never on a timer;
 - a slot is freed only when nothing left the process for it: once its
-  request was posted, it stays held whatever the mech answered. The one
-  exception is a 503 that still stands after ``gap_retries`` resends, which
-  frees the slot, because the mech admitted nothing;
+  request was posted, it stays held whatever the mech answered. Two answers
+  are the exception, each because the mech holds nothing at that nonce: a
+  503 that still stands after ``gap_retries`` resends, which admitted
+  nothing, and a delivery carrying status ``rejected``, which the mech
+  discarded without settling (``NonceAllocator.rejected``);
 - every held slot, its metadata salt and the stall are persisted in a JSON
   file under the caller's ``store_path``, written before the POST, so a
   restart never reissues a held nonce.
@@ -59,6 +61,7 @@ from typing import (
     IO,
     Iterable,
     Iterator,
+    List,
     Literal,
     Optional,
     Tuple,
@@ -66,6 +69,7 @@ from typing import (
     Union,
 )
 
+from mech_client.domain.delivery.models import DeliveryResult
 from mech_client.services.marketplace_service import (
     HTTP_CLIENT_ERRORS,
     HTTP_UNAUTHORIZED,
@@ -86,6 +90,9 @@ POLL_SECONDS = 2.0
 GAP_RETRY_SECONDS = 2.0
 # the mech's 401 for a stale or duplicate nonce, verbatim: n is taken
 NONCE_TAKEN_REASON = "wire nonce below sender's next expected slot"
+# the status a delivery carries when the mech discarded the request instead of
+# settling it, so it holds nothing at that nonce
+DELIVERY_REJECTED = "rejected"
 _HOOK_NOT_PASSED = (
     "send for nonce %s never passed send_with_nonce's hook to send_request as "
     "on_request_id; a failure is held as unknown"
@@ -280,7 +287,7 @@ class Reservation:
 
         A ``not_accepted`` answer with ``posted`` set is recorded as
         ``unknown``, so n stays held until ``mapNonces`` passes it; the module
-        docstring states the rule and its one exception.
+        docstring states the rule and its exceptions.
 
         :param outcome: What the answer means for the nonce
         :param mech: The mech the request went to
@@ -463,6 +470,37 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
                     queue.slots[nonce].delivered_at = now
         if marked:
             self._save(f"the deliveries of mech nonces {marked} on {key}")
+
+    def rejected(self, chain: str, sender: str, nonces: Iterable[int]) -> None:
+        """
+        Free each accepted slot whose delivery carried the mech's rejection.
+
+        A rejected delivery is the mech saying it discarded the request
+        without settling it, so it holds nothing at that nonce and
+        ``mapNonces`` still equals it: the next ``reserve`` for this sender
+        hands the same nonce out again. A nonce that is not held, or held as
+        ``unknown`` (the mech may still hold that request, so
+        ``mech-answer-unknown`` keeps it), is left alone, and the queue's
+        stall is untouched either way.
+
+        It waits for the queue's lock, so do not call it inside ``reserve``.
+
+        :param chain: Chain name
+        :param sender: Requester address
+        :param nonces: Nonces whose delivery carried a rejection
+        """
+        key = self.key(chain, sender)
+        queue = self._queue(key)
+        with queue.lock:
+            freed = [
+                n
+                for n in nonces
+                if n in queue.slots and queue.slots[n].state == ACCEPTED
+            ]
+            for nonce in freed:
+                del queue.slots[nonce]
+        if freed:
+            self._save(f"the rejected mech nonces {freed} on {key}")
 
     def _sync(self, key: str, queue: _Queue, map_nonces: int) -> None:
         """Free every slot below mapNonces (settled), and stall an overdue queue.
@@ -981,6 +1019,29 @@ def _refusal(
     return detail
 
 
+def _is_rejected(delivery: Optional[DeliveryResult]) -> bool:
+    """Whether a delivery carries the mech's rejection of the request.
+
+    :param delivery: The delivery, or None if none arrived for the request
+    :return: True if its content carries status ``rejected``
+    """
+    data = None if delivery is None else delivery.data
+    return isinstance(data, dict) and data.get("status") == DELIVERY_REJECTED
+
+
+def _rejected_nonces(result: OffchainRequestResult) -> List[int]:
+    """Return the nonces of an off-chain call the mech rejected the delivery of.
+
+    ``request_ids`` and ``nonces`` are in send order, so they pair up.
+
+    :param result: What ``send_request`` returned for the call
+    :return: Those nonces, in send order
+    """
+    deliveries = result.get("deliveries") or {}
+    sent = zip(result.get("request_ids") or [], result.get("nonces") or [])
+    return [n for request_id, n in sent if _is_rejected(deliveries.get(request_id))]
+
+
 # too-many-arguments: keyword-only; the allocator plus what identifies,
 # sends and bounds one request
 def send_with_nonce(  # pylint: disable=too-many-arguments
@@ -1002,7 +1063,9 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
     ``send(nonce, hook)`` must pass ``hook`` to ``send_request`` as
     ``on_request_id``; whether the nonce is freed or held follows the rule the
     module docstring states, read from the hook (see ``PreSignHook``), and
-    ``outcome_of`` names the rule each answer is refused under. A 503 resends
+    ``outcome_of`` names the rule each answer is refused under. A delivery
+    ``send`` waited for that carries status ``rejected`` frees its nonce
+    before this returns, the module docstring's other exception. A 503 resends
     the same nonce and id, up to the allocator's ``gap_retries`` times, with a
     fresh hook that carries what earlier sends deposited, so the request's
     auto-deposits stay within one ``max_price`` across its resends.
@@ -1066,5 +1129,11 @@ def send_with_nonce(  # pylint: disable=too-many-arguments
             if not hook.received:
                 logger.warning(_HOOK_NOT_PASSED, slot.nonce)
             slot.answered(ACCEPTED, mech=mech, salt=salt, posted=True)
-            return result
-    raise AssertionError("unreachable")  # pragma: no cover
+            break
+        else:  # pragma: no cover
+            raise AssertionError("unreachable")
+    # outside the reservation, whose lock ``rejected`` would wait for
+    rejected_nonces = _rejected_nonces(result)
+    if rejected_nonces:
+        allocator.rejected(chain, sender, rejected_nonces)
+    return result
