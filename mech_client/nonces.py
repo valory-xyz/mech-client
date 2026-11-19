@@ -297,7 +297,9 @@ class Reservation:
         ``unknown``, so n stays held until ``mapNonces`` passes it; the module
         docstring states the rule and its exceptions. ``rejected`` is the
         answer for a posted request the mech delivered a rejection for: it
-        frees n, since the mech discarded the request without settling it.
+        frees n, since the mech discarded the request without settling it,
+        and frees a slot a stalled queue's probe ran over with it, which the
+        mech proved it does not hold by admitting the probe.
 
         :param outcome: What the answer means for the nonce
         :param mech: The mech the request went to
@@ -859,16 +861,23 @@ class NonceAllocator:  # pylint: disable=too-many-instance-attributes
             )
         elif outcome == REJECTED:
             # the mech accepted the POST and then discarded the request
-            # instead of settling it, so nothing of ours is held at n; the
-            # POST was accepted, so the stall clears as it does for ACCEPTED
-            if prior is not None:
-                queue.slots[nonce] = prior  # the probe's own request is gone
-            elif self._tops_the_queue(queue, nonce):
-                del queue.slots[nonce]
+            # instead of settling it, so nothing of ours is held at n. A probe
+            # is admitted at mapNonces only while the mech holds nothing of
+            # ours there, so a slot it ran over is not held either, which is
+            # the evidence ACCEPTED acts on too; and the POST was accepted, so
+            # the stall clears as it does for ACCEPTED
+            if self._tops_the_queue(queue, nonce):
+                del queue.slots[nonce]  # the probed slot, or the placeholder
                 logger.info(_REJECTED_FREED, [nonce], key)
             else:
                 logger.info(_REJECTED_KEPT, [nonce], key)
-                queue.slots[nonce] = _Slot(ACCEPTED, mech.lower(), salt, now)
+                # a slot must stay at n, and a probed one carries the older
+                # salt and settle clock
+                queue.slots[nonce] = (
+                    prior
+                    if prior is not None
+                    else _Slot(ACCEPTED, mech.lower(), salt, now)
+                )
             if queue.stalled:
                 self._restart_settle_clocks(queue, nonce, now)
             queue.stalled_at = None

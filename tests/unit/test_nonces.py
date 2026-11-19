@@ -1096,15 +1096,33 @@ def test_send_with_nonce_holds_a_nonce_whose_result_file_says_rejected(
     assert salt_of(allocator, 5) == "s"
 
 
-def test_a_rejected_delivery_for_a_probe_keeps_what_it_probed_over(
+def test_a_rejected_delivery_keeps_a_probed_slot_under_a_later_one(
     allocator: NonceAllocator, clock: Clock
 ) -> None:
-    """The probe's own request is gone; the slot it probed over is still held."""
+    """6 is held above the probe at 5, so 5 keeps a slot: the one probed over."""
     _overdue_queue(allocator, clock)
     _, result = _send(allocator, [_call({"status": "rejected"})])
     assert result["nonces"] == [5]
     assert cast(dict, held(allocator, 5))["salt"] == "s5"  # the probed slot
+    assert salt_of(allocator, 6) == "s6"
     assert not allocator.stalled("gnosis", SENDER)
+
+
+def test_a_rejected_delivery_frees_the_only_slot_a_probe_ran_over(
+    allocator: NonceAllocator, clock: Clock
+) -> None:
+    """The mech admitted the probe, so it holds nothing at mapNonces: n is free."""
+    with take(allocator, 5) as slot:
+        slot.answered("unknown", mech=MECH_A, salt="s5", posted=True)
+    clock.now += nonces.RESPONSE_TIMEOUT_SECONDS + 61
+    _sync(allocator, 5)
+    assert allocator.stalled("gnosis", SENDER)
+    _, result = _send(allocator, [_call({"status": "rejected"})])
+    assert result["nonces"] == [5]
+    assert held(allocator, 5) is None
+    assert not allocator.stalled("gnosis", SENDER)  # nothing left to re-stall on
+    with take(allocator, 5) as slot:
+        assert slot.nonce == 5
 
 
 def test_a_rejected_delivery_holds_a_probe_a_gapped_store_held_above(
