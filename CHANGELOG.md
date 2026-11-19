@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.1] - 2026-11-19
+
+### 🐛 Fixed
+
+- A delivery whose inline payload carries `status: "rejected"` frees its nonce, so the next request from that sender reuses that nonce instead of skipping it. The mech discards a rejected request instead of settling it, so `mapNonces[sender]` never passes that nonce; the slot was previously kept held as `accepted`, and every later request from the same sender was answered 503 "wire nonce above sender's next expected slot" until the nonce store was reset by hand.
+- `NonceAllocator.rejected(chain, sender, [(nonce, salt), ...])` is the public counterpart of `delivered()` for rejected deliveries, for a payer that collects deliveries itself. It names each slot by its request, not by its nonce: the `salt` is the metadata salt the request was sent with (`extra_attributes["nonce"]`), and a slot holding another request's salt stays held, so a late or repeated call cannot free a slot that reserved the reissued nonce after it. A nonce is freed only while no later slot is held above it, since `reserve()` numbers slots contiguously from `mapNonces` and freeing one below the top would hand the next request a nonce a live slot already holds; such a slot stays held until its settle timeout stalls the queue, and a batch is freed from the top down. A nonce that is not held, is already past `mapNonces`, or is held as `unknown` is a no-op. It never marks the queue stalled and never clears a stall, and every nonce it frees or leaves held is logged. Only the mech's inline envelope counts: a delivery read from a result file (`url` set) carries tool output, whose `status` is not the mech's. Like `delivered()`, it waits for the queue's lock, so it must not be called inside `reserve()`.
+- `send_with_nonce` does not call `rejected()`; it answers its reservation with the new `rejected` answer instead, so the slot is decided in one store write while the queue's lock is still held and no waiter can reserve against a slot that is about to be freed. `rejected` is an `Answer`, not an `Outcome`: `outcome_of` never returns it, and it is the one answer `posted` does not gate, because a delivery arrived for it.
+- The freed-or-held rule in `mech_client/nonces.py`'s module docstring now names both of its exceptions, a 503 that still stands after `gap_retries` resends and a rejected delivery. The README nonce example routes rejected deliveries to `rejected()`, and `docs/ARCHITECTURE.md` follows.
+
+### 🔧 Changed
+
+- Development toolchain: tomte pinned to 0.7.4 (was 0.7.3), whose security policy carries the advisory ignores the `safety` check needs. No runtime dependency changes.
+
 ## [0.26.0] - 2026-11-13
 
 ### ✨ Added
