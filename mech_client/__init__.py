@@ -64,6 +64,7 @@ from mech_client.infrastructure.config.payment_config import PaymentType
 
 # Off-chain nonce allocation
 from mech_client.nonces import (
+    Answer,
     NonceAllocator,
     NonceRefused,
     NonceRule,
@@ -152,6 +153,7 @@ __all__ = [
     "RULE_QUEUE_NOT_STALLED",
     "RULE_QUEUE_CLOSED",
     "RULE_QUEUE_LOCKED",
+    "Answer",
     "Outcome",
     "Reservation",
     "outcome_of",
