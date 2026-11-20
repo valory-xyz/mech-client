@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.2] - 2026-11-20
+
+### 🔧 Changed
+
+- `olas-operate-middleware` floor raised to 0.15.54 (was 0.15.39), the first release that accepts fastapi past 0.120 (valory-xyz/olas-operate-middleware#509). mech-client does not use fastapi itself; the higher floor stops a resolver from settling on an older middleware, which caps fastapi below 0.121.
+- That middleware requires `open-aea-ledger-ethereum>=2.2.10` and `open-autonomy>=0.21.30`, so `open-aea-helpers` is pinned to 0.21.31 (was 0.21.29) and the lock moves the open-aea packages to 2.2.10 and open-autonomy to 0.21.31. A project pinning `open-aea-ledger-ethereum==2.2.9` must move to 2.2.10.
+- Development toolchain: tomte's `open_autonomy_version` / `open_aea_version`, the lint envs' `open-autonomy[all]` and liccheck's authorized `open-autonomy` follow to 0.21.31 / 2.2.10.
+
 ## [0.26.1] - 2026-11-19
 
 ### 🐛 Fixed
