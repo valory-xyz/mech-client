@@ -103,7 +103,7 @@ def _subgraph_client(chain_config: str, **client_options: Any) -> SubgraphClient
     if not mech_config.subgraph_url:
         raise SubgraphError(
             f"Subgraph URL not set for chain config: {chain_config}. "
-            "mech list needs a subgraph, and this chain has none configured."
+            f"Set {mech_config.subgraph_url_env or 'MECHX_SUBGRAPH_URL'} to configure its indexer."
         )
 
     if (
@@ -241,15 +241,25 @@ def query_erc8004_agent_id(chain_config: str, service_id: int) -> Optional[int]:
     if not mech_config.registry_subgraph_url:
         raise SubgraphError(
             f"Registry subgraph URL not set for chain config: {chain_config}. "
-            "Checking an operator's domain needs the service registry indexer."
+            f"Set {mech_config.registry_subgraph_url_env or 'MECHX_REGISTRY_SUBGRAPH_URL'} to configure the service registry indexer."
+        )
+    if (
+        mech_config.registry_subgraph_dialect == "squid"
+        and EnvironmentConfig.load().mechx_registry_subgraph_url
+    ):
+        logger.warning(
+            "MECHX_REGISTRY_SUBGRAPH_URL replaces the endpoint for %s but not its dialect: this query uses squid syntax",
+            chain_config,
         )
     client = SubgraphClient(
         mech_config.registry_subgraph_url,
-        dialect=mech_config.subgraph_dialect,
+        dialect=mech_config.registry_subgraph_dialect,
         timeout=REPORT_QUERY_TIMEOUT,
     )
     response = client.query_service_agent_id(service_id)
-    lookup = "serviceById" if mech_config.subgraph_dialect == "squid" else "service"
+    lookup = (
+        "serviceById" if mech_config.registry_subgraph_dialect == "squid" else "service"
+    )
     try:
         service = response[lookup]  # pylint: disable=unsubscriptable-object
         if service is None:

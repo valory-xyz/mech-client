@@ -120,7 +120,7 @@ The report is built from the Mech's published manifest and the marketplace subgr
 
 `mechx mech info` prints the report as JSON. For library users, `ToolManager.mech_report(mech_address, metadata)` returns the same report as data, a superset of `terms_report`. `ToolManager.mech_report_or_terms(mech_address, metadata)` is the one to call before paying: it falls back to the terms alone, with `report_note`, when the manifest or the Mech's record cannot be read. The subgraph reads a report makes time out after 10 seconds each, and each read of the domain proof after 5.
 
-The service registry subgraph has a default endpoint per chain and can be overridden with `MECHX_REGISTRY_SUBGRAPH_URL`.
+Gnosis, Optimism and Robinhood have registry defaults. Base and Polygon require `MECHX_REGISTRY_BASE_SQUID_URL` / `MECHX_REGISTRY_POLYGON_SQUID_URL`. `MECHX_REGISTRY_SUBGRAPH_URL` overrides the endpoint but not its configured dialect.
 
 ### Supported Chains
 
@@ -142,7 +142,7 @@ All commands require `--chain-config` with one of these five chain names.
 - **Native Payment**: Chains that support `deposit native` command for prepaid native token deposits.
 - **NVM Subscriptions**: Chains that support `subscription purchase` command for Nevermined subscription-based payments (Gnosis, Base only).
 - **OLAS/USDC Payments**: Chains that support `deposit token` command with OLAS or USDC tokens. On Robinhood the USDC payment type uses USDG, so `--token-type usdc` deposits USDG.
-- **Subgraph**: Default subgraph URLs are provided for all supported chains. Robinhood's is the marketplace squid (SQD), which takes a different query syntax that mech-client handles for you. The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
+- **Subgraph**: Gnosis, Optimism and Robinhood have default indexer URLs; Base and Polygon require `MECHX_MARKETPLACE_BASE_SQUID_URL` / `MECHX_MARKETPLACE_POLYGON_SQUID_URL`. Robinhood's is the marketplace squid (SQD), which takes a different query syntax that mech-client handles for you. The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
 
 ### Set up agent mode for on-chain interactions
 
@@ -169,7 +169,7 @@ mechx setup --chain-config <chain_config>
 
 To list the top marketplace mechs based on deliveries, use the `mech list` command. You can specify the chain you want to query. Please note that only the first 20 mechs sorted by number of deliveries will be shown.
 
-**Note:** Default subgraph URLs are provided for all supported chains (on Robinhood, the marketplace squid). You can optionally override the default by setting:
+**Note:** Gnosis, Optimism and Robinhood have default indexer URLs; Base and Polygon require `MECHX_MARKETPLACE_BASE_SQUID_URL` / `MECHX_MARKETPLACE_POLYGON_SQUID_URL` (on Robinhood, the marketplace squid). You can optionally override the default by setting:
 
 ```bash
 export MECHX_SUBGRAPH_URL=<your-custom-subgraph-url>
@@ -574,6 +574,101 @@ service = MarketplaceService(
 
 This works for on-chain requests (client and agent mode), deposits (`DepositService`), and offchain prepaid requests. In agent mode the Safe transaction is approved via the pre-validated signature encoding, so only ordinary transaction signing is required from the signer. Passing `crypto=` keeps working unchanged (it wraps the key in the default `LocalSigner`).
 
+### Choosing offchain nonces
+
+A caller that tracks its own marketplace nonces (e.g. to keep several offchain requests from one requester in flight) can pass them, and see each request id before it is signed:
+
+```python
+from mech_client import OffchainRequestRejected
+
+def approve(request_id: bytes, nonce: int) -> None:
+    ...  # raise to stop this request before it is signed
+
+try:
+    result = await service.send_request(
+        prompts=("What is 2+2?",),
+        tools=("openai-gpt-4o-2024-05-13",),
+        use_offchain=True,
+        nonces=[next_nonce],
+        on_request_id=approve,
+        extra_attributes={"nonce": salt},
+    )
+    print(result["nonces"])
+except OffchainRequestRejected as e:
+    ...
+```
+
+`OffchainTopUpFailed` means the auto top-up after the mech's 402 failed on your side, so the request was not accepted. The hook gets the raw 32-byte request id; `request_ids` and `OffchainRequestRejected.request_id` are hex strings. The mech accepts only the requester's next nonce, so requests must reach it in nonce order. A transport error stays a plain `ValueError`: whether the mech stored the request is unknown.
+
+`extra_attributes["nonce"]` is unrelated to the marketplace nonce: it fixes the metadata salt, which is otherwise random. A resend signs the same request id only with the same salt, prompt, tool, marketplace nonce, mech, rate and requester.
+
+Passing `nonces` makes the requests sequential (`nonce_mode="sequential"`); `nonce_mode="explicit"` together with `nonces` is refused. A sequential request id that is hooked, signed and sent is always derived locally from the marketplace's `domainSeparator()` (`mech_client.request_digest`). `getRequestId` is still called over the RPC as a cross-check; if it answers anything else, `RequestIdMismatch` (a `ValueError` with `expected`, `reported` and `nonce`) is raised before `on_request_id` and before signing, so a lying RPC can only cause a refusal. An explicit request id is read from `getRequestIdWithNonce`.
+
+### Allocating offchain nonces
+
+`mapNonces(requester)` only moves when a delivery settles, and the mech admits only the requester's next slot (`mapNonces` + accepted + settling). `NonceAllocator` keeps that queue for you, one per requester and chain, and only one allocator may use a store at a time, across processes too (it locks `mech_nonces.lock` and refuses a second one as `mech-queue-locked` until the first is closed or its process exits; a closed allocator refuses as `mech-queue-closed` and writes nothing): one mech in flight, requests posted in nonce order, a slot held until `mapNonces` passes it. One mech in flight is forced by settlement, which rebuilds every id from one counter per requester: while one mech holds a slot, a request to another mech waits, and is refused as `mech-in-flight` when its wait runs out, so a requester whose traffic to one mech never pauses cannot reach a second mech; treat `mech-in-flight` as back off and retry. It persists its slots in `mech_nonces.json` under the directory you give it (created if missing), fsynced before each POST, so a restart never reissues a held nonce; a store that cannot be read or written refuses requests (`mech-queue-unreadable`, `mech-queue-unwritable`).
+
+```python
+import asyncio
+from pathlib import Path
+
+from mech_client import NonceAllocator, NonceRefused, send_with_nonce
+from mech_client.domain.delivery import OffchainDeliveryWatcher
+
+allocator = NonceAllocator(Path("~/.my-app").expanduser(), settle_timeout=1800, gap_retries=3)
+contract = service.marketplace_contract()
+sender = service.requester()  # the Safe in agent mode, else the signer's EOA, as send_request signs
+
+def send(nonce: int, hook):
+    # The queue lock is held until send returns, so keep the delivery wait
+    # short here and watch for the delivery outside the allocator.
+    return asyncio.run(service.send_request(
+        prompts=(prompt,), tools=(tool,), priority_mech=mech, use_offchain=True,
+        nonces=[nonce], on_request_id=hook, extra_attributes={"nonce": salt},
+        max_price=cap, timeout=1,
+    ))
+
+try:
+    result = send_with_nonce(
+        allocator, chain="gnosis", sender=sender, mech=mech, salt=salt,
+        read_map_nonces=lambda: contract.functions.mapNonces(sender).call(),
+        send=send, not_sent=(), timeout=60,
+    )
+except NonceRefused as e:
+    print(e.rule, e)  # one of the RULE_* constants, e.g. RULE_IN_FLIGHT, RULE_NONCE_GAP
+else:
+    # Outside the lock: the next request from this requester can go out now.
+    url = service.tool_manager.get_offchain_url(service.mech_info(mech).service_id)
+    deliveries = asyncio.run(OffchainDeliveryWatcher(url, timeout=300).watch(result["request_ids"]))
+    settled, discarded = [], []
+    for rid, n in zip(result["request_ids"], result["nonces"]):
+        delivery = deliveries.get(rid)
+        if delivery is None:
+            continue  # nothing arrived for it: the slot stays held
+        envelope = delivery.data if delivery.url is None else None
+        if isinstance(envelope, dict) and envelope.get("status") == "rejected":
+            discarded.append((n, salt))  # the mech holds nothing at that nonce
+        else:
+            settled.append(n)
+    allocator.delivered("gnosis", sender, settled)
+    allocator.rejected("gnosis", sender, discarded)  # (nonce, salt): this request's slot
+```
+
+The allocator's lock covers whatever `send` does, so `send` should only send. `send(nonce, hook)` must pass `hook` (a `PreSignHook`) to `send_request` as `on_request_id`; a caller's own pre-sign hook goes to `send_with_nonce(on_request_id=...)`, which runs it inside `hook`. `send_request` calls the hook's `mark_received()` on entry and `mark_posting()` right before the POST, after signing: a failure after it was received but before posting (an unknown tool, a missing offchain URL, an RPC error, a refused or async hook, a signer error) reached no mech and frees the nonce. If `send` never passes the hook on, nothing tells those failures apart, so a failure holds the nonce as `unknown` and is logged. A 503 resends the same nonce and id up to `gap_retries` times. `outcome_of(error)` maps `OffchainRequestRejected` / `OffchainTopUpFailed` to what the answer means for the nonce: `retry` (503), `taken` (the 401 for a stale or duplicate nonce), `not_accepted` (any other 4xx but 401, or a failed top-up) or `unknown` (any other 401, and other 5xx). A slot is freed only when nothing left the process for it: a request that was posted keeps its nonce held until `mapNonces` passes it whatever the answer, so a `not_accepted` rejection or a failed top-up after the POST is refused as `mech-request-rejected` with the nonce held as `unknown`. Two answers are the exception, each because the mech holds nothing at that nonce: a 503 that still stands after `gap_retries` resends, which admitted nothing, and a delivery carrying status `rejected`, which the mech discarded without settling. A rejected nonce is freed only while no later slot is held above it, since the next nonce is `mapNonces` plus the held slots. A `Reservation` you drive yourself is answered once, with a terminal outcome: answering `retry` leaves it open for the resend's answer. `answered(outcome, mech=..., salt=..., posted=...)` requires `posted`, whether the request's payload left the process, so an answer cannot free a posted slot by leaving it out: with `posted=True`, `not_accepted` holds the nonce. `rejected` is the one answer `posted` does not gate, since a delivery arrived for it. A `taken` with no slot of ours keeps the answering mech in flight at that nonce until `mapNonces` passes it. `send_with_nonce` sends a new request, never a held one: the store keeps a held slot's salt, not its prompt or tool, so a stalled queue's probe has its own id. An exception listed in `not_sent` (a failure that reached no mech) frees the nonce only when the hook is not posting; once posting, it and any other failure hold the nonce as `unknown`, a warning names the nonce and its queue, and the exception is re-raised as itself, so a caller classifying by type still can. Call `allocator.delivered(chain, sender, nonces)` when deliveries arrive, and `allocator.rejected(chain, sender, [(nonce, salt), ...])` for those whose inline payload carries status `rejected`; a delivery read from a result file (`url`) carries tool output, not the mech's envelope, so it is not one of them. `rejected` frees each of those nonces for the next request and leaves the queue's stall as it found it. A freed nonce is handed out again, so each pair names its request by the metadata salt it was sent with, and a slot holding another request's salt stays held: a late or repeated call for one rejection cannot free the slot that came after it. A slot held as `unknown`, and one a later slot is held above, stay held too, each logged. `send_with_nonce` answers its own `send`'s delivery `rejected` under the queue's lock, so the next request sees the freed slot; passing that delivery to `rejected` as well is one of those repeats. A slot's `settle_timeout` counts from its delivery, or, when no delivery was seen, from the end of the request's response timeout; a slot `mapNonces` has not passed by then stalls the queue, which then only probes at `mapNonces` until one is accepted. Once that probe is accepted, or answered `taken` over a slot of ours that is not itself overdue (the mech holds that request, and `mapNonces` has moved on to it), the stall clears and the later slots' settle clocks restart. A `taken` over the overdue slot `mapNonces` is stuck on leaves the stall and its clock as they are, so `hard_cancel` becomes allowed. An on-chain request from the same requester goes inside `allocator.exclusive(...)`. As a last resort, `allocator.hard_cancel(chain, sender, read_map_nonces, stalled_for=...)` yields `mapNonces` for one on-chain request once the queue has been stalled (`stalled_since`) at least that long, and restarts the stall clock (and the later slots' settle clocks) when it exits, so each cancel needs its own window; you decide who confirms that payment.
+
+### Price cap, mech info and RPC
+
+- `send_request(..., max_price=p)` raises `MechPriceExceeded` (`price`, `max_price`) before any deposit, signature or POST when the mech's `max_delivery_rate` times the number of prompts exceeds `p`, in the payment asset's base units. It also bounds the call's auto-deposits after a 402, on top of the ratio bound below: together they never exceed `p`, counting what earlier `send_with_nonce` resends of the same request deposited, and a shortfall that would take them past `p` raises `OffchainTopUpFailed` before that deposit is sent. With `max_price=None` an auto-deposit is bounded only by `_MAX_AUTO_DEPOSIT_RATIO` times the mech's `max_delivery_rate`.
+- `service.mech_info(mech)` returns `MechInfo(mech, service_id, payment_type, max_delivery_rate)`; `service.marketplace_contract()` returns the marketplace contract, and `service.requester()` the requester of record.
+- `payment_token(payment_type, chain)` names the token a mech is paid in (`None` for native), and `balance_tracker(chain, payment_type)` the tracker a prepaid top-up pays (`None` for NVM subscriptions). Both use the chain id payments use, `MECHX_LEDGER_CHAIN_ID` included, and raise `ValueError` for an unknown chain or a token or tracker not deployed on it.
+- `MarketplaceService`, `DepositService`, `SubscriptionService`, `ToolService` and `ToolManager` take `rpc_url=...` (a blank one is refused), so a process can talk to several chains without setting the process-wide `MECHX_CHAIN_RPC`. Left out, the RPC comes from `MECHX_CHAIN_RPC`, then the operate config (agent mode), then the default.
+
+### Offchain capability and chat
+
+`ToolManager.read_tools_metadata(service_id)` returns `MetadataRead(document, error)` and never raises for an unreadable document (a gateway error status, or a chain with no metadata contract, is a cause too; causes are redacted). A `MetadataRead` holds exactly one of the two (`MetadataRead.ok(document)`, `MetadataRead.failed(error)`). `offchain_blocker(read)` gives a short reason, naming the cause, why a mech cannot take offchain requests, or `None`.
+
+For chat tools the prompt is an OpenAI-style messages list as JSON (`is_chat_prompt(prompt)`), and `chat_report(delivery)` returns `{"completion", "usage"}` from a delivery, or `None`; `None` also covers a delivery that could not be fetched, so check `delivery.data` first to tell the two apart.
+
 You can also use the Mech Client to programmatically fetch tools for marketplace mechs in your Python project, as well as retrieve descriptions and input/output schemas for specific tools given their unique identifier.
 
 1. Set up the private key as specified [above](#set-up-the-private-key). Store the resulting key file (e.g., `ethereum_private_key.txt`) in a convenient and secure location.
@@ -748,3 +843,21 @@ mechx request --prompts "write a short poem" --priority-mech 0x77af31De935740567
 ```
 
 </details>
+
+### Base and Polygon Marketplace squid configuration
+
+Set `MECHX_MARKETPLACE_BASE_SQUID_URL` and
+`MECHX_MARKETPLACE_POLYGON_SQUID_URL` in the runtime environment. Both chains
+now use the squid query dialect. `MECHX_SUBGRAPH_URL` remains the explicit
+per-process override and must point to a compatible squid on these chains.
+Registry endpoints retain their independently configured dialect. Release
+this package before upgrading downstream clients such as Connect.
+
+Base and Polygon registry reads also use squids. Set
+`MECHX_REGISTRY_BASE_SQUID_URL` and `MECHX_REGISTRY_POLYGON_SQUID_URL`;
+the ERC-8004 service lookup uses the existing `serviceById` adapter.
+Marketplace and registry endpoints/dialects stay independent.
+`MECHX_REGISTRY_SUBGRAPH_URL` remains a per-process endpoint override,
+and must use the chain's configured registry dialect.
+
+Base/Polygon indexer endpoints are supplied by your deployment operator. Ask the Olas deployment maintainer for the Marketplace and service-registry squid URLs before using these chains; no default endpoints are bundled.

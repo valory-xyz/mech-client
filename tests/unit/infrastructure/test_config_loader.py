@@ -19,11 +19,12 @@
 
 """Tests for configuration loader."""
 
+from typing import Dict
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
-
 from mech_client.infrastructure.config import LedgerConfig, MechConfig, get_mech_config
+from mech_client.infrastructure.config.loader import ledger_chain_id
 
 
 class TestGetMechConfig:
@@ -37,9 +38,7 @@ class TestGetMechConfig:
 
     @patch.dict("os.environ", {}, clear=True)
     @patch("mech_client.infrastructure.operate.load_rpc_from_operate")
-    def test_none_chain_config_uses_first_chain(
-        self, mock_load_rpc: MagicMock
-    ) -> None:
+    def test_none_chain_config_uses_first_chain(self, mock_load_rpc: MagicMock) -> None:
         """Test that passing chain_config=None uses the first chain in mechs.json."""
         mock_load_rpc.return_value = None
 
@@ -48,7 +47,7 @@ class TestGetMechConfig:
 
         assert config.rpc_url is not None and len(config.rpc_url) > 0
 
-    @patch("builtins.open", new_callable=mock_open, read_data='invalid json')
+    @patch("builtins.open", new_callable=mock_open, read_data="invalid json")
     def test_invalid_json_raises_error(self, mock_file: mock_open) -> None:
         """Test that malformed JSON raises JSONDecodeError."""
         with pytest.raises(Exception):  # JSONDecodeError
@@ -110,6 +109,7 @@ class TestMechConfigDataclass:
 
         config = MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://rpc.gnosischain.com",
             ledger_config=ledger_config,
@@ -137,6 +137,7 @@ class TestMechConfigDataclass:
 
         config = MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -308,6 +309,7 @@ class TestMechConfigPriorityOrder:
 
         config = MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -336,6 +338,7 @@ class TestMechConfigPriorityOrder:
 
         config = MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -369,6 +372,7 @@ class TestMechConfigPriorityOrder:
 
         config = MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -404,6 +408,7 @@ class TestMechConfigPriorityOrder:
 
         config = MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -437,6 +442,7 @@ class TestMechConfigPriorityOrder:
 
         config = MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -468,6 +474,7 @@ class TestMechConfigPriorityOrder:
 
         config = MechConfig(
             subgraph_dialect="graph",
+            registry_subgraph_dialect="graph",
             complementary_metadata_hash_address="0x" + "2" * 40,
             rpc_url="https://default.rpc.com",
             ledger_config=ledger_config,
@@ -483,3 +490,24 @@ class TestMechConfigPriorityOrder:
         # Should not load from operate when chain_config is None
         mock_load_rpc.assert_not_called()
         assert config.rpc_url == "https://default.rpc.com"
+
+
+class TestLedgerChainId:
+    """ledger_chain_id resolves the chain id as LedgerConfig does."""
+
+    @pytest.mark.parametrize(
+        ("env", "expected"), [({}, 100), ({"MECHX_LEDGER_CHAIN_ID": "8453"}, 8453)]
+    )
+    def test_it_agrees_with_the_ledger_config(
+        self, env: Dict[str, str], expected: int
+    ) -> None:
+        """Payments and the ledger pay on one chain id, override or not."""
+        with patch.dict("os.environ", env, clear=True):
+            assert ledger_chain_id("gnosis") == expected
+            assert get_mech_config("gnosis").ledger_config.chain_id == expected
+
+    def test_an_unknown_chain_raises_even_with_the_override(self) -> None:
+        """The override moves a known chain's id; it does not invent a chain."""
+        with patch.dict("os.environ", {"MECHX_LEDGER_CHAIN_ID": "8453"}, clear=True):
+            with pytest.raises(ValueError, match="Unknown chain"):
+                ledger_chain_id("nowhere")

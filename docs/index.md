@@ -83,7 +83,7 @@ All commands require `--chain-config` with one of these five chain names.
 - **OLAS/USDC Payments**: Chains supporting `deposit token` command with OLAS or USDC tokens. On Robinhood the USDC payment type uses USDG, so `--token-type usdc` deposits USDG.
 
 **Important Notes:**
-- The `mech list` command works on all supported chains with default subgraph URLs provided (on Robinhood, the marketplace squid). The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
+- The `mech list` command works on all supported chains after configuring Base/Polygon squid variables; other chains have defaults (on Robinhood, the marketplace squid). The `MECHX_SUBGRAPH_URL` environment variable is optional and only needed to override defaults.
 - For other marketplace commands (`request`, deposits), subgraph is not required.
 
 ## 1. How to Send a request to a Mech (registered on the Mech MarketPlace)
@@ -106,7 +106,7 @@ mechx mech list --chain-config <chain-config>
 
 Replace `<chain-config>` by the chosen network. Supported marketplace chains: gnosis, base, polygon, optimism, robinhood.
 
-**Note**: Default subgraph URLs are provided for all supported chains (on Robinhood, the marketplace squid). You can optionally override the default:
+**Note**: Gnosis, Optimism and Robinhood have default indexer URLs; Base and Polygon require `MECHX_MARKETPLACE_BASE_SQUID_URL` / `MECHX_MARKETPLACE_POLYGON_SQUID_URL` (on Robinhood, the marketplace squid). You can optionally override the default:
 ```bash
 export MECHX_SUBGRAPH_URL=<your-custom-subgraph-url>
 ```
@@ -492,6 +492,8 @@ report = manager.mech_report(mech, metadata)         # dict with the same fields
 ```
 
 Call `manager.mech_report_or_terms(mech, metadata)` before paying: when the metadata or the chain record cannot be read it returns the Valory terms check alone, with a `report_note` saying why.
+
+To know why the metadata could not be read, use `manager.read_tools_metadata(service_id)`: it returns `MetadataRead(document, error)`, holding exactly one of the two, and never raises for an unreadable document. `offchain_blocker(read)` (from `mech_client`) turns it into the reason a Mech cannot take offchain requests, or `None`.
 
 
 You can use the Mech Client as a library in your Python project:

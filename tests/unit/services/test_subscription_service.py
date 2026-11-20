@@ -84,7 +84,35 @@ class TestSubscriptionService:
         assert service.chain_config == "gnosis"
         assert service.agent_mode is False
         mock_config_class.from_chain.assert_called_once_with("gnosis")
-        mock_get_mech_config.assert_called_once_with("gnosis", agent_mode=False)
+        mock_get_mech_config.assert_called_once_with(
+            "gnosis", agent_mode=False, rpc_url=None
+        )
+
+    @patch("mech_client.services.subscription_service.asdict", return_value={})
+    @patch("mech_client.services.subscription_service.EthereumApi")
+    @patch("mech_client.services.subscription_service.get_mech_config")
+    @patch("mech_client.services.subscription_service.NVMConfig")
+    def test_it_passes_its_rpc_url(
+        self,
+        _mock_config_class: MagicMock,
+        mock_get_mech_config: MagicMock,
+        _mock_ethereum_api_class: MagicMock,
+        _mock_asdict: MagicMock,
+        mock_crypto: MagicMock,
+    ) -> None:
+        """SubscriptionService(rpc_url=...) loads its config with that RPC."""
+        from mech_client.services.subscription_service import SubscriptionService
+
+        SubscriptionService(
+            chain_config="gnosis",
+            crypto=mock_crypto,
+            agent_mode=False,
+            rpc_url="https://caller.example",
+        )
+
+        mock_get_mech_config.assert_called_once_with(
+            "gnosis", agent_mode=False, rpc_url="https://caller.example"
+        )
 
     @patch("mech_client.services.subscription_service.SubscriptionManager")
     @patch("mech_client.services.subscription_service.SubscriptionBalanceChecker")

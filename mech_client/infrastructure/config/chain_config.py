@@ -51,6 +51,29 @@ def get_rpc_chain_id(rpc_url: str, timeout: float = 5.0) -> Optional[int]:
     return None
 
 
+def effective_chain_id(configured: int, env_config: EnvironmentConfig) -> int:
+    """Return the chain id a ledger uses: ``MECHX_LEDGER_CHAIN_ID`` if set.
+
+    :param configured: The chain id ``mechs.json`` configures
+    :param env_config: The loaded environment configuration
+    :return: The override if set, else ``configured``
+    """
+    override = env_config.mechx_ledger_chain_id
+    return configured if override is None else override
+
+
+def _checked_override(rpc_override: str) -> str:
+    """Return a caller-given RPC endpoint, refusing a blank one.
+
+    :param rpc_override: The endpoint the caller passed as ``rpc_url``
+    :return: The endpoint
+    :raises ValueError: If it is empty or whitespace only
+    """
+    if not rpc_override.strip():
+        raise ValueError("rpc_url must not be blank; pass None to use the default")
+    return rpc_override
+
+
 @dataclass
 class LedgerConfig:
     """Ledger configuration with environment variable override support.
@@ -63,6 +86,8 @@ class LedgerConfig:
         is_gas_estimation_enabled: Whether to estimate gas automatically
         agent_mode: Whether running in agent mode (default: False)
         chain_config: Chain configuration name (e.g., 'gnosis')
+        rpc_override: RPC endpoint passed by the caller; when set it is the
+            address, and neither MECHX_CHAIN_RPC nor the operate config is read
     """
 
     address: str
@@ -72,18 +97,45 @@ class LedgerConfig:
     is_gas_estimation_enabled: bool
     agent_mode: bool = field(default=False)
     chain_config: Optional[str] = field(default=None)
+    rpc_override: Optional[str] = field(default=None)
 
     def __post_init__(self) -> None:
         """Post initialization to override with environment variables.
 
         Priority order for RPC address:
-        1. MECHX_CHAIN_RPC environment variable (highest priority)
-        2. Stored operate config (agent mode only)
-        3. Default from mechs.json (lowest priority)
+        1. rpc_override, passed by the caller (highest priority)
+        2. MECHX_CHAIN_RPC environment variable
+        3. Stored operate config (agent mode only)
+        4. Default from mechs.json (lowest priority)
         """
         # Load environment configuration (centralized env var loading)
         env_config = EnvironmentConfig.load()
 
+        if self.rpc_override is not None:
+            self.address = _checked_override(self.rpc_override)
+        else:
+            self._resolve_rpc(env_config)
+
+        self.chain_id = effective_chain_id(self.chain_id, env_config)
+
+        if env_config.mechx_ledger_poa_chain is not None:
+            self.poa_chain = env_config.mechx_ledger_poa_chain
+
+        if env_config.mechx_ledger_default_gas_price_strategy:
+            self.default_gas_price_strategy = (
+                env_config.mechx_ledger_default_gas_price_strategy
+            )
+
+        if env_config.mechx_ledger_is_gas_estimation_enabled is not None:
+            self.is_gas_estimation_enabled = (
+                env_config.mechx_ledger_is_gas_estimation_enabled
+            )
+
+    def _resolve_rpc(self, env_config: EnvironmentConfig) -> None:
+        """Take the RPC from the operate config, then MECHX_CHAIN_RPC.
+
+        :param env_config: The loaded environment configuration
+        """
         # In agent mode, try to load RPC from stored operate configuration first
         if self.agent_mode and self.chain_config:
             # Import here to avoid circular imports
@@ -126,22 +178,6 @@ class LedgerConfig:
                     actual_chain_id,
                     self.address,
                 )
-
-        if env_config.mechx_ledger_chain_id is not None:
-            self.chain_id = env_config.mechx_ledger_chain_id
-
-        if env_config.mechx_ledger_poa_chain is not None:
-            self.poa_chain = env_config.mechx_ledger_poa_chain
-
-        if env_config.mechx_ledger_default_gas_price_strategy:
-            self.default_gas_price_strategy = (
-                env_config.mechx_ledger_default_gas_price_strategy
-            )
-
-        if env_config.mechx_ledger_is_gas_estimation_enabled is not None:
-            self.is_gas_estimation_enabled = (
-                env_config.mechx_ledger_is_gas_estimation_enabled
-            )
 
 
 @dataclass
@@ -195,6 +231,8 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
             is disabled; overridden by eth_estimateGas when is_gas_estimation_enabled
             is true in ledger_config)
         transaction_url: Block explorer transaction URL template
+        subgraph_url_env: Optional env name supplying the Marketplace endpoint
+        registry_subgraph_url_env: Optional env name supplying the registry endpoint
         subgraph_url: Subgraph GraphQL endpoint URL
         price: Default price for requests
         mech_marketplace_contract: Marketplace contract address
@@ -202,8 +240,10 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
         agent_mode: Whether running in agent mode (default: False)
         chain_config: Chain configuration name (e.g., 'gnosis')
         subgraph_dialect: GraphQL dialect of subgraph_url ("graph" or "squid")
-        registry_subgraph_url: Service registry GraphQL endpoint, same dialect
-            as subgraph_url; blank when the chain has none
+        registry_subgraph_url: Service registry GraphQL endpoint, independent of the marketplace dialect; blank when the chain has none
+        registry_subgraph_dialect: GraphQL dialect of the registry endpoint
+        rpc_override: RPC endpoint passed by the caller; when set it is the
+            rpc_url, and neither MECHX_CHAIN_RPC nor the operate config is read
     """
 
     complementary_metadata_hash_address: str
@@ -215,37 +255,45 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
     price: int
     mech_marketplace_contract: str
     subgraph_dialect: SubgraphDialect
+    registry_subgraph_dialect: SubgraphDialect
     registry_subgraph_url: str = field(default="")
+    subgraph_url_env: Optional[str] = None
+    registry_subgraph_url_env: Optional[str] = None
     priority_mech_address: Optional[str] = field(default=None)
     agent_mode: bool = field(default=False)
     chain_config: Optional[str] = field(default=None)
+    rpc_override: Optional[str] = field(default=None)
 
     def __post_init__(self) -> None:
         """Validate the subgraph dialect, then apply environment variable overrides.
 
         Priority order for RPC URL:
-        1. MECHX_CHAIN_RPC environment variable (highest priority)
-        2. Stored operate config (agent mode only)
-        3. Default from mechs.json (lowest priority)
+        1. rpc_override, passed by the caller (highest priority)
+        2. MECHX_CHAIN_RPC environment variable
+        3. Stored operate config (agent mode only)
+        4. Default from mechs.json (lowest priority)
         """
         validate_subgraph_dialect(self.subgraph_dialect, f"chain {self.chain_config!r}")
+        validate_subgraph_dialect(
+            self.registry_subgraph_dialect, f"registry of chain {self.chain_config!r}"
+        )
         # Load environment configuration (centralized env var loading)
         env_config = EnvironmentConfig.load()
 
-        # In agent mode, try to load RPC from stored operate configuration first
-        if self.agent_mode and self.chain_config:
-            # Import here to avoid circular imports
-            from mech_client.infrastructure.operate import (  # pylint: disable=import-outside-toplevel
-                load_rpc_from_operate,
+        if self.subgraph_url_env:
+            self.subgraph_url = (
+                env_config.indexer_url(self.subgraph_url_env) or self.subgraph_url
+            )
+        if self.registry_subgraph_url_env:
+            self.registry_subgraph_url = (
+                env_config.indexer_url(self.registry_subgraph_url_env)
+                or self.registry_subgraph_url
             )
 
-            operate_rpc = load_rpc_from_operate(self.chain_config)
-            if operate_rpc:
-                self.rpc_url = operate_rpc
-
-        # Environment variable overrides everything (including operate config)
-        if env_config.mechx_chain_rpc:
-            self.rpc_url = env_config.mechx_chain_rpc
+        if self.rpc_override is not None:
+            self.rpc_url = _checked_override(self.rpc_override)
+        else:
+            self._resolve_rpc(env_config)
 
         if env_config.mechx_gas_limit is not None:
             self.gas_limit = env_config.mechx_gas_limit
@@ -258,3 +306,23 @@ class MechConfig:  # pylint: disable=too-many-instance-attributes
 
         if env_config.mechx_registry_subgraph_url:
             self.registry_subgraph_url = env_config.mechx_registry_subgraph_url
+
+    def _resolve_rpc(self, env_config: EnvironmentConfig) -> None:
+        """Take the RPC from the operate config, then MECHX_CHAIN_RPC.
+
+        :param env_config: The loaded environment configuration
+        """
+        # In agent mode, try to load RPC from stored operate configuration first
+        if self.agent_mode and self.chain_config:
+            # Import here to avoid circular imports
+            from mech_client.infrastructure.operate import (  # pylint: disable=import-outside-toplevel
+                load_rpc_from_operate,
+            )
+
+            operate_rpc = load_rpc_from_operate(self.chain_config)
+            if operate_rpc:
+                self.rpc_url = operate_rpc
+
+        # Environment variable overrides operate config
+        if env_config.mechx_chain_rpc:
+            self.rpc_url = env_config.mechx_chain_rpc
