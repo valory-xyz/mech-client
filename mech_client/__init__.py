@@ -35,7 +35,7 @@ instead of ``crypto``:
     ... )
 """
 
-__version__ = "0.26.0"
+__version__ = "0.26.2"
 
 # Chat contract
 from mech_client.domain.delivery.chat import ChatReport, chat_report, is_chat_prompt
@@ -64,6 +64,7 @@ from mech_client.infrastructure.config.payment_config import PaymentType
 
 # Off-chain nonce allocation
 from mech_client.nonces import (
+    Answer,
     NonceAllocator,
     NonceRefused,
     NonceRule,
@@ -152,6 +153,7 @@ __all__ = [
     "RULE_QUEUE_NOT_STALLED",
     "RULE_QUEUE_CLOSED",
     "RULE_QUEUE_LOCKED",
+    "Answer",
     "Outcome",
     "Reservation",
     "outcome_of",
