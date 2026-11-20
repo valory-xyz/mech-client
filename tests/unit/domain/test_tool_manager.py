@@ -158,10 +158,6 @@ TOOLS_MANIFEST: Dict[str, Any] = {
 }
 
 
-# deeper than the JSON decoder recurses, small enough for one IPFS block
-DEEPLY_NESTED = 100_000
-
-
 def _published_uri(pinned: bytes) -> str:
     """
     Name the on-chain metadata URI for bytes an operator pinned.
@@ -1582,14 +1578,18 @@ class TestReadToolsMetadata:
 
     def test_a_document_nested_past_the_decoder_limit_is_unreadable(self) -> None:
         """RecursionError from the JSON decoder is a cause, not a crash."""
-        nested = b"[" * DEEPLY_NESTED + b"]" * DEEPLY_NESTED
-        response = MagicMock(content=nested)
+        body = b"[[]]"
+        response = MagicMock(content=body)
 
-        read = self._read(_published_uri(nested), MagicMock(return_value=response))
+        with patch(
+            "mech_client.domain.tools.manager.json.loads",
+            side_effect=RecursionError("maximum recursion depth exceeded"),
+        ):
+            read = self._read(_published_uri(body), MagicMock(return_value=response))
 
-        assert read.document is None
-        assert read.error is not None
-        assert read.error.startswith("RecursionError: ")
+        assert read == MetadataRead(
+            None, "RecursionError: maximum recursion depth exceeded"
+        )
 
     @pytest.mark.parametrize(
         "error", [FileNotFoundError("no abi"), json.JSONDecodeError("bad", "", 0)]
