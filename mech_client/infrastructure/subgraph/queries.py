@@ -39,6 +39,7 @@ CHAIN_TO_MECH_FACTORY_TO_MECH_TYPE = {
     "base": {
         "0x2E008211f34b25A7d7c102403c6C2C3B665a1abe": "Fixed Price Native",
         "0x97371B1C0cDA1D04dFc43DFb50a04645b7Bc9BEe": "Fixed Price Token",
+        "0x5b70a66fe68c4c86ffd724b58cc56049c70e9d3d": "Fixed Price Token USDC",
         "0x847bBE8b474e0820215f818858e23F5f5591855A": "NvmSubscription Native",
         "0x7beD01f8482fF686F025628e7780ca6C1f0559fc": "NvmSubscription Token USDC",
     },
