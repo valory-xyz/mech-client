@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-11-25
+
 ### ✨ Added
 
 - `--max-cost` on `mechx request` (`max_cost` on `MarketplaceService.send_request`): the most to pay per request, in base units of the Mech's payment asset. Off-chain it is the cap signed into the request. On-chain the Mech's advertised `maxDeliveryRate` is the charge, and a `--max-cost` below it refuses the request before it is sent.
