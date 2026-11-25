@@ -168,7 +168,7 @@ def _format_failed_delivery(
 )
 @click.option(
     "--deadline-seconds",
-    type=int,
+    type=click.IntRange(min=1),
     default=EXPLICIT_NONCE_DEADLINE_SECONDS,
     show_default=True,
     help=(
@@ -183,9 +183,8 @@ def _format_failed_delivery(
     help=(
         "The most to pay per request, in base units of the Mech's payment "
         "asset. Off-chain it is the cap signed into the request; on-chain the "
-        "Mech's fixed charge must be at or below it. Default: 2x the expected "
-        "cost the Mech publishes for the tool, else the Mech's advertised "
-        "maximum. See 'Choosing a cap' in the docs."
+        "Mech's fixed charge must be at or below it. See 'Choosing a cap' in "
+        "the docs."
     ),
 )
 @click.option(
@@ -346,15 +345,12 @@ def request(
     # Display results
     click.echo(f"\n✓ Transaction hash: {result['tx_hash']}")
     click.echo(f"✓ Request IDs: {result['request_ids']}")
-    if result.get("deliveries"):
+    deliveries = result.get("deliveries") or {}
+    delivered = {rid: d for rid, d in deliveries.items() if d.failure is None}
+    failed = {rid: d for rid, d in deliveries.items() if d.failure is not None}
+    if delivered:
         click.echo("\n✓ Delivery results:")
-        for request_id, delivery in result["deliveries"].items():
-            if delivery.failure is not None:
-                for line in _format_failed_delivery(
-                    request_id, delivery.failure, delivery.actual_delivery_rate
-                ):
-                    click.echo(line)
-                continue
+        for request_id, delivery in delivered.items():
             click.echo(
                 f"  Request {request_id}: {_format_delivery_output(delivery.data)}"
             )
@@ -366,3 +362,13 @@ def request(
                     f"units of the mech's payment asset, at or below the signed "
                     f"cap; the mech settles it on-chain later)"
                 )
+    if failed:
+        click.echo("\n✗ Failed runs:")
+        for request_id, delivery in failed.items():
+            for line in _format_failed_delivery(
+                request_id,
+                cast(RunFailure, delivery.failure),
+                delivery.actual_delivery_rate,
+            ):
+                click.echo(line)
+        raise click.exceptions.Exit(1)

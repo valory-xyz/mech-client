@@ -505,6 +505,28 @@ class TestReadExpectedCosts:
         """No asset or no positive decimal-string amount means no entry for that tool."""
         assert read_expected_costs(manifest) == {}
 
+    @pytest.mark.parametrize(
+        ("block", "logged"),
+        [
+            ({"asset": "native", "amount": 12}, "needs an asset and a positive whole amount"),
+            ({"amount": "12"}, "needs an asset and a positive whole amount"),
+            ("12", "is not an object"),
+            (None, None),
+        ],
+        ids=["amount_is_a_number", "no_asset", "not_an_object", "absent"],
+    )
+    def test_a_rejected_entry_is_logged_with_its_tool(self, block: Any, logged: Any) -> None:
+        """An entry that is there but unusable is named in the log; a tool without one is not."""
+        entry = {} if block is None else {"expectedCost": block}
+        with patch(f"{MODULE}.logger.warning") as warning:
+            assert read_expected_costs({"toolMetadata": {"tool-x": entry}}) == {}
+        if logged is None:
+            warning.assert_not_called()
+        else:
+            warning.assert_called_once()
+            assert logged in warning.call_args.args[0]
+            assert "'tool-x'" in warning.call_args.args[0]
+
 
 class TestProofUrl:
     """The proof lives at the well-known path on the exact domain."""

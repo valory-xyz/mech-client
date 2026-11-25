@@ -1166,6 +1166,34 @@ class TestRequestCommandMaxCost:
         invoked.service.send_request.assert_not_called()
 
 
+DEADLINE_SECONDS = 1_200
+
+
+class TestRequestCommandDeadlineSeconds:
+    """``--deadline-seconds`` reaches the service, and only as a positive count."""
+
+    def test_a_chosen_deadline_is_passed_through(self) -> None:
+        """The value given is the one the service signs with."""
+        invoked = _invoke_with_result(
+            {**OFFCHAIN_RESULT, "deliveries": {}},
+            "--use-offchain", "true", "--deadline-seconds", str(DEADLINE_SECONDS),
+        )
+
+        assert invoked.exit_code == 0, invoked.output
+        assert invoked.service.send_request.call_args.kwargs["deadline_seconds"] == DEADLINE_SECONDS
+
+    @pytest.mark.parametrize("value", ["0", "-1", "soon"])
+    def test_a_deadline_that_is_not_positive_is_a_usage_error(self, value: str) -> None:
+        """A deadline already in the past, or not a number, is refused before anything runs."""
+        invoked = _invoke_with_result(
+            {**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true", "--deadline-seconds", value
+        )
+
+        assert invoked.exit_code == 2
+        assert "Invalid value for '--deadline-seconds'" in invoked.output
+        invoked.service.send_request.assert_not_called()
+
+
 class TestRequestCommandNonceMode:
     """``--nonce-mode`` reaches the service, and defaults to explicit."""
 
@@ -1254,12 +1282,37 @@ class TestRequestCommandFailedRuns:
             mock_setup_wallet, mock_marketplace_service, {"0xabc": delivery}
         )
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == 1, result.output
+        assert "Failed runs" in result.output
+        assert "Delivery results" not in result.output
         assert f"Request 0xabc failed: {FAILED_ERROR}" in result.output
         for text in expected:
             assert text in result.output
         assert "fixed amount" not in result.output
         assert "Reported charge" not in result.output
+
+    @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
+    @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    def test_one_failed_run_in_a_batch_fails_the_command(
+        self, mock_setup_wallet: MagicMock, mock_marketplace_service: MagicMock
+    ) -> None:
+        """The answered run is listed as delivered, the failed one apart, and the exit code says so."""
+        deliveries = {
+            "0xaaa": DeliveryResult("0xaaa", data={"result": "yes"}, actual_delivery_rate=5),
+            "0xbbb": DeliveryResult(
+                "0xbbb",
+                data={"status": "failed", "error": FAILED_ERROR},
+                actual_delivery_rate=7,
+                failure=RunFailure(error=FAILED_ERROR, fault=FAULT_CLIENT),
+            ),
+        }
+        result = _invoke_with_deliveries(mock_setup_wallet, mock_marketplace_service, deliveries)
+
+        assert result.exit_code == 1, result.output
+        delivered, failed = result.output.split("Failed runs", 1)
+        assert "Request 0xaaa: yes" in delivered
+        assert "0xbbb" not in delivered
+        assert f"Request 0xbbb failed: {FAILED_ERROR}" in failed
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")

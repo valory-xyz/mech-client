@@ -97,52 +97,30 @@ RESPONSE_TIMEOUT_SECONDS = 300
 # Outbound HTTP timeout (seconds) for the offchain request POST.
 OFFCHAIN_HTTP_TIMEOUT = 30
 
-# How an offchain request's nonce is chosen, which decides the view that
-# derives its request id and the marketplace path that settles it. This is
-# the one description; the docs' "Offchain Requests" section is the
-# user-facing copy.
-#
-# ``explicit`` (the default): the requester picks a random nonce per request
-# and a settlement deadline, the id is the marketplace's EIP-712 digest from
-# ``getRequestIdWithNonce`` (its own signing domain), the payload says so in
-# ``nonce_mode`` and carries ``deadline``, and the marketplace's
-# per-request-id record is the only replay guard, so independently signed
-# requests settle in any order and in independent transactions, up to the
-# deadline.
-# ``sequential``: the nonce is the requester's ``mapNonces`` counter, the id
-# comes from ``getRequestId``, the payload is the one every mech has always
-# accepted, and settlement consumes the counter in order.
-# A mech with the explicit-nonce path switched off answers an explicit
-# request with HTTP 503 and ``EXPLICIT_NONCE_DISABLED_REASON``; the request,
-# and the rest of the batch, is then resent sequentially. A mech on a
-# release that predates ``nonce_mode`` is not covered by that fallback.
-# The two ids are domain-separated: a signature for one path is rejected on
-# the other.
+# How an offchain request is numbered, ``explicit`` or ``sequential``; see
+# "Offchain Requests" in the docs.
 NonceMode = Literal["explicit", "sequential"]
 NONCE_MODE_EXPLICIT: NonceMode = "explicit"
 NONCE_MODE_SEQUENTIAL: NonceMode = "sequential"
 # Verbatim ``reason`` a mech sends with its 503 when explicit-nonce requests
-# are not enabled on it (mech ``task_execution`` handlers).
+# are not enabled on it.
 EXPLICIT_NONCE_DISABLED_REASON = "explicit-nonce requests are not enabled on this mech"
 # How long, from the latest block, an explicit-nonce authorisation stays
 # settleable. The marketplace reverts a settlement past the signed deadline, so
 # the window must cover the mech's execution and settlement, not only the
 # answer; a mech refuses a request whose deadline is closer than its own floor.
 EXPLICIT_NONCE_DEADLINE_SECONDS = 15 * 60
-# Width of a requester-chosen nonce. The marketplace requires it to be unique
-# per (mech, request data, signed maximum, payment type); the request data
-# already carries a per-request UUID, so 256 random bits are not what keeps
-# ids distinct, they are what keeps them independent of ``mapNonces``.
+# The longest settlement window accepted: added to any block timestamp
+# (which fits in 64 bits) it still fits the signed uint256 deadline.
+MAX_DEADLINE_SECONDS = UINT256_MAX - 2**64
+# Width of a requester-chosen nonce: random, so ids do not depend on ``mapNonces``.
 EXPLICIT_NONCE_BITS = 256
 # Without a chosen cap, an off-chain request signs this multiple of the
-# expected cost the mech publishes for the tool: headroom sized from the
-# spread of charges observed across mechs (valory-xyz/mech#505). What is
-# not charged is not paid.
+# expected cost the mech publishes for the tool.
 DEFAULT_CAP_FACTOR = 2
-# A default cap this many times the mech's advertised maximum is logged as a
-# warning: the manifest is the operator's own document, and the cap also sets
-# the auto-deposit ceiling (``_MAX_AUTO_DEPOSIT_RATIO`` times the cap).
-CAP_WARNING_FACTOR = 10
+# A cap derived from the manifest above this many times the mech's advertised
+# maximum is refused unless the requester passes their own.
+MAX_DERIVED_CAP_FACTOR = 10
 # Hard cap on auto-deposit: refuse to top up more than this multiple of the
 # requester's signed ``max_delivery_rate`` in a single retry. The mech URL is
 # auto-discovered from on-chain metadata, so without a cap a compromised or
@@ -783,6 +761,15 @@ class MarketplaceService(
                 "nonces are marketplace counter values and need "
                 f"nonce_mode={NONCE_MODE_SEQUENTIAL!r}"
             )
+        if (
+            not isinstance(deadline_seconds, int)
+            or isinstance(deadline_seconds, bool)
+            or not 0 < deadline_seconds <= MAX_DEADLINE_SECONDS
+        ):
+            raise ValueError(
+                f"deadline_seconds must be a whole number of seconds from 1 to "
+                f"{MAX_DEADLINE_SECONDS}, got {deadline_seconds!r}"
+            )
         if max_cost is not None and not 0 < max_cost <= UINT256_MAX:
             raise ValueError(
                 f"max_cost must be a positive amount no larger than a contract "
@@ -1042,7 +1029,7 @@ class MarketplaceService(
                 cost = None
             if cost is None:
                 logger.warning(
-                    f"The mech publishes no expected cost for {tool}; its "
+                    f"The mech publishes no usable expected cost for {tool}; its "
                     f"advertised maximum of {advertised_max} is signed as the "
                     f"cap for it. Pass max_cost to choose your own."
                 )
@@ -1055,13 +1042,12 @@ class MarketplaceService(
                 f"{asset} the mech publishes"
             )
         cap = max(caps.values())
-        if cap > CAP_WARNING_FACTOR * advertised_max:
-            logger.warning(
-                f"The cap of {cap} derived from the manifest is more than "
-                f"{CAP_WARNING_FACTOR}x the mech's advertised maximum of "
-                f"{advertised_max}. The manifest is the operator's own document "
-                f"and this cap also sets the auto-deposit ceiling; pass max_cost "
-                f"to choose your own."
+        if cap > MAX_DERIVED_CAP_FACTOR * advertised_max:
+            raise ValueError(
+                f"The cap of {cap} derived from the mech's manifest is more than "
+                f"{MAX_DERIVED_CAP_FACTOR}x its advertised maximum of "
+                f"{advertised_max}, so it is not signed without your say. Pass "
+                f"--max-cost (max_cost) with the most you will pay per request."
             )
         return cap
 
@@ -1130,7 +1116,6 @@ class MarketplaceService(
             max_price, deposited=hook.deposited if hook else 0, hook=hook
         )
         mech_address = ensure_checksummed_address(priority_mech_address)
-        payment_type_bytes = bytes.fromhex(payment_type.value)
         url = f"{mech_offchain_url.rstrip('/')}/send_signed_requests"
 
         # Sequential nonces count up from ``mapNonces`` (or are the caller's);
@@ -1149,7 +1134,9 @@ class MarketplaceService(
             ]
             deadline = self._explicit_deadline(marketplace_contract, deadline_seconds)
         # read once, on the first sequential request
-        domain_separator: Optional[bytes] = None
+        read_domain_separator = functools.cache(
+            lambda: bytes(marketplace_contract.functions.domainSeparator().call())
+        )
 
         # Prepare and send each request
         request_ids_hex: List[str] = []
@@ -1177,58 +1164,18 @@ class MarketplaceService(
                             f"IPFS); content CID {fetched[1]}"
                         )
                     data_hash, _, ipfs_data = fetched
-                    if nonce_mode == NONCE_MODE_SEQUENTIAL:
-                        # The signed id is derived locally, so a lying RPC can
-                        # only cause a mismatch; getRequestId is a cross-check.
-                        if domain_separator is None:
-                            domain_separator = bytes(
-                                marketplace_contract.functions.domainSeparator().call()
-                            )
-                        request_id_bytes = request_digest(
-                            domain_separator=domain_separator,
-                            marketplace=str(marketplace_contract.address),
-                            mech=mech_address,
-                            requester=sender,
-                            data=bytes.fromhex(data_hash.removeprefix("0x")),
-                            delivery_rate=max_delivery_rate,
-                            payment_type=payment_type_bytes,
-                            nonce=nonce,
-                        )
-                        reported = bytes(
-                            marketplace_contract.functions.getRequestId(
-                                mech_address,
-                                sender,
-                                data_hash,
-                                max_delivery_rate,
-                                "0x" + payment_type.value,
-                                nonce,
-                            ).call()
-                        )
-                    else:
-                        # Derived locally like the sequential id;
-                        # getRequestIdWithNonce is the cross-check.
-                        request_id_bytes = explicit_request_digest(
-                            chain_id=self.mech_config.ledger_config.chain_id,
-                            marketplace=str(marketplace_contract.address),
-                            mech=mech_address,
-                            requester=sender,
-                            data=bytes.fromhex(data_hash.removeprefix("0x")),
-                            delivery_rate=max_delivery_rate,
-                            payment_type=payment_type_bytes,
-                            nonce=nonce,
-                            deadline=cast(int, deadline),
-                        )
-                        reported = bytes(
-                            marketplace_contract.functions.getRequestIdWithNonce(
-                                mech_address,
-                                sender,
-                                data_hash,
-                                max_delivery_rate,
-                                "0x" + payment_type.value,
-                                nonce,
-                                deadline,
-                            ).call()
-                        )
+                    request_id_bytes, reported = self._derive_request_id(
+                        marketplace_contract,
+                        nonce_mode=nonce_mode,
+                        read_domain_separator=read_domain_separator,
+                        mech_address=mech_address,
+                        sender=sender,
+                        data_hash=data_hash,
+                        rate=max_delivery_rate,
+                        payment_type=payment_type,
+                        nonce=nonce,
+                        deadline=deadline,
+                    )
                 except (OSError, ValueError, Web3Exception) as e:
                     raise _derivation_failed(
                         e, nonce, _accepted_note(request_ids_hex, request_nonces)
@@ -1317,9 +1264,10 @@ class MarketplaceService(
                         f"see the log or the chained cause."
                         + _accepted_note(request_ids_hex, request_nonces)
                     ) from e
-                if nonce_mode == NONCE_MODE_SEQUENTIAL:
-                    break
-                if not self._explicit_nonce_refused(response):
+                if (
+                    nonce_mode == NONCE_MODE_SEQUENTIAL
+                    or not self._explicit_nonce_refused(response)
+                ):
                     break
                 logger.warning(
                     "The mech does not accept explicit nonces; resending "
@@ -1405,6 +1353,73 @@ class MarketplaceService(
             )
         return list(nonces)
 
+    def _derive_request_id(  # pylint: disable=too-many-arguments
+        self,
+        marketplace_contract: Web3Contract,
+        *,
+        nonce_mode: NonceMode,
+        read_domain_separator: Callable[[], bytes],
+        mech_address: str,
+        sender: str,
+        data_hash: str,
+        rate: int,
+        payment_type: PaymentType,
+        nonce: int,
+        deadline: Optional[int],
+    ) -> Tuple[bytes, bytes]:
+        """Derive a request id locally and read the marketplace view's answer for it.
+
+        The signed id is the local one; the view is a cross-check, so a
+        disagreement can only refuse the request.
+
+        :param marketplace_contract: Marketplace contract instance
+        :param nonce_mode: ``explicit`` or ``sequential``
+        :param read_domain_separator: Returns the sequential path's ``domainSeparator()``
+        :param mech_address: The priority mech
+        :param sender: The requester of record
+        :param data_hash: The request data hash, ``0x``-prefixed
+        :param rate: The signed cap
+        :param payment_type: The mech's payment type
+        :param nonce: The request's nonce
+        :param deadline: The settlement deadline (explicit only)
+        :return: The locally derived id and the id the view reports
+        """
+        data = bytes.fromhex(data_hash.removeprefix("0x"))
+        payment_type_hex = "0x" + payment_type.value
+        payment_type_bytes = bytes.fromhex(payment_type.value)
+        marketplace = str(marketplace_contract.address)
+        views = marketplace_contract.functions
+        if nonce_mode == NONCE_MODE_SEQUENTIAL:
+            local = request_digest(
+                domain_separator=read_domain_separator(),
+                marketplace=marketplace,
+                mech=mech_address,
+                requester=sender,
+                data=data,
+                delivery_rate=rate,
+                payment_type=payment_type_bytes,
+                nonce=nonce,
+            )
+            call = views.getRequestId(
+                mech_address, sender, data_hash, rate, payment_type_hex, nonce
+            )
+        else:
+            local = explicit_request_digest(
+                chain_id=self.mech_config.ledger_config.chain_id,
+                marketplace=marketplace,
+                mech=mech_address,
+                requester=sender,
+                data=data,
+                delivery_rate=rate,
+                payment_type=payment_type_bytes,
+                nonce=nonce,
+                deadline=cast(int, deadline),
+            )
+            call = views.getRequestIdWithNonce(
+                mech_address, sender, data_hash, rate, payment_type_hex, nonce, deadline
+            )
+        return local, bytes(call.call())
+
     @staticmethod
     def _explicit_deadline(
         marketplace_contract: Web3Contract, deadline_seconds: int
@@ -1424,20 +1439,30 @@ class MarketplaceService(
         return int(latest["timestamp"]) + int(deadline_seconds)
 
     @staticmethod
-    def _rejection_reason(response: requests.Response) -> str:
+    def _json_dict(response: requests.Response) -> Dict[str, Any]:
+        """Return a mech's JSON object body, or ``{}`` for any other body.
+
+        :param response: the HTTP response from the mech.
+        :return: the parsed object, empty when the body is not JSON or not an object.
+        """
+        try:
+            body = response.json()
+        except ValueError:
+            return {}
+        return body if isinstance(body, dict) else {}
+
+    @classmethod
+    def _rejection_reason(cls, response: requests.Response) -> str:
         """Return the ``reason`` from a mech's JSON rejection body, else ``""``.
 
         :param response: the HTTP response from the mech.
         :return: the reason string, empty when the body carries none.
         """
-        try:
-            return str(response.json().get("reason") or "")
-        except (ValueError, AttributeError):
-            return ""
+        return str(cls._json_dict(response).get("reason") or "")
 
-    @staticmethod
+    @classmethod
     def _below_minimum_cap(
-        response: requests.Response, signed_cap: int
+        cls, response: requests.Response, signed_cap: int
     ) -> Optional[str]:
         """Explain a refusal of the signed cap as below the mech's minimum charge.
 
@@ -1447,11 +1472,8 @@ class MarketplaceService(
         """
         if response.status_code != HTTP_BAD_REQUEST:
             return None
-        try:
-            body = response.json()
-        except ValueError:
-            return None
-        if not isinstance(body, dict) or body.get("reason") != MINIMUM_CAP_REASON:
+        body = cls._json_dict(response)
+        if body.get("reason") != MINIMUM_CAP_REASON:
             return None
         minimum = body.get("minimum_cap")
         minimum_text = (

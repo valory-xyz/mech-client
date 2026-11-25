@@ -48,11 +48,12 @@ from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.config.chain_config import LedgerConfig
 from mech_client.nonces import NonceAllocator, NonceRefused, send_with_nonce
 from mech_client.services.marketplace_service import (
-    CAP_WARNING_FACTOR,
+    MAX_DERIVED_CAP_FACTOR,
     DEFAULT_CAP_FACTOR,
     EXPLICIT_NONCE_DEADLINE_SECONDS,
     EXPLICIT_NONCE_BITS,
     EXPLICIT_NONCE_DISABLED_REASON,
+    MAX_DEADLINE_SECONDS,
     NONCE_MODE_EXPLICIT,
     NONCE_MODE_SEQUENTIAL,
     MINIMUM_CAP_REASON,
@@ -3109,6 +3110,7 @@ async def _send_offchain_in_mode(
     nonce_mode: Any = NONCE_MODE_EXPLICIT,
     prompts: Tuple[str, ...] = ("hello",),
     fallback_rate: Optional[int] = None,
+    deadline_seconds: int = EXPLICIT_NONCE_DEADLINE_SECONDS,
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """Send ``prompts`` offchain against canned HTTP responses.
 
@@ -3118,6 +3120,7 @@ async def _send_offchain_in_mode(
     :param nonce_mode: the nonce mode to send with
     :param prompts: one prompt per request
     :param fallback_rate: the advertised maximum passed for a derived cap
+    :param deadline_seconds: the settlement window to sign
     :return: the result and every payload POSTed, in order
     """
     watcher = AsyncMock()
@@ -3144,6 +3147,7 @@ async def _send_offchain_in_mode(
             timeout=30.0,
             nonce_mode=nonce_mode,
             fallback_rate=fallback_rate,
+            deadline_seconds=deadline_seconds,
         )
         payloads = [call.kwargs["data"] for call in mock_requests.post.call_args_list]
     return dict(result), payloads
@@ -3361,6 +3365,24 @@ class TestOffchainNonceModes:
         # The signature is over the explicit id, which the sequential path rejects.
         self.service.signer.sign_message.assert_called_once_with(EXPLICIT_REQUEST_ID)
         assert result["request_ids"] == [EXPLICIT_REQUEST_ID.hex()]
+
+    @pytest.mark.asyncio
+    async def test_a_chosen_deadline_is_the_one_signed(self) -> None:
+        """A non-default window moves the signed deadline and so the signed id."""
+        chosen = EXPLICIT_NONCE_DEADLINE_SECONDS * 2
+        contract = _nonce_mode_contract()
+
+        with patch(f"{SERVICE}.secrets.randbits", return_value=CHOSEN_NONCE):
+            result, (payload,) = await _send_offchain_in_mode(
+                self.service, contract, [_accepted()], deadline_seconds=chosen
+            )
+
+        signed = _explicit_id(
+            CHOSEN_NONCE, LATEST_BLOCK_TIMESTAMP + chosen, data=CONTENT_HASH, rate=MECH_MAX_RATE
+        )
+        assert payload["deadline"] == LATEST_BLOCK_TIMESTAMP + chosen
+        assert payload["request_id"] == int.from_bytes(signed, "big")
+        assert result["request_ids"] == [signed.hex()]
 
     @pytest.mark.asyncio
     async def test_an_explicit_id_the_view_does_not_confirm_is_never_signed(
@@ -3712,7 +3734,7 @@ class TestResolveSignedRate:
             rate = self._resolve(("tool-a",), metadata=metadata)
         assert rate == MECH_MAX_RATE
         warning.assert_called_once()
-        assert "no expected cost for tool-a" in warning.call_args.args[0]
+        assert "no usable expected cost for tool-a" in warning.call_args.args[0]
         assert str(MECH_MAX_RATE) in warning.call_args.args[0]
 
     @pytest.mark.parametrize("metadata", [None, "manifest", 7], ids=["none", "string", "int"])
@@ -3726,33 +3748,34 @@ class TestResolveSignedRate:
         warning.assert_called_once()
         message = warning.call_args.args[0]
         assert "manifest could not be read" in message
-        assert "no expected cost for" not in message
+        assert "expected cost for" not in message
         assert str(MECH_MAX_RATE) in message
 
-    def test_a_cap_far_above_the_advertised_maximum_is_signed_with_a_warning(self) -> None:
-        """The manifest is the operator's document and the cap sets the deposit ceiling, so a large one is called out."""
-        high = {"toolMetadata": {"tool-a": {"expectedCost": {"asset": "native", "amount": str(6 * MECH_MAX_RATE)}}}}
-        with patch(f"{SERVICE}.logger.warning") as warning:
-            rate = self._resolve(("tool-a",), metadata=high)
-        assert rate == DEFAULT_CAP_FACTOR * 6 * MECH_MAX_RATE
-        assert rate > CAP_WARNING_FACTOR * MECH_MAX_RATE
-        warning.assert_called_once()
-        assert f"more than {CAP_WARNING_FACTOR}x" in warning.call_args.args[0]
-        assert str(MECH_MAX_RATE) in warning.call_args.args[0]
+    def test_a_derived_cap_above_the_limit_is_refused(self) -> None:
+        """One base unit over the limit needs the buyer's own cap; nothing is signed."""
+        over = MAX_DERIVED_CAP_FACTOR * MECH_MAX_RATE + 2
+        high = {"toolMetadata": {"tool-a": {"expectedCost": {"asset": "native", "amount": str(over // 2)}}}}
+        with pytest.raises(ValueError, match=f"more than {MAX_DERIVED_CAP_FACTOR}x its advertised maximum"):
+            self._resolve(("tool-a",), metadata=high)
 
-    def test_a_cap_at_the_warning_factor_is_signed_quietly(self) -> None:
-        """Exactly the factor is not above it."""
+    def test_a_derived_cap_at_the_limit_is_signed_quietly(self) -> None:
+        """Exactly the limit is not above it."""
         at = {"toolMetadata": {"tool-a": {"expectedCost": {"asset": "native", "amount": str(5 * MECH_MAX_RATE)}}}}
         with patch(f"{SERVICE}.logger.warning") as warning:
             rate = self._resolve(("tool-a",), metadata=at)
-        assert rate == CAP_WARNING_FACTOR * MECH_MAX_RATE
+        assert rate == MAX_DERIVED_CAP_FACTOR * MECH_MAX_RATE
         warning.assert_not_called()
+
+    def test_a_chosen_cap_above_the_limit_is_signed(self) -> None:
+        """The limit is on the manifest's number, not on what the buyer chooses."""
+        high = {"toolMetadata": {"tool-a": {"expectedCost": {"asset": "native", "amount": str(6 * MECH_MAX_RATE)}}}}
+        chosen = MAX_DERIVED_CAP_FACTOR * MECH_MAX_RATE * 3
+        assert self._resolve(("tool-a",), metadata=high, max_cost=chosen) == chosen
 
     def test_the_derived_cap_never_exceeds_what_a_contract_can_carry(self) -> None:
         """Doubling the largest publishable amount stays at the uint256 ceiling."""
         top = {"toolMetadata": {"tool-a": {"expectedCost": {"asset": "native", "amount": str(UINT256_MAX)}}}}
-        with patch(f"{SERVICE}.logger.warning"):
-            rate = self._resolve(("tool-a",), metadata=top)
+        rate = self._resolve(("tool-a",), metadata=top, advertised_max=UINT256_MAX)
         assert rate == UINT256_MAX
 
     def test_an_expected_cost_in_another_asset_is_ignored(self) -> None:
@@ -3788,6 +3811,54 @@ class TestResolveSignedRate:
         """The request would revert with a lower maximum, so it is stopped here with the price."""
         with pytest.raises(ValueError, match=f"charges {MECH_MAX_RATE} per on-chain request"):
             self._resolve(("tool-a",), use_offchain=False, max_cost=MECH_MAX_RATE - 1)
+
+
+class TestSendRequestDeadlineSeconds:
+    """``send_request`` refuses a deadline that cannot be signed, before any chain read."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "deadline_seconds",
+        [0, -1, MAX_DEADLINE_SECONDS + 1, True, 1.5],
+        ids=["zero", "negative", "past_uint256", "bool", "fraction"],
+    )
+    async def test_a_deadline_that_cannot_be_signed_is_refused_before_any_chain_read(
+        self, deadline_seconds: Any
+    ) -> None:
+        """An expired, oversized or non-integer window raises before anything is fetched."""
+        service = _build_offchain_service()
+
+        with patch.object(service, "marketplace_contract") as contract:
+            with pytest.raises(ValueError, match="deadline_seconds must be a whole number"):
+                await service.send_request(
+                    prompts=("p",), tools=("tool-a",), use_offchain=True, deadline_seconds=deadline_seconds
+                )
+
+        contract.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("deadline_seconds", [1, MAX_DEADLINE_SECONDS], ids=["one", "largest"])
+    async def test_the_bounds_are_accepted(self, deadline_seconds: int) -> None:
+        """The shortest and longest windows reach the off-chain sender unchanged."""
+        service = _build_offchain_service()
+        service.tool_manager = MagicMock()
+        service.tool_manager.read_tools_metadata.return_value = MetadataRead(COSTED_MANIFEST, None)
+
+        with (
+            patch.object(service, "marketplace_contract", return_value=MagicMock()),
+            patch.object(
+                service,
+                "mech_info",
+                return_value=MechInfo(MECH_ADDRESS, 1, PaymentType.NATIVE, MECH_MAX_RATE),
+            ),
+            patch.object(service, "_validate_tools"),
+            patch.object(service, "_send_offchain_request", new_callable=AsyncMock) as offchain,
+        ):
+            await service.send_request(
+                prompts=("p",), tools=("tool-a",), use_offchain=True, deadline_seconds=deadline_seconds
+            )
+
+        assert offchain.call_args.kwargs["deadline_seconds"] == deadline_seconds
 
 
 class TestSendRequestMaxCost:

@@ -46,22 +46,15 @@ class RunFailure:
 
 @dataclass(frozen=True)
 class DeliveryResult:
-    """A mech delivery, resolved to its content.
+    """One request's delivery, in the same shape on-chain and off-chain.
 
-    Both watchers return this, so callers get the same shape whether the
-    response was delivered on-chain or off-chain.
-
-    ``data`` holds the parsed content of the delivered result file, or
-    ``None`` when the gateway could not be read (``url`` still points at it).
-    ``url`` is the gateway URL ``data`` was read from; it is ``None`` for
-    offchain mechs that answer inline instead of pinning a result file.
-    ``actual_delivery_rate`` is what the mech charged for the request, in
-    the base units of its payment asset: at or below the maximum the
-    requester signed (the ``delivery_rate`` of the request payload), with
-    the difference staying in the requester's balance. It is ``None`` when
-    the mech did not report a charge, which is always the case for on-chain
-    delivery. ``failure`` is set when an off-chain run failed; the charge is
-    then what the mech settles for the failed run.
+    ``data``: the delivered content, or ``None`` when the gateway could not be
+    read. A failed off-chain run also sets it (the mech's failure body), so
+    check ``failure`` before treating ``data`` as an answer.
+    ``url``: the gateway URL ``data`` was read from; ``None`` off-chain.
+    ``actual_delivery_rate``: what the mech charged, in base units of its
+    payment asset; ``None`` when not reported, always so on-chain.
+    ``failure``: set when an off-chain run failed.
     """
 
     request_id: str

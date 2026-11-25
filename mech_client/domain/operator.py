@@ -226,11 +226,20 @@ def read_expected_costs(manifest: Dict[str, Any]) -> Dict[str, ExpectedCost]:
         if not isinstance(tool, str) or not isinstance(entry, dict):
             continue
         block = entry.get("expectedCost")
+        if block is None:
+            continue
         if not isinstance(block, dict):
+            logger.warning(
+                f"The manifest's expected cost for {tool!r} is not an object; it is ignored."
+            )
             continue
         asset = clean_text(block.get("asset"))
         amount = base_units(block.get("amount"))
         if asset is None or amount is None:
+            logger.warning(
+                f"The manifest's expected cost for {tool!r} needs an asset and a "
+                f"positive whole amount in base units; it is ignored."
+            )
             continue
         costs[tool] = ExpectedCost(asset.lower(), amount)
     return costs

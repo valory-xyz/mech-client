@@ -40,6 +40,17 @@ __version__ = "0.27.0"
 # Chat contract
 from mech_client.domain.delivery.chat import ChatReport, chat_report, is_chat_prompt
 
+# Delivery results
+from mech_client.domain.delivery.models import (
+    DeliveryResult,
+    FAULT_CLIENT,
+    FAULT_MECH,
+    RunFailure,
+)
+
+# Operator manifest
+from mech_client.domain.operator import read_expected_costs
+
 # Payment addresses
 from mech_client.domain.payment.addresses import balance_tracker, payment_token
 
@@ -90,6 +101,7 @@ from mech_client.services.marketplace_service import (
     MarketplaceService,
     MechInfo,
     MechPriceExceeded,
+    NonceMode,
     OffchainRequestRejected,
     OffchainRequestResult,
     OffchainTopUpFailed,
@@ -139,6 +151,13 @@ __all__ = [
     "OnchainRequestResult",
     "RequestResult",
     "request_digest",
+    "NonceMode",
+    # Delivery results: a failed off-chain run carries ``failure``
+    "DeliveryResult",
+    "RunFailure",
+    "FAULT_CLIENT",
+    "FAULT_MECH",
+    "read_expected_costs",
     # Off-chain nonce allocation
     "NonceAllocator",
     "NonceRefused",

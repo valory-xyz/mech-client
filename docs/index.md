@@ -208,7 +208,7 @@ An off-chain request carries a cap: the most you agree to pay for it. A Mech wit
 - Otherwise, when the Mech's manifest publishes an expected cost for the tool (`toolMetadata.<tool>.expectedCost`, with `asset` naming `native`, `olas` or `usdc` and `amount` as a decimal string in base units), the client signs twice that amount. The expected cost is the operator's estimate, as guidance only, and the margin is a default; pass `--max-cost` to choose your own. The client ignores an expected cost stated in an asset other than the one the Mech is paid in.
 - Otherwise it signs the Mech's advertised maximum per request, `maxDeliveryRate`, and says so. A manifest that could not be read at all gets one warning saying so, and the advertised maximum is signed.
 
-Every amount, the published one and `--max-cost`, must fit a uint256 (at most 2^256 - 1); larger values are refused before anything is read from the chain. A derived cap more than 10x the Mech's advertised maximum is signed with a warning: the manifest is the operator's own document, and the cap also sets the ceiling of `--auto-deposit` (10x the cap).
+Every amount, the published one and `--max-cost`, must fit a uint256 (at most 2^256 - 1); larger values are refused before anything is read from the chain. A derived cap more than 10x the Mech's advertised maximum is refused until you pass `--max-cost`: the manifest is the operator's own document, and the cap also sets the ceiling of `--auto-deposit` (10x the cap).
 
 The manifest is accepted only when the gateway answers with the document and its bytes hash to the content id recorded on the Mech's `ComplementaryServiceMetadata` contract, so the expected cost is the one the operator published. A gateway error is reported as such.
 
