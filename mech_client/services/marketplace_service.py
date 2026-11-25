@@ -52,7 +52,7 @@ from mech_client.domain.delivery import (
 from mech_client.domain.operator import read_expected_costs
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.domain.payment.addresses import DEPOSIT_PAYMENT_TYPES
-from mech_client.domain.request_id import request_digest
+from mech_client.domain.request_id import explicit_request_digest, request_digest
 from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
 from mech_client.domain.tools.manager import payment_asset
@@ -865,6 +865,7 @@ class MarketplaceService(
                 nonces=nonces,
                 on_request_id=on_request_id,
                 max_price=max_price,
+                fallback_rate=advertised_max if max_cost is None else None,
             )
 
         # On-chain flow
@@ -1082,6 +1083,7 @@ class MarketplaceService(
         nonces: Optional[Sequence[int]] = None,
         on_request_id: Optional[Callable[[bytes, int], None]] = None,
         max_price: Optional[int] = None,
+        fallback_rate: Optional[int] = None,
     ) -> OffchainRequestResult:
         """
         Send offchain request to mech HTTP endpoint.
@@ -1109,6 +1111,10 @@ class MarketplaceService(
         :param on_request_id: Pre-sign hook (see ``send_request``)
         :param max_price: The most the call's auto-deposits may move together
             (see ``send_request``)
+        :param fallback_rate: The Mech's advertised maximum when the cap was
+            derived rather than passed as ``max_cost``. A Mech that turns away
+            explicit nonces has pricing off and charges the full signed cap,
+            so the sequential resend signs the lower of the two.
         :return: Dictionary with request results
         """
         logger.info("Sending offchain mech marketplace request...")
@@ -1199,7 +1205,20 @@ class MarketplaceService(
                             ).call()
                         )
                     else:
-                        request_id_bytes = bytes(
+                        # Derived locally like the sequential id;
+                        # getRequestIdWithNonce is the cross-check.
+                        request_id_bytes = explicit_request_digest(
+                            chain_id=self.mech_config.ledger_config.chain_id,
+                            marketplace=str(marketplace_contract.address),
+                            mech=mech_address,
+                            requester=sender,
+                            data=bytes.fromhex(data_hash.removeprefix("0x")),
+                            delivery_rate=max_delivery_rate,
+                            payment_type=payment_type_bytes,
+                            nonce=nonce,
+                            deadline=cast(int, deadline),
+                        )
+                        reported = bytes(
                             marketplace_contract.functions.getRequestIdWithNonce(
                                 mech_address,
                                 sender,
@@ -1210,14 +1229,13 @@ class MarketplaceService(
                                 deadline,
                             ).call()
                         )
-                        reported = request_id_bytes
                 except (OSError, ValueError, Web3Exception) as e:
                     raise _derivation_failed(
                         e, nonce, _accepted_note(request_ids_hex, request_nonces)
                     ) from e
                 if reported != request_id_bytes:
                     raise RequestIdMismatch(
-                        f"The RPC's getRequestId answered {reported.hex()} for nonce "
+                        f"The RPC's request-id view answered {reported.hex()} for nonce "
                         f"{nonce}, not the locally derived {request_id_bytes.hex()}; "
                         f"nothing was signed or sent for it. Check the RPC "
                         f"(MECHX_CHAIN_RPC or rpc_url)."
@@ -1308,6 +1326,13 @@ class MarketplaceService(
                     "with the marketplace's sequential nonce instead."
                 )
                 nonce_mode = NONCE_MODE_SEQUENTIAL
+                if fallback_rate is not None and fallback_rate < max_delivery_rate:
+                    logger.info(
+                        f"Signing the mech's advertised maximum of {fallback_rate} "
+                        f"instead of the derived cap of {max_delivery_rate}: a mech "
+                        f"without explicit nonces charges the full cap."
+                    )
+                    max_delivery_rate = fallback_rate
                 request_nonces[i:] = self._sequential_nonces(
                     marketplace_contract,
                     sender,

@@ -22,6 +22,34 @@
 from eth_abi import encode as abi_encode
 from eth_utils import keccak
 
+# ``MechMarketplace.EXPLICIT_NONCE_TYPE_HASH``: explicit-nonce requests are
+# standard EIP-712 typed data under the marketplace's second signing domain.
+EXPLICIT_NONCE_TYPE_HASH = keccak(
+    text=(
+        "ExplicitNonceDelivery(address mech,address requester,bytes data,"
+        "uint256 maxDeliveryRate,bytes32 paymentType,uint256 nonce,uint256 deadline)"
+    )
+)
+EIP712_DOMAIN_TYPE_HASH = keccak(
+    text=(
+        "EIP712Domain(string name,string version,uint256 chainId,"
+        "address verifyingContract)"
+    )
+)
+EXPLICIT_NONCE_DOMAIN_NAME = "MechMarketplace"
+EXPLICIT_NONCE_DOMAIN_VERSION = "2"
+
+EXPLICIT_STRUCT_TYPES = [
+    "bytes32",
+    "address",
+    "address",
+    "bytes32",
+    "uint256",
+    "bytes32",
+    "uint256",
+    "uint256",
+]
+
 REQUEST_STRUCT_TYPES = [
     "address",
     "address",
@@ -77,5 +105,84 @@ def request_digest(  # pylint: disable=too-many-arguments  # the id's preimage, 
                 nonce,
             ],
         )
+    )
+    return bytes(keccak(b"\x19\x01" + domain_separator + struct_hash))
+
+
+def explicit_nonce_domain_separator(*, chain_id: int, marketplace: str) -> bytes:
+    """
+    Recompute ``MechMarketplace.getDomainSeparatorWithNonce`` locally.
+
+    :param chain_id: The chain the marketplace is deployed on
+    :param marketplace: The marketplace contract address
+    :return: The 32-byte domain separator of the explicit-nonce path
+    """
+    return bytes(
+        keccak(
+            abi_encode(
+                ["bytes32", "bytes32", "bytes32", "uint256", "address"],
+                [
+                    EIP712_DOMAIN_TYPE_HASH,
+                    keccak(text=EXPLICIT_NONCE_DOMAIN_NAME),
+                    keccak(text=EXPLICIT_NONCE_DOMAIN_VERSION),
+                    chain_id,
+                    marketplace,
+                ],
+            )
+        )
+    )
+
+
+def explicit_request_digest(  # pylint: disable=too-many-arguments  # the id's preimage, kw-only
+    *,
+    chain_id: int,
+    marketplace: str,
+    mech: str,
+    requester: str,
+    data: bytes,
+    delivery_rate: int,
+    payment_type: bytes,
+    nonce: int,
+    deadline: int,
+) -> bytes:
+    r"""
+    Recompute ``MechMarketplace.getRequestIdWithNonce`` locally.
+
+    The id an explicit-nonce request signs is EIP-712 typed data::
+
+        keccak256("\x19\x01" ‖ getDomainSeparatorWithNonce() ‖ keccak256(abi.encode(
+            EXPLICIT_NONCE_TYPE_HASH, mech, requester, keccak256(data),
+            maxDeliveryRate, paymentType, nonce, deadline)))
+
+    The marketplace address enters through the domain separator.
+
+    :param chain_id: The chain the marketplace is deployed on
+    :param marketplace: The marketplace contract address
+    :param mech: The priority mech address
+    :param requester: The requester of record (Safe in agent mode, else EOA)
+    :param data: The request's data, hashed here
+    :param delivery_rate: The signed cap
+    :param payment_type: The 32-byte payment type
+    :param nonce: The requester-chosen nonce
+    :param deadline: The last timestamp at which the request settles
+    :return: The 32-byte request id
+    """
+    struct_hash = keccak(
+        abi_encode(
+            EXPLICIT_STRUCT_TYPES,
+            [
+                EXPLICIT_NONCE_TYPE_HASH,
+                mech,
+                requester,
+                keccak(data),
+                delivery_rate,
+                payment_type,
+                nonce,
+                deadline,
+            ],
+        )
+    )
+    domain_separator = explicit_nonce_domain_separator(
+        chain_id=chain_id, marketplace=marketplace
     )
     return bytes(keccak(b"\x19\x01" + domain_separator + struct_hash))

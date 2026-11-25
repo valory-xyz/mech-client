@@ -210,7 +210,7 @@ Additionally other options are available and their usage is listed below:
 `--nonce-mode <explicit|sequential>`: how off-chain requests are numbered, see [Offchain Requests](#offchain-requests). Defaults to explicit. <br>
 `--max-cost <amount>`: the most to pay per request, in base units of the Mech's payment asset. See [Choosing a cap](https://github.com/valory-xyz/mech-client/blob/main/docs/index.md#choosing-a-cap) in the docs.
 
-An off-chain request is signed with a cap you set: `--max-cost`, or by default twice the expected cost the Mech publishes for the tool in its manifest, or the Mech's advertised maximum (`maxDeliveryRate`) when it publishes none. The Mech charges its actual cost at delivery, at or below the cap, and what it does not charge stays in your marketplace balance. An on-chain request pays the Mech's advertised `maxDeliveryRate`; with `--max-cost` below it the request is refused before it is sent.
+An off-chain request is signed with a cap you set: `--max-cost`, or by default twice the expected cost the Mech publishes for the tool in its manifest, or the Mech's advertised maximum (`maxDeliveryRate`) when it publishes none. A Mech with dynamic pricing on charges its actual cost at delivery, at or below the cap, and what it does not charge stays in your marketplace balance; a Mech with it off charges the full cap. An on-chain request pays the Mech's advertised `maxDeliveryRate`; with `--max-cost` below it the request is refused before it is sent.
 
 #### Understanding Payment Types
 

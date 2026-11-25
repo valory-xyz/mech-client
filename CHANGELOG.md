@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--nonce-mode` on `mechx request` (`nonce_mode` on `MarketplaceService.send_request`): `explicit` (the default) or `sequential`; `send_request` with `nonces=[...]`, as the nonce allocator calls it, is sequential, and `explicit` with `nonces` is refused, and `--deadline-seconds` (`deadline_seconds`), how long an explicit request stays settleable from the latest block (15 minutes by default). See "Offchain Requests" in the docs. Requires a Mech release that knows the option; on an older Mech pass `sequential`.
 - The marketplace ABI is the build of autonolas-marketplace `main` at `14f191a`: `getRequestIdWithNonce` with its deadline and signing domain (`getDomainSeparatorWithNonce`), the `deliverMarketplaceWithSignatures` overloads that settle a cap with an actual charge, and the `RateOverCap` and `SignatureExpired` errors.
 
+- An explicit-nonce request id is derived locally (`explicit_request_digest`, EIP-712 over the marketplace's second signing domain), like the sequential one; `getRequestIdWithNonce` is a cross-check, and a mismatch raises `RequestIdMismatch` before the pre-sign hook and before signing.
+- When a Mech turns explicit nonces away and the cap was derived rather than passed as `--max-cost`, the sequential resend signs the lower of that cap and the Mech's advertised `maxDeliveryRate`, since such a Mech charges the full cap.
+
 ### 🔧 Changed
 
 - `max_price` is checked against the signed cap times the number of prompts, so an off-chain request is held to the cap it signs rather than to the Mech's advertised `maxDeliveryRate`. The manifest is read before that check, to size the cap.

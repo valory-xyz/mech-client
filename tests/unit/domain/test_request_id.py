@@ -23,7 +23,7 @@ from typing import Any, Dict
 
 import pytest
 
-from mech_client.domain.request_id import request_digest
+from mech_client.domain.request_id import explicit_request_digest, request_digest
 
 GOLDEN_INPUTS: Dict[str, Any] = {
     "domain_separator": bytes.fromhex(
@@ -70,4 +70,78 @@ def test_every_input_changes_the_id(field: str, value: Any) -> None:
     """The id commits to each of its inputs."""
     assert request_digest(**{**GOLDEN_INPUTS, field: value}) != request_digest(
         **GOLDEN_INPUTS
+    )
+
+
+EXPLICIT_INPUTS: Dict[str, Any] = {
+    "mech": "0x" + "11" * 20,
+    "requester": "0x" + "22" * 20,
+    "data": bytes.fromhex("33" * 32),
+    "delivery_rate": 7,
+    "payment_type": bytes.fromhex("44" * 32),
+    "nonce": 9,
+    "deadline": 1_900_000_000,
+}
+
+
+@pytest.mark.parametrize(
+    ("chain_id", "marketplace", "expected"),
+    [
+        (
+            100,
+            "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB",
+            "0a88545ee8084de72517271130ed61d031c1b1cf48766d523f74a7df2b564b96",
+        ),
+        (
+            137,
+            "0x343F2B005cF6D70bA610CD9F1F1927049414B582",
+            "cc69de6a75318009b6513d0a69f8f7fe753d9979e76ee68a0c8910be4c14f4e5",
+        ),
+        (
+            4663,
+            "0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",
+            "f9ce4425ad1e9ea12ae8c0e21e927c86a55432ef897f084cf9e8c17433c04d3f",
+        ),
+    ],
+)
+def test_explicit_request_digest_matches_the_deployed_marketplaces(
+    chain_id: int, marketplace: str, expected: str
+) -> None:
+    """Golden vectors recorded from the deployed gnosis, polygon and robinhood marketplaces.
+
+    getRequestIdWithNonce(...) was called on each (2026-11-25) with these
+    synthetic inputs; the local derivation must reproduce the contract's
+    answer byte for byte, or every explicit-nonce request is refused.
+    """
+    assert (
+        explicit_request_digest(
+            chain_id=chain_id, marketplace=marketplace, **EXPLICIT_INPUTS
+        ).hex()
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("chain_id", 101),
+        ("marketplace", "0x" + "55" * 20),
+        ("mech", "0x" + "12" * 20),
+        ("requester", "0x" + "23" * 20),
+        ("data", bytes.fromhex("34" * 32)),
+        ("delivery_rate", 8),
+        ("payment_type", bytes.fromhex("45" * 32)),
+        ("nonce", 10),
+        ("deadline", 1_900_000_001),
+    ],
+)
+def test_every_input_changes_the_explicit_id(field: str, value: Any) -> None:
+    """The explicit id commits to each of its inputs, the domain included."""
+    base = {
+        "chain_id": 100,
+        "marketplace": "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB",
+        **EXPLICIT_INPUTS,
+    }
+    assert explicit_request_digest(**{**base, field: value}) != explicit_request_digest(
+        **base
     )
