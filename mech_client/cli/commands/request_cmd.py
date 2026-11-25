@@ -371,4 +371,7 @@ def request(
                 delivery.actual_delivery_rate,
             ):
                 click.echo(line)
-        raise click.exceptions.Exit(1)
+        raise ClickException(
+            f"{len(failed)} of {len(deliveries)} request(s) failed; see the "
+            f"failed runs above."
+        )

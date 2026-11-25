@@ -1290,6 +1290,7 @@ class TestRequestCommandFailedRuns:
             assert text in result.output
         assert "fixed amount" not in result.output
         assert "Reported charge" not in result.output
+        assert "Unexpected error" not in result.output
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
@@ -1313,6 +1314,8 @@ class TestRequestCommandFailedRuns:
         assert "Request 0xaaa: yes" in delivered
         assert "0xbbb" not in delivered
         assert f"Request 0xbbb failed: {FAILED_ERROR}" in failed
+        assert "Error: 1 of 2 request(s) failed; see the failed runs above." in failed
+        assert "Unexpected error" not in result.output
 
     @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
     @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
