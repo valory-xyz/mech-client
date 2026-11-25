@@ -25,6 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import requests
 
+from mech_client.domain.delivery import FAULT_CLIENT, FAULT_MECH, RunFailure
 from mech_client.domain.delivery.offchain_watcher import OffchainDeliveryWatcher
 
 
@@ -706,3 +707,200 @@ class TestOffchainDeliveryWatcherFetchData:
 
         # Verify None returned on connection error
         assert data is None
+
+
+WATCHER = "mech_client.domain.delivery.offchain_watcher"
+RESULT_FILE_HASH = "a" * 64
+CHARGE = 120
+
+
+def _envelope_response(envelope: Any) -> MagicMock:
+    """A ``fetch_offchain_info`` response whose JSON body is ``envelope``.
+
+    :param envelope: the body the mech answers with
+    :return: a mock response
+    """
+    response = MagicMock()
+    response.json.return_value = envelope
+    response.raise_for_status.return_value = None
+    return response
+
+
+class TestOffchainDeliveryWatcherReportsCharge:
+    """The envelope's ``delivery_rate`` is what the mech charged; it travels with the result."""
+
+    @pytest.mark.anyio
+    @patch(f"{WATCHER}.requests")
+    async def test_inline_answer_carries_the_charge(self, mock_requests: MagicMock) -> None:
+        """A mech answering inline reports its charge next to the answer."""
+        envelope = {"request_id": "26", "result": "the answer", "delivery_rate": CHARGE}
+        mock_requests.get.return_value = _envelope_response(envelope)
+
+        results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
+
+        assert results["0x1a"].actual_delivery_rate == CHARGE
+        assert results["0x1a"].data == envelope
+
+    @pytest.mark.anyio
+    @patch(f"{WATCHER}.fetch_result_file")
+    @patch(f"{WATCHER}.requests")
+    async def test_result_file_answer_carries_the_charge(
+        self, mock_requests: MagicMock, mock_fetch_result_file: MagicMock
+    ) -> None:
+        """The charge comes from the envelope even though the answer is read from a file."""
+        mock_requests.get.return_value = _envelope_response(
+            {"request_id": "26", "task_result": RESULT_FILE_HASH, "delivery_rate": str(CHARGE)}
+        )
+        mock_fetch_result_file.return_value = {"result": "the answer"}
+
+        results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
+
+        assert results["0x1a"].actual_delivery_rate == CHARGE
+        assert results["0x1a"].data == {"result": "the answer"}
+        assert results["0x1a"].url is not None
+
+    @pytest.mark.anyio
+    @patch(f"{WATCHER}.logger")
+    @patch(f"{WATCHER}.requests")
+    async def test_a_mech_that_reports_no_charge_gives_none(
+        self, mock_requests: MagicMock, mock_logger: MagicMock
+    ) -> None:
+        """An envelope without the field is a mech that does not report charges, not an error."""
+        mock_requests.get.return_value = _envelope_response({"request_id": "26", "result": "x"})
+
+        results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
+
+        assert results["0x1a"].actual_delivery_rate is None
+        mock_logger.warning.assert_not_called()
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("charged", ["abc", "", None, 1.5, True, -1, [CHARGE], {"wei": CHARGE}])
+    @patch(f"{WATCHER}.logger")
+    @patch(f"{WATCHER}.requests")
+    async def test_an_unusable_charge_is_unknown_and_logged(
+        self, mock_requests: MagicMock, mock_logger: MagicMock, charged: Any
+    ) -> None:
+        """A charge that is not a non-negative integer is reported as unknown, with a warning."""
+        mock_requests.get.return_value = _envelope_response(
+            {"request_id": "26", "result": "x", "delivery_rate": charged}
+        )
+
+        results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
+
+        assert results["0x1a"].actual_delivery_rate is None
+        assert results["0x1a"].data is not None
+        mock_logger.warning.assert_called_once()
+        assert "26" in mock_logger.warning.call_args.args
+
+    @pytest.mark.anyio
+    @patch(f"{WATCHER}.time.time")
+    @patch(f"{WATCHER}.asyncio.sleep")
+    @patch(f"{WATCHER}.fetch_result_file")
+    @patch(f"{WATCHER}.requests")
+    async def test_an_unreadable_file_still_reports_the_charge(
+        self,
+        mock_requests: MagicMock,
+        mock_fetch_result_file: MagicMock,
+        mock_sleep: AsyncMock,
+        mock_time: MagicMock,
+    ) -> None:
+        """The charge was settled whether or not the file can be read, so it is reported either way."""
+        mock_requests.get.return_value = _envelope_response(
+            {"request_id": "26", "task_result": RESULT_FILE_HASH, "delivery_rate": CHARGE}
+        )
+        mock_fetch_result_file.return_value = None
+
+        def clock() -> Iterator[float]:
+            """Start the clock, allow one poll, then run past the budget."""
+            yield 0.0
+            yield 0.0
+            while True:
+                yield 999.0
+
+        mock_time.side_effect = clock()
+
+        results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
+
+        assert results["0x1a"].data is None
+        assert results["0x1a"].url is not None
+        assert results["0x1a"].actual_delivery_rate == CHARGE
+
+
+FAILED_ERROR = "ValueError: Tool nope is not supported."
+
+
+class TestOffchainDeliveryWatcherReportsFailedRuns:
+    """A ``failed`` envelope is a finished, charged run: its error, fault and charge are kept."""
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        ("fault", "expected_fault"),
+        [
+            (FAULT_CLIENT, FAULT_CLIENT),
+            (FAULT_MECH, FAULT_MECH),
+            ("nobody", None),
+            (None, None),
+        ],
+    )
+    @patch(f"{WATCHER}.fetch_result_file")
+    @patch(f"{WATCHER}.requests")
+    async def test_a_failed_run_is_delivered_with_its_failure(
+        self,
+        mock_requests: MagicMock,
+        mock_fetch_result_file: MagicMock,
+        fault: Any,
+        expected_fault: Any,
+    ) -> None:
+        """One poll finishes it; no result file is read."""
+        envelope = {
+            "status": "failed",
+            "error": FAILED_ERROR,
+            "fault": fault,
+            "delivery_rate": CHARGE,
+            "task_result": RESULT_FILE_HASH,
+        }
+        mock_requests.get.return_value = _envelope_response(envelope)
+
+        results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
+
+        assert results["0x1a"].failure == RunFailure(error=FAILED_ERROR, fault=expected_fault)
+        assert results["0x1a"].actual_delivery_rate == CHARGE
+        assert results["0x1a"].url is None
+        mock_requests.get.assert_called_once()
+        mock_fetch_result_file.assert_not_called()
+
+    @pytest.mark.anyio
+    @patch(f"{WATCHER}.requests")
+    async def test_a_failed_run_without_an_error_is_still_a_failure(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """A missing error message does not turn the envelope into an answer."""
+        mock_requests.get.return_value = _envelope_response(
+            {"status": "failed", "fault": FAULT_MECH}
+        )
+
+        results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
+
+        assert results["0x1a"].failure == RunFailure(error="failed", fault=FAULT_MECH)
+        assert results["0x1a"].actual_delivery_rate is None
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "envelope",
+        [
+            {"status": "rejected", "reason": "bad prompt"},
+            {"status": "ok", "result": "the answer", "delivery_rate": CHARGE},
+            {"result": "the answer"},
+        ],
+    )
+    @patch(f"{WATCHER}.requests")
+    async def test_other_envelopes_carry_no_failure(
+        self, mock_requests: MagicMock, envelope: Any
+    ) -> None:
+        """A refusal or an answer is delivered inline as before, with no failure."""
+        mock_requests.get.return_value = _envelope_response(envelope)
+
+        results = await OffchainDeliveryWatcher("https://mech.example.com", 60.0).watch(["0x1a"])
+
+        assert results["0x1a"].failure is None
+        assert results["0x1a"].data == envelope

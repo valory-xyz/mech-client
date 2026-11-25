@@ -1,6 +1,6 @@
 [project]
 name = "mech-client"
-version = "0.26.2"
+version = "0.27.0"
 description = "Basic client to interact with a mech"
 requires-python = ">=3.10,<3.15"
 readme = "README.md"
@@ -63,6 +63,21 @@ tomte_dep_pin = "==0.7.4"
 # W2301: `...` body is required to dodge a darglint 1.8.1 / Py3.14 crash
 #        on abstract methods; pylint flags it as redundant.
 pylint_disables = ["E1101", "W0719", "C0411", "W2301"]
+# filelock in the safety env's own venv, which safety pins below 4.0; these
+# advisories are fixed only in 4.x. Same basis as tomte's baseline for that
+# package; drop once tomte carries them.
+safety_ignores = [
+    "SFTY-20261020-11422",
+    "SFTY-20261020-13394",
+    "SFTY-20261020-18367",
+    "SFTY-20261020-25530",
+    "SFTY-20261020-34461",
+    "SFTY-20261020-81101",
+    "SFTY-20261020-91319",
+    "SFTY-20261023-10299",
+    "SFTY-20261023-16869",
+    "SFTY-20261023-24590",
+]
 
 [tool.uv.build-backend]
 module-name = [

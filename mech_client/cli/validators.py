@@ -24,6 +24,7 @@ from pathlib import Path
 
 from click import ClickException
 from mech_client.utils import validators as utils_validators
+from mech_client.utils.constants import UINT256_MAX
 from mech_client.utils.errors import ValidationError
 
 MECHX_CHAIN_CONFIGS = Path(__file__).parent.parent / "configs" / "mechs.json"
@@ -100,13 +101,14 @@ def validate_amount(amount: str, name: str = "Amount") -> int:
     """
     try:
         amount_int = int(amount)
-        if amount_int <= 0:
+        if not 0 < amount_int <= UINT256_MAX:
             raise ValueError
         return amount_int
     except (ValueError, TypeError) as e:
         raise ClickException(
             f"Invalid {name}: {amount!r}\n\n"
-            f"{name} must be a positive integer.\n\n"
+            f"{name} must be a positive integer no larger than a contract can "
+            f"carry (2**256 - 1).\n\n"
             f"Example: 1000000000000000000 (1 token with 18 decimals)"
         ) from e
 

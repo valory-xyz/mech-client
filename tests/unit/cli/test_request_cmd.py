@@ -19,13 +19,21 @@
 
 """Tests for request command."""
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from mech_client.infrastructure.config import IPFS_URL_TEMPLATE
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from mech_client.cli.commands.request_cmd import request
-from mech_client.domain.delivery import DeliveryResult
+from mech_client.domain.delivery import (
+    FAULT_CLIENT,
+    FAULT_MECH,
+    DeliveryResult,
+    RunFailure,
+)
 
 
 class TestRequestCommand:
@@ -1074,3 +1082,253 @@ class TestRequestEdgeCases:
 
             # Should handle long prompts
             assert result.exit_code == 0
+
+
+def _invoke_with_result(result: dict, *extra_args: str) -> Result:
+    """Run ``mechx request`` with the service answering ``result``.
+
+    :param result: what the mocked ``send_request`` returns
+    :param extra_args: options appended to a minimal offchain invocation
+    :return: the click result, with the service mock on ``.service``
+    """
+    service = MagicMock()
+    service.send_request = AsyncMock(return_value=result)
+    with (
+        patch("mech_client.cli.commands.request_cmd.setup_wallet_command"),
+        patch("mech_client.cli.commands.request_cmd.MarketplaceService", return_value=service),
+    ):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("key.txt", "w") as f:
+                f.write("dummy_key")
+            invoked = runner.invoke(
+                request,
+                ["--prompts", "p", "--tools", "t", "--chain-config", "gnosis", "--key", "key.txt", *extra_args],
+            )
+    invoked.service = service  # type: ignore[attr-defined]
+    return invoked
+
+
+OFFCHAIN_RESULT = {"tx_hash": None, "request_ids": ["0xabc"], "receipt": None}
+
+
+class TestRequestCommandCharge:
+    """The charge a mech reports is printed under its delivery."""
+
+    def test_a_reported_charge_is_printed(self) -> None:
+        """A delivery carrying a charge prints it after the answer."""
+        deliveries = {"0xabc": DeliveryResult("0xabc", data="answer", actual_delivery_rate=120)}
+
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": deliveries}, "--use-offchain", "true")
+
+        assert invoked.exit_code == 0, invoked.output
+        assert "Request 0xabc: answer" in invoked.output
+        assert "Reported charge: 120" in invoked.output
+        assert "settles it on-chain later" in invoked.output
+
+    def test_no_charge_line_when_the_mech_reported_none(self) -> None:
+        """A delivery without a charge prints no charge line rather than a placeholder."""
+        deliveries = {"0xabc": DeliveryResult("0xabc", data="answer")}
+
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": deliveries}, "--use-offchain", "true")
+
+        assert invoked.exit_code == 0, invoked.output
+        assert "Reported charge" not in invoked.output
+
+
+
+class TestRequestCommandMaxCost:
+    """``--max-cost`` is validated like a deposit amount and reaches the service in base units."""
+
+    def test_omitted_means_the_service_derives_the_cap(self) -> None:
+        """Without the option the service gets no cap and picks the default."""
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true")
+
+        assert invoked.exit_code == 0, invoked.output
+        assert invoked.service.send_request.call_args.kwargs["max_cost"] is None
+
+    def test_an_amount_is_passed_through_as_an_integer(self) -> None:
+        """The amount is base units, so it is parsed as an integer and not scaled."""
+        invoked = _invoke_with_result(
+            {**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true", "--max-cost", "24000000000000000"
+        )
+
+        assert invoked.exit_code == 0, invoked.output
+        assert invoked.service.send_request.call_args.kwargs["max_cost"] == 24_000_000_000_000_000
+
+    @pytest.mark.parametrize("value", ["0", "-5", "0.01", "1e16", "abc", "", str(2**256)])
+    def test_anything_but_a_positive_integer_is_refused_before_the_request(self, value: str) -> None:
+        """A fraction, a sign, an exponent, text or a value wider than a uint256 is not an amount in base units."""
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true", "--max-cost", value)
+
+        assert invoked.exit_code == 1, invoked.output
+        assert "max-cost" in invoked.output
+        invoked.service.send_request.assert_not_called()
+
+
+DEADLINE_SECONDS = 1_200
+
+
+class TestRequestCommandDeadlineSeconds:
+    """``--deadline-seconds`` reaches the service, and only as a positive count."""
+
+    def test_a_chosen_deadline_is_passed_through(self) -> None:
+        """The value given is the one the service signs with."""
+        invoked = _invoke_with_result(
+            {**OFFCHAIN_RESULT, "deliveries": {}},
+            "--use-offchain", "true", "--deadline-seconds", str(DEADLINE_SECONDS),
+        )
+
+        assert invoked.exit_code == 0, invoked.output
+        assert invoked.service.send_request.call_args.kwargs["deadline_seconds"] == DEADLINE_SECONDS
+
+    @pytest.mark.parametrize("value", ["0", "-1", "soon"])
+    def test_a_deadline_that_is_not_positive_is_a_usage_error(self, value: str) -> None:
+        """A deadline already in the past, or not a number, is refused before anything runs."""
+        invoked = _invoke_with_result(
+            {**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true", "--deadline-seconds", value
+        )
+
+        assert invoked.exit_code == 2
+        assert "Invalid value for '--deadline-seconds'" in invoked.output
+        invoked.service.send_request.assert_not_called()
+
+
+class TestRequestCommandNonceMode:
+    """``--nonce-mode`` reaches the service, and defaults to explicit."""
+
+    def test_defaults_to_explicit(self) -> None:
+        """Without the option the service is asked for an explicit-nonce request."""
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true")
+
+        assert invoked.exit_code == 0, invoked.output
+        assert invoked.service.send_request.call_args.kwargs["nonce_mode"] == "explicit"
+
+    def test_sequential_is_passed_through(self) -> None:
+        """``--nonce-mode sequential`` is passed to the service as given."""
+        invoked = _invoke_with_result(
+            {**OFFCHAIN_RESULT, "deliveries": {}}, "--use-offchain", "true", "--nonce-mode", "sequential"
+        )
+
+        assert invoked.exit_code == 0, invoked.output
+        assert invoked.service.send_request.call_args.kwargs["nonce_mode"] == "sequential"
+
+    def test_an_unknown_mode_is_a_usage_error(self) -> None:
+        """Click rejects a mode the service does not define before anything runs."""
+        invoked = _invoke_with_result({**OFFCHAIN_RESULT, "deliveries": {}}, "--nonce-mode", "random")
+
+        assert invoked.exit_code == 2
+        assert "Invalid value for '--nonce-mode'" in invoked.output
+        invoked.service.send_request.assert_not_called()
+
+
+FAILED_ERROR = "ValueError: Tool nope is not supported."
+
+
+def _invoke_with_deliveries(
+    mock_setup_wallet: MagicMock,
+    mock_marketplace_service: MagicMock,
+    deliveries: dict,
+) -> Result:
+    """Run ``mechx request`` offchain with the service returning ``deliveries``."""
+    mock_setup_wallet.return_value = MagicMock(agent_mode=False)
+    mock_service = MagicMock()
+    mock_service.send_request = AsyncMock(
+        return_value={"tx_hash": None, "request_ids": ["0xabc"], "deliveries": deliveries}
+    )
+    mock_marketplace_service.return_value = mock_service
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        with open("key.txt", "w") as f:
+            f.write("dummy_key")
+        return runner.invoke(
+            request,
+            [
+                "--prompts", "q", "--tools", "t", "--chain-config", "gnosis",
+                "--key", "key.txt", "--use-offchain", "true",
+            ],
+        )
+
+
+class TestRequestCommandFailedRuns:
+    """A failed run prints the mech's error, who caused it and the charge."""
+
+    @pytest.mark.parametrize(
+        ("fault", "charge", "expected"),
+        [
+            (FAULT_CLIENT, 10**16, ["Fault: client", "full signed cap", "Charged: 10000000000000000"]),
+            (FAULT_MECH, 1, ["Fault: mech (the mech could not complete the run)", "Charged: 1 "]),
+            (None, None, ["Fault: not reported", "Charged: not reported"]),
+        ],
+    )
+    @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
+    @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    def test_failed_run_output(
+        self,
+        mock_setup_wallet: MagicMock,
+        mock_marketplace_service: MagicMock,
+        fault: Any,
+        charge: Any,
+        expected: list,
+    ) -> None:
+        """The failure lines replace the answer and the generic charge line."""
+        delivery = DeliveryResult(
+            "0xabc",
+            data={"status": "failed", "error": FAILED_ERROR},
+            actual_delivery_rate=charge,
+            failure=RunFailure(error=FAILED_ERROR, fault=fault),
+        )
+        result = _invoke_with_deliveries(
+            mock_setup_wallet, mock_marketplace_service, {"0xabc": delivery}
+        )
+
+        assert result.exit_code == 1, result.output
+        assert "Failed runs" in result.output
+        assert "Delivery results" not in result.output
+        assert f"Request 0xabc failed: {FAILED_ERROR}" in result.output
+        for text in expected:
+            assert text in result.output
+        assert "fixed amount" not in result.output
+        assert "Reported charge" not in result.output
+        assert "Unexpected error" not in result.output
+
+    @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
+    @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    def test_one_failed_run_in_a_batch_fails_the_command(
+        self, mock_setup_wallet: MagicMock, mock_marketplace_service: MagicMock
+    ) -> None:
+        """The answered run is listed as delivered, the failed one apart, and the exit code says so."""
+        deliveries = {
+            "0xaaa": DeliveryResult("0xaaa", data={"result": "yes"}, actual_delivery_rate=5),
+            "0xbbb": DeliveryResult(
+                "0xbbb",
+                data={"status": "failed", "error": FAILED_ERROR},
+                actual_delivery_rate=7,
+                failure=RunFailure(error=FAILED_ERROR, fault=FAULT_CLIENT),
+            ),
+        }
+        result = _invoke_with_deliveries(mock_setup_wallet, mock_marketplace_service, deliveries)
+
+        assert result.exit_code == 1, result.output
+        delivered, failed = result.output.split("Failed runs", 1)
+        assert "Request 0xaaa: yes" in delivered
+        assert "0xbbb" not in delivered
+        assert f"Request 0xbbb failed: {FAILED_ERROR}" in failed
+        assert "Error: 1 of 2 request(s) failed; see the failed runs above." in failed
+        assert "Unexpected error" not in result.output
+
+    @patch("mech_client.cli.commands.request_cmd.MarketplaceService")
+    @patch("mech_client.cli.commands.request_cmd.setup_wallet_command")
+    def test_a_successful_run_prints_no_failure(
+        self, mock_setup_wallet: MagicMock, mock_marketplace_service: MagicMock
+    ) -> None:
+        """An answer with a charge prints as before."""
+        delivery = DeliveryResult("0xabc", data={"result": "yes"}, actual_delivery_rate=5)
+        result = _invoke_with_deliveries(
+            mock_setup_wallet, mock_marketplace_service, {"0xabc": delivery}
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Request 0xabc: yes" in result.output
+        assert "Reported charge: 5" in result.output
+        assert "failed" not in result.output

@@ -128,3 +128,6 @@ METADATA_FIELD_DELIVERIES = "totalDeliveries"
 EVENT_DELIVER = "Deliver"
 EVENT_REQUEST = "Request"
 EVENT_DEPOSIT = "Deposit"
+
+# The largest amount a contract can carry: every rate, cap and deposit is a uint256.
+UINT256_MAX = 2**256 - 1

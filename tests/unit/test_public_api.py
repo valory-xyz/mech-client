@@ -20,7 +20,8 @@
 """Tests for the names mech_client exports for off-chain payers."""
 
 import mech_client
-from mech_client.domain.delivery import chat
+from mech_client.domain import operator
+from mech_client.domain.delivery import chat, models as delivery_models
 from mech_client.domain.payment import addresses
 from mech_client.domain.request_id import request_digest
 from mech_client.domain.tools import manager, models
@@ -52,6 +53,12 @@ def test_the_off_chain_payer_api_is_exported() -> None:
         "ChatReport": chat.ChatReport,
         "chat_report": chat.chat_report,
         "is_chat_prompt": chat.is_chat_prompt,
+        "DeliveryResult": delivery_models.DeliveryResult,
+        "RunFailure": delivery_models.RunFailure,
+        "FAULT_CLIENT": delivery_models.FAULT_CLIENT,
+        "FAULT_MECH": delivery_models.FAULT_MECH,
+        "NonceMode": marketplace_service.NonceMode,
+        "read_expected_costs": operator.read_expected_costs,
     }
     for name, value in expected.items():
         assert name in mech_client.__all__

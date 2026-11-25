@@ -22,12 +22,15 @@
 import functools
 import inspect
 import logging
+import secrets
 from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
     Dict,
+    FrozenSet,
     List,
+    Literal,
     NamedTuple,
     Optional,
     Sequence,
@@ -35,6 +38,7 @@ from typing import (
     TypedDict,
     Union,
     cast,
+    get_args,
 )
 
 import requests
@@ -45,11 +49,13 @@ from mech_client.domain.delivery import (
     OffchainDeliveryWatcher,
     OnchainDeliveryWatcher,
 )
+from mech_client.domain.operator import read_expected_costs
 from mech_client.domain.payment import PaymentStrategyFactory
 from mech_client.domain.payment.addresses import DEPOSIT_PAYMENT_TYPES
-from mech_client.domain.request_id import request_digest
+from mech_client.domain.request_id import explicit_request_digest, request_digest
 from mech_client.domain.signing import Signer
 from mech_client.domain.tools import ToolManager
+from mech_client.domain.tools.manager import payment_asset
 from mech_client.infrastructure.blockchain.abi_loader import get_abi
 from mech_client.infrastructure.blockchain.contracts import get_contract
 from mech_client.infrastructure.blockchain.receipt_waiter import (
@@ -59,6 +65,7 @@ from mech_client.infrastructure.blockchain.receipt_waiter import (
 from mech_client.infrastructure.config import PaymentType
 from mech_client.infrastructure.ipfs import IPFSClient, push_metadata_to_ipfs
 from mech_client.services.base_service import BaseTransactionService
+from mech_client.utils.constants import UINT256_MAX
 from mech_client.utils.errors.exceptions import RpcError
 from mech_client.utils.redaction import redacted, redacted_cause
 from mech_client.utils.validators import ensure_checksummed_address
@@ -72,8 +79,15 @@ logger = logging.getLogger(__name__)
 # HTTP status the offchain mech returns when the requester's prepaid balance is
 # insufficient (structured 402 challenge, see mech task_execution handlers).
 HTTP_PAYMENT_REQUIRED = 402
+# HTTP status and verbatim ``reason`` a mech sends when the signed cap is below
+# the least it charges for a run; the body carries that least as
+# ``minimum_cap``. A deposit cannot fix it, only a higher cap can.
+HTTP_BAD_REQUEST = 400
+MINIMUM_CAP_REASON = "signed cap below the mech's minimum charge"
 # The mech's answers to a stale or duplicate nonce (401, with a reason), to a
 # nonce gap (503), and the client-error range the rest of its refusals fall in.
+# A 503 with ``EXPLICIT_NONCE_DISABLED_REASON`` is the one an explicit-nonce
+# request is resent sequentially for.
 HTTP_UNAUTHORIZED = 401
 HTTP_SERVICE_UNAVAILABLE = 503
 HTTP_CLIENT_ERRORS = range(400, 500)
@@ -82,6 +96,31 @@ HTTP_CLIENT_ERRORS = range(400, 500)
 RESPONSE_TIMEOUT_SECONDS = 300
 # Outbound HTTP timeout (seconds) for the offchain request POST.
 OFFCHAIN_HTTP_TIMEOUT = 30
+
+# How an offchain request is numbered, ``explicit`` or ``sequential``; see
+# "Offchain Requests" in the docs.
+NonceMode = Literal["explicit", "sequential"]
+NONCE_MODE_EXPLICIT: NonceMode = "explicit"
+NONCE_MODE_SEQUENTIAL: NonceMode = "sequential"
+# Verbatim ``reason`` a mech sends with its 503 when explicit-nonce requests
+# are not enabled on it.
+EXPLICIT_NONCE_DISABLED_REASON = "explicit-nonce requests are not enabled on this mech"
+# How long, from the latest block, an explicit-nonce authorisation stays
+# settleable. The marketplace reverts a settlement past the signed deadline, so
+# the window must cover the mech's execution and settlement, not only the
+# answer; a mech refuses a request whose deadline is closer than its own floor.
+EXPLICIT_NONCE_DEADLINE_SECONDS = 15 * 60
+# The longest settlement window accepted: added to any block timestamp
+# (which fits in 64 bits) it still fits the signed uint256 deadline.
+MAX_DEADLINE_SECONDS = UINT256_MAX - 2**64
+# Width of a requester-chosen nonce: random, so ids do not depend on ``mapNonces``.
+EXPLICIT_NONCE_BITS = 256
+# Without a chosen cap, an off-chain request signs this multiple of the
+# expected cost the mech publishes for the tool.
+DEFAULT_CAP_FACTOR = 2
+# A cap derived from the manifest above this many times the mech's advertised
+# maximum is refused unless the requester passes their own.
+MAX_DERIVED_CAP_FACTOR = 10
 # Hard cap on auto-deposit: refuse to top up more than this multiple of the
 # requester's signed ``max_delivery_rate`` in a single retry. The mech URL is
 # auto-discovered from on-chain metadata, so without a cap a compromised or
@@ -136,6 +175,46 @@ def _derivation_failed(
     if isinstance(e, _RPC_TRANSPORT_ERRORS):
         return RequestIdRpcError(message)
     return ValueError(message)
+
+
+# Request fields the metadata builders set; an extra attribute may not replace
+# them. ``nonce`` is not one: it is the metadata salt, which a caller may pin
+# so a resend signs the same request id.
+RESERVED_REQUEST_KEYS: FrozenSet[str] = frozenset({"prompt", "tool"})
+
+
+def validate_request_shape(
+    prompts: Tuple[str, ...],
+    tools: Tuple[str, ...],
+    extra_attributes: Optional[Dict[str, Any]],
+) -> None:
+    """
+    Refuse a request every mech would fail, before anything is read or sent.
+
+    A mech charges the full signed cap for a run that fails because of the
+    request, so these are checked locally. An empty prompt is allowed: a tool
+    may read its inputs from extra attributes. Only the arguments are read; the
+    tool list is checked against the mech's already fetched manifest by
+    ``MarketplaceService._validate_tools``.
+
+    :param prompts: The prompt of each request
+    :param tools: The tool of each request
+    :param extra_attributes: Extra attributes merged into each request
+    :raises ValueError: If a prompt is not a string, a tool is empty, or an extra attribute
+        replaces a field the request sets itself
+    """
+    for index, prompt in enumerate(prompts):
+        if not isinstance(prompt, str):
+            raise ValueError(f"Prompt {index + 1} is not a string")
+    for index, tool in enumerate(tools):
+        if not isinstance(tool, str) or not tool.strip():
+            raise ValueError(f"Tool {index + 1} is empty")
+    clobbered = sorted((extra_attributes or {}).keys() & RESERVED_REQUEST_KEYS)
+    if clobbered:
+        raise ValueError(
+            f"Extra attributes may not set {', '.join(clobbered)}; the request "
+            f"sets these itself"
+        )
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -494,7 +573,13 @@ class PaymentChallenge:
 
     @property
     def shortfall(self) -> int:
-        """The deficit the requester needs to top up. Never negative."""
+        """The deficit the requester needs to top up. Never negative.
+
+        ``current_balance`` is net of in-flight reservations and may be
+        negative, which raises the deficit above ``required``.
+
+        :return: ``required`` less ``current_balance``, floored at zero.
+        """
         return max(0, self.required - self.current_balance)
 
 
@@ -579,12 +664,24 @@ class MarketplaceService(
         auto_deposit: bool = False,
         extra_attributes: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
+        nonce_mode: Optional[NonceMode] = None,
+        deadline_seconds: int = EXPLICIT_NONCE_DEADLINE_SECONDS,
+        max_cost: Optional[int] = None,
         nonces: Optional[Sequence[int]] = None,
         on_request_id: Optional[Callable[[bytes, int], None]] = None,
         max_price: Optional[int] = None,
     ) -> RequestResult:
         """
         Send marketplace request(s) to mech(s).
+
+        Off-chain, the requester sets the cap signed into each request and the
+        mech charges its actual cost at delivery, at or below it; what it does
+        not charge stays in the requester's balance. The cap is ``max_cost``
+        when given, else :data:`DEFAULT_CAP_FACTOR` times the expected cost the
+        mech's manifest publishes for the tool, else the mech's advertised
+        ``maxDeliveryRate``. On-chain the marketplace records the advertised
+        ``maxDeliveryRate`` as the charge, so that is what is signed, and a
+        ``max_cost`` below it refuses the request before anything is sent.
 
         :param prompts: Tuple of prompt strings
         :param tools: Tuple of tool identifiers
@@ -597,13 +694,27 @@ class MarketplaceService(
             ``extra_attributes["nonce"]`` replaces the random metadata salt,
             so the same inputs sign the same request id.
         :param timeout: Timeout for delivery watching
+        :param nonce_mode: ``explicit`` or ``sequential``, see :data:`NonceMode`.
+            None picks ``sequential`` when ``nonces`` is given, else
+            ``explicit``. ``nonces`` are marketplace counter values, so
+            ``explicit`` with ``nonces`` is refused. On-chain requests take
+            their nonce from the marketplace and ignore this.
+        :param deadline_seconds: How long from the latest block an explicit
+            request stays settleable, see :data:`EXPLICIT_NONCE_DEADLINE_SECONDS`.
+            Sequential and on-chain requests ignore this.
+        :param max_cost: The most to pay per request, in base units of the
+            mech's payment asset. Off-chain it is the signed cap; on-chain
+            the advertised charge must be at or below it.
         :param nonces: Offchain only: the marketplace nonce for each prompt,
             instead of ``mapNonces(sender) + i``. Integers, strictly
-            increasing, none below ``mapNonces(sender)``.
+            increasing, none below ``mapNonces(sender)``. Sequential only.
         :param on_request_id: Offchain only, synchronous: called with each raw
             32-byte request id and its nonce just before the request is
-            signed, once the id derived locally from ``domainSeparator()``
-            has been checked against ``getRequestId``. If it raises, that
+            signed. A sequential id is first derived locally from
+            ``domainSeparator()`` and checked against ``getRequestId``; an
+            explicit id is read from ``getRequestIdWithNonce``. An explicit
+            request resent sequentially calls it again with the new id and
+            nonce. If it raises, that
             request and the rest of the call are neither signed nor sent;
             earlier ones were already sent.
         :param max_price: The most the requests may cost, in the payment
@@ -619,9 +730,10 @@ class MarketplaceService(
             (both ``None`` on the offchain path, which has no transaction),
             ``request_ids``, and ``deliveries`` mapping each request ID to a
             :class:`DeliveryResult` carrying the parsed content the mech
-            delivered plus the gateway URL it was read from. ``deliveries``
-            has the same shape regardless of whether delivery was on-chain
-            or offchain. The offchain result also lists the ``nonces`` used.
+            delivered, the gateway URL it was read from and, for offchain
+            delivery, what the mech charged. ``deliveries`` has the same shape
+            regardless of whether delivery was on-chain or offchain. The
+            offchain result also lists the ``nonces`` used.
             A mech's HTTP error raises :class:`OffchainRequestRejected`, a
             failed auto top-up after its 402 :class:`OffchainTopUpFailed`, a
             price above ``max_price`` :class:`MechPriceExceeded`, and an RPC
@@ -634,6 +746,34 @@ class MarketplaceService(
         if len(prompts) != len(tools):
             raise ValueError(
                 f"Number of prompts ({len(prompts)}) must match number of tools ({len(tools)})"
+            )
+        validate_request_shape(prompts, tools, extra_attributes)
+        if nonce_mode is None:
+            nonce_mode = (
+                NONCE_MODE_SEQUENTIAL if nonces is not None else NONCE_MODE_EXPLICIT
+            )
+        if nonce_mode not in get_args(NonceMode):
+            raise ValueError(
+                f"Unknown nonce_mode {nonce_mode!r}; expected one of {get_args(NonceMode)}"
+            )
+        if nonces is not None and nonce_mode != NONCE_MODE_SEQUENTIAL:
+            raise ValueError(
+                "nonces are marketplace counter values and need "
+                f"nonce_mode={NONCE_MODE_SEQUENTIAL!r}"
+            )
+        if (
+            not isinstance(deadline_seconds, int)
+            or isinstance(deadline_seconds, bool)
+            or not 0 < deadline_seconds <= MAX_DEADLINE_SECONDS
+        ):
+            raise ValueError(
+                f"deadline_seconds must be a whole number of seconds from 1 to "
+                f"{MAX_DEADLINE_SECONDS}, got {deadline_seconds!r}"
+            )
+        if max_cost is not None and not 0 < max_cost <= UINT256_MAX:
+            raise ValueError(
+                f"max_cost must be a positive amount no larger than a contract "
+                f"can carry (2**256 - 1), got {max_cost}"
             )
         if not use_offchain and (nonces is not None or on_request_id is not None):
             raise ValueError("nonces and on_request_id apply only to offchain requests")
@@ -658,8 +798,22 @@ class MarketplaceService(
         if not priority_mech_address:
             raise ValueError("No priority mech address specified")
         info = self.mech_info(priority_mech_address)
-        _, service_id, payment_type, max_delivery_rate = info
-        # the mech contract's own rate, not mechs.json's chain-wide default price
+        _, service_id, payment_type, advertised_max = info
+
+        # One metadata read per request: the tool check, the terms notice, the
+        # expected costs and the offchain URL lookup all derive from this document.
+        read = self.tool_manager.read_tools_metadata(service_id)
+        metadata = read.document
+        self._validate_tools(tools, service_id, metadata)
+        max_delivery_rate = self._resolve_signed_rate(
+            tools=tools,
+            metadata=metadata,
+            payment_type=payment_type,
+            advertised_max=advertised_max,
+            max_cost=max_cost,
+            use_offchain=use_offchain,
+        )
+        # the rate signed into each request, which bounds what the mech can charge
         price = max_delivery_rate * len(prompts)
         if max_price is not None and price > max_price:
             raise MechPriceExceeded(
@@ -669,12 +823,6 @@ class MarketplaceService(
                 price=price,
                 max_price=max_price,
             )
-
-        # One metadata read per request: the tool check, the terms notice and
-        # the offchain URL lookup all derive from this document.
-        read = self.tool_manager.read_tools_metadata(service_id)
-        metadata = read.document
-        self._validate_tools(tools, service_id, metadata)
 
         response_timeout = RESPONSE_TIMEOUT_SECONDS
 
@@ -699,9 +847,12 @@ class MarketplaceService(
                 extra_attributes=extra_attributes,
                 timeout=timeout or 300.0,
                 auto_deposit=auto_deposit,
+                nonce_mode=nonce_mode,
+                deadline_seconds=deadline_seconds,
                 nonces=nonces,
                 on_request_id=on_request_id,
                 max_price=max_price,
+                fallback_rate=advertised_max if max_cost is None else None,
             )
 
         # On-chain flow
@@ -810,7 +961,97 @@ class MarketplaceService(
             "receipt": receipt,
         }
 
-    async def _send_offchain_request(  # pylint: disable=too-many-arguments,too-many-locals,unused-argument
+    def _resolve_signed_rate(  # pylint: disable=too-many-arguments
+        self,
+        tools: Tuple[str, ...],
+        metadata: Any,
+        payment_type: PaymentType,
+        advertised_max: int,
+        max_cost: Optional[int],
+        use_offchain: bool,
+    ) -> int:
+        """
+        Pick the per-request rate signed into this batch.
+
+        On-chain the marketplace records the mech's advertised maximum as the
+        charge and refuses a lower one, so the advertised maximum is signed
+        and a lower ``max_cost`` stops the request here. Off-chain the signed
+        value is a cap the mech charges at or below: ``max_cost`` when given,
+        else, for each tool, :data:`DEFAULT_CAP_FACTOR` times the expected cost
+        the manifest publishes in the mech's payment asset, falling back to
+        the advertised maximum for a tool without one. One batch signs one
+        rate, the largest of its tools', so every request in it is covered.
+        An unreadable manifest signs the advertised maximum with one warning.
+        A derived cap above :data:`CAP_WARNING_FACTOR` times the advertised
+        maximum is signed with a warning, since the manifest is the operator's
+        and the cap also sets the auto-deposit ceiling.
+
+        :param tools: The tool of each request in the batch
+        :param metadata: The mech's manifest document, or None if unreadable
+        :param payment_type: The mech's payment type
+        :param advertised_max: The mech's on-chain ``maxDeliveryRate``
+        :param max_cost: The requester's own cap, or None to derive one
+        :param use_offchain: Whether the batch goes to the mech's HTTP endpoint
+        :return: The rate to sign into every request of the batch
+        :raises ValueError: If an on-chain request's charge is above ``max_cost``
+        """
+        if not use_offchain:
+            if max_cost is not None and advertised_max > max_cost:
+                raise ValueError(
+                    f"The mech charges {advertised_max} per on-chain request, "
+                    f"above the {max_cost} allowed. On-chain requests pay the "
+                    f"mech's advertised maxDeliveryRate; raise max_cost or send "
+                    f"the request off-chain, where the cap is yours."
+                )
+            return advertised_max
+        if max_cost is not None:
+            logger.info(f"Signing your cap of {max_cost} per request")
+            return max_cost
+
+        if not isinstance(metadata, dict):
+            logger.warning(
+                f"The mech's manifest could not be read, so no expected cost is "
+                f"known; its advertised maximum of {advertised_max} is signed as "
+                f"the cap. Pass max_cost to choose your own."
+            )
+            return advertised_max
+
+        asset = payment_asset(payment_type)
+        published = read_expected_costs(metadata)
+        caps: Dict[str, int] = {}
+        for tool in dict.fromkeys(tools):
+            cost = published.get(tool)
+            if cost is not None and cost.asset != asset:
+                logger.warning(
+                    f"The expected cost of {tool} is stated in {cost.asset}, "
+                    f"not the mech's payment asset {asset}; it is ignored."
+                )
+                cost = None
+            if cost is None:
+                logger.warning(
+                    f"The mech publishes no usable expected cost for {tool}; its "
+                    f"advertised maximum of {advertised_max} is signed as the "
+                    f"cap for it. Pass max_cost to choose your own."
+                )
+                caps[tool] = advertised_max
+                continue
+            caps[tool] = min(DEFAULT_CAP_FACTOR * cost.amount, UINT256_MAX)
+            logger.info(
+                f"Signing a cap of {caps[tool]} per {tool} request, "
+                f"{DEFAULT_CAP_FACTOR}x the expected cost of {cost.amount} "
+                f"{asset} the mech publishes"
+            )
+        cap = max(caps.values())
+        if cap > MAX_DERIVED_CAP_FACTOR * advertised_max:
+            raise ValueError(
+                f"The cap of {cap} derived from the mech's manifest is more than "
+                f"{MAX_DERIVED_CAP_FACTOR}x its advertised maximum of "
+                f"{advertised_max}, so it is not signed without your say. Pass "
+                f"--max-cost (max_cost) with the most you will pay per request."
+            )
+        return cap
+
+    async def _send_offchain_request(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements,too-many-branches,unused-argument
         self,
         marketplace_contract: Web3Contract,
         prompts: Tuple[str, ...],
@@ -823,69 +1064,79 @@ class MarketplaceService(
         extra_attributes: Optional[Dict[str, Any]],
         timeout: float,
         auto_deposit: bool = False,
+        nonce_mode: NonceMode = NONCE_MODE_EXPLICIT,
+        deadline_seconds: int = EXPLICIT_NONCE_DEADLINE_SECONDS,
         nonces: Optional[Sequence[int]] = None,
         on_request_id: Optional[Callable[[bytes, int], None]] = None,
         max_price: Optional[int] = None,
+        fallback_rate: Optional[int] = None,
     ) -> OffchainRequestResult:
         """
         Send offchain request to mech HTTP endpoint.
+
+        ``max_delivery_rate`` is the requester's cap, signed into every
+        request; the mech charges at or below it and reports the charge with
+        the delivery.
 
         :param marketplace_contract: Marketplace contract instance
         :param prompts: Tuple of prompt strings
         :param tools: Tuple of tool identifiers
         :param priority_mech_address: Mech address
-        :param max_delivery_rate: Max delivery rate from mech
+        :param max_delivery_rate: The per-request cap, see ``_resolve_signed_rate``
         :param payment_type: Payment type
         :param response_timeout: Response timeout in seconds
         :param mech_offchain_url: Base URL of offchain mech
         :param extra_attributes: Extra attributes for metadata
         :param timeout: Delivery watching timeout
         :param auto_deposit: On a 402, deposit the shortfall and retry once
-        :param nonces: Marketplace nonce per prompt (see ``send_request``)
+        :param nonce_mode: ``explicit`` or ``sequential``, see :data:`NonceMode`.
+        :param deadline_seconds: Settlement window of an explicit request, from
+            the latest block.
+        :param nonces: Marketplace nonce per prompt (see ``send_request``);
+            sequential only
         :param on_request_id: Pre-sign hook (see ``send_request``)
         :param max_price: The most the call's auto-deposits may move together
             (see ``send_request``)
+        :param fallback_rate: The Mech's advertised maximum when the cap was
+            derived rather than passed as ``max_cost``. A Mech that turns away
+            explicit nonces has pricing off and charges the full signed cap,
+            so the sequential resend signs the lower of the two.
         :return: Dictionary with request results
         """
         logger.info("Sending offchain mech marketplace request...")
 
         # In agent mode the requester of record is the Safe (msg.sender on
         # the on-chain path, ``mapNonces`` key, and requester bound into
-        # ``getRequestId``); in client mode it is the EOA. The signature is
+        # the request id); in client mode it is the EOA. The signature is
         # verified against this address downstream (Safe.isValidSignature
         # for the Safe branch, plain ecrecover for the EOA branch).
         sender = self.requester()
-        first_nonce = next(iter(nonces or []), None)
         hook = on_request_id if isinstance(on_request_id, PreSignHook) else None
         deposit_budget = _DepositBudget(
             max_price, deposited=hook.deposited if hook else 0, hook=hook
         )
-        try:
-            current_nonce = marketplace_contract.functions.mapNonces(sender).call()
-        except (OSError, ValueError, Web3Exception) as e:
-            raise _derivation_failed(e, first_nonce) from e
-        if nonces is None:
-            request_nonces = [current_nonce + i for i in range(len(prompts))]
-        else:
-            request_nonces = list(nonces)
-            stale = [n for n in request_nonces if n < current_nonce]
-            if stale:
-                raise ValueError(
-                    f"Nonce(s) {stale} are below the requester's marketplace "
-                    f"nonce {current_nonce} and can never settle."
-                )
-
-        # The signed id is derived locally, so a lying RPC can only cause a
-        # mismatch; getRequestId is a cross-check.
-        try:
-            domain_separator = bytes(
-                marketplace_contract.functions.domainSeparator().call()
-            )
-        except (OSError, ValueError, Web3Exception) as e:
-            raise _derivation_failed(e, next(iter(request_nonces), None)) from e
-        marketplace_address = str(marketplace_contract.address)
         mech_address = ensure_checksummed_address(priority_mech_address)
-        payment_type_bytes = bytes.fromhex(payment_type.value)
+        url = f"{mech_offchain_url.rstrip('/')}/send_signed_requests"
+
+        # Sequential nonces count up from ``mapNonces`` (or are the caller's);
+        # explicit ones are drawn up front, with one deadline for the batch
+        # taken from chain time, since the marketplace compares it with
+        # ``block.timestamp``. Explicit requests leave ``mapNonces`` untouched
+        # and only read it if the mech turns them away.
+        deadline: Optional[int] = None
+        if nonce_mode == NONCE_MODE_SEQUENTIAL:
+            request_nonces = self._sequential_nonces(
+                marketplace_contract, sender, len(prompts), nonces
+            )
+        else:
+            request_nonces = [
+                secrets.randbits(EXPLICIT_NONCE_BITS) for _ in range(len(prompts))
+            ]
+            deadline = self._explicit_deadline(marketplace_contract, deadline_seconds)
+        # read once, on the first sequential request
+        read_domain_separator = functools.cache(
+            lambda: bytes(marketplace_contract.functions.domainSeparator().call())
+        )
 
         # Prepare and send each request
         request_ids_hex: List[str] = []
@@ -897,120 +1148,156 @@ class MarketplaceService(
                 fetch_ipfs_hash,
             )
 
-            nonce = request_nonces[i]
-            try:
-                data_hash, data_hash_full, ipfs_data = fetch_ipfs_hash(
-                    prompt, tool, extra_attributes or {}
-                )
-                request_id_bytes = request_digest(
-                    domain_separator=domain_separator,
-                    marketplace=marketplace_address,
-                    mech=mech_address,
-                    requester=sender,
-                    data=bytes.fromhex(data_hash.removeprefix("0x")),
-                    delivery_rate=max_delivery_rate,
-                    payment_type=payment_type_bytes,
-                    nonce=nonce,
-                )
-                reported = bytes(
-                    marketplace_contract.functions.getRequestId(
-                        mech_address,
-                        sender,
-                        data_hash,
-                        max_delivery_rate,
-                        "0x" + payment_type.value,
-                        nonce,
-                    ).call()
-                )
-            except (OSError, ValueError, Web3Exception) as e:
-                raise _derivation_failed(
-                    e, nonce, _accepted_note(request_ids_hex, request_nonces)
-                ) from e
-            logger.info(
-                f"Prompt sent directly to the mech (not published to IPFS); "
-                f"content CID {data_hash_full}"
-            )
-            if reported != request_id_bytes:
-                raise RequestIdMismatch(
-                    f"The RPC's getRequestId answered {reported.hex()} for nonce "
-                    f"{nonce}, not the locally derived {request_id_bytes.hex()}; "
-                    f"nothing was signed or sent for it. Check the RPC "
-                    f"(MECHX_CHAIN_RPC or rpc_url)."
-                    + _accepted_note(request_ids_hex, request_nonces),
-                    expected=request_id_bytes.hex(),
-                    reported=reported.hex(),
-                    nonce=nonce,
-                )
-
-            request_id_int = int.from_bytes(request_id_bytes, byteorder="big")
-            request_id_hex = request_id_bytes.hex()
-
-            if on_request_id is not None:
-                returned = cast(Any, on_request_id)(request_id_bytes, nonce)
-                if inspect.isawaitable(returned):
-                    if inspect.iscoroutine(returned):
-                        returned.close()
-                    raise TypeError(
-                        "on_request_id must be synchronous; an awaitable would "
-                        "never run before the request is signed"
+            fetched: Optional[Tuple[str, str, str]] = None
+            # At most two rounds: the second only when an explicit request was
+            # turned away for its nonce, in which case the mech answers every
+            # explicit request that way and the rest of the batch goes
+            # sequential too. A refused request was never accepted, so
+            # nothing of it is in flight.
+            while True:
+                nonce = request_nonces[i]
+                try:
+                    if fetched is None:
+                        fetched = fetch_ipfs_hash(prompt, tool, extra_attributes or {})
+                        logger.info(
+                            f"Prompt sent directly to the mech (not published to "
+                            f"IPFS); content CID {fetched[1]}"
+                        )
+                    data_hash, _, ipfs_data = fetched
+                    request_id_bytes, reported = self._derive_request_id(
+                        marketplace_contract,
+                        nonce_mode=nonce_mode,
+                        read_domain_separator=read_domain_separator,
+                        mech_address=mech_address,
+                        sender=sender,
+                        data_hash=data_hash,
+                        rate=max_delivery_rate,
+                        payment_type=payment_type,
+                        nonce=nonce,
+                        deadline=deadline,
+                    )
+                except (OSError, ValueError, Web3Exception) as e:
+                    raise _derivation_failed(
+                        e, nonce, _accepted_note(request_ids_hex, request_nonces)
+                    ) from e
+                if reported != request_id_bytes:
+                    raise RequestIdMismatch(
+                        f"The RPC's request-id view answered {reported.hex()} for nonce "
+                        f"{nonce}, not the locally derived {request_id_bytes.hex()}; "
+                        f"nothing was signed or sent for it. Check the RPC "
+                        f"(MECHX_CHAIN_RPC or rpc_url)."
+                        + _accepted_note(request_ids_hex, request_nonces),
+                        expected=request_id_bytes.hex(),
+                        reported=reported.hex(),
+                        nonce=nonce,
                     )
 
-            # Signature encoding depends on how the marketplace verifies the
-            # requester: Safe.isValidSignature (agent mode) requires the
-            # SafeMessage-wrapped hash to be signed; plain ecrecover
-            # (client mode) requires the raw digest.
-            signature = self._sign_request_digest(sender, request_id_bytes)
+                request_id_int = int.from_bytes(request_id_bytes, byteorder="big")
+                request_id_hex = request_id_bytes.hex()
 
-            # Prepare payload
-            payload = {
-                "sender": sender,
-                "signature": signature,
-                "ipfs_hash": data_hash,
-                "request_id": request_id_int,
-                "delivery_rate": max_delivery_rate,
-                "nonce": nonce,
-                "ipfs_data": ipfs_data,
-            }
+                if on_request_id is not None:
+                    returned = cast(Any, on_request_id)(request_id_bytes, nonce)
+                    if inspect.isawaitable(returned):
+                        if inspect.iscoroutine(returned):
+                            returned.close()
+                        raise TypeError(
+                            "on_request_id must be synchronous; an awaitable would "
+                            "never run before the request is signed"
+                        )
 
-            # Send HTTP POST request (handles a structured 402 + receipt header)
-            url = f"{mech_offchain_url.rstrip('/')}/send_signed_requests"
-            if isinstance(on_request_id, PreSignHook):
-                on_request_id.mark_posting()  # from here the mech may hold it
-            try:
-                response = self._post_offchain_request(
-                    url,
-                    payload,
-                    payment_type,
-                    auto_deposit,
-                    max_delivery_rate,
-                    deposit_budget=deposit_budget,
+                # Signature encoding depends on how the marketplace verifies the
+                # requester: Safe.isValidSignature (agent mode) requires the
+                # SafeMessage-wrapped hash to be signed; plain ecrecover
+                # (client mode) requires the raw digest.
+                signature = self._sign_request_digest(sender, request_id_bytes)
+
+                # A sequential payload carries no ``nonce_mode`` and is the
+                # payload every mech has always accepted.
+                payload: Dict[str, Any] = {
+                    "sender": sender,
+                    "signature": signature,
+                    "ipfs_hash": data_hash,
+                    "request_id": request_id_int,
+                    "delivery_rate": max_delivery_rate,
+                    "nonce": nonce,
+                    "ipfs_data": ipfs_data,
+                }
+                if nonce_mode == NONCE_MODE_EXPLICIT:
+                    payload["nonce_mode"] = NONCE_MODE_EXPLICIT
+                    payload["deadline"] = deadline
+
+                # Send HTTP POST request (handles a structured 402 + receipt header)
+                if isinstance(on_request_id, PreSignHook):
+                    on_request_id.mark_posting()  # from here the mech may hold it
+                try:
+                    response = self._post_offchain_request(
+                        url,
+                        payload,
+                        payment_type,
+                        auto_deposit,
+                        max_delivery_rate,
+                        deposit_budget=deposit_budget,
+                    )
+                except _MechRefusal as e:
+                    raise self._rejection(
+                        e.response,
+                        request_id_hex,
+                        request_nonces,
+                        request_ids_hex,
+                        str(e),
+                        e.deposited,
+                    ) from e
+                except _TopUpFailure as e:
+                    raise OffchainTopUpFailed(
+                        str(e) + _accepted_note(request_ids_hex, request_nonces),
+                        request_id=request_id_hex,
+                        nonce=nonce,
+                        unsent=request_nonces[i + 1 :],
+                    ) from e
+                except requests.exceptions.RequestException as e:
+                    logger.warning(
+                        f"Offchain POST failed for nonce {nonce} "
+                        f"(request {request_id_hex}): {redacted_cause(e)}"
+                    )
+                    raise ValueError(
+                        f"Failed to send offchain request ({type(e).__name__}); "
+                        f"see the log or the chained cause."
+                        + _accepted_note(request_ids_hex, request_nonces)
+                    ) from e
+                if (
+                    nonce_mode == NONCE_MODE_SEQUENTIAL
+                    or not self._explicit_nonce_refused(response)
+                ):
+                    break
+                logger.warning(
+                    "The mech does not accept explicit nonces; resending "
+                    "with the marketplace's sequential nonce instead."
                 )
-            except _MechRefusal as e:
+                nonce_mode = NONCE_MODE_SEQUENTIAL
+                if fallback_rate is not None and fallback_rate < max_delivery_rate:
+                    logger.info(
+                        f"Signing the mech's advertised maximum of {fallback_rate} "
+                        f"instead of the derived cap of {max_delivery_rate}: a mech "
+                        f"without explicit nonces charges the full cap."
+                    )
+                    max_delivery_rate = fallback_rate
+                request_nonces[i:] = self._sequential_nonces(
+                    marketplace_contract,
+                    sender,
+                    len(prompts) - i,
+                    None,
+                    _accepted_note(request_ids_hex, request_nonces),
+                )
+
+            below_minimum = self._below_minimum_cap(response, max_delivery_rate)
+            if below_minimum is not None:
                 raise self._rejection(
-                    e.response,
+                    response,
                     request_id_hex,
                     request_nonces,
                     request_ids_hex,
-                    str(e),
-                    e.deposited,
-                ) from e
-            except _TopUpFailure as e:
-                raise OffchainTopUpFailed(
-                    str(e) + _accepted_note(request_ids_hex, request_nonces),
-                    request_id=request_id_hex,
-                    nonce=nonce,
-                    unsent=request_nonces[i + 1 :],
-                ) from e
-            except requests.exceptions.RequestException as e:
-                logger.warning(
-                    f"Offchain POST failed for nonce {nonce} "
-                    f"(request {request_id_hex}): {redacted_cause(e)}"
+                    below_minimum,
                 )
-                raise ValueError(
-                    f"Failed to send offchain request ({type(e).__name__}); "
-                    f"see the log or the chained cause."
-                    + _accepted_note(request_ids_hex, request_nonces)
-                ) from e
             if not response.ok:
                 raise self._rejection(
                     response, request_id_hex, request_nonces, request_ids_hex
@@ -1033,7 +1320,193 @@ class MarketplaceService(
         }
 
     @staticmethod
-    def _rejection(
+    def _sequential_nonces(
+        marketplace_contract: Web3Contract,
+        sender: str,
+        count: int,
+        nonces: Optional[Sequence[int]],
+        note: str = "",
+    ) -> List[int]:
+        """Pick the marketplace nonces for ``count`` sequential requests.
+
+        :param marketplace_contract: Marketplace contract instance
+        :param sender: Requester of record, the ``mapNonces`` key
+        :param count: How many requests need a nonce
+        :param nonces: The caller's own nonces, else ``mapNonces + i``
+        :param note: Appended to a derivation error, e.g. the requests
+            accepted earlier in the call
+        :return: One nonce per request
+        :raises ValueError: if ``mapNonces`` cannot be read, or a caller's
+            nonce is below it and can never settle
+        """
+        try:
+            current_nonce = marketplace_contract.functions.mapNonces(sender).call()
+        except (OSError, ValueError, Web3Exception) as e:
+            raise _derivation_failed(e, next(iter(nonces or []), None), note) from e
+        if nonces is None:
+            return [current_nonce + i for i in range(count)]
+        stale = [n for n in nonces if n < current_nonce]
+        if stale:
+            raise ValueError(
+                f"Nonce(s) {stale} are below the requester's marketplace "
+                f"nonce {current_nonce} and can never settle."
+            )
+        return list(nonces)
+
+    def _derive_request_id(  # pylint: disable=too-many-arguments
+        self,
+        marketplace_contract: Web3Contract,
+        *,
+        nonce_mode: NonceMode,
+        read_domain_separator: Callable[[], bytes],
+        mech_address: str,
+        sender: str,
+        data_hash: str,
+        rate: int,
+        payment_type: PaymentType,
+        nonce: int,
+        deadline: Optional[int],
+    ) -> Tuple[bytes, bytes]:
+        """Derive a request id locally and read the marketplace view's answer for it.
+
+        The signed id is the local one; the view is a cross-check, so a
+        disagreement can only refuse the request.
+
+        :param marketplace_contract: Marketplace contract instance
+        :param nonce_mode: ``explicit`` or ``sequential``
+        :param read_domain_separator: Returns the sequential path's ``domainSeparator()``
+        :param mech_address: The priority mech
+        :param sender: The requester of record
+        :param data_hash: The request data hash, ``0x``-prefixed
+        :param rate: The signed cap
+        :param payment_type: The mech's payment type
+        :param nonce: The request's nonce
+        :param deadline: The settlement deadline (explicit only)
+        :return: The locally derived id and the id the view reports
+        """
+        data = bytes.fromhex(data_hash.removeprefix("0x"))
+        payment_type_hex = "0x" + payment_type.value
+        payment_type_bytes = bytes.fromhex(payment_type.value)
+        marketplace = str(marketplace_contract.address)
+        views = marketplace_contract.functions
+        if nonce_mode == NONCE_MODE_SEQUENTIAL:
+            local = request_digest(
+                domain_separator=read_domain_separator(),
+                marketplace=marketplace,
+                mech=mech_address,
+                requester=sender,
+                data=data,
+                delivery_rate=rate,
+                payment_type=payment_type_bytes,
+                nonce=nonce,
+            )
+            call = views.getRequestId(
+                mech_address, sender, data_hash, rate, payment_type_hex, nonce
+            )
+        else:
+            local = explicit_request_digest(
+                chain_id=self.mech_config.ledger_config.chain_id,
+                marketplace=marketplace,
+                mech=mech_address,
+                requester=sender,
+                data=data,
+                delivery_rate=rate,
+                payment_type=payment_type_bytes,
+                nonce=nonce,
+                deadline=cast(int, deadline),
+            )
+            call = views.getRequestIdWithNonce(
+                mech_address, sender, data_hash, rate, payment_type_hex, nonce, deadline
+            )
+        return local, bytes(call.call())
+
+    @staticmethod
+    def _explicit_deadline(
+        marketplace_contract: Web3Contract, deadline_seconds: int
+    ) -> int:
+        """Return the settlement deadline signed into an explicit-nonce batch.
+
+        A latest block that cannot be read is a failed request-id derivation.
+
+        :param marketplace_contract: Marketplace contract instance
+        :param deadline_seconds: Settlement window, from the latest block
+        :return: The latest block's timestamp plus ``deadline_seconds``
+        """
+        try:
+            latest = marketplace_contract.w3.eth.get_block("latest")
+        except (OSError, ValueError, Web3Exception) as e:
+            raise _derivation_failed(e, None) from e
+        return int(latest["timestamp"]) + int(deadline_seconds)
+
+    @staticmethod
+    def _json_dict(response: requests.Response) -> Dict[str, Any]:
+        """Return a mech's JSON object body, or ``{}`` for any other body.
+
+        :param response: the HTTP response from the mech.
+        :return: the parsed object, empty when the body is not JSON or not an object.
+        """
+        try:
+            body = response.json()
+        except ValueError:
+            return {}
+        return body if isinstance(body, dict) else {}
+
+    @classmethod
+    def _rejection_reason(cls, response: requests.Response) -> str:
+        """Return the ``reason`` from a mech's JSON rejection body, else ``""``.
+
+        :param response: the HTTP response from the mech.
+        :return: the reason string, empty when the body carries none.
+        """
+        return str(cls._json_dict(response).get("reason") or "")
+
+    @classmethod
+    def _below_minimum_cap(
+        cls, response: requests.Response, signed_cap: int
+    ) -> Optional[str]:
+        """Explain a refusal of the signed cap as below the mech's minimum charge.
+
+        :param response: the HTTP response from the mech.
+        :param signed_cap: the cap the request was signed with.
+        :return: the message to raise with, or None for any other answer.
+        """
+        if response.status_code != HTTP_BAD_REQUEST:
+            return None
+        body = cls._json_dict(response)
+        if body.get("reason") != MINIMUM_CAP_REASON:
+            return None
+        minimum = body.get("minimum_cap")
+        minimum_text = (
+            str(minimum)
+            if isinstance(minimum, int) and not isinstance(minimum, bool)
+            else "not reported"
+        )
+        return (
+            f"Offchain request refused: the signed cap {signed_cap} is below the "
+            f"mech's minimum charge (minimum cap: {minimum_text}, in base units "
+            f"of the mech's payment asset). Nothing was charged. Re-run with "
+            f"--max-cost at or above the minimum."
+        )
+
+    @classmethod
+    def _explicit_nonce_refused(cls, response: requests.Response) -> bool:
+        """Whether the mech turned the request away for using an explicit nonce.
+
+        Only the exact 503 the mech sends for a disabled explicit-nonce path
+        counts; any other rejection, including a 503 for another reason, is
+        reported to the caller as it is.
+
+        :param response: the HTTP response from the mech.
+        :return: True if the request should be resent with a sequential nonce.
+        """
+        return (
+            response.status_code == HTTP_SERVICE_UNAVAILABLE
+            and cls._rejection_reason(response) == EXPLICIT_NONCE_DISABLED_REASON
+        )
+
+    @classmethod
+    def _rejection(  # pylint: disable=too-many-arguments
+        cls,
         response: requests.Response,
         request_id: str,
         request_nonces: List[int],
@@ -1052,11 +1525,7 @@ class MarketplaceService(
         :return: The rejection to raise
         """
         index = len(accepted_ids)
-        try:
-            reason = str(response.json().get("reason") or "")
-        except (ValueError, AttributeError):
-            reason = ""
-        reason = reason or response.reason
+        reason = cls._rejection_reason(response) or response.reason
         if message is None:
             message = (
                 f"Offchain request rejected: {reason} (HTTP {response.status_code})"
@@ -1076,8 +1545,8 @@ class MarketplaceService(
 
         In agent mode this is the Safe (matching the onchain flow where the
         Safe is ``msg.sender`` on the marketplace call); in client mode it
-        is the EOA. Offchain requests use it for ``mapNonces``,
-        ``getRequestId`` and the payload ``sender`` field so the mech,
+        is the EOA. Offchain requests use it for ``mapNonces``, the
+        request-id views and the payload ``sender`` field so the mech,
         subgraph and settlement path all agree on who owns the request; a
         nonce allocator keys its queue on it.
 
@@ -1116,12 +1585,12 @@ class MarketplaceService(
         caller (Safe in agent mode, EOA in client mode). Threading it in
         rather than re-resolving keeps the address the signature is bound
         to identical to the address the caller wrote into the payload and
-        ``getRequestId``.
+        the request-id view.
 
         :param sender: Checksummed requester address (agent mode: Safe;
             client mode: EOA). Must equal the ``sender`` field of the
-            outbound payload and the requester argument to
-            ``getRequestId``.
+            outbound payload and the requester argument to the request-id
+            view.
         :param request_id_bytes: the 32-byte request-id digest to sign.
         :return: 0x-prefixed hex signature, as sent to the mech.
         :raises ValueError: if the signature has the wrong length, uses an
@@ -1223,9 +1692,10 @@ class MarketplaceService(
             by every request of one ``send_request`` call; ``None`` leaves only
             the ratio bound.
         :return: the (possibly retried) HTTP response.
-        :raises _MechRefusal: on a 402 when auto-deposit is disabled, on a
-            non-positive shortfall that auto-deposit can't act on, or on a
-            second 402 after the deposit landed.
+        :raises _MechRefusal: on a 402 when auto-deposit is disabled, when
+            it asks for more than the signed cap, on a non-positive shortfall
+            that auto-deposit can't act on, or on a second 402 after the
+            deposit landed.
         :raises _TopUpFailure: if the auto-deposit fails on the requester's side.
         """
         response = self._do_offchain_post(url, payload)
@@ -1238,6 +1708,15 @@ class MarketplaceService(
                     f"{challenge.current_balance}) deposited to "
                     f"{challenge.pay_to}. Re-run with auto-deposit enabled or "
                     f"top up your prepaid balance. ({challenge.error})",
+                    response,
+                )
+            if challenge.required > max_delivery_rate:
+                # The mech reports this request's cap as ``required``; more
+                # than the signed cap is not a figure a deposit should follow.
+                raise _MechRefusal(
+                    "Offchain request rejected with HTTP 402 asking for "
+                    f"{challenge.required}, more than the signed cap of "
+                    f"{max_delivery_rate}; not depositing. ({challenge.error})",
                     response,
                 )
             if challenge.shortfall <= 0:

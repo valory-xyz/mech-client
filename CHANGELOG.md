@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.27.0] - 2026-11-25
+
+### ✨ Added
+
+- `--max-cost` on `mechx request` (`max_cost` on `MarketplaceService.send_request`): the most to pay per request, in base units of the Mech's payment asset. Off-chain it is the cap signed into the request. On-chain the Mech's advertised `maxDeliveryRate` is the charge, and a `--max-cost` below it refuses the request before it is sent.
+- Without `--max-cost`, an off-chain request signs twice the expected cost the Mech's manifest publishes for the tool (`toolMetadata.<tool>.expectedCost`, with `asset` and a decimal-string `amount`), and falls back to the Mech's advertised `maxDeliveryRate`, with a warning, for a tool without one or with one stated in another asset; an unreadable manifest gets one warning of its own. A batch signs the largest cap among its tools. Amounts above a uint256 are refused before any chain read, and a derived cap more than 10x the advertised maximum is refused until `--max-cost` is passed. See "Choosing a cap" in the docs.
+- `read_expected_costs(manifest)` reads that field, and `mech_report` passes it on under `payment.expected_costs` with `expected_cost_note`.
+- `DeliveryResult.failure` (`RunFailure`, with `error` and `fault`): set when an off-chain run failed. The Mech settles a failed run on-chain at the envelope's `delivery_rate`, reported in `actual_delivery_rate`: the full signed cap for a `client` fault; for a `mech` fault the amount depends on the Mech's settings. `mechx request` prints `Request <id> failed: <error>` with `Fault:` and `Charged:` lines. `status: "rejected"` is unchanged.
+- `validate_request_shape`: `send_request` refuses a prompt that is not a string, an empty tool, or extra attributes that set `prompt` or `tool`, before any chain read, manifest fetch or request. It reads only its arguments. `extra_attributes["nonce"]` stays allowed: it pins the metadata salt, which the nonce allocator relies on.
+- A Mech's HTTP 400 refusing a cap below its minimum charge is reported with the `minimum_cap` it names, and never auto-deposits.
+- `DeliveryResult.actual_delivery_rate`: the charge the Mech reports for the request, in the base units of its payment asset, read from the off-chain delivery envelope. `None` when the Mech reports no charge, which is always the case for on-chain delivery. `mechx request` prints it as `Reported charge: <amount>`; the Mech settles it on-chain afterwards.
+- `--nonce-mode` on `mechx request` (`nonce_mode` on `MarketplaceService.send_request`): `explicit` (the default) or `sequential`. `send_request` with `nonces=[...]`, as the nonce allocator calls it, is sequential, and `explicit` with `nonces` is refused. See "Offchain Requests" in the docs. Explicit needs a Mech on v0.37 or later; on an older Mech pass `sequential`.
+- `--deadline-seconds` on `mechx request` (`deadline_seconds`): how long an explicit request stays settleable from the latest block, 15 minutes by default. A value that is not a positive whole number of seconds, or too large to sign, is refused before any chain read.
+- The marketplace ABI is the build of autonolas-marketplace `main` at `14f191a`: `getRequestIdWithNonce` with its deadline and signing domain (`getDomainSeparatorWithNonce`), the `deliverMarketplaceWithSignatures` overloads that settle a cap with an actual charge, and the `RateOverCap` and `SignatureExpired` errors.
+- An explicit-nonce request id is derived locally (`explicit_request_digest`, EIP-712 over the marketplace's second signing domain), like the sequential one; `getRequestIdWithNonce` is a cross-check, and a mismatch raises `RequestIdMismatch` before the pre-sign hook and before signing.
+- When a Mech turns explicit nonces away and the cap was derived rather than passed as `--max-cost`, the sequential resend signs the lower of that cap and the Mech's advertised `maxDeliveryRate`, since such a Mech charges the full cap.
+
+### 🔧 Changed
+
+- `max_price` is checked against the signed cap times the number of prompts, so an off-chain request is held to the cap it signs rather than to the Mech's advertised `maxDeliveryRate`. The manifest is read before that check, to size the cap.
+- With `--auto-deposit`, a 402 whose `required` is above the signed cap is refused instead of deposited. The deposit is `required` less the `currentBalance` the Mech reports, which already excludes what the requester's in-flight requests reserve and may be negative.
+- The manifest fetched from the Mech's `ComplementaryServiceMetadata` URI is used only when the gateway answers with it and its bytes hash to the content id that URI names; a gateway error or a mismatch is treated as an unreadable manifest, each with its own log line.
+- A failed off-chain run comes back as a `DeliveryResult` with `failure` set and `data` holding the mech's failure body, where it used to look like any other delivery. Payers should check `failure` before treating `data` as an answer; `mechx request` lists failed runs apart and exits non-zero when any run failed.
+- Buyer docs say cap where they said price: the requester sets the cap signed into an off-chain request, the Mech charges at or below it, and what it does not charge stays in the buyer's balance. The Mech's `maxDeliveryRate` is the on-chain charge and the off-chain fallback cap.
+
 ## [0.26.2] - 2026-11-20
 
 ### 🔧 Changed
